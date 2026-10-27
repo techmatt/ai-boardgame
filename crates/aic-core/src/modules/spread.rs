@@ -2,8 +2,10 @@
 
 use super::BLIGHT;
 use crate::module::{
-    scheduled, Build, Cx, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, VariantDef,
+    scheduled, Build, Cx, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec,
+    VariantDef, World,
 };
+use crate::view::ViewOut;
 use crate::GameState;
 
 const RNG: &str = "spread";
@@ -143,6 +145,26 @@ impl Spread {
 }
 
 impl Module for Spread {
+    fn view(&self, g: &GameState, _w: &World, out: &mut ViewOut) {
+        let n = scheduled(&self.per_country, g.round);
+        out.global(
+            "per_country",
+            "spread this round",
+            n,
+            None,
+            "Blight each country gets in this round's spread.",
+        );
+        if let Some(cap) = self.cluster_cap {
+            out.global(
+                "cap",
+                "blight cap per hex",
+                cap,
+                None,
+                "Most blight one hex can hold (cluster).",
+            );
+        }
+    }
+
     fn setup(&self, g: &mut GameState, cx: &mut Cx) {
         // Same placement rule as every round, so `cap` holds from the start.
         for c in 0..g.seats.len() {

@@ -25,9 +25,11 @@ pub mod hex;
 pub mod map;
 pub mod module;
 pub mod modules;
+pub mod record;
 pub mod rng;
 pub mod rules;
 pub mod state;
+pub mod view;
 
 pub use action::Action;
 pub use config::{Config, ModuleConfig, ParamValue};
@@ -37,8 +39,10 @@ pub use event::Event;
 pub use hash::fnv1a64;
 pub use hex::{Dir, Hex};
 pub use map::Map;
+pub use record::{SavedGame, RECORD_FORMAT};
 pub use rules::Rules;
 pub use state::{GameState, Outcome, Seat, Stats};
+pub use view::View;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -66,6 +70,13 @@ pub fn apply(state: &GameState, action: &Action) -> Result<(GameState, Vec<Event
     let rules = Rules::new(&state.config)?;
     rules.check_state(state)?;
     rules.apply(state, action)
+}
+
+/// The generic view of a state (see `view.rs`), for clients.
+pub fn view(state: &GameState) -> Result<View, String> {
+    let rules = Rules::new(&state.config)?;
+    rules.check_state(state)?;
+    Ok(rules.view(state))
 }
 
 /// The module registry as JSON-friendly data: every module, its variants,

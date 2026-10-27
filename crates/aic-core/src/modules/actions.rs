@@ -6,6 +6,7 @@ use crate::action::Action;
 use crate::content::{Effect, TargetRule};
 use crate::event::Event;
 use crate::module::{Build, Cx, Module, ModuleDef, PhaseKind, PhaseSpec, VariantDef, World};
+use crate::view::{CardView, ViewOut};
 use crate::GameState;
 
 pub static DEF: ModuleDef = ModuleDef {
@@ -99,6 +100,44 @@ impl OpenCards {
 }
 
 impl Module for OpenCards {
+    /// Each seat's open cards, with cost and whether it could play them in
+    /// this module's phase: used, unaffordable, no target, or ready.
+    fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
+        for s in 0..g.seats.len() {
+            let cards = self
+                .cards
+                .iter()
+                .map(|c| {
+                    let used = g.seats[s].exhausted.binary_search(&c.id).is_ok();
+                    let has_target = c.target.as_ref().is_none_or(|rule| {
+                        w.map.countries[s]
+                            .hexes
+                            .iter()
+                            .any(|&h| Self::valid_target(g, w, s, rule, h))
+                    });
+                    let status = if used {
+                        "used"
+                    } else if g.resource(s, CREDITS) < c.cost {
+                        "unaffordable"
+                    } else if !has_target {
+                        "no target"
+                    } else {
+                        "ready"
+                    };
+                    let def = w.content.card_index(&c.id).map(|i| &w.content.cards[i]);
+                    CardView {
+                        id: c.id.clone(),
+                        name: def.map_or_else(|| c.id.clone(), |d| d.name.clone()),
+                        text: def.map_or_else(String::new, |d| d.text.clone()),
+                        status: status.to_string(),
+                        cost: Some(c.cost),
+                    }
+                })
+                .collect();
+            out.cards(s, "open", "open cards", cards);
+        }
+    }
+
     /// Used cards refresh at the start of every round.
     fn round_start(&self, g: &mut GameState, cx: &mut Cx) {
         for s in 0..g.seats.len() {

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.vite/
+*.log
+# Built by `npm run wasm` from crates/aic-wasm
+src/wasm/
+e2e-out/

@@ -23,11 +23,24 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `content/` | Data embedded at compile time: `map.json` (country piece, layouts for 1–5 countries) and `cards.json` (cards built from effect primitives). |
 | `configs/` | Game configs: modules, variants, every parameter. `baseline.json` and `clean_land.json` differ only in the income variant and one spread tunable. |
 | `scripts/wasm-smoke.mjs` | Plays one game through the wasm package in Node. |
+| `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
 Core source map: `rules.rs` (config compilation, round/phase loop, apply), `module.rs`
 (the module framework: `ModuleDef`, `VariantDef`, `Module`, `Cx`), `config.rs`,
 `content.rs`, `map.rs` + `hex.rs` (axial hexes), `state.rs`, `action.rs`, `event.rs`,
-`rng.rs`, `driver.rs` (`play`/`replay` with an `Agent`, `GameRecord`), `tests.rs`.
+`rng.rs`, `driver.rs` (`play`/`replay` with an `Agent`, `GameRecord`), `view.rs` (the
+generic view clients draw), `record.rs` (`SavedGame`, the game record format), `tests.rs`.
+
+## Viewer
+
+```sh
+cd web && npm install && npm run dev               # builds the wasm (~9 s warm), serves http://localhost:5173/
+npm run dev -- --port 61870                        # another port
+```
+
+The dev server rebuilds the wasm and reloads when `crates/` or `content/` change. Open a
+record from `aic-sim --save` with *Open record…* or by dropping the file on the page.
+Details, and the browser check (`npm run e2e`), are in [web/README.md](web/README.md).
 
 ## Toolchain
 
@@ -71,6 +84,9 @@ $S run configs/baseline.json --games 1 --trace     # first game as JSON lines
 $S run configs/baseline.json --json                # machine-readable summary
 $S show configs/baseline.json                      # resolved config, hash, every tunable
 $S modules                                         # registry: modules, variants, params, phases
+$S run configs/baseline.json --games 2000 --save out/games              # first 20 losses as records
+$S compare configs/baseline.json configs/clean_land.json --save out/cmp --save-when timeout --save-seed 17
+$S replay out/games/*.json                         # check records natively (also browser bug reports)
 ```
 
 | Option | Default | Meaning |
@@ -82,6 +98,10 @@ $S modules                                         # registry: modules, variants
 | `--threads N` | all cores | Results don't depend on it: agents are seeded per game. |
 | `--json` | off | Print the summary as JSON: every field below, plus the diff, agent, `max_actions` and rules revision. |
 | `--trace` | off | Print the first game of each config: every action (with its option count) and event. Goes to stderr with `--json`. |
+| `--save DIR` | off | `run`/`compare`: write the selected games as game records into `DIR` (created if needed), named `<config name>-<run\|A\|B>-seed<S>.json`, so A and B never collide. The paths are printed after the table, or listed under `saved` in each `--json` result with the match counts. A write failure exits 2. |
+| `--save-when W` | `loss` | Which games to save: `all`, `win`, `loss`, `timeout`, or an end reason code (`overrun`, `survived`, ...). Repeatable; a game matching any is saved. With only `--save-seed` given, no default: just those seeds. A reason code no game ended with gets a warning on stderr (likely a typo). |
+| `--save-seed S` | | Always save this seed, whatever `--save-when` says and not counted against `--save-max`. Repeatable. A seed outside the range played gets a warning. |
+| `--save-max N` | `20` | Per config, keep the first `N` games `--save-when` matched, in seed order. The output says how many matched, so a cap never truncates silently. |
 
 The output shows each config's hash, content hash and engine version, plus an
 `A -> B` line listing every variant and parameter difference. The rows:
@@ -101,7 +121,24 @@ mismatch, and 2 on a bad config or bad arguments (including a seed range that
 overflows `u64`).
 
 Measured on this machine: about 0.03–0.05 ms per game, replay included. 2 × 100,000
-games take about 7 s.
+games take 7–10 s, depending on what else the machine is doing.
+
+**Game records** (`aic-game-record/1`, `aic_core::SavedGame`) are JSON: the resolved
+config, the seed and the action list (one action per line), plus a `note` saying why the
+game was saved (command, outcome, seed, selector, overrides) and the outcome, rounds,
+final-state fingerprint, hashes, engine version and rules revision for checking the
+replay. A saved record is the game the summary counted, not a second play. Only
+`config`, `seed` and `actions` are required, so a hand-written record loads too. `aic-sim
+replay <record.json>...` prints each record's seed, outcome and warnings (a different
+rules revision, content or config hash, or final fingerprint), and exits 1 if any record
+fails to load or replay or has a warning. Browser bug reports are checked the same way.
+
+Measured: saving the default 20 per config doesn't change the run time noticeably (2 ×
+100,000 games: 9.3 s with `--save`, 9.8 s without). A record is about 3.6 KB. Saving
+every game is slow, and Windows file writes are the bottleneck: 200,000 records take
+82 s and 880 MB. `replay` of 300 records takes 0.17 s. A shell glob over more than a few
+hundred records hits Windows' command-line length limit ("Argument list too long"), so
+replay big sets in batches.
 
 The random agent picks uniformly among all seats' legal actions, passes included. Treat
 it as a floor, not as a model of a weak team.

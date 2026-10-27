@@ -9,7 +9,9 @@ use std::process::exit;
 use std::time::Instant;
 
 use agents::RandomAgent;
-use aic_core::{content_hash, play, replay, Action, Config, Event, GameRecord, Rules};
+use aic_core::{
+    content_hash, play, replay, Action, Config, Event, GameRecord, Outcome, Rules, SavedGame,
+};
 use serde::Serialize;
 
 const USAGE: &str = "\
@@ -17,6 +19,7 @@ usage: aic-sim run <config.json> [options]
        aic-sim compare <a.json> <b.json> [options]
        aic-sim show <config.json> [--set k=v]...     resolved config + hash
        aic-sim modules                               module registry as JSON
+       aic-sim replay <record.json>...               check saved game records
 
 options:
   --games N         games per config (default 200)
@@ -28,7 +31,21 @@ options:
   --max-actions N   per-game action cap; a capped game is a timeout (default 100000)
   --threads N       worker threads (default: all cores); results do not depend on it
   --json            print the summary as JSON instead of a table
-  --trace           print the first game of each config as JSON lines (actions, events)";
+  --trace           print the first game of each config as JSON lines (actions, events)
+
+saving game records (run, compare):
+  --save DIR        write the selected games as game records into DIR (created if needed),
+                    named <config name>-<run|A|B>-seed<S>.json
+  --save-when W     select games by outcome: all, win, loss, timeout, or an end reason
+                    code such as overrun or survived (repeatable; default loss, or none
+                    when only --save-seed is given)
+  --save-seed S     always save this seed, whatever --save-when says (repeatable)
+  --save-max N      at most the first N games --save-when selects, in seed order, per
+                    config (default 20); --save-seed games are not capped
+
+replay:
+  aic-sim replay <record.json>...   replay each record and check it against what was
+                    saved; exit 1 if any record fails or has warnings";
 
 struct Options {
     command: String,
@@ -42,6 +59,10 @@ struct Options {
     threads: usize,
     json: bool,
     trace: bool,
+    save: Option<String>,
+    save_when: Vec<String>,
+    save_seeds: Vec<u64>,
+    save_max: usize,
 }
 
 fn die(msg: &str) -> ! {
@@ -64,7 +85,12 @@ fn parse_args() -> Options {
         threads: std::thread::available_parallelism().map_or(1, |n| n.get()),
         json: false,
         trace: false,
+        save: None,
+        save_when: Vec::new(),
+        save_seeds: Vec::new(),
+        save_max: 20,
     };
+    let mut save_max_given = false;
     while let Some(a) = args.next() {
         let mut value = |name: &str| {
             args.next()
@@ -84,6 +110,25 @@ fn parse_args() -> Options {
             "--threads" => o.threads = num::<usize>("--threads", value("--threads")).max(1),
             "--json" => o.json = true,
             "--trace" => o.trace = true,
+            "--save" => {
+                let d = value("--save");
+                if d.is_empty() {
+                    die("--save needs a directory");
+                }
+                o.save = Some(d)
+            }
+            "--save-when" => {
+                let w = value("--save-when");
+                if w.is_empty() {
+                    die("--save-when needs a value");
+                }
+                o.save_when.push(w)
+            }
+            "--save-seed" => o.save_seeds.push(num("--save-seed", value("--save-seed"))),
+            "--save-max" => {
+                o.save_max = num("--save-max", value("--save-max"));
+                save_max_given = true;
+            }
             "-h" | "--help" => {
                 println!("{USAGE}");
                 exit(0)
@@ -92,6 +137,17 @@ fn parse_args() -> Options {
             _ => o.paths.push(a),
         }
     }
+    if o.save.is_none() && (!o.save_when.is_empty() || !o.save_seeds.is_empty() || save_max_given) {
+        die("--save-when, --save-seed and --save-max need --save DIR");
+    }
+    if o.save.is_some() && o.command != "run" && o.command != "compare" {
+        die("--save needs run or compare");
+    }
+    if o.save.is_some() && o.save_when.is_empty() && o.save_seeds.is_empty() {
+        o.save_when.push("loss".to_string());
+    }
+    o.save_seeds.sort_unstable();
+    o.save_seeds.dedup();
     if o.games == 0 {
         die("--games must be at least 1");
     }
@@ -166,6 +222,7 @@ fn main() {
                 die("--set-b needs compare");
             }
             let mut sides = Vec::new();
+            let mut records = Vec::new();
             for (i, path) in o.paths.iter().enumerate() {
                 let own = if i == 0 { &o.set_a } else { &o.set_b };
                 let overrides: Vec<&String> = o.set.iter().chain(own).collect();
@@ -179,7 +236,31 @@ fn main() {
                 } else {
                     ["A", "B"][i].to_string()
                 };
-                sides.push(simulate(label, path, overrides, &r, &o));
+                let (summary, saved) = simulate(label, path, overrides, &r, &o);
+                sides.push(summary);
+                records.push(saved);
+            }
+            if let Some(dir) = &o.save {
+                let outside: Vec<String> = o
+                    .save_seeds
+                    .iter()
+                    .filter(|&&s| s < o.seed || s > o.last_seed())
+                    .map(|s| s.to_string())
+                    .collect();
+                if !outside.is_empty() {
+                    eprintln!(
+                        "warning: --save-seed {} outside the seeds played ({}..={}), not saved",
+                        outside.join(", "),
+                        o.seed,
+                        o.last_seed()
+                    );
+                }
+                for (side, saved) in sides.iter_mut().zip(&records) {
+                    let paths = write_records(dir, side, saved);
+                    if let Some(rep) = side.saved.as_mut() {
+                        rep.paths = paths;
+                    }
+                }
             }
             let diff = if sides.len() == 2 {
                 sides[0].config.diff(&sides[1].config)
@@ -200,6 +281,7 @@ fn main() {
                 println!("{}", serde_json::to_string_pretty(&out).unwrap());
             } else {
                 print_table(&sides, &diff, &o);
+                print_saved(&sides);
             }
             let bad: u64 = sides.iter().map(|s| s.games - s.replay_ok).sum();
             if bad > 0 {
@@ -207,7 +289,158 @@ fn main() {
                 exit(1);
             }
         }
+        "replay" => {
+            if o.paths.is_empty() {
+                die("replay takes one or more game records");
+            }
+            let bad = o.paths.iter().filter(|p| !replay_record(p)).count();
+            if bad > 0 {
+                eprintln!(
+                    "{bad} of {} record(s) failed or had warnings",
+                    o.paths.len()
+                );
+                exit(1);
+            }
+        }
         other => die(&format!("unknown command {other:?}")),
+    }
+}
+
+/// Replays one saved record and prints what it found. True if it replays
+/// with no warnings.
+fn replay_record(path: &str) -> bool {
+    let loaded = std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|t| SavedGame::from_json(&t));
+    let rec = match loaded {
+        Ok(r) => r,
+        Err(e) => {
+            println!("{path}: ERROR {e}");
+            return false;
+        }
+    };
+    match rec.replay() {
+        Err(e) => {
+            println!("{path}: seed {}: ERROR {e}", rec.seed);
+            false
+        }
+        Ok((g, warnings)) => {
+            println!(
+                "{path}: seed {}, {}, round {}, {} actions, fingerprint {}{}",
+                rec.seed,
+                describe(g.outcome.as_ref(), rec.actions.len()),
+                g.round,
+                rec.actions.len(),
+                g.fingerprint(),
+                if warnings.is_empty() { ", ok" } else { "" }
+            );
+            if !rec.note.is_empty() {
+                println!("  note: {}", rec.note);
+            }
+            for w in &warnings {
+                println!("  WARNING {w}");
+            }
+            warnings.is_empty()
+        }
+    }
+}
+
+/// `win (survived)`, `loss (overrun)`, `timeout (100000 actions)`.
+fn describe(outcome: Option<&Outcome>, actions: usize) -> String {
+    match outcome {
+        Some(o) => format!("{} ({})", if o.won { "win" } else { "loss" }, o.reason),
+        None => format!("timeout ({actions} actions)"),
+    }
+}
+
+/// Which `--save-when` selector a game matches first, if any.
+fn when_match<'a>(when: &'a [String], outcome: Option<&Outcome>) -> Option<&'a String> {
+    when.iter().find(|w| match (w.as_str(), outcome) {
+        ("all", _) => true,
+        ("win", Some(o)) => o.won,
+        ("loss", Some(o)) => !o.won,
+        ("timeout", None) => true,
+        (code, Some(o)) => o.reason == code,
+        _ => false,
+    })
+}
+
+/// A file-name-safe version of a config name.
+fn file_stem(name: &str) -> String {
+    let s: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(64)
+        .collect();
+    if s.trim_matches('_').is_empty() {
+        "game".to_string()
+    } else {
+        s
+    }
+}
+
+/// Writes one side's records into `dir`; exits 2 on any failure.
+fn write_records(dir: &str, side: &Summary, saved: &[SavedGame]) -> Vec<String> {
+    let fail = |what: &str, e: std::io::Error| -> ! {
+        eprintln!("--save {dir}: cannot write {what}: {e}");
+        exit(2)
+    };
+    std::fs::create_dir_all(dir).unwrap_or_else(|e| fail("the directory", e));
+    let stem = file_stem(&side.name);
+    // `dir/name` rather than Path::join, so the paths printed on Windows
+    // don't mix separators.
+    let base = match dir.trim_end_matches(['/', '\\']) {
+        "" => dir,
+        d => d,
+    };
+    let sep = if base.ends_with(['/', '\\']) { "" } else { "/" };
+    saved
+        .iter()
+        .map(|rec| {
+            let file = format!("{base}{sep}{stem}-{}-seed{}.json", side.label, rec.seed);
+            std::fs::write(&file, rec.to_text()).unwrap_or_else(|e| fail(&file, e));
+            file
+        })
+        .collect()
+}
+
+fn print_saved(sides: &[Summary]) {
+    for s in sides {
+        let Some(rep) = &s.saved else { continue };
+        let mut why = Vec::new();
+        if !rep.when.is_empty() {
+            let capped = if rep.kept_by_when < rep.matched {
+                format!(", first {} kept (--save-max {})", rep.kept_by_when, rep.max)
+            } else {
+                String::new()
+            };
+            why.push(format!(
+                "--save-when {}: {} matched{capped}",
+                rep.when.join(","),
+                rep.matched
+            ));
+        }
+        if !rep.seeds.is_empty() {
+            why.push(format!("--save-seed {}", rep.seeds.join(",")));
+        }
+        if why.is_empty() {
+            why.push("no --save-seed in the seeds played".to_string());
+        }
+        println!(
+            "\nsaved {}: {} record(s) written ({})",
+            s.label,
+            rep.paths.len(),
+            why.join("; ")
+        );
+        for p in &rep.paths {
+            println!("  {p}");
+        }
     }
 }
 
@@ -246,45 +479,180 @@ struct Summary {
     counters: BTreeMap<String, f64>,
     replay_ok: u64,
     ms_per_game: f64,
+    /// With `--save`: what was selected and where it went.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    saved: Option<SaveReport>,
+}
+
+#[derive(Serialize)]
+struct SaveReport {
+    /// The `--save-when` selectors (empty when only `--save-seed` was given).
+    when: Vec<String>,
+    /// Games any `--save-when` selector matched.
+    matched: u64,
+    /// `--save-max`.
+    max: usize,
+    /// Of `matched`, the first `max` in seed order.
+    kept_by_when: u64,
+    /// `--save-seed` seeds within the range played.
+    seeds: Vec<String>,
+    /// The files written, one per record.
+    paths: Vec<String>,
 }
 
 struct Played {
     record: GameRecord,
     replay_ok: bool,
+    /// A `--save-when` selector matched.
+    when: bool,
 }
 
-fn simulate(label: String, path: &str, overrides: Vec<&String>, r: &Rules, o: &Options) -> Summary {
+/// A game kept for `--save`, before the global `--save-max` cut.
+struct Kept {
+    by_when: bool,
+    by_seed: bool,
+    record: SavedGame,
+}
+
+fn simulate(
+    label: String,
+    path: &str,
+    overrides: Vec<&String>,
+    r: &Rules,
+    o: &Options,
+) -> (Summary, Vec<SavedGame>) {
     let seeds: Vec<u64> = (o.seed..=o.last_seed()).collect();
     // Replays go through rules rebuilt from the resolved config, as a
     // saved state would: proof that config + seed + actions is enough.
     let rebuilt = Rules::new(&r.config).expect("a resolved config is valid");
+    let saving = o.save.is_some();
+    // The note on every saved record: what was run, and why it was picked.
+    let side = if o.command == "compare" {
+        format!(" (config {label})")
+    } else {
+        String::new()
+    };
+    let note_head = format!("aic-sim {} {}{side}", o.command, o.paths.join(" "));
+    let note_tail = if overrides.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ", overrides: {}",
+            overrides
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    };
     let start = Instant::now();
     let chunk = seeds.len().div_ceil(o.threads.max(1)).max(1);
-    let mut played: Vec<Played> = std::thread::scope(|s| {
+    let (mut played, mut kept): (Vec<Played>, Vec<Kept>) = std::thread::scope(|s| {
         let handles: Vec<_> = seeds
             .chunks(chunk)
             .map(|part| {
                 let rebuilt = &rebuilt;
+                let (note_head, note_tail) = (&note_head, &note_tail);
                 s.spawn(move || {
-                    part.iter()
+                    // Each chunk is a run of consecutive seeds, so the
+                    // global first `save_max` matches are among each
+                    // chunk's first `save_max`: keeping only those keeps
+                    // the result independent of `--threads`.
+                    let mut kept = Vec::new();
+                    let mut when_seen = 0usize;
+                    let played = part
+                        .iter()
                         .map(|&seed| {
-                            let (g, record) =
+                            let (g, mut record) =
                                 play(r, seed, &mut RandomAgent::new(seed), o.max_actions);
                             let replay_ok =
                                 replay(rebuilt, seed, &record.actions).is_ok_and(|h| h == g);
-                            Played { record, replay_ok }
+                            let w = if saving {
+                                when_match(&o.save_when, record.outcome.as_ref())
+                            } else {
+                                None
+                            };
+                            let by_seed = saving && o.save_seeds.binary_search(&seed).is_ok();
+                            let by_when = w.is_some() && when_seen < o.save_max;
+                            when_seen += w.is_some() as usize;
+                            if by_when || by_seed {
+                                let why = match w {
+                                    Some(w) if !by_seed => format!("--save-when {w}"),
+                                    _ => "--save-seed".to_string(),
+                                };
+                                let note = format!(
+                                    "{note_head}: {}, seed {seed}, picked by {why}{note_tail}",
+                                    describe(record.outcome.as_ref(), record.actions.len()),
+                                );
+                                // The summary needs no actions; the record does.
+                                let actions = std::mem::take(&mut record.actions);
+                                kept.push(Kept {
+                                    by_when: w.is_some(),
+                                    by_seed,
+                                    record: SavedGame::new(r, seed, actions, &g, &note),
+                                });
+                            }
+                            Played {
+                                record,
+                                replay_ok,
+                                when: w.is_some(),
+                            }
                         })
-                        .collect::<Vec<_>>()
+                        .collect::<Vec<_>>();
+                    (played, kept)
                 })
             })
             .collect();
-        handles
-            .into_iter()
-            .flat_map(|h| h.join().expect("worker"))
-            .collect()
+        let mut all = (Vec::new(), Vec::new());
+        for h in handles {
+            let (p, k) = h.join().expect("worker");
+            all.0.extend(p);
+            all.1.extend(k);
+        }
+        all
     });
     let elapsed = start.elapsed().as_secs_f64();
     played.sort_by_key(|p| p.record.seed);
+    kept.sort_by_key(|k| k.record.seed);
+    let mut rank = 0usize;
+    let saved_games: Vec<SavedGame> = kept
+        .into_iter()
+        .filter(|k| {
+            let keep = k.by_seed || (k.by_when && rank < o.save_max);
+            rank += k.by_when as usize;
+            keep
+        })
+        .map(|k| k.record)
+        .collect();
+    let matched = played.iter().filter(|p| p.when).count() as u64;
+    // A reason code nobody ended with is most likely a typo: say so.
+    let reasons: std::collections::BTreeSet<&str> = played
+        .iter()
+        .filter_map(|p| p.record.outcome.as_ref().map(|o| o.reason.as_str()))
+        .collect();
+    for w in &o.save_when {
+        if !["all", "win", "loss", "timeout"].contains(&w.as_str()) && !reasons.contains(w.as_str())
+        {
+            let seen: Vec<&str> = reasons.iter().copied().collect();
+            eprintln!(
+                "warning: --save-when {w:?} matched no game ({label}); known: all, win, loss, timeout, {}",
+                seen.join(", ")
+            );
+        }
+    }
+    let saved = saving.then(|| SaveReport {
+        when: o.save_when.clone(),
+        matched,
+        max: o.save_max,
+        kept_by_when: matched.min(o.save_max as u64),
+        seeds: o
+            .save_seeds
+            .iter()
+            .filter(|&&s| s >= o.seed && s <= o.last_seed())
+            .map(|s| s.to_string())
+            .collect(),
+        paths: Vec::new(),
+    });
 
     let n = played.len().max(1) as f64;
     let wins = played
@@ -330,7 +698,7 @@ fn simulate(label: String, path: &str, overrides: Vec<&String>, r: &Rules, o: &O
         *v /= n;
     }
     let first = played.first().map(|p| &p.record);
-    Summary {
+    let summary = Summary {
         label,
         path: path.to_string(),
         overrides: overrides.into_iter().cloned().collect(),
@@ -358,7 +726,9 @@ fn simulate(label: String, path: &str, overrides: Vec<&String>, r: &Rules, o: &O
         counters,
         replay_ok: played.iter().filter(|p| p.replay_ok).count() as u64,
         ms_per_game: elapsed * 1000.0 / n,
-    }
+        saved,
+    };
+    (summary, saved_games)
 }
 
 fn print_table(sides: &[Summary], diff: &[String], o: &Options) {

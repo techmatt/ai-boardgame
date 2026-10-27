@@ -3,8 +3,9 @@
 
 use super::{country_tokens, BLIGHT};
 use crate::module::{
-    Build, Cx, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, VariantDef,
+    Build, Cx, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, VariantDef, World,
 };
+use crate::view::ViewOut;
 use crate::GameState;
 
 pub static DEF: ModuleDef = ModuleDef {
@@ -38,6 +39,27 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
 }
 
 impl Module for Survive {
+    fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
+        out.global(
+            "round",
+            "round",
+            g.round as i64,
+            Some(self.rounds),
+            "Survive this many rounds to win.",
+        );
+        for c in 0..g.seats.len() {
+            let n = country_tokens(g, w, c, BLIGHT);
+            out.country(
+                c,
+                "overrun",
+                "blight / overrun",
+                n,
+                Some(self.overrun),
+                "This much blight in one country loses the game.",
+            );
+        }
+    }
+
     fn run(&self, _phase: usize, g: &mut GameState, cx: &mut Cx) {
         let w = cx.world;
         for c in 0..g.seats.len() {

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Complete viewer</title>
+  </head>
+  <body>
+    <header id="top">
+      <h1>AI Complete <small>viewer · engine <code id="version">loading…</code></small></h1>
+      <form id="new-form">
+        <label>Config <select id="config"></select></label>
+        <label>Seed <input id="seed" type="text" inputmode="numeric" autocomplete="off" size="12" /></label>
+        <button type="submit">New game</button>
+        <button type="button" id="random-seed" title="New game with a random seed">Random seed</button>
+      </form>
+      <div class="tools">
+        <button type="button" id="undo" title="Drop the last action (Ctrl+Z)">Undo</button>
+        <button type="button" id="random-action" title="Take one random legal action (R)">Random action</button>
+        <button type="button" id="random-end" title="Random legal actions to the end of the game">Random to end</button>
+        <button type="button" id="open-record" title="Open a game record file (or drop one on the page)">Open record…</button>
+        <button type="button" id="record" title="Copy this game as a record, or paste one">Record / bug report…</button>
+        <input type="file" id="record-file" accept=".json,application/json" hidden />
+      </div>
+    </header>
+    <p id="error" hidden></p>
+    <p id="source"></p>
+
+    <main id="app">
+      <section id="board-pane">
+        <div id="phase-bar"></div>
+        <div id="board-wrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg></div>
+        <div id="prompt"></div>
+      </section>
+      <section id="side">
+        <div id="globals"></div>
+        <div id="seats"></div>
+        <div id="piles"></div>
+      </section>
+      <section id="data">
+        <nav id="tabs">
+          <button type="button" data-tab="log" class="on">Event log</button>
+          <button type="button" data-tab="state">Raw state</button>
+          <button type="button" data-tab="view">View</button>
+          <button type="button" data-tab="config">Config</button>
+        </nav>
+        <div id="tab-log" class="tab"></div>
+        <pre id="tab-state" class="tab" hidden></pre>
+        <pre id="tab-view" class="tab" hidden></pre>
+        <pre id="tab-config" class="tab" hidden></pre>
+      </section>
+    </main>
+
+    <footer id="timeline">
+      <button type="button" id="first" title="Start (Home)">⏮</button>
+      <button type="button" id="back" title="Step back (←)">◀</button>
+      <button type="button" id="play" title="Play forward (Space)">▶ play</button>
+      <button type="button" id="fwd" title="Step forward (→)">▶</button>
+      <button type="button" id="end" title="Last step (End)">⏭</button>
+      <input type="range" id="scrub" min="0" max="0" value="0" />
+      <span id="step"></span>
+    </footer>
+
+    <div id="tip" hidden></div>
+
+    <dialog id="record-dialog">
+      <h2>Game record</h2>
+      <p>Config + seed + action list: the same format <code>aic-sim --save</code> writes. Copy it into a
+        bug report, or paste one and load it to step through.</p>
+      <label>Note <input id="record-note" type="text" size="60" placeholder="what went wrong, or why it is worth a look" /></label>
+      <textarea id="record-text" rows="16" cols="90" spellcheck="false"></textarea>
+      <p id="record-msg"></p>
+      <div class="tools">
+        <button type="button" id="record-copy" class="primary">Copy this game</button>
+        <button type="button" id="record-copy-cursor">Copy up to shown step</button>
+        <button type="button" id="record-load">Load pasted record</button>
+        <button type="button" id="record-close">Close</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

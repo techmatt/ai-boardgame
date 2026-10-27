@@ -1,0 +1,432 @@
+//! The generic view: what a client draws, for any set of modules.
+//!
+//! A client should not need code for each module. [`Rules::view`] turns a
+//! state into a fixed set of shapes (hexes with tokens, per-seat and
+//! per-country values, card groups, card slots, card piles, global values)
+//! and every module may add to them through [`Module::view`]. The engine
+//! fills in the generic parts itself, so a new module's tokens, resources
+//! and tracks show up without any view code; a module adds a `view` hook
+//! only to show something derived (a threshold, a projection, card status).
+//!
+//! The view is display data only: nothing here is read back by the rules,
+//! and it is not part of the state, its hash or its replay.
+//!
+//! [`Module::view`]: crate::module::Module::view
+
+use serde::Serialize;
+
+use crate::hex::Hex;
+use crate::module::PhaseKind;
+use crate::state::{GameState, Outcome};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct View {
+    pub round: u32,
+    /// The phase waiting for decisions, or `None` once the game is over.
+    pub phase: Option<PhaseView>,
+    /// The round's phase sequence (`config.round`), with each entry's kind.
+    pub round_order: Vec<PhaseInfo>,
+    pub outcome: Option<Outcome>,
+    /// Every hex, aligned with `Map::hexes` and `GameState::hexes`.
+    pub hexes: Vec<HexView>,
+    pub countries: Vec<CountryView>,
+    pub seats: Vec<SeatView>,
+    /// Values that belong to the whole game: every `vars` track, plus what
+    /// modules add.
+    pub globals: Vec<Value>,
+    /// Ordered card piles (decks, discards, queues). No module has any yet.
+    pub piles: Vec<PileView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PhaseInfo {
+    /// The round entry, e.g. `"actions.play"` or `"a.play+b.build"`.
+    pub name: String,
+    /// `"auto"` or `"decision"`.
+    pub kind: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PhaseView {
+    /// Index into `round_order`.
+    pub index: usize,
+    pub name: String,
+    pub kind: &'static str,
+    /// Seats that have not passed yet.
+    pub waiting: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HexView {
+    pub index: usize,
+    pub hex: Hex,
+    pub country: u8,
+    pub piece_pos: [u8; 2],
+    /// Indices of on-board neighbours.
+    pub neighbours: Vec<usize>,
+    /// Non-zero token stacks, by kind (sorted).
+    pub tokens: Vec<Token>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Token {
+    pub kind: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CountryView {
+    pub index: u8,
+    /// The seat that plays this country (one seat per country).
+    pub seat: u8,
+    /// Display colour from `content/map.json`.
+    pub colour: String,
+    pub hexes: Vec<usize>,
+    /// The piece's card strip: a card per slot, if any.
+    pub slots: Vec<Option<CardView>>,
+    /// Token totals over the country's hexes (`tokens.<kind>`), then what
+    /// modules add.
+    pub values: Vec<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SeatView {
+    pub index: u8,
+    pub country: u8,
+    /// Passed in the current decision phase.
+    pub passed: bool,
+    /// Every resource (`resource.<name>`), then what modules add.
+    pub values: Vec<Value>,
+    /// Card groups modules show for this seat. Exhausted cards that no
+    /// module shows land in a generic `engine.exhausted` group.
+    pub cards: Vec<CardGroup>,
+}
+
+/// One number worth showing, with where it came from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Value {
+    /// Stable id: `resource.<name>`, `tokens.<kind>`, a `vars` key, or
+    /// `"<module>.<name>"` for a module's own value.
+    pub key: String,
+    pub label: String,
+    pub value: i64,
+    /// A limit the value is measured against (a threshold, a round count).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<i64>,
+    /// `"engine"` for the generic parts, otherwise the module id.
+    pub source: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub doc: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CardGroup {
+    pub key: String,
+    pub label: String,
+    pub source: String,
+    pub cards: Vec<CardView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CardView {
+    /// Content card id.
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// A short word for its state, chosen by the module (`"ready"`,
+    /// `"used"`, ...). Clients may style known words and show any other.
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PileView {
+    pub key: String,
+    pub label: String,
+    pub source: String,
+    /// The seat it belongs to, or `None` for a shared pile.
+    pub owner: Option<u8>,
+    pub count: usize,
+    /// Cards a player can see, top first (all of a face-up pile, none of a
+    /// face-down one).
+    pub visible: Vec<CardView>,
+}
+
+/// What one module adds to the view. Keys are namespaced
+/// `"<module>.<key>"` automatically.
+pub struct ViewOut<'a> {
+    pub(crate) module: &'static str,
+    pub(crate) view: &'a mut View,
+}
+
+impl ViewOut<'_> {
+    fn value(&self, key: &str, label: &str, value: i64, max: Option<i64>, doc: &str) -> Value {
+        Value {
+            key: format!("{}.{key}", self.module),
+            label: label.to_string(),
+            value,
+            max,
+            source: self.module.to_string(),
+            doc: doc.to_string(),
+        }
+    }
+
+    /// A value of the whole game. One with the key of a `vars` track
+    /// replaces that track's generic entry.
+    pub fn global(&mut self, key: &str, label: &str, value: i64, max: Option<i64>, doc: &str) {
+        let v = self.value(key, label, value, max, doc);
+        upsert(&mut self.view.globals, v);
+    }
+
+    pub fn country(
+        &mut self,
+        country: usize,
+        key: &str,
+        label: &str,
+        value: i64,
+        max: Option<i64>,
+        doc: &str,
+    ) {
+        let v = self.value(key, label, value, max, doc);
+        upsert(&mut self.view.countries[country].values, v);
+    }
+
+    pub fn seat(
+        &mut self,
+        seat: usize,
+        key: &str,
+        label: &str,
+        value: i64,
+        max: Option<i64>,
+        doc: &str,
+    ) {
+        let v = self.value(key, label, value, max, doc);
+        upsert(&mut self.view.seats[seat].values, v);
+    }
+
+    pub fn cards(&mut self, seat: usize, key: &str, label: &str, cards: Vec<CardView>) {
+        let group = CardGroup {
+            key: format!("{}.{key}", self.module),
+            label: label.to_string(),
+            source: self.module.to_string(),
+            cards,
+        };
+        self.view.seats[seat].cards.push(group);
+    }
+
+    pub fn pile(
+        &mut self,
+        key: &str,
+        label: &str,
+        owner: Option<u8>,
+        count: usize,
+        visible: Vec<CardView>,
+    ) {
+        self.view.piles.push(PileView {
+            key: format!("{}.{key}", self.module),
+            label: label.to_string(),
+            source: self.module.to_string(),
+            owner,
+            count,
+            visible,
+        });
+    }
+}
+
+fn upsert(values: &mut Vec<Value>, v: Value) {
+    match values.iter_mut().find(|x| x.key == v.key) {
+        Some(x) => *x = v,
+        None => values.push(v),
+    }
+}
+
+pub(crate) fn kind_name(k: PhaseKind) -> &'static str {
+    match k {
+        PhaseKind::Auto => "auto",
+        PhaseKind::Decision => "decision",
+    }
+}
+
+/// The parts of the view the engine fills in for every config.
+pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
+    let content = crate::content();
+    let card = |id: &str, status: &str| match content.card_index(id) {
+        Some(i) => CardView {
+            id: id.to_string(),
+            name: content.cards[i].name.clone(),
+            text: content.cards[i].text.clone(),
+            status: status.to_string(),
+            cost: None,
+        },
+        None => CardView {
+            id: id.to_string(),
+            name: id.to_string(),
+            text: String::new(),
+            status: status.to_string(),
+            cost: None,
+        },
+    };
+    let engine = |key: String, label: &str, value: i64, doc: &str| Value {
+        key,
+        label: label.to_string(),
+        value,
+        max: None,
+        source: "engine".to_string(),
+        doc: doc.to_string(),
+    };
+    let hexes: Vec<HexView> = rules
+        .map
+        .hexes
+        .iter()
+        .zip(&g.hexes)
+        .enumerate()
+        .map(|(i, (cell, h))| HexView {
+            index: i,
+            hex: cell.hex,
+            country: cell.country,
+            piece_pos: cell.piece_pos,
+            neighbours: cell.neighbours.clone(),
+            tokens: h
+                .tokens
+                .iter()
+                .filter(|(_, &n)| n != 0)
+                .map(|(k, &n)| Token {
+                    kind: k.clone(),
+                    count: n,
+                })
+                .collect(),
+        })
+        .collect();
+    let kinds: std::collections::BTreeSet<&str> = g
+        .hexes
+        .iter()
+        .flat_map(|h| h.tokens.keys().map(String::as_str))
+        .collect();
+    let countries = rules
+        .map
+        .countries
+        .iter()
+        .enumerate()
+        .map(|(c, geo)| {
+            // Every kind on the board, so a clean country shows 0 rather than nothing.
+            let mut totals: std::collections::BTreeMap<&str, i64> =
+                kinds.iter().map(|&k| (k, 0)).collect();
+            for &h in &geo.hexes {
+                for (k, &n) in &g.hexes[h].tokens {
+                    *totals.entry(k.as_str()).or_insert(0) += n;
+                }
+            }
+            CountryView {
+                index: c as u8,
+                seat: c as u8,
+                colour: geo.colour.clone(),
+                hexes: geo.hexes.clone(),
+                slots: g.seats[c]
+                    .slots
+                    .iter()
+                    .map(|s| s.as_deref().map(|id| card(id, "slotted")))
+                    .collect(),
+                values: totals
+                    .into_iter()
+                    .map(|(k, n)| {
+                        engine(
+                            format!("tokens.{k}"),
+                            k,
+                            n,
+                            "tokens on this country's hexes",
+                        )
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+    let seats = g
+        .seats
+        .iter()
+        .enumerate()
+        .map(|(s, seat)| SeatView {
+            index: s as u8,
+            country: s as u8,
+            passed: seat.passed,
+            values: seat
+                .resources
+                .iter()
+                .map(|(k, &n)| engine(format!("resource.{k}"), k, n, "on this seat's board"))
+                .collect(),
+            cards: Vec::new(),
+        })
+        .collect();
+    let globals = g
+        .vars
+        .iter()
+        .map(|(k, &n)| engine(k.clone(), k, n, "a module track (vars)"))
+        .collect();
+    let phase = rules.phase(g).map(|p| PhaseView {
+        index: g.phase,
+        name: p.name.clone(),
+        kind: kind_name(p.kind),
+        waiting: g
+            .seats
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| !s.passed)
+            .map(|(i, _)| i as u8)
+            .collect(),
+    });
+    View {
+        round: g.round,
+        phase,
+        round_order: rules
+            .round
+            .iter()
+            .map(|p| PhaseInfo {
+                name: p.name.clone(),
+                kind: kind_name(p.kind),
+            })
+            .collect(),
+        outcome: g.outcome.clone(),
+        hexes,
+        countries,
+        seats,
+        globals,
+        piles: Vec::new(),
+    }
+}
+
+/// After the modules: exhausted cards that no module's card group shows go
+/// into a generic group, so nothing in the state goes unshown.
+pub(crate) fn finish(view: &mut View, g: &GameState) {
+    let content = crate::content();
+    for (s, seat) in g.seats.iter().enumerate() {
+        let sv = &mut view.seats[s];
+        let shown = |id: &str| {
+            sv.cards
+                .iter()
+                .any(|grp| grp.cards.iter().any(|c| c.id == id))
+        };
+        let rest: Vec<CardView> = seat
+            .exhausted
+            .iter()
+            .filter(|id| !shown(id))
+            .map(|id| CardView {
+                id: id.clone(),
+                name: content
+                    .card_index(id)
+                    .map_or_else(|| id.clone(), |i| content.cards[i].name.clone()),
+                text: String::new(),
+                status: "used".to_string(),
+                cost: None,
+            })
+            .collect();
+        if !rest.is_empty() {
+            sv.cards.push(CardGroup {
+                key: "engine.exhausted".to_string(),
+                label: "exhausted".to_string(),
+                source: "engine".to_string(),
+                cards: rest,
+            });
+        }
+    }
+}

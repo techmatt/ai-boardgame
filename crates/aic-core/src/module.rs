@@ -15,6 +15,7 @@ use crate::event::Event;
 use crate::map::Map;
 use crate::rng::Stream;
 use crate::state::{GameState, Outcome};
+use crate::view::ViewOut;
 
 /// A module: an id, a one-line summary and its variants. Registered in
 /// `modules::REGISTRY`.
@@ -100,6 +101,10 @@ pub trait Module: Send + Sync + Debug {
     ) -> Result<(), String> {
         Err(format!("this phase takes no action like {action:?}"))
     }
+    /// Add derived values, card groups or piles to the generic view (see
+    /// `view.rs`). Tokens, resources, `vars` and exhausted cards already
+    /// show without this. Display only: the rules never read the view.
+    fn view(&self, _g: &GameState, _w: &World, _out: &mut ViewOut) {}
 }
 
 /// Read-only game data shared by every game of a config.

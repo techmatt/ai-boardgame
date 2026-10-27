@@ -15,6 +15,7 @@ use crate::module::{Build, Cx, Module, ParamKind, PhaseKind, VariantDef, World};
 use crate::modules;
 use crate::rng::Stream;
 use crate::state::{GameState, HexState, Outcome, Seat, Stats};
+use crate::view::{self, View, ViewOut};
 
 /// Hard stop for configs whose round never ends the game.
 pub const MAX_ROUNDS: u32 = 1000;
@@ -319,6 +320,24 @@ impl Rules {
         } else {
             self.round.get(g.phase)
         }
+    }
+
+    /// The generic view of a state, for clients (see `view.rs`).
+    pub fn view(&self, g: &GameState) -> View {
+        let mut v = view::generic(self, g);
+        let w = self.world();
+        for i in &self.modules {
+            i.module.view(
+                g,
+                &w,
+                &mut ViewOut {
+                    module: i.id,
+                    view: &mut v,
+                },
+            );
+        }
+        view::finish(&mut v, g);
+        v
     }
 
     pub fn legal_actions(&self, g: &GameState) -> Vec<Action> {

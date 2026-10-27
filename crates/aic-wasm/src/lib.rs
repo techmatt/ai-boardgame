@@ -5,7 +5,7 @@
 //! and `events` are separate JSON strings. Errors (bad JSON, bad seed, an
 //! invalid config, an illegal action) are thrown as JavaScript strings.
 
-use aic_core::{Action, Config, GameState, Rules};
+use aic_core::{Action, Config, GameState, Rules, SavedGame};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -70,10 +70,70 @@ pub fn board(config_json: &str) -> Result<String, JsValue> {
 /// Starts a game. `seed` is a decimal string (any `u64`).
 #[wasm_bindgen]
 pub fn new_game(config_json: &str, seed: &str) -> Result<String, JsValue> {
-    let seed: u64 = seed.trim().parse().map_err(|_| {
-        JsValue::from_str(&format!("bad seed {seed:?}: expected a decimal u64 string"))
-    })?;
+    let seed = parse_seed(seed)?;
     Ok(to_json(&rules(config_json)?.new_game(seed)))
+}
+
+fn parse_seed(seed: &str) -> Result<u64, JsValue> {
+    seed.trim().parse().map_err(|_| {
+        JsValue::from_str(&format!("bad seed {seed:?}: expected a decimal u64 string"))
+    })
+}
+
+/// Starts a game and returns an `Outcome` whose `events` are setup's (and
+/// the first round's, up to the first decision).
+#[wasm_bindgen]
+pub fn start(config_json: &str, seed: &str) -> Result<Outcome, JsValue> {
+    let seed = parse_seed(seed)?;
+    let mut events = Vec::new();
+    let state = rules(config_json)?.new_game_logged(seed, Some(&mut events));
+    Ok(Outcome {
+        state: to_json(&state),
+        events: to_json(&events),
+    })
+}
+
+/// The generic view of a state (`aic_core::View`): tokens on hexes,
+/// per-seat and per-country values, card groups, slots, piles, globals.
+#[wasm_bindgen]
+pub fn view(state_json: &str) -> Result<String, JsValue> {
+    let state: GameState = parse("state", state_json)?;
+    Ok(to_json(&aic_core::view(&state).map_err(err)?))
+}
+
+/// A game record (`aic_core::SavedGame` text: config + seed + actions,
+/// plus identity) for the game that `actions` took to `state`.
+#[wasm_bindgen]
+pub fn record_text(state_json: &str, actions_json: &str, note: &str) -> Result<String, JsValue> {
+    let state: GameState = parse("state", state_json)?;
+    let actions: Vec<Action> = parse("actions", actions_json)?;
+    let r = Rules::new(&state.config).map_err(err)?;
+    Ok(SavedGame::new(&r, state.seed, actions, &state, note).to_text())
+}
+
+/// Parses a game record. Returns the record as compact JSON (config, seed
+/// as a decimal string, actions, ...) plus `"config_error"` if its config is
+/// invalid for this engine. Replay it with `start` + `apply`.
+#[wasm_bindgen]
+pub fn parse_record(text: &str) -> Result<String, JsValue> {
+    let rec = SavedGame::from_json(text).map_err(err)?;
+    let mut v = serde_json::to_value(&rec).expect("records serialize");
+    if let Err(e) = Rules::new(&rec.config) {
+        v["config_error"] = e.into();
+    }
+    Ok(v.to_string())
+}
+
+/// Replays a record natively and returns `{"ok": true, "warnings": [...]}`
+/// or `{"ok": false, "error": "..."}`: the same check `aic-sim replay` does.
+#[wasm_bindgen]
+pub fn check_record(text: &str) -> String {
+    let out = SavedGame::from_json(text).and_then(|r| r.replay());
+    match out {
+        Ok((_, warnings)) => serde_json::json!({ "ok": true, "warnings": warnings }),
+        Err(e) => serde_json::json!({ "ok": false, "error": e }),
+    }
+    .to_string()
 }
 
 /// Legal actions for a state, as a JSON array.

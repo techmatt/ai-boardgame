@@ -9,6 +9,9 @@ rules themselves are in [rules.md](rules.md).
 - **`aic-sim`**: native CLI. Plays seeded games, compares configs, replay-checks
   everything. Agents live here, not in the core.
 - **`aic-wasm`**: wasm-bindgen adapter, JSON strings in and out. No rules.
+- **`web/`**: the browser viewer (Vite + TypeScript) on `aic-wasm`. It draws the
+  [generic view](#the-generic-view) and offers only `legal_actions`; see
+  [web/README.md](../web/README.md).
 
 ## Core invariants
 
@@ -51,6 +54,7 @@ rules.legal_actions_into(&g, &mut buf);      // hot path: reuse a buffer
 rules.apply_mut(&mut g, &action, None)?;     // hot path: in place, no event log
 let (next, events) = rules.apply(&g, &action)?;  // copy + event log
 rules.tunables();                            // every tunable of this config, with values
+rules.view(&g);                              // the generic view, for clients (display only)
 rules.check_state(&g)?;                      // does a (deserialized) state fit these rules?
 ```
 
@@ -207,6 +211,9 @@ helper spend only their own resources.
    actions). Add an `Action` variant only if it can't.
 5. Make sure random games still replay and that simultaneous actions still commute
    (extend `variant_matrix`), and document it in `docs/rules.md`.
+6. The viewer shows its tokens, resources, `vars` tracks and exhausted cards without
+   any work. Add a `view` hook only for derived values or card status (see
+   [The generic view](#the-generic-view)).
 
 ### Adding content
 
@@ -228,6 +235,75 @@ country count. A placed piece covers `anchor + i·axes[0] + j·axes[1]` for `i, 
 - Geometry is not in the state. UIs get it from `board(config)` in wasm.
 - The `layouts_match_the_reference_images` test pins the 3/4/5 layouts to the hex sets
   read off the reference images.
+
+## The generic view
+
+Modules come and go, so clients must not need code per module. `Rules::view(&state)`
+(wasm `view(state)`, `view.rs`) turns any state into a fixed set of shapes, and the
+web viewer draws only these:
+
+| Part | Holds | Filled by the engine |
+|---|---|---|
+| `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `tokens` (`{kind, count}`) | every token stack on every hex |
+| `countries[c]` | `colour`, `hexes`, `slots` (card strip), `values` | `tokens.<kind>` totals over the country |
+| `seats[s]` | `passed`, `values`, `cards` (card groups) | `resource.<name>` per resource; exhausted cards no module shows, as group `engine.exhausted` |
+| `globals` | `values` of the whole game | every `vars` track, by its key |
+| `piles` | `{key, label, owner, count, visible}` | none yet: no module has piles |
+| `round`, `phase`, `round_order`, `outcome` | where the game is | always |
+
+A **value** is `{key, label, value, max?, source, doc?}`. `max` is a limit to measure
+against (a threshold or a round count); the viewer marks a value at 75% of its `max` or
+more. `source` is `"engine"` or the module id. A **card** is `{id, name, text?, status,
+cost?}`. `status` is a short word the module chooses; the viewer styles `ready`,
+`used`, `unaffordable` and `no target`, and shows any other word as text.
+
+**How a module exposes its state.** Most of it needs nothing. Tokens it places,
+resources it gives and `vars` it sets all appear by default, labelled by their keys. A
+module implements `Module::view(&self, g, w, out)` only to add what the engine can't
+derive:
+
+- `out.global(key, label, value, max, doc)`, `out.country(c, ...)`, `out.seat(s, ...)`:
+  derived values such as a threshold, a projection or a schedule entry. Keys become
+  `"<module>.<key>"`. A global with a `vars` key replaces that track's generic entry.
+- `out.cards(seat, key, label, cards)`: a card group with each card's status. Cards it
+  shows are no longer listed again under `engine.exhausted`.
+- `out.pile(key, label, owner, count, visible)`: an ordered pile, for the first module
+  that has one.
+
+The placeholders show what this looks like:
+
+- `victory` adds round *n*/`rounds`, and blight / `overrun` per country.
+- `spread` adds this round's `per_country` (and `cap` for `cluster`).
+- `income` adds each country's income if collected now.
+- `actions` adds each seat's open cards as ready, used, unaffordable or no target,
+  with costs.
+
+The view is display data:
+
+- The rules never read it.
+- It is not in the state, the fingerprint or a replay.
+- A hook must not draw from the RNG; it gets `&GameState`, so it can't.
+
+Two tests check it: `the_view_shows_every_hex_seat_country_and_module_value`, and
+`the_view_shows_state_no_module_describes` (unknown tokens, resources, vars, cards).
+
+**What the client assumes.** It draws hexes from `[q, r]`, tints them by country
+colour, and draws every token kind as a counter (blight has a set colour, other kinds
+get a hashed one). It offers actions as `legal_actions` lists them, grouped per seat:
+
+- Actions that differ only in a `target` hex become one button that arms a hex pick.
+- Every other action is its own button, labelled from its fields.
+
+A new `Action` variant with new fields therefore shows up as a button with no client
+change. A hex-valued field under another name still gets a button per action, but no
+board pick. Anything the view doesn't cover is in the viewer's *Raw state* tab.
+
+**Records.** `SavedGame` (`record.rs`, format `aic-game-record/1`) holds the resolved
+config, the seed and the action list, plus identity and the saved outcome and final
+fingerprint. It is the one format for a game the sim saves (`aic-sim --save`), a
+browser bug report and a game loaded into the viewer. `SavedGame::replay` rebuilds the
+game and warns if the rules revision, content, config hash or final fingerprint
+differ.
 
 ## Observability
 

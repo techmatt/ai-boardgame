@@ -14,14 +14,28 @@ const cfg = readFileSync(process.argv[2] ?? path.join(root, 'configs', 'baseline
 const resolved = JSON.parse(m.resolve_config(cfg));
 const board = JSON.parse(m.board(cfg));
 let state = m.new_game(cfg, '18446744073709551615');
-let actions = 0;
+const started = m.start(cfg, '18446744073709551615');
+const sameStart = started.state === state && JSON.parse(started.events).length > 0;
+const taken = [];
 for (;;) {
   const legal = JSON.parse(m.legal_actions(state));
   if (legal.length === 0) break;
   state = m.apply(state, JSON.stringify(legal[0])).state;
-  actions++;
+  taken.push(legal[0]);
 }
+const actions = taken.length;
 const s = JSON.parse(state);
+
+// The generic view and the game record (what web/ uses).
+const view = JSON.parse(m.view(state));
+const record = m.record_text(state, JSON.stringify(taken), 'smoke');
+const parsed = JSON.parse(m.parse_record(record));
+const checked = JSON.parse(m.check_record(record));
+const viewOk = view.hexes.length === board.hexes.length && view.seats.length === s.seats.length
+  && JSON.stringify(view.outcome) === JSON.stringify(s.outcome);
+const recordOk = parsed.seed === s.seed && parsed.actions.length === actions && checked.ok
+  && checked.warnings.length === 0 && !parsed.config_error;
+console.log(`view ${viewOk ? 'ok' : 'BAD'}, record ${recordOk ? 'ok' : 'BAD'} (${record.length} bytes), start ${sameStart ? 'ok' : 'BAD'}`);
 
 // Must equal GOLDEN_FINGERPRINT in crates/aic-core/src/tests.rs (same config,
 // seed and policy), proving native and wasm builds play the same game.
@@ -42,7 +56,7 @@ try {
 }
 console.log(`engine ${m.version()}, config ${resolved.hash}, ${board.hexes.length} hexes`);
 console.log(`seed ${s.seed}: ${actions} actions, outcome ${JSON.stringify(s.outcome)}`);
-if (!s.outcome || s.seed !== '18446744073709551615' || !threw || !golden) {
+if (!s.outcome || s.seed !== '18446744073709551615' || !threw || !golden || !viewOk || !recordOk || !sameStart) {
   console.error('wasm smoke test FAILED');
   process.exit(1);
 }

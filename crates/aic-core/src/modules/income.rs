@@ -2,9 +2,12 @@
 
 use super::{BLIGHT, CREDITS};
 use crate::module::{
-    Build, Cx, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, VariantDef,
+    Build, Cx, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, VariantDef, World,
 };
+use crate::view::ViewOut;
 use crate::GameState;
+
+const INCOME_DOC: &str = "Credits this country would gain if income were collected now.";
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "income",
@@ -58,6 +61,12 @@ fn build_flat(b: &Build) -> Result<Box<dyn Module>, String> {
 }
 
 impl Module for Flat {
+    fn view(&self, g: &GameState, _w: &World, out: &mut ViewOut) {
+        for c in 0..g.seats.len() {
+            out.country(c, "income", "income", self.amount, None, INCOME_DOC);
+        }
+    }
+
     fn run(&self, _phase: usize, g: &mut GameState, cx: &mut Cx) {
         for seat in 0..g.seats.len() {
             cx.add_resource(g, seat, CREDITS, self.amount);
@@ -79,15 +88,28 @@ fn build_clean_land(b: &Build) -> Result<Box<dyn Module>, String> {
     }))
 }
 
+impl CleanLand {
+    fn gain(&self, g: &GameState, w: &World, seat: usize) -> i64 {
+        let clean = w.map.countries[seat]
+            .hexes
+            .iter()
+            .filter(|&&h| g.tokens(h, BLIGHT) == 0)
+            .count() as i64;
+        self.base + clean / self.per_clean
+    }
+}
+
 impl Module for CleanLand {
+    fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
+        for c in 0..g.seats.len() {
+            out.country(c, "income", "income", self.gain(g, w, c), None, INCOME_DOC);
+        }
+    }
+
     fn run(&self, _phase: usize, g: &mut GameState, cx: &mut Cx) {
+        let w = cx.world;
         for seat in 0..g.seats.len() {
-            let clean = cx.world.map.countries[seat]
-                .hexes
-                .iter()
-                .filter(|&&h| g.tokens(h, BLIGHT) == 0)
-                .count() as i64;
-            let gain = self.base + clean / self.per_clean;
+            let gain = self.gain(g, &w, seat);
             cx.add_resource(g, seat, CREDITS, gain);
             cx.count(g, "credits", gain);
         }

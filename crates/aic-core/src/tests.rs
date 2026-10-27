@@ -654,6 +654,183 @@ fn golden_game() {
 }
 
 #[test]
+fn the_view_shows_every_hex_seat_country_and_module_value() {
+    for config in variant_matrix() {
+        let rules = Rules::new(&config).unwrap();
+        let (g, _) = random_game(&rules, 9);
+        let mut g2 = rules.new_game(9);
+        rules
+            .apply_mut(&mut g2, &Action::Pass { seat: 0 }, None)
+            .unwrap();
+        for g in [&g, &g2] {
+            let v = rules.view(g);
+            assert_eq!(v.hexes.len(), g.hexes.len());
+            for (hv, h) in v.hexes.iter().zip(&g.hexes) {
+                let tokens: std::collections::BTreeMap<String, i64> = hv
+                    .tokens
+                    .iter()
+                    .map(|t| (t.kind.clone(), t.count))
+                    .collect();
+                assert_eq!(tokens, h.tokens);
+                assert_eq!(hv.hex, rules.map.hexes[hv.index].hex);
+            }
+            assert_eq!(v.seats.len(), g.seats.len());
+            assert_eq!(v.countries.len(), g.seats.len());
+            assert_eq!(v.round_order.len(), rules.config.round.len());
+            assert_eq!(v.outcome, g.outcome);
+            assert_eq!(v.phase.is_none(), g.is_over());
+            let key = |vals: &[view::Value], k: &str| vals.iter().find(|x| x.key == k).cloned();
+            assert_eq!(key(&v.globals, "victory.round").unwrap().max, Some(8));
+            for c in &v.countries {
+                let blight: i64 = c.hexes.iter().map(|&h| g.tokens(h, "blight")).sum();
+                let ov = key(&c.values, "victory.overrun").unwrap();
+                assert_eq!(
+                    (ov.value, ov.max, ov.source.as_str()),
+                    (blight, Some(13), "victory")
+                );
+                let on_board = g.hexes.iter().any(|h| h.tokens.contains_key("blight"));
+                if on_board {
+                    assert_eq!(key(&c.values, "tokens.blight").unwrap().value, blight);
+                }
+                assert!(key(&c.values, "income.income").is_some());
+                assert_eq!(c.slots.len(), 3);
+            }
+            for s in &v.seats {
+                let credits = g.resource(s.index as usize, "credits");
+                assert_eq!(
+                    key(&s.values, "resource.credits").map_or(0, |x| x.value),
+                    credits
+                );
+                assert_eq!(
+                    s.cards.len(),
+                    1,
+                    "only the module's group: every card is in it"
+                );
+                assert_eq!(s.cards[0].key, "actions.open");
+                for c in &s.cards[0].cards {
+                    let used = g.seats[s.index as usize].exhausted.contains(&c.id);
+                    assert_eq!(used, c.status == "used");
+                }
+            }
+        }
+        let p = rules.view(&g2).phase.unwrap();
+        assert_eq!((p.name.as_str(), p.waiting.len()), ("actions.play", 2));
+    }
+}
+
+/// Anything in the state that no module draws still shows, generically.
+#[test]
+fn the_view_shows_state_no_module_describes() {
+    let rules = Rules::new(&baseline()).unwrap();
+    let mut g = rules.new_game(3);
+    g.vars.insert("future.track".into(), 4);
+    g.hexes[5].tokens.insert("relay".into(), 2);
+    g.seats[1].resources.insert("influence".into(), 7);
+    g.seats[1].exhausted.push("mystery".into());
+    g.seats[2].slots[0] = Some("scrub".into());
+    let v = rules.view(&g);
+    assert!(v
+        .globals
+        .iter()
+        .any(|x| x.key == "future.track" && x.value == 4 && x.source == "engine"));
+    assert!(v.hexes[5]
+        .tokens
+        .iter()
+        .any(|t| t.kind == "relay" && t.count == 2));
+    let c = rules.map.hexes[5].country as usize;
+    assert!(v.countries[c]
+        .values
+        .iter()
+        .any(|x| x.key == "tokens.relay" && x.value == 2));
+    assert!(v.seats[1]
+        .values
+        .iter()
+        .any(|x| x.key == "resource.influence" && x.value == 7));
+    let ex = v.seats[1]
+        .cards
+        .iter()
+        .find(|g| g.key == "engine.exhausted")
+        .unwrap();
+    assert_eq!(ex.cards[0].id, "mystery");
+    assert_eq!(v.countries[2].slots[0].as_ref().unwrap().name, "Scrub");
+
+    // A clean country: blight totals 0, targeted cards have no target.
+    for &h in &rules.map.countries[0].hexes {
+        g.hexes[h].tokens.remove("blight");
+    }
+    g.seats[0].resources.insert("credits".into(), 10);
+    let v = rules.view(&g);
+    let blight = v.countries[0]
+        .values
+        .iter()
+        .find(|x| x.key == "tokens.blight")
+        .unwrap();
+    assert_eq!(blight.value, 0);
+    let status = |id: &str| {
+        v.seats[0].cards[0]
+            .cards
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap()
+            .status
+            .clone()
+    };
+    assert_eq!(
+        (status("scrub"), status("invest")),
+        ("no target".into(), "ready".into())
+    );
+}
+
+#[test]
+fn saved_games_round_trip_and_replay_to_the_saved_state() {
+    let mut config = baseline();
+    config.apply_override("spread.variant=cluster").unwrap();
+    config.apply_override("spread.cap=4").unwrap();
+    let rules = Rules::new(&config).unwrap();
+    let (g, actions) = random_game(&rules, 21);
+    let rec = SavedGame::new(&rules, 21, actions.clone(), &g, "a loss");
+    let text = rec.to_text();
+    assert!(text.starts_with("{\n  \"format\": \"aic-game-record/1\",\n  \"note\": \"a loss\""));
+    assert_eq!(
+        text.lines().count(),
+        actions.len() + 15,
+        "one action per line:\n{text}"
+    );
+    let back = SavedGame::from_json(&text).unwrap();
+    assert_eq!(back, rec);
+    let (h, warnings) = back.replay().unwrap();
+    assert_eq!((h, warnings), (g.clone(), vec![]));
+
+    // The minimal hand-written form loads too.
+    for seed in [serde_json::json!("21"), serde_json::json!(21)] {
+        let minimal = serde_json::json!({
+            "config": config, "seed": seed, "actions": actions,
+        });
+        let (h, warnings) = SavedGame::from_json(&minimal.to_string())
+            .unwrap()
+            .replay()
+            .unwrap();
+        assert_eq!((h, warnings), (g.clone(), vec![]));
+    }
+
+    let mut bad = rec.clone();
+    bad.final_fingerprint = "0000000000000000".into();
+    let w = bad.replay().unwrap().1;
+    assert!(w[0].contains("fingerprint"), "{w:?}");
+    let mut bad = rec.clone();
+    bad.actions.insert(0, Action::Pass { seat: 9 });
+    assert!(bad.replay().err().unwrap().contains("action 0"));
+    let other = text.replace("aic-game-record/1", "aic-game-record/9");
+    assert!(SavedGame::from_json(&other)
+        .err()
+        .unwrap()
+        .contains("format"));
+    // An empty game (no actions) writes valid JSON.
+    let empty = SavedGame::new(&rules, 1, vec![], &rules.new_game(1), "");
+    assert_eq!(SavedGame::from_json(&empty.to_text()).unwrap(), empty);
+}
+
+#[test]
 fn removing_the_last_module_of_an_explicit_round_is_an_error() {
     let mut c = baseline();
     c.round = vec!["spread.advance".into(), "victory.check".into()];
