@@ -1,0 +1,12 @@
+[package]
+name = "aic-core"
+description = "AI Complete rules engine: pure, deterministic, front-end free"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true

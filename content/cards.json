@@ -1,0 +1,31 @@
+[
+  {
+    "id": "scrub",
+    "name": "Scrub",
+    "text": "Remove blight from a hex in your country.",
+    "cost": { "param": "scrub_cost" },
+    "target": { "own_hex": { "with_token": "blight" } },
+    "effects": [
+      { "op": "remove_tokens", "token": "blight", "amount": { "param": "scrub_amount" } }
+    ]
+  },
+  {
+    "id": "invest",
+    "name": "Invest",
+    "text": "Pay credits now, gain more credits now.",
+    "cost": { "param": "invest_cost" },
+    "effects": [
+      { "op": "gain", "resource": "credits", "amount": { "param": "invest_gain" } }
+    ]
+  },
+  {
+    "id": "purge",
+    "name": "Purge",
+    "text": "Remove up to 3 blight from a hex in your country.",
+    "cost": 4,
+    "target": { "own_hex": { "with_token": "blight" } },
+    "effects": [
+      { "op": "remove_tokens", "token": "blight", "amount": 3 }
+    ]
+  }
+]

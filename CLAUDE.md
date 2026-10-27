@@ -12,8 +12,20 @@ The standing contract for every executor working in this repo.
 - Intended shape: a **Rust core** that simulates the rules, with clients that render
   it. The first client is **wasm + a JS front-end**. Clients render and take input;
   rules live in the core.
-- Design is still being gathered. Most of this does not exist yet; don't describe
-  or document code as if it does.
+- Design is still being gathered. The engine skeleton exists (core, sim, wasm), but the
+  game rules don't: the modules are placeholders. Don't describe or document code as
+  if it does more than it does.
+
+## Engine rules
+
+- The core invariants (no I/O, no clock, no global RNG, no hash-order leaks, serde
+  state, exact replay, native = wasm) and how to add a module, variant or card are in
+  [docs/architecture.md](docs/architecture.md). Keep them.
+- Tunable numbers live in configs, never in code. A new mechanic is a module; another
+  way of doing one is a variant.
+- Any change to how games play out: bump `RULES_REVISION` and update the golden
+  fingerprint (`tests.rs` and `scripts/wasm-smoke.mjs`).
+- Every rules change updates [docs/rules.md](docs/rules.md) in the same commit.
 
 ## Working rules
 

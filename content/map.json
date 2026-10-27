@@ -1,0 +1,48 @@
+{
+  "piece": {
+    "size": 4,
+    "card_slots": 3
+  },
+  "layouts": [
+    {
+      "countries": 1,
+      "pieces": [
+        { "anchor": [-4, 3], "axes": ["E", "SE"], "colour": "#efe4b0" }
+      ]
+    },
+    {
+      "countries": 2,
+      "pieces": [
+        { "anchor": [-4, 3], "axes": ["E", "SE"], "colour": "#efe4b0" },
+        { "anchor": [3, 0], "axes": ["SW", "SE"], "colour": "#ffaec9" }
+      ]
+    },
+    {
+      "countries": 3,
+      "pieces": [
+        { "anchor": [-4, 3], "axes": ["E", "SE"], "colour": "#efe4b0" },
+        { "anchor": [3, 0], "axes": ["SW", "SE"], "colour": "#ffaec9" },
+        { "anchor": [0, -1], "axes": ["E", "SW"], "colour": "#99d9ea" }
+      ]
+    },
+    {
+      "countries": 4,
+      "pieces": [
+        { "anchor": [-4, 3], "axes": ["E", "SE"], "colour": "#efe4b0" },
+        { "anchor": [3, 0], "axes": ["SW", "SE"], "colour": "#ffaec9" },
+        { "anchor": [0, -1], "axes": ["NE", "SE"], "colour": "#99d9ea" },
+        { "anchor": [-4, -1], "axes": ["E", "SE"], "colour": "#b5e61d" }
+      ]
+    },
+    {
+      "countries": 5,
+      "pieces": [
+        { "anchor": [-4, 3], "axes": ["E", "SE"], "colour": "#efe4b0" },
+        { "anchor": [3, 0], "axes": ["SW", "SE"], "colour": "#ffaec9" },
+        { "anchor": [0, -1], "axes": ["NE", "SE"], "colour": "#99d9ea" },
+        { "anchor": [-4, -1], "axes": ["E", "SE"], "colour": "#b5e61d" },
+        { "anchor": [0, -5], "axes": ["E", "SW"], "colour": "#ffc90e" }
+      ]
+    }
+  ]
+}
