@@ -1,4 +1,4 @@
-# ai-boardgame
+# aicomplete
 
 **AI Complete**, a cooperative board game about AIs, being turned into a digital version.
 The rules live in a pure, deterministic Rust core that simulates them. A native simulator
