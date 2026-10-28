@@ -445,4 +445,32 @@ mod tests {
         assert!(AgentSpec::parse("mcts").is_err());
         assert!(AgentSpec::parse("random:samples=2").is_err());
     }
+
+    /// The deck clock (011): `w.clock` per round the team, at its rate so
+    /// far, would still be short of the top opposition level when the deck
+    /// runs out; nothing while it is on course.
+    #[test]
+    fn deck_clock_penalises_a_team_behind_the_deck() {
+        let r = rules(0);
+        let mut g = r.new_game(1);
+        let value = |clock: f64, g: &aic_core::GameState| {
+            let mut w = eval::Weights::default();
+            w.clock = clock;
+            eval::Eval::new(&r, w).value(&r, g)
+        };
+        // Round 4, 4 points (1 a round), 24 for the top level: 20 rounds
+        // needed. Two cards left: 2 action phases after this one. 18 short.
+        g.round = 4;
+        g.vars.insert("opposition.points".into(), 4);
+        let deck = g.pile("adversary.deck").to_vec();
+        g.piles.insert("adversary.deck".into(), deck[..2].to_vec());
+        assert!((value(0.0, &g) - value(2.0, &g) - 2.0 * 18.0).abs() < 1e-9);
+        // On course (20 points by round 4: 5 a round, 1 round to go): no cost.
+        g.vars.insert("opposition.points".into(), 20);
+        assert_eq!(value(0.0, &g), value(2.0, &g));
+        // The engine watches the deck by default; greedy doesn't (its
+        // games, the difficulty calibration, are unchanged).
+        assert!(eval::Weights::engine().clock > 0.0);
+        assert_eq!(eval::Weights::default().clock, 0.0);
+    }
 }

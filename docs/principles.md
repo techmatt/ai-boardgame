@@ -52,5 +52,7 @@ The standards every module and every rules change is judged against.
 
 Agents get no information or help the printed game couldn't give players.
 
+Weigh each measure's cost against the decision it informs: screen cheaply first, and run expensive measures only on finalists.
+
 The agents (random, greedy, beam, rollout) and how each measure is computed are in the
 README (*Agents*, *Experiments*); `aic-sim experiment` writes them up as a cycle report.

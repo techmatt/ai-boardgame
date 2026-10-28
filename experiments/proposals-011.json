@@ -1,0 +1,98 @@
+{
+  "name": "proposals-011",
+  "note": "011: 007's accepted proposals at the tuned baseline, rules r4. base = the new defaults (clear-board win from stage II; new difficulty 1 and 3 effects). r3_rules = the r3 rules by override (clear-board win any time, level 1 counter_bonus 2 and no extra threat, level 3 foundry_bonus 1 and no reach). Opposition rewards, each against off (and the default pushback). free_keep at keep_cost 2 (007 proposal 6: one free keep a round, others at 2). The uplinks spread variant, alone and with foundries exploring. Greedy and the engine agent (deck clock on), difficulties 0-4, no probes. Not run to completion: stopped at 2,109 of 6,400 games (Matt's message #444, a rules overhaul is coming); kept ready to run.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "base",
+      "set": []
+    },
+    {
+      "name": "r3_rules",
+      "set": [
+        "opposition.clear_win_stage=1",
+        "adversary.counter_bonus=2",
+        "adversary.extra_threats=0",
+        "adversary.foundry_bonus=1",
+        "adversary.foundry_reach=0"
+      ]
+    },
+    {
+      "name": "opp_off",
+      "set": [
+        "opposition.variant=off"
+      ]
+    },
+    {
+      "name": "opp_income4",
+      "set": [
+        "opposition.variant=income",
+        "opposition.income_credits=4"
+      ]
+    },
+    {
+      "name": "opp_free4",
+      "set": [
+        "opposition.variant=free_purchases",
+        "opposition.free_purchases=4"
+      ]
+    },
+    {
+      "name": "opp_insight1",
+      "set": [
+        "opposition.variant=insight",
+        "opposition.insight_income=1"
+      ]
+    },
+    {
+      "name": "opp_counter_all",
+      "set": [
+        "opposition.variant=counter_all"
+      ]
+    },
+    {
+      "name": "free_keep",
+      "set": [
+        "cards.variant=free_keep",
+        "cards.free_keeps=1",
+        "cards.keep_cost=2"
+      ]
+    },
+    {
+      "name": "uplinks",
+      "set": [
+        "adversary.variant=uplinks",
+        "adversary.explore_foundries=0"
+      ]
+    },
+    {
+      "name": "uplinks_foundries",
+      "set": [
+        "adversary.variant=uplinks",
+        "adversary.explore_foundries=1"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 64,
+  "first_seed": 600000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

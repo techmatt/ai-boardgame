@@ -27,6 +27,7 @@ const SPEC: &str = r#"{
   "agents": ["random", "greedy"],
   "games": 3,
   "winprob": {"games": 1, "rollouts": 2, "agent": "random"},
+  "closeness": {"every": 1},
   "records": 2
 }"#;
 
@@ -71,7 +72,7 @@ fn results_without_timing(dir: &Path) -> Vec<Vec<String>> {
 fn experiment_writes_report_and_records_random() {
     let body = SPEC
         .replace(r#"["random", "greedy"]"#, r#"["random"]"#)
-        .replace(r#""records": 2"#, r#""closeness": {"every": 4}, "records": 2"#);
+        .replace(r#""closeness": {"every": 1}"#, r#""closeness": {"every": 4}"#);
     writes_report_and_records("aic-sim-experiment-random", &body, 2);
 }
 
@@ -254,6 +255,72 @@ fn experiment_omits_comparisons_that_do_not_apply() {
     assert!(report.contains("## Variants against the base"));
     assert!(!report.contains("## Head to head against greedy"));
     assert!(!report.contains("## Removing a module"));
+}
+
+/// The two-stage pattern (011): `--variants` keeps the base and the named
+/// variants; `--winprob` and `--closeness` turn the probes on for that run.
+/// An unknown variant is an argument error.
+#[test]
+fn experiment_filters_variants_and_turns_probes_on() {
+    let root = fresh_dir("aic-sim-experiment-two-stage");
+    let spec = root.join("spec.json");
+    let body = r#"{
+  "name": "two-stage",
+  "configs": ["configs/baseline.json"],
+  "variants": [
+    {"name": "base", "set": []},
+    {"name": "keep0", "set": ["cards.keep_cost=0"]},
+    {"name": "keep2", "set": ["cards.keep_cost=2"]}
+  ],
+  "agents": ["random"],
+  "games": 2,
+  "winprob": {"games": 0, "rollouts": 1, "agent": "random"},
+  "records": 0
+}"#;
+    std::fs::write(&spec, body).unwrap();
+    let out = root.join("out");
+    let res = sim()
+        .arg("experiment")
+        .arg(&spec)
+        .arg("--out")
+        .arg(&out)
+        .args(["--variants", "keep2", "--winprob", "1", "--closeness", "2"])
+        .output()
+        .unwrap();
+    assert!(res.status.success(), "{}", String::from_utf8_lossy(&res.stderr));
+    let results: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap()).unwrap();
+    let names: Vec<&str> = results["spec"]["variants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["base", "keep2"]);
+    assert_eq!(results["spec"]["winprob"]["games"], 1);
+    assert_eq!(results["spec"]["closeness"]["every"], 2);
+    // Without the flags the spec's defaults hold: both probes off.
+    let res = sim()
+        .arg("experiment")
+        .arg(&spec)
+        .arg("--out")
+        .arg(root.join("out2"))
+        .output()
+        .unwrap();
+    assert!(res.status.success());
+    let results: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join("out2/results.json")).unwrap()).unwrap();
+    assert_eq!(results["spec"]["winprob"]["games"], 0);
+    assert_eq!(results["spec"]["closeness"]["every"], 0);
+    let report = std::fs::read_to_string(root.join("out2/report.md")).unwrap();
+    assert!(report.contains("Off measures are opt-in"), "{report}");
+    let res = sim()
+        .arg("experiment")
+        .arg(&spec)
+        .args(["--variants", "nope"])
+        .output()
+        .unwrap();
+    assert_eq!(res.status.code(), Some(2));
 }
 
 #[test]

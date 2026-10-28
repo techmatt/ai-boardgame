@@ -115,6 +115,7 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; 5] {
         }
     }
     add("credits", g.var(opposition::INCOME_BONUS));
+    add("insight", g.var(opposition::INSIGHT_BONUS));
     out
 }
 

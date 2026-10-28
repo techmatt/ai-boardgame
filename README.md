@@ -23,7 +23,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports with their records. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 as tuned by the 007 run (2 countries, difficulty 0); `v0_untuned.json` keeps v0's numbers; `shared_row.json` differs only in the threat variant; `clusters.json` and `assets.json` only in the adversary (the two spread variants, rules.md §2a). Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §2b): `--set threats.variant=off`, `opposition.variant=off`, `cards.variant=off`. |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 as tuned by the 007 run with 011's rules, r4 (2 countries, difficulty 0); `v0_untuned.json` keeps v0's numbers and rules; `shared_row.json` differs only in the threat variant; `clusters.json` and `assets.json` only in the adversary (the two spread variants, rules.md §2a). Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §2b): `--set threats.variant=off`, `opposition.variant=off`, `cards.variant=off`. 011's opt-in variants (rules.md): `opposition.variant=insight` (+ `opposition.insight_income=1`), `opposition.variant=counter_all`, `cards.variant=free_keep` (+ `cards.free_keeps=1`), `adversary.variant=uplinks` (+ `adversary.explore_foundries=0|1`). |
 | `scripts/wasm-smoke.mjs` | Plays one game through the wasm package in Node. |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
@@ -222,7 +222,7 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
 | `greedy` | One action at a time: each scored by the heuristic after it, its own choices resolved best-first. A pass scores the table as it is (else stalling beats stopping). | `samples` 1 (guesses averaged), `depth` 1 (actions looked ahead), `choices` 2 |
 | `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all), `choices` 2 (levels of an action's own choices resolved before scoring it; with 1, placing a processor, which asks a track and then a hex, looks worthless and beam stops growing its engine) |
 | `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `choices` 2, `candidates` 3, `rollouts` 4, `horizon` 2 |
-| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and production (working factories' credits, processors' compute) `w.production` of that; the rounds left are the adversary deck's clock, cut short by when the team is on course to win (opposition still needed at its rate so far, `w.opp_rate`, `w.win_lag`) and discounted by danger (`w.risk` per unpaid threat per country, pool ≤ 4, population near the loss line); a building without income earns `w.ability` per round left; a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.locked` for tier 2 not yet unlocked; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `locked` 0.5, `opp_rate` 2, `win_lag` 1, `production` 0, `insight_wait` 0 |
+| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and production (working factories' credits, processors' compute) `w.production` of that; the rounds left are the adversary deck's clock, cut short by when the team is on course to win (opposition still needed at its rate so far, `w.opp_rate`, `w.win_lag`) and discounted by danger (`w.risk` per unpaid threat per country, pool ≤ 4, population near the loss line); a building without income earns `w.ability` per round left; a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.locked` for tier 2 not yet unlocked; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left; and the **deck clock** (011, `w.clock`): a penalty per round the team, at its opposition rate so far, would still be short of the top level when the deck runs out. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `locked` 0.5, `opp_rate` 2, `win_lag` 1, `production` 0, `insight_wait` 0, `clock` 30 |
 
 Any agent can use horizon mode (`greedy:w.horizon=1,...`); `engine` only changes the
 defaults. Agent sweeps with strategy health (win %, buildings and tier-2 cards played per
@@ -287,6 +287,18 @@ gives the same total throughput (about 1.3 games/s for greedy + engine), and eve
 `tail` on a log can take 30+ s under that load. A background waiter killed at its time
 limit can leave a `bash.exe.stackdump` in the repo root: delete it.
 
+**Proposals (011)**, write-up `experiments/proposals-011.md`: 007's accepted proposals
+as variants and new defaults (rules r4). Screens (no probes, greedy):
+`experiments/screen-011-difficulty*.json` (512–1,024 games, 9–16 min each with another
+run beside it) chose the new level 1 and 3 effects; `screen-011-clock*.json` ran on
+009's `t2_half+t2_noam` patch binary (`bash scripts/payback/build_patches.sh
+t2_half+t2_noam`, then `out/patch-bin/t2_half+t2_noam.exe experiment ...`; 192–480
+greedy + engine games, 7–12 min). The measurement, `experiments/proposals-011.json`
+(10 variants × d0–d4 × greedy, engine × 64 seeds = 6,400 games, no probes), was
+stopped unfinished: 2,109 games in 28 minutes alone on 12 threads (about 1.25 greedy +
+engine games a second), so about 85 minutes for the whole grid. An experiment writes
+nothing until its grid finishes, so a stopped run leaves no results.
+
 An experiment is configs × variants × difficulties × agents over a seed range, played
 on every core (one game at a time per worker, results sorted, so nothing depends on the
 thread count; every game is replay-checked). The spec (`experiments/*.json`):
@@ -300,9 +312,24 @@ thread count; every game is replay-checked). The spec (`experiments/*.json`):
 | `agents` | | Agent specs, weakest first. |
 | `games`, `first_seed` | `first_seed` 0 | Seeds per cell. `--games`/`--seed` override. |
 | `max_actions` | `5000` | Per-game cap (`timeout`). |
-| `winprob` | `{"games": 0, "rollouts": 8, "agent": "greedy"}` | Win probability by round: for the first `games` seeds of each cell, `rollouts` playouts by `agent` from a guess of the table at the start of each round. |
-| `closeness` | `{"every": 1, "gap": 2.0}` | Probe every n-th real choice (0 = off): 1-ply greedy scores of every option; close when the best two are within `gap` heuristic points (about credits). |
+| `winprob` | `{"games": 0, "rollouts": 8, "agent": "greedy"}` | **Off unless set.** Win probability by round: for the first `games` seeds of each cell, `rollouts` playouts by `agent` from a guess of the table at the start of each round. `--winprob N` sets `games`. |
+| `closeness` | `{"every": 0, "gap": 2.0}` | **Off unless set** (011; it was on, every 1). Probe every n-th real choice: 1-ply greedy scores of every option; close when the best two are within `gap` heuristic points (about credits). `--closeness N` sets `every`. |
 | `records` | `4` | Records saved per category. |
+
+**Expensive measures are opt-in: screen first, probe finalists.** Win-probability
+probes cost about 5× an experiment (007's `tune-after`: 45 minutes probed, 9–12
+without), and closeness about one greedy decision per probed decision. Both are off
+unless a spec or the command line turns them on. The two-stage pattern:
+
+```sh
+$S experiment experiments/x.json                                     # 1. screen: every variant, no probes
+$S experiment experiments/x.json --variants keep2,uplinks \
+    --winprob 10 --closeness 1 --out out/experiments/x-finalists     # 2. probe only the finalists
+```
+
+`--variants A,B` keeps only those variants of the spec (its first variant, the base,
+is always kept, first, so the comparisons still have their reference). The report's
+*Run* section says which measures were off.
 
 The output directory (`--out`, default `out/experiments/<name>/`) holds `report.md` (the
 cycle report: findings, then the tables), `results.json` (`aic-experiment/1`: the
@@ -405,5 +432,9 @@ the reason in the record's `note`: *close losses* at the top difficulty (fewest 
 over the bar, then the longest games); *early lock-ins* (decided by round 2 in games of
 3+ rounds, from the win-probability playouts); *surprising wins* (by the weakest agent,
 after the playouts gave them ≤ 0.25, or below the top agent at the top difficulty).
+"Weakest", "top" and "stronger first" are by **measured** strength (011), not ladder
+tier: agents ranked by win rate at the top difficulty on the base variant (the same
+reading as the strategy-health *top agent*); equal win rates share a rank, so with all
+agents tied nobody is "weakest".
 Files are named `<category>-c<cell>-<config>-<variant>-d<difficulty>-<agent>-seed<S>.json`;
 a rerun into the same directory replaces them.

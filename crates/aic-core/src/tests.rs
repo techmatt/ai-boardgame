@@ -32,6 +32,28 @@ fn variant_matrix() -> Vec<Config> {
             }
         }
     }
+    // 011's variants and difficulty options, each on the baseline.
+    let extra: [&[&str]; 5] = [
+        &["opposition.variant=insight", "opposition.insight_income=1"],
+        &["opposition.variant=counter_all", "adversary.difficulty=4"],
+        &["cards.variant=free_keep", "cards.free_keeps=1"],
+        &["adversary.variant=uplinks", "adversary.explore_foundries=1", "adversary.difficulty=4"],
+        &[
+            "adversary.difficulty=4",
+            "adversary.counter_bonus_all=1",
+            "adversary.extra_threats=1",
+            "adversary.foundry_reach=2",
+            "opposition.clear_win_stage=1",
+        ],
+    ];
+    for e in extra {
+        let mut c = baseline();
+        for o in e {
+            c.apply_override(o).unwrap();
+        }
+        Rules::new(&c).unwrap();
+        out.push(c);
+    }
     out
 }
 
@@ -755,7 +777,7 @@ fn rng_draws_are_fixed_width_and_pinned() {
 }
 
 const GOLDEN_DRAWS: [usize; 8] = [10, 13, 7, 2, 12, 9, 1, 7];
-const GOLDEN_FINGERPRINT: &str = "ae84b873819c2651";
+const GOLDEN_FINGERPRINT: &str = "a08c1c27bc9d018c";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).
@@ -777,7 +799,7 @@ fn golden_game() {
     assert!(g.is_over());
     assert_eq!(
         (RULES_REVISION, g.fingerprint().as_str()),
-        (3, GOLDEN_FINGERPRINT)
+        (4, GOLDEN_FINGERPRINT)
     );
 }
 
@@ -838,6 +860,7 @@ fn the_view_names_countries_shows_boards_and_keeps_bookkeeping_out_of_globals() 
         "cards.next_discount.",
         "cards.civic_used.",
         "cards.unpowered.",
+        "cards.kept_round.",
         "economy.bonus_insight",
         "threats.paid.",
         "threats.jam.",
@@ -1201,4 +1224,189 @@ fn off_variants_remove_threats_level_rewards_and_the_draft() {
     // Only the AIs' unique cards: nothing dealt, drafted or drawable.
     assert_eq!(g.pile("cards.hand.0").len(), 3);
     assert!(rules.legal_actions(&g).iter().all(|a| !matches!(a, Action::Draw { .. })));
+}
+
+/// The baseline with overrides.
+fn baseline_with(sets: &[&str]) -> Config {
+    let mut c = baseline();
+    for o in sets {
+        c.apply_override(o).unwrap();
+    }
+    c
+}
+
+/// The level-0 win (no adversary pieces) only counts from the stage
+/// `clear_win_stage` names (011: stage II by default).
+#[test]
+fn the_clear_board_win_waits_for_stage_two() {
+    for (rule, stage, wins) in [(2, 1, false), (2, 2, true), (1, 1, true)] {
+        let rules = Rules::new(&baseline_with(&[&format!("opposition.clear_win_stage={rule}")])).unwrap();
+        let mut g = rules.new_game(4);
+        advance_to(&rules, &mut g, ACTIONS);
+        for h in g.hexes.iter_mut() {
+            for k in ["drone", "outpost", "foundry"] {
+                h.tokens.remove(k);
+            }
+        }
+        g.vars.insert("adversary.stage".into(), stage);
+        g.seats[0].resources.insert("insight".into(), 1);
+        rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
+        assert_eq!(g.outcome.as_ref().is_some_and(|o| o.won), wins, "rule {rule}, stage {stage}");
+        // The view says when the clear-board win starts to count.
+        let level = rules.view(&g).globals.into_iter().find(|v| v.key == "opposition.level").unwrap();
+        assert_eq!(level.doc.contains("from adversary stage"), stage < rule, "{}", level.doc);
+    }
+}
+
+/// Difficulty 1's options (011): every counter requirement higher, and
+/// extra threats each round, one per country in turn (round 1: country 0).
+#[test]
+fn difficulty_1_raises_every_requirement_and_deals_more_threats() {
+    let sets = ["adversary.counter_bonus=0", "adversary.counter_bonus_all=1", "adversary.extra_threats=1"];
+    let at = |d: i64| {
+        let mut s: Vec<String> = sets.iter().map(|s| s.to_string()).collect();
+        s.push(format!("adversary.difficulty={d}"));
+        let s: Vec<&str> = s.iter().map(|x| x.as_str()).collect();
+        Rules::new(&baseline_with(&s)).unwrap()
+    };
+    let (r0, r1) = (at(0), at(1));
+    let mut g0 = r0.new_game(1);
+    let mut g1 = r1.new_game(1);
+    let req = |r: &Rules, g: &GameState| modules::threats::requirement(&r.world(), g, "patrol");
+    assert_eq!(req(&r0, &g0), [("energy".to_string(), 2), ("credits".to_string(), 2)]);
+    assert_eq!(req(&r1, &g1), [("energy".to_string(), 3), ("credits".to_string(), 3)]);
+    advance_to(&r0, &mut g0, ACTIONS);
+    advance_to(&r1, &mut g1, ACTIONS);
+    assert_eq!(modules::threats::active(&g0).len(), 2);
+    let on = |g: &GameState, c: usize| {
+        modules::threats::active(g).iter().filter(|(_, at)| *at == Some(c)).count()
+    };
+    assert_eq!((on(&g1, 0), on(&g1, 1)), (2, 1));
+    // Round 2: the extra threat goes to country 1.
+    for _ in 0..10_000 {
+        let there = g1.round == 2 && g1.pending.is_none() && r1.phase(&g1).is_some_and(|p| p.name == ACTIONS);
+        if there || g1.is_over() {
+            break;
+        }
+        let a = r1.legal_actions(&g1)[0].clone();
+        r1.apply_mut(&mut g1, &a, None).unwrap();
+    }
+    assert!(!g1.is_over(), "seed 1 should reach round 2");
+    assert_eq!((on(&g1, 0), on(&g1, 1)), (1, 2));
+}
+
+/// Difficulty 3 (011): a ravaged foundry's reach destroys players' pieces
+/// in the adjacent hexes, after their defense; no corruption there.
+#[test]
+fn foundry_reach_hits_adjacent_hexes_at_difficulty_3() {
+    for (d, defended, lost) in [(3, false, true), (3, true, false), (2, false, false)] {
+        let mut c = baseline_with(&[
+            &format!("adversary.difficulty={d}"),
+            "adversary.foundry_bonus=0",
+            "adversary.foundry_reach=2",
+        ]);
+        c.round = vec!["adversary.ravage".into(), ACTIONS.into()];
+        let rules = Rules::new(&c).unwrap();
+        let mut g = rules.new_game(1);
+        for h in g.hexes.iter_mut() {
+            h.tokens.clear();
+        }
+        let map = &rules.map;
+        let h = map.numbered(0, 5);
+        let n = map.hexes[h].neighbours[0];
+        g.piles.insert("adversary.ravage".into(), vec!["s1_urban".into()]);
+        g.hexes[h].tokens.insert("foundry".into(), 1);
+        g.hexes[n].tokens.insert("population".into(), 1);
+        if defended {
+            g.hexes[n].tokens.insert("defense:0".into(), 1);
+        }
+        g.hexes[map.numbered(1, 5)].tokens.insert("population".into(), 6);
+        g.vars.insert("board.start_population".into(), 2);
+        g.phase = 0;
+        rules.enter(&mut g, None);
+        assert!(g.pending.is_none());
+        assert_eq!(g.tokens(n, "population"), if lost { 0 } else { 1 }, "d{d} defended {defended}");
+        assert_eq!(g.tokens(n, "corruption"), 0);
+        // The foundry's own hex ravages as before (3 damage: corruption).
+        assert_eq!(g.tokens(h, "corruption"), 1);
+    }
+}
+
+/// Variant `uplinks` (011): outposts no longer seed explore; with
+/// `explore_foundries`, foundries do.
+#[test]
+fn uplinks_variant_explores_only_from_uplinks_and_foundries() {
+    let cases: [(&[&str], &str, i64); 4] = [
+        (&[], "outpost", 1),
+        (&["adversary.variant=uplinks", "adversary.explore_foundries=0"], "outpost", 0),
+        (&["adversary.variant=uplinks", "adversary.explore_foundries=0"], "foundry", 0),
+        (&["adversary.variant=uplinks", "adversary.explore_foundries=1"], "foundry", 1),
+    ];
+    for (sets, piece, drones) in cases {
+        let mut c = baseline_with(sets);
+        c.round = vec!["adversary.explore".into(), ACTIONS.into()];
+        let rules = Rules::new(&c).unwrap();
+        let mut g = rules.new_game(1);
+        for h in g.hexes.iter_mut() {
+            h.tokens.clear();
+        }
+        let h = rules.map.numbered(0, 5);
+        assert!(!rules.map.hexes[h].uplink);
+        g.hexes[h].tokens.insert(piece.into(), 1);
+        g.piles.insert("adversary.explore".into(), vec![]);
+        g.piles.insert("adversary.deck".into(), vec!["s1_urban".into()]);
+        g.phase = 0;
+        rules.enter(&mut g, None);
+        assert_eq!(g.tokens(h, "drone"), drones, "{sets:?} {piece}");
+    }
+}
+
+/// Variant `free_keep` (011): each player's first kept card each round is
+/// free; the next costs `keep_cost`.
+#[test]
+fn free_keep_makes_the_first_keep_of_the_round_free() {
+    let rules = Rules::new(&baseline_with(&["cards.variant=free_keep", "cards.free_keeps=1"])).unwrap();
+    let mut g = rules.new_game(2);
+    advance_to(&rules, &mut g, "cards.keep");
+    let cost = rules.world().int("cards.keep_cost");
+    let credits = g.resource(0, "credits");
+    let drafted = g.pile("cards.drafted.0").to_vec();
+    assert!(drafted.len() >= 2);
+    for (k, card) in drafted.iter().take(2).enumerate() {
+        rules.apply_mut(&mut g, &Action::Keep { seat: 0, card: card.clone() }, None).unwrap();
+        let paid = if k == 0 { 0 } else { cost };
+        assert_eq!(g.resource(0, "credits"), credits - paid, "keep {k}");
+    }
+    // A new round gives a new free keep.
+    advance_to(&rules, &mut g, "cards.draft");
+    assert_eq!(g.var("cards.kept_round.0"), 0);
+}
+
+/// Rewards `insight` and `counter_all` (011).
+#[test]
+fn insight_and_counter_all_rewards() {
+    for (sets, insight) in [
+        (&["opposition.variant=insight", "opposition.insight_income=1"][..], true),
+        (&["opposition.variant=counter_all"][..], false),
+    ] {
+        let rules = Rules::new(&baseline_with(sets)).unwrap();
+        let mut g = rules.new_game(4);
+        advance_to(&rules, &mut g, ACTIONS);
+        assert!(!modules::threats::active(&g).is_empty());
+        // An outpost stays, so reaching level 1 doesn't win.
+        g.hexes[rules.map.numbered(0, 3)].tokens.insert("outpost".into(), 1);
+        g.seats[0].resources.insert("insight".into(), 1);
+        g.vars.insert("opposition.points".into(), 8);
+        let before = modules::economy::income(&rules.world(), &g, 0)[4];
+        rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
+        assert_eq!(g.var("opposition.level"), 1);
+        assert!(g.outcome.is_none());
+        let after = modules::economy::income(&rules.world(), &g, 0)[4];
+        if insight {
+            assert_eq!(after, before + 1);
+        } else {
+            assert_eq!(after, before);
+            assert!(modules::threats::active(&g).is_empty());
+        }
+    }
 }

@@ -22,37 +22,50 @@ const fn i(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSp
     }
 }
 
-const BASE: [ParamSpec; 5] = [
+const BASE: [ParamSpec; 6] = [
     i("per_player", 1, 50, "opposition per player that fills one level"),
     i("max_level", 1, 10, "the top level; reaching it wins"),
     i("outpost", 0, 10, "opposition for destroying an outpost"),
     i("foundry", 0, 10, "opposition for destroying a foundry"),
     i("loss_population_percent", 0, 100, "players lose when population falls below this % of the start"),
+    i("clear_win_stage", 1, 3, "the level-0 win (no adversary pieces) counts only once a card of this stage has been revealed (1: any time)"),
 ];
 
-const PUSHBACK: [ParamSpec; 6] = [
+const PUSHBACK: [ParamSpec; 7] = [
     BASE[0],
     BASE[1],
     BASE[2],
     BASE[3],
     BASE[4],
+    BASE[5],
     i("pushback_drones", 0, 5, "drones removed from each country when a level is reached"),
 ];
-const INCOME: [ParamSpec; 6] = [
+const INCOME: [ParamSpec; 7] = [
     BASE[0],
     BASE[1],
     BASE[2],
     BASE[3],
     BASE[4],
+    BASE[5],
     i("income_credits", 0, 20, "credit income every player gains when a level is reached"),
 ];
-const FREE: [ParamSpec; 6] = [
+const FREE: [ParamSpec; 7] = [
     BASE[0],
     BASE[1],
     BASE[2],
     BASE[3],
     BASE[4],
+    BASE[5],
     i("free_purchases", 0, 20, "card purchases (keeping a drafted card) that become free when a level is reached"),
+];
+const INSIGHT: [ParamSpec; 7] = [
+    BASE[0],
+    BASE[1],
+    BASE[2],
+    BASE[3],
+    BASE[4],
+    BASE[5],
+    i("insight_income", 0, 5, "insight every player gains each round, for the rest of the game, when a level is reached"),
 ];
 
 pub static DEF: ModuleDef = ModuleDef {
@@ -97,6 +110,24 @@ pub static DEF: ModuleDef = ModuleDef {
             build,
         },
         VariantDef {
+            name: "insight",
+            summary: "Reaching a level: every player gains insight each round for the rest of the game",
+            params: &INSIGHT,
+            phases: &[],
+            rng: &[],
+            uses_cards: false,
+            build,
+        },
+        VariantDef {
+            name: "counter_all",
+            summary: "Reaching a level: counter every active threat",
+            params: &BASE,
+            phases: &[],
+            rng: &[],
+            uses_cards: false,
+            build: build_counter_all,
+        },
+        VariantDef {
             name: "off",
             summary: "Reaching a level gives no reward (the level still lowers the purge bar)",
             params: &BASE,
@@ -112,19 +143,27 @@ fn build_off(_: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Opposition { reward: Reward::None }))
 }
 
+fn build_counter_all(_: &Build) -> Result<Box<dyn Module>, String> {
+    Ok(Box::new(Opposition { reward: Reward::CounterAll }))
+}
+
 pub const POINTS: &str = "opposition.points";
 pub const LEVEL: &str = "opposition.level";
 /// Credit income every player has from levels (variant `income`).
 pub const INCOME_BONUS: &str = "opposition.income_bonus";
 /// Free card purchases left (variant `free_purchases`).
 pub const FREE_LEFT: &str = "opposition.free_purchases";
+/// Insight every player gains each round from levels (variant `insight`).
+pub const INSIGHT_BONUS: &str = "opposition.insight_bonus";
 
 #[derive(Debug, Clone, Copy)]
 enum Reward {
     Pushback(i64),
     Income(i64),
     Free(i64),
+    Insight(i64),
     Counter,
+    CounterAll,
     None,
 }
 
@@ -140,6 +179,8 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
         Reward::Income(b.int("income_credits")?)
     } else if b.params.contains_key("free_purchases") {
         Reward::Free(b.int("free_purchases")?)
+    } else if b.params.contains_key("insight_income") {
+        Reward::Insight(b.int("insight_income")?)
     } else {
         Reward::Counter
     };
@@ -188,8 +229,16 @@ fn population(g: &GameState) -> i64 {
 
 /// Whether the adversary's presence is under the bar for `level` (the
 /// bars per adversary variant are in `adversary::under_bar`).
+/// The level-0 bar (no adversary pieces) counts only once a card of stage
+/// `clear_win_stage` has been revealed (the stages are stacked and public).
 fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
-    level >= w.int("opposition.max_level") || adversary::under_bar(w, g, level)
+    if level >= w.int("opposition.max_level") {
+        return true;
+    }
+    if level == 0 && g.var(adversary::STAGE) < w.int("opposition.clear_win_stage") {
+        return false;
+    }
+    adversary::under_bar(w, g, level)
 }
 
 impl Module for Opposition {
@@ -245,7 +294,12 @@ impl Module for Opposition {
             Some(per * (level + 1).min(max)),
             "humanity rising: every per_player x players opposition fills a level",
         );
-        out.global("level", "opposition level", level, Some(max), &win_text(w, level, max));
+        let mut text = win_text(w, level, max);
+        let stage = w.int("opposition.clear_win_stage");
+        if level == 0 && g.var(adversary::STAGE) < stage {
+            text += &format!(" (from adversary stage {stage})");
+        }
+        out.global("level", "opposition level", level, Some(max), &text);
         let start = g.var(board::START_POPULATION);
         out.global(
             "population",
@@ -263,6 +317,9 @@ impl Module for Opposition {
         );
         if g.var(INCOME_BONUS) > 0 {
             out.global("income_bonus", "level income bonus", g.var(INCOME_BONUS), None, "credit income every player has from levels");
+        }
+        if g.var(INSIGHT_BONUS) > 0 {
+            out.global("insight_bonus", "level insight bonus", g.var(INSIGHT_BONUS), None, "insight every player gains each round from levels");
         }
         if g.var(FREE_LEFT) > 0 {
             out.global("free_purchases", "free purchases", g.var(FREE_LEFT), None, "card purchases that are free");
@@ -291,6 +348,12 @@ impl Opposition {
             Reward::None => {}
             Reward::Income(n) => cx.add_key(g, INCOME_BONUS.into(), n),
             Reward::Free(n) => cx.add_key(g, FREE_LEFT.into(), n),
+            Reward::Insight(n) => cx.add_key(g, INSIGHT_BONUS.into(), n),
+            Reward::CounterAll => {
+                for (t, _) in threats::active(g) {
+                    threats::counter(g, cx, &t);
+                }
+            }
             Reward::Counter => {
                 let active = threats::active(g);
                 let opts = active.iter().map(|(t, _)| opt(t.clone())).collect();

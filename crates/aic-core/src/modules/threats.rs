@@ -136,17 +136,17 @@ fn pile_of(scope: Option<usize>) -> String {
 /// and Jam Signals applied).
 pub fn requirement(w: &World, g: &GameState, threat: &str) -> Vec<(String, i64)> {
     let jam = g.var(&jam_key(threat));
-    let bonus = if adversary::level(w, 1) {
-        w.int("adversary.counter_bonus")
+    let (bonus, all) = if adversary::level(w, 1) {
+        (w.int("adversary.counter_bonus"), w.int("adversary.counter_bonus_all"))
     } else {
-        0
+        (0, 0)
     };
     def(w, threat)
         .counter
         .iter()
         .enumerate()
         .map(|(k, (r, n))| {
-            let n = n + if k == 0 { bonus } else { 0 } - jam;
+            let n = n + if k == 0 { bonus } else { 0 } + all - jam;
             (r.clone(), n.max(0))
         })
         .collect()
@@ -300,8 +300,18 @@ impl Module for Threats {
         let w = cx.world;
         if phase == 0 {
             let tier = adversary::threat_tier(&w, g);
-            for c in 0..w.map.countries.len() {
-                for _ in 0..self.per_country {
+            // Difficulty 1: `extra_threats` more a round in all, one per
+            // country in turn (country 1 first in round 1, then 2, ...).
+            let n = w.map.countries.len();
+            let extra = if adversary::level(&w, 1) {
+                w.int("adversary.extra_threats").max(0) as usize
+            } else {
+                0
+            };
+            let first = (g.round.max(1) as usize - 1) % n.max(1);
+            for c in 0..n {
+                let more = (0..extra).filter(|k| (first + k) % n == c).count() as i64;
+                for _ in 0..self.per_country + more {
                     let Some(id) = self.draw(g, cx, tier) else {
                         break;
                     };

@@ -1,9 +1,13 @@
 # Rules as implemented
 
-What the code implements: ruleset **v0 as tuned by the 007 tuning run** (rules revision 3),
-Militarist against Builder and Protector, 1–4 countries. The rules are v0's; only numbers
-changed. Each changed value gives the v0 value beside it, and
-[`configs/v0_untuned.json`](../configs/v0_untuned.json) keeps the v0 numbers. **Keep this current with every rules change.** Design intent lives in
+What the code implements: ruleset **v0 as tuned by the 007 tuning run, with 011's
+rule changes** (rules revision 4), Militarist against Builder and Protector, 1–4
+countries. 007 changed only numbers. 011 changed three rules: the clear-board win waits
+for stage II ([§3](#3-opposition-and-the-end-of-the-game-module-opposition)), and
+difficulty levels 1 and 3 have new effects ([§2](#difficulty-difficulty-04-each-level-includes-the-ones-below)).
+It also added variants that are not the default: two opposition rewards, `free_keep`
+and the `uplinks` spread. Each changed value gives the v0 value beside it, and
+[`configs/v0_untuned.json`](../configs/v0_untuned.json) keeps the v0 numbers and rules. **Keep this current with every rules change.** Design intent lives in
 [principles.md](principles.md); how the engine is put together lives in
 [architecture.md](architecture.md).
 
@@ -144,16 +148,41 @@ nothing. Players **lose** when the pool is empty (**Default:** "runs out" read a
 | Level | Adds | Tunable |
 |---|---|---|
 | 0 | Base rules | |
-| 1 | Every threat's first counter requirement is higher | `counter_bonus` 2 (v0: 1) |
+| 1 | **An extra threat** (011): each round `extra_threats` (1) more threat is dealt in all, one per country in turn: country 0 (the first piece) in round 1, country 1 in round 2, and so on (tier as usual). Also available, off by default: every threat's first counter requirement higher (`counter_bonus`, r3: 2), or every requirement higher (`counter_bonus_all`) | `extra_threats` 1; `counter_bonus` 0 (r3: 2, v0: 1), `counter_bonus_all` 0 |
 | 2 | Stage-I cards removed from the deck: stage II arrives sooner | `stage1_removed` 1 |
-| 3 | Ravage deals more damage in hexes with a foundry | `foundry_bonus` 1 |
+| 3 | **Foundry reach** (011): when a hex holding foundries is ravaged, each adjacent hex (any country) first takes `foundry_reach` (3) damage per foundry, less its own defense, destroying players' pieces as a ravage does (players choose each). The reach adds no corruption and no Momentum | `foundry_reach` 3; `foundry_bonus` 0 (r3: 1) |
 | 4 | Tier-2 threats start sooner; the corruption pool is smaller per country | `tier2_early` 1 (rounds), `pool_reduction` 4 (v0: 1) |
 
-**Measured (007 tuning run):** levels 2 and 3 play identically. Foundries grow where
-adversary pieces pile up, on uplinks and outpost hexes, which hold no population or
-buildings, so `foundry_bonus` has destroyed nothing in any game measured (even at 5).
-`tier2_early` moved no win rate either; level 4's bite is `pool_reduction`. Proposals
-for levels 3 and 4 are in the 007 cycle report (`experiments/tuning-007.md`).
+Every option stays a tunable, so the r3 levels are one override away:
+`counter_bonus` 2, `counter_bonus_all` 0, `extra_threats` 0, `foundry_bonus` 1,
+`foundry_reach` 0 (and `opposition.clear_win_stage` 1 for r3's clear-board win).
+
+**Why the new levels 1 and 3 (011).** The 007 run found level 1 barely moved a strong
+team (`counter_bonus` raises only the first requirement, and greedy counters few
+threats) and level 3 did nothing: foundries grow on uplinks and outpost hexes, which
+hold no population or buildings, so `foundry_bonus` destroyed nothing (even at 5). The
+new effects land where the players are. Screened with greedy (64 seeds a point,
+`experiments/screen-011-difficulty*.json`, results in
+`experiments/results/screen-011-*`), as the change in win rate from the level below:
+
+| Level | Effect | Win % change from the level below (greedy) |
+|---|---|---|
+| 1 | r3: first requirement +2 (`counter_bonus` 2) | −7.8 (64 seeds), 007: 0 to −3 (200) |
+| 1 | every requirement +1 / +2 / +3 (`counter_bonus_all`) | −3.1 / −4.7, −3.1, 0.0 / −4.7 |
+| 1 | first +2 and every +1 | −1.0 (96 seeds) |
+| 1 | one extra threat **per country** each round | −32.8 (64 seeds): far too strong |
+| 1 | **one extra threat a round in all, countries in turn** (chosen) | **−11.5 ±3.9** (96 seeds, p 0.007) |
+| 3 | r3: `foundry_bonus` 1 | 0 (64 seeds), 007: 0 even at 5 |
+| 3 | foundry reach 1 / 2 | 0 / +1.5 |
+| 3 | **foundry reach 3** (chosen) | **−6.2 ±3.0** and **−9.4** (two seed sets of 64) |
+| 3 | foundry reach 4 | −9.4 (64 seeds) |
+
+Raising counter requirements barely bites: greedy counters few threats and simply
+lets more of them execute. Reach 1 and 2 kill nothing that matters often (population
+needs 2, buildings 3); reach 3 takes a building or a population with each foundry.
+
+`tier2_early` moved no win rate in 007; level 4's bite is `pool_reduction`. The five-level
+curve at the new defaults is not yet measured (`experiments/proposals-011.md`).
 
 Level 4's "a round sooner" is implemented as: tier-2 threats are dealt once any of the
 top `tier2_early` deck cards is stage II or later (the stage boundary is public: the
@@ -241,6 +270,16 @@ nothing. The pool is the limit: players lose when it is empty, so the pool size
 - **Purge win (Adaptation):** at opposition level *L*, at most *L* × `purge_allowance`
   (1) × countries corrupted assets remain (level 0: none).
 
+### Explore from uplinks (`uplinks`, 011)
+
+The Militarist with one change, for a spread that is easier to read: **explore adds
+drones only on uplinks** of the card's terrain. Outposts no longer seed explore; they
+still build (every hex holding adversary pieces builds) and ravage. With
+`explore_foundries` 1, hexes next to a foundry explore too. Every other rule, parameter
+and difficulty level is the Militarist's (`--set adversary.variant=uplinks --set
+adversary.explore_foundries=0`). Drones still reach the interior by Momentum and by
+threats (Conscription, Drone surge). Not the default.
+
 ### Threats and cards under the spread variants (Adaptation)
 
 Threats and cards name the Militarist's pieces. Under `clusters`, a drone, outpost or
@@ -295,12 +334,24 @@ Reaching a level triggers a one-time reward, by variant:
 | `income` | Every player gains `income_credits` (2) credit income for the rest of the game |
 | `free_purchases` | The next `free_purchases` (2) card purchases are free. **Default:** a purchase is keeping a drafted card |
 | `counter_threat` | Counter one active threat (players choose) |
+| `insight` (011) | Every player gains `insight_income` (1) insight at the start of every round for the rest of the game |
+| `counter_all` (011) | Counter every active threat |
 | `off` | None (for measuring the rewards; [§2b](#2b-off-variants)) |
 
 **Winning:** players win immediately when the adversary's presence is under the bar for
 the current level: level 0, no adversary pieces; level 1, no outposts or foundries;
 level 2, no foundries; level `max_level`, at once. (The spread variants count clusters
 or corrupted assets instead: [§2a](#2a-spread-variants-module-adversary-variants-clusters-and-assets).)
+
+**The level-0 win waits for stage II** (011, the default): the level-0 bar ("no
+adversary pieces") counts only once an adversary card of stage `clear_win_stage` (2)
+has been revealed. Before that, clearing the board wins nothing. With no starting
+outpost the opening board is 4 drones, and Sweep or Watchtower Net could clear it for a
+round-2 win (007: a random team did it; greedy in 3–4% of games). `clear_win_stage` 1
+is the r3 rule (any time); `v0_untuned.json` keeps it. The stages are stacked and
+public, so the table can always see whether it counts. Levels 1 and 2 are unchanged.
+The gate applies to every adversary variant: under `clusters` and `assets`, the
+level-0 purge win (none left) also waits for stage II.
 
 **Losing:** total population falls below `loss_population_percent` (50) % of the start;
 the corruption pool is empty; or the adversary deck is empty when a card must be revealed.
@@ -424,6 +475,13 @@ any population loss.
 
 (Variant `off`: no draft and no drawing, [§2b](#2b-off-variants).)
 
+**Variant `free_keep`** (011, not the default): the draft as above, but each player's
+first `free_keeps` (1) kept cards each round cost nothing; each further keep costs
+`keep_cost`. 007's proposal 6 reads "keep one card free each round, others at 2", so it
+is measured with `keep_cost` 2 (`--set cards.variant=free_keep --set
+cards.free_keeps=1 --set cards.keep_cost=2`). A round's free keep is used before an
+opposition level's free purchase (`free_purchases`), then credits.
+
 - **Decks:** a tier-1 and a tier-2 deck of the cards listed in the config (one copy of
   each; a hard constraint the tests check). Discards reshuffle into a deck when it runs
   out. An AI's unique cards go back to the box when played (programs) or discarded.
@@ -506,6 +564,11 @@ Card details beyond the ruleset text:
 21. Panic's population flees within its own country.
 22. A giving card (Power Share) is not offered without another player; Grant and
     Venture Capital are (their own gain still applies).
+23. (011) Difficulty 1's extra threat goes to the countries in turn by round number;
+    difficulty 3's foundry reach hits adjacent hexes in any country, before the
+    foundry's own hex ravages, and adds no corruption or Momentum.
+24. (011) "Stage II has begun" for the clear-board win means a stage-II card has been
+    revealed into the explore slot (as for tier-2 threats).
 
 **Deviations** (the implementation departs from the ruleset text):
 

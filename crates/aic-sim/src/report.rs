@@ -317,6 +317,40 @@ fn top_agent(cells: &[Cell], sums: &[CellSummary]) -> Option<(String, i64)> {
     best.map(|(l, _)| (l, hi))
 }
 
+/// Each agent's rank by measured strength, 0 = weakest: its win rate at
+/// the highest difficulty on the base variant (mean over configs), as
+/// [`top_agent`] reads it. Equal win rates share a rank, so the top rank
+/// holds the top agent (and any agent tied with it), and a "weakest"
+/// agent exists only when some agent measured below the rest.
+fn measured_rank(cells: &[Cell], games: &[GameResult]) -> BTreeMap<String, usize> {
+    let hi = cells.iter().map(|c| c.difficulty).max().unwrap_or(0);
+    let base = cells.first().map(|c| c.variant.clone()).unwrap_or_default();
+    let score: Vec<(String, f64)> = agent_order(cells)
+        .iter()
+        .map(|a| {
+            let l = a.label();
+            let mut by_config: BTreeMap<&str, (u64, u64)> = BTreeMap::new();
+            for g in games {
+                let c = &cells[g.cell];
+                if c.difficulty == hi && c.variant == base && c.agent.label() == l {
+                    let e = by_config.entry(c.config_path.as_str()).or_default();
+                    e.0 += g.won as u64;
+                    e.1 += 1;
+                }
+            }
+            let rates = by_config.values().map(|&(w, n)| w as f64 / n as f64);
+            (l, mean(rates).unwrap_or(0.0))
+        })
+        .collect();
+    let mut levels: Vec<f64> = score.iter().map(|s| s.1).collect();
+    levels.sort_by(f64::total_cmp);
+    levels.dedup();
+    score
+        .into_iter()
+        .map(|(l, p)| (l, levels.iter().position(|&x| x == p).unwrap_or(0)))
+        .collect()
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct HeadToHead {
     pub config: String,
@@ -771,8 +805,12 @@ pub fn save_records(
         }
     }
     let top_d = cells.iter().map(|c| c.difficulty).max().unwrap_or(0);
-    let top_tier = cells.iter().map(|c| c.agent.tier()).max().unwrap_or(0);
-    let low_tier = cells.iter().map(|c| c.agent.tier()).min().unwrap_or(0);
+    // Agents ranked by measured strength, not by ladder tier (011): the
+    // ladder's top tier is not always the strongest agent.
+    let strength = measured_rank(cells, games);
+    let rank = |c: &Cell| strength.get(&c.agent.label()).copied().unwrap_or(0);
+    let top_tier = strength.values().copied().max().unwrap_or(0);
+    let low_tier = 0;
     let mut picked: Vec<(String, usize, String)> = Vec::new();
     let mut taken = BTreeSet::new();
     let mut take =
@@ -789,7 +827,7 @@ pub fn save_records(
             }
         };
     // Close losses at the top difficulty: fewest pieces over the bar, then
-    // the longest games, stronger agents first.
+    // the longest games, measured-stronger agents first.
     let mut close: Vec<(usize, &GameResult)> = games
         .iter()
         .enumerate()
@@ -799,7 +837,7 @@ pub fn save_records(
         (
             g.margin.blockers,
             std::cmp::Reverse(g.rounds),
-            std::cmp::Reverse(cells[g.cell].agent.tier()),
+            std::cmp::Reverse(rank(&cells[g.cell])),
             g.seed,
         )
     });
@@ -827,7 +865,7 @@ pub fn save_records(
         (
             *r,
             std::cmp::Reverse(g.rounds),
-            std::cmp::Reverse(cells[g.cell].agent.tier()),
+            std::cmp::Reverse(rank(&cells[g.cell])),
             g.seed,
         )
     });
@@ -855,11 +893,11 @@ pub fn save_records(
     for (i, g) in games.iter().enumerate().filter(|(_, g)| g.won) {
         let c = &cells[g.cell];
         let low = g.winprob.iter().copied().fold(f64::INFINITY, f64::min);
-        let why = if c.agent.tier() == low_tier && low_tier < top_tier {
-            Some((0, format!("won by the weakest agent ({})", c.agent.label())))
+        let why = if rank(c) == low_tier && low_tier < top_tier {
+            Some((0, format!("won by the weakest agent as measured ({})", c.agent.label())))
         } else if low <= 0.25 {
             Some((1, format!("won after the playouts gave it {low:.2}")))
-        } else if c.difficulty == top_d && c.agent.tier() < top_tier {
+        } else if c.difficulty == top_d && rank(c) < top_tier {
             Some((
                 2,
                 format!(
@@ -1156,6 +1194,12 @@ pub fn markdown(run: &Run) -> String {
             "off".into()
         }
     );
+    if spec.winprob.games == 0 || spec.closeness.every == 0 {
+        let _ = writeln!(
+            w,
+            "- Off measures are opt-in (README, *Experiments*): screen without them, then rerun the finalists with `--variants A,B --winprob N --closeness N`."
+        );
+    }
     let bad: usize = sums.iter().map(|s| s.games - s.replay_ok).sum();
     let _ = writeln!(
         w,

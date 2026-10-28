@@ -42,8 +42,11 @@
         "momentum_drones": 1,
         "escalation_outposts": 1,
         "counter_bonus": 1,
+        "counter_bonus_all": 0,
+        "extra_threats": 0,
         "stage1_removed": 1,
         "foundry_bonus": 1,
+        "foundry_reach": 0,
         "tier2_early": 1,
         "pool_reduction": 1
       }
@@ -64,6 +67,7 @@
         "outpost": 1,
         "foundry": 2,
         "loss_population_percent": 50,
+        "clear_win_stage": 1,
         "pushback_drones": 1
       }
     },

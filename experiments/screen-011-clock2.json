@@ -1,0 +1,17 @@
+{
+  "name": "screen-011-clock2",
+  "note": "011 screen (no probes) on the 009 content patch t2_half+t2_noam (cheap tier 2): the deck clock counting only the action phases after this one. Engine agent at w.clock 10 and 30, d0 and d4, 009's seeds; compare screen-011-clock (greedy 100 / 66.7, engine without the clock 60.4 / 31.2).",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "difficulties": [0, 4],
+  "agents": [
+    "engine:w.clock=10",
+    "engine:w.clock=30"
+  ],
+  "games": 48,
+  "first_seed": 300000,
+  "winprob": {"games": 0},
+  "closeness": {"every": 0},
+  "records": 0
+}

@@ -56,7 +56,13 @@ experiment:
                     play the spec's grid (configs x variants x difficulties x agents
                     over a seed range) and write the cycle report into DIR (default
                     out/experiments/<name>): report.md, results.json, games.csv,
-                    cards.csv, records/. --games and --seed override the spec.";
+                    cards.csv, records/. --games and --seed override the spec.
+  Expensive measures are opt-in (off unless the spec or these turn them on):
+    --winprob N     win-probability playouts for the first N seeds of each cell
+                    (about 5x an experiment's time at N = 10 of 200)
+    --closeness N   closeness probe on every N-th real choice
+    --variants A,B  play only these of the spec's variants (the base is always
+                    kept, first): screen without probes, then probe the finalists";
 
 struct Options {
     command: String,
@@ -80,6 +86,10 @@ struct Options {
     games_given: bool,
     seed_given: bool,
     max_actions_given: bool,
+    /// `experiment`: probe overrides and a variant filter (two-stage runs).
+    winprob: Option<u64>,
+    closeness: Option<usize>,
+    variants: Option<Vec<String>>,
 }
 
 fn die(msg: &str) -> ! {
@@ -111,6 +121,9 @@ fn parse_args() -> Options {
         games_given: false,
         seed_given: false,
         max_actions_given: false,
+        winprob: None,
+        closeness: None,
+        variants: None,
     };
     let mut save_max_given = false;
     while let Some(a) = args.next() {
@@ -132,6 +145,17 @@ fn parse_args() -> Options {
                 o.seed_given = true;
             }
             "--out" => o.out = Some(value("--out")),
+            "--winprob" => o.winprob = Some(num("--winprob", value("--winprob"))),
+            "--closeness" => o.closeness = Some(num("--closeness", value("--closeness"))),
+            "--variants" => {
+                o.variants = Some(
+                    value("--variants")
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
+                )
+            }
             "--set" => o.set.push(value("--set")),
             "--set-a" => o.set_a.push(value("--set-a")),
             "--set-b" => o.set_b.push(value("--set-b")),
@@ -195,6 +219,9 @@ fn parse_args() -> Options {
         {
             die("--out needs a directory");
         }
+    }
+    if (o.winprob.is_some() || o.closeness.is_some() || o.variants.is_some()) && o.command != "experiment" {
+        die("--winprob, --closeness and --variants need experiment");
     }
     if o.out.is_some() && o.command != "experiment" {
         die("--out needs experiment");
@@ -959,6 +986,15 @@ fn run_experiment(path: &str, o: &Options) -> i32 {
     }
     if o.max_actions_given {
         spec.max_actions = o.max_actions;
+    }
+    if let Some(n) = o.winprob {
+        spec.winprob.games = n;
+    }
+    if let Some(n) = o.closeness {
+        spec.closeness.every = n;
+    }
+    if let Some(keep) = &o.variants {
+        experiment::keep_variants(&mut spec, keep).unwrap_or_else(|e| die(&format!("--variants: {e}")));
     }
     let cells = experiment::cells(&spec).unwrap_or_else(|e| die(&format!("{path}: {e}")));
     let dir = o

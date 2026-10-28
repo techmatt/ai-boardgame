@@ -105,6 +105,10 @@ pub struct Weights {
     /// Horizon mode, when above 0: cards in hand wait their turn for
     /// insight (each needs the insight of the cards before it too).
     pub insight_wait: f64,
+    /// The deck clock (011), any mode: per round the team's projected win
+    /// (opposition still needed at its rate so far, plus `win_lag`) comes
+    /// after the adversary deck runs out. 0 = off.
+    pub clock: f64,
 }
 
 impl Default for Weights {
@@ -156,6 +160,7 @@ impl Default for Weights {
             // insight on one card lowered every other card's chance, so
             // playing anything looked costly. Off until it is modelled per round.
             insight_wait: 0.0,
+            clock: 0.0,
         }
     }
 }
@@ -170,6 +175,9 @@ impl Weights {
             hand_cost: 0.2,
             built: 1.0,
             built_cost: 0.0,
+            // 011: see `clock`; chosen on 009's cheap-tier-2 patch, where
+            // without it the engine ran out the deck.
+            clock: 30.0,
             ..Weights::default()
         }
     }
@@ -209,6 +217,8 @@ pub struct Eval {
     damage: [i64; 3],
     /// Extra ravage damage where there is a foundry (difficulty 3+).
     foundry_bonus: i64,
+    /// Damage a ravaged foundry deals to each adjacent hex (difficulty 3+).
+    foundry_reach: i64,
 }
 
 impl Eval {
@@ -248,6 +258,11 @@ impl Eval {
             },
             foundry_bonus: if adversary::style(&world) == adversary::Style::Militarist && adversary::level(&world, 3) {
                 world.int("adversary.foundry_bonus")
+            } else {
+                0
+            },
+            foundry_reach: if adversary::style(&world) == adversary::Style::Militarist && adversary::level(&world, 3) {
+                world.int("adversary.foundry_reach")
             } else {
                 0
             },
@@ -345,6 +360,7 @@ impl Eval {
         for share in self.unpaid_threats(rules, g) {
             v -= w.threat * share;
         }
+        v -= self.clock_penalty(g);
         v
     }
 
@@ -384,14 +400,7 @@ impl Eval {
         let clock = g.pile(adversary::DECK).len() as f64;
         let points = g.var(opposition::POINTS) as f64;
         let bar = (self.per_level * (self.max_level - 1).max(1)) as f64;
-        // Points held may include this round's, so this round counts as played.
-        let rate = if g.round > 1 {
-            (points / g.round as f64).max(w.opp_rate * 0.25)
-        } else {
-            w.opp_rate
-        }
-        .max(0.1);
-        let to_win = ((bar - points).max(0.0) / rate).ceil() + w.win_lag;
+        let to_win = ((bar - points).max(0.0) / self.opposition_rate(g)).ceil() + w.win_lag;
         let rounds = clock.min(to_win).max(0.0);
         let world = rules.world();
         let countries = world.map.countries.len().max(1) as f64;
@@ -416,6 +425,40 @@ impl Eval {
             k += 1.0;
         }
         total
+    }
+
+    /// Opposition gained per round so far (`opp_rate` before the team has a
+    /// record of its own). Points held may include this round's, so this
+    /// round counts as played.
+    fn opposition_rate(&self, g: &GameState) -> f64 {
+        let w = &self.w;
+        let points = g.var(opposition::POINTS) as f64;
+        if g.round > 1 {
+            (points / g.round as f64).max(w.opp_rate * 0.25)
+        } else {
+            w.opp_rate
+        }
+        .max(0.1)
+    }
+
+    /// The deck-clock penalty: `clock` per round the team, at its
+    /// opposition rate so far, would still be short of the top level (a win
+    /// at once) when the deck runs out. With `k` cards left, `k` action
+    /// phases come after this one (the reveal after the last loses); this
+    /// round's points count as they are scored, not as a round still to
+    /// come, so in the last round every point short costs `clock` / rate.
+    /// The top level, not the purge bar: a team sitting at level 2 with
+    /// foundries it can't clear is not on course (the cheap-tier-2 engine
+    /// ended 19-23 points of 24 into a deck-out).
+    fn clock_penalty(&self, g: &GameState) -> f64 {
+        if self.w.clock == 0.0 {
+            return 0.0;
+        }
+        let clock = g.pile(adversary::DECK).len() as f64;
+        let points = g.var(opposition::POINTS) as f64;
+        let top = (self.per_level * self.max_level) as f64;
+        let need = (top - points).max(0.0) / self.opposition_rate(g);
+        self.w.clock * (need - clock).max(0.0)
     }
 
     /// Per-seat resources, income, hands and buildings, by flat weights.
@@ -572,11 +615,24 @@ impl Eval {
             if g.tokens(h, "foundry") > 0 {
                 raw += self.foundry_bonus;
             }
-            let prevented: i64 = defense
-                .iter()
-                .enumerate()
-                .map(|(s, d)| g.tokens(h, &format!("defense:{s}")) * d)
-                .sum();
+            let prevented_at = |x: usize| -> i64 {
+                defense
+                    .iter()
+                    .enumerate()
+                    .map(|(s, d)| g.tokens(x, &format!("defense:{s}")) * d)
+                    .sum()
+            };
+            // Difficulty 3: the foundries' reach into each adjacent hex
+            // (population only: no corruption).
+            let reach = self.foundry_reach * g.tokens(h, "foundry");
+            if reach > 0 {
+                for &n in &cell.neighbours {
+                    let d = (reach - prevented_at(n)).max(0);
+                    let lost = (d / pop_health).min(g.tokens(n, "population"));
+                    cost += lost as f64 * self.w.population;
+                }
+            }
+            let prevented = prevented_at(h);
             let dmg = (raw - prevented).max(0);
             if dmg >= corruption_at {
                 let cascade = if g.tokens(h, "corruption") > 0 {

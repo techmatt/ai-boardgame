@@ -114,9 +114,11 @@ pub struct Closeness {
     pub gap: f64,
 }
 
+/// Off by default (011): a probe costs about a greedy decision per probed
+/// decision. Expensive measures are opt-in, per spec or `--closeness`.
 impl Default for Closeness {
     fn default() -> Self {
-        Closeness { every: 1, gap: 2.0 }
+        Closeness { every: 0, gap: 2.0 }
     }
 }
 
@@ -157,6 +159,24 @@ impl Cell {
             self.difficulty,
         )
     }
+}
+
+/// Keeps only the named variants (the two-stage pattern's second stage:
+/// probe the finalists). The first variant is the base the others are
+/// compared with, so it is always kept, first.
+pub fn keep_variants(spec: &mut Spec, keep: &[String]) -> Result<(), String> {
+    for k in keep {
+        if !spec.variants.iter().any(|v| &v.name == k) {
+            let names: Vec<&str> = spec.variants.iter().map(|v| v.name.as_str()).collect();
+            return Err(format!("no variant {k:?} in the spec ({})", names.join(", ")));
+        }
+    }
+    let mut i = 0;
+    spec.variants.retain(|v| {
+        i += 1;
+        i == 1 || keep.contains(&v.name)
+    });
+    Ok(())
 }
 
 /// Builds every cell, checking every config, override and agent first.

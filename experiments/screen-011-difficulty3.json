@@ -1,0 +1,19 @@
+{
+  "name": "screen-011-difficulty3",
+  "note": "011 third screen (no probes), fresh seeds, difficulty 1 only: every requirement +2; one extra threat a round in all (countries in turn); and r3's first-requirement +2 with every requirement +1. Greedy only.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {"name": "cba2", "set": ["adversary.counter_bonus=0", "adversary.counter_bonus_all=2"]},
+    {"name": "xt1_total", "set": ["adversary.counter_bonus=0", "adversary.extra_threats=1"]},
+    {"name": "cb2_cba1", "set": ["adversary.counter_bonus=2", "adversary.counter_bonus_all=1"]}
+  ],
+  "difficulties": [0, 1],
+  "agents": ["greedy"],
+  "games": 96,
+  "first_seed": 520000,
+  "winprob": {"games": 0},
+  "closeness": {"every": 0},
+  "records": 0
+}

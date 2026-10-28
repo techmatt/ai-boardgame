@@ -1,0 +1,27 @@
+{
+  "name": "screen-011-clock",
+  "note": "011 screen (no probes), run on the 009 content patch t2_half+t2_noam (cheap tier 2) built by scripts/payback/build_patches.sh: does the deck-clock weight w.clock (shortfall against the top opposition level) stop the engine agent running out the deck? 009's seeds; rules r4 (clear-board win from stage II). Ran with an earlier form of the clock (k + 1 action phases counted with k cards left); screen-011-clock2 has the final form (k).",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "greedy:w.clock=10",
+    "engine:w.clock=0",
+    "engine:w.clock=10",
+    "engine:w.clock=30"
+  ],
+  "games": 48,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 0
+}

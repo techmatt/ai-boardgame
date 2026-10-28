@@ -31,7 +31,9 @@
         "cascade": 1,
         "pool_per_country": 10,
         "pool_base": 2,
-        "counter_bonus": 2,
+        "counter_bonus": 0,
+        "counter_bonus_all": 0,
+        "extra_threats": 1,
         "stage1_removed": 1,
         "tier2_early": 1,
         "pool_reduction": 4,
@@ -63,6 +65,7 @@
         "outpost": 1,
         "foundry": 2,
         "loss_population_percent": 50,
+        "clear_win_stage": 2,
         "pushback_drones": 1
       }
     },

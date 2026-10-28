@@ -14,14 +14,10 @@ use crate::view::{CardView, ViewOut};
 use super::common::*;
 use super::{board, cards, opposition};
 
-pub static DEF: ModuleDef = ModuleDef {
-    id: "adversary",
-    summary: "The adversary deck and pipeline (explore, build, ravage), corruption, innate rules, difficulty",
-    requires: &["board", "cards", "opposition"],
-    variants: &[VariantDef {
-        name: "militarist",
-        summary: "The Militarist: Momentum and Escalation",
-        params: &[
+/// The Militarist's parameters, then any more a variant of it adds.
+macro_rules! militarist_params {
+    ($($extra:expr),* $(,)?) => {
+        &[
             i("difficulty", 0, 4, "difficulty level 0-4 (each level includes the ones below)"),
             l("stage_cards", "adversary cards dealt from stage I, II and III (before difficulty)"),
             i("drone_health", 1, 10, "damage to destroy a drone"),
@@ -43,15 +39,48 @@ pub static DEF: ModuleDef = ModuleDef {
             i("momentum_drones", 0, 5, "Momentum: drones added next to a ravage that destroyed population"),
             i("escalation_outposts", 0, 5, "Escalation: outposts each country's busiest uplink gains"),
             i("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
+            i("counter_bonus_all", 0, 10, "difficulty 1+: added to every counter requirement of every threat"),
+            i("extra_threats", 0, 5, "difficulty 1+: extra threats dealt each round in all, one per country in turn"),
             i("stage1_removed", 0, 3, "difficulty 2+: stage-I cards removed"),
             i("foundry_bonus", 0, 10, "difficulty 3+: extra ravage damage in hexes with a foundry"),
+            i("foundry_reach", 0, 10, "difficulty 3+: a ravaged foundry also deals this much damage to each adjacent hex"),
             i("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
             i("pool_reduction", 0, 10, "difficulty 4+: corruption pool smaller by this per country"),
-        ],
+            $($extra,)*
+        ]
+    };
+}
+
+pub static DEF: ModuleDef = ModuleDef {
+    id: "adversary",
+    summary: "The adversary deck and pipeline (explore, build, ravage), corruption, innate rules, difficulty",
+    requires: &["board", "cards", "opposition"],
+    variants: &[VariantDef {
+        name: "militarist",
+        summary: "The Militarist: Momentum and Escalation",
+        params: militarist_params!(),
         phases: &[
             ph("ravage", "ravage with the card in the ravage slot"),
             ph("build", "build with the card in the build slot"),
             ph("explore", "reveal a card into the explore slot and explore (and escalate)"),
+            ph("slide", "slide the cards one slot along; the ravage card is discarded"),
+        ],
+        rng: &["adversary"],
+        uses_cards: false,
+        build,
+    }, VariantDef {
+        name: "uplinks",
+        summary: "The Militarist, exploring only from uplinks (and, with explore_foundries, next to foundries): a linear spread",
+        params: militarist_params!(i(
+            "explore_foundries",
+            0,
+            1,
+            "1: hexes next to a foundry explore too; 0: only uplinks explore"
+        )),
+        phases: &[
+            ph("ravage", "ravage with the card in the ravage slot"),
+            ph("build", "build with the card in the build slot"),
+            ph("explore", "reveal a card into the explore slot and explore from uplinks (and escalate)"),
             ph("slide", "slide the cards one slot along; the ravage card is discarded"),
         ],
         rng: &["adversary"],
@@ -81,6 +110,8 @@ pub static DEF: ModuleDef = ModuleDef {
             i("cluster_opposition", 0, 10, "opposition for destroying a cluster"),
             i("purge_allowance", 0, 20, "purge win: at opposition level L, at most L x this x countries clusters may remain"),
             i("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
+            i("counter_bonus_all", 0, 10, "difficulty 1+: added to every counter requirement of every threat"),
+            i("extra_threats", 0, 5, "difficulty 1+: extra threats dealt each round in all, one per country in turn"),
             i("stage1_removed", 0, 3, "difficulty 2+: stage-I cards removed"),
             i("damage_bonus", 0, 10, "difficulty 3+: extra assault damage in each hex assaulted"),
             i("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
@@ -112,6 +143,8 @@ pub static DEF: ModuleDef = ModuleDef {
             i("reclaim_opposition", 0, 10, "opposition for reclaiming a corrupted asset by damage"),
             i("purge_allowance", 0, 20, "purge win: at opposition level L, at most L x this x countries corrupted assets may remain"),
             i("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
+            i("counter_bonus_all", 0, 10, "difficulty 1+: added to every counter requirement of every threat"),
+            i("extra_threats", 0, 5, "difficulty 1+: extra threats dealt each round in all, one per country in turn"),
             i("stage1_removed", 0, 3, "difficulty 2+: stage-I cards removed"),
             i("damage_bonus", 0, 10, "difficulty 3+: extra strike damage in each hex struck"),
             i("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
@@ -493,12 +526,22 @@ fn explore(g: &mut GameState, cx: &mut Cx) {
     let shields: Vec<usize> = (0..g.seats.len())
         .filter(|&s| cards::has_passive(&w, g, s, |p| matches!(p, Passive::ExploreShield)))
         .collect();
+    // Variant `uplinks`: only uplinks explore, and with `explore_foundries`
+    // also hexes next to a foundry; outposts no longer seed explore.
+    let uplinks_only = w.variant("adversary") == Some("uplinks");
+    let from_foundries = uplinks_only && w.int("adversary.explore_foundries") > 0;
     let mut hits = Vec::new();
     for h in 0..g.hexes.len() {
         if !has_terrain(&w, h, &c.terrains) {
             continue;
         }
-        let source = |x: usize| g.tokens(x, OUTPOST) + g.tokens(x, FOUNDRY) > 0;
+        let source = |x: usize| {
+            if uplinks_only {
+                from_foundries && g.tokens(x, FOUNDRY) > 0
+            } else {
+                g.tokens(x, OUTPOST) + g.tokens(x, FOUNDRY) > 0
+            }
+        };
         if !(w.map.hexes[h].uplink || next_to(&w, h, source)) {
             continue;
         }
@@ -652,6 +695,9 @@ pub fn ravage(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
         Style::Clusters if level(&w, 3) => raw += w.int("adversary.damage_bonus"),
         _ => {}
     }
+    if style(&w) == Style::Militarist {
+        foundry_reach(g, cx, h)?;
+    }
     let prevented = prevented(&w, g, h);
     let dmg = (raw - prevented).max(0);
     cx.adversary_ops(g, 1);
@@ -686,6 +732,42 @@ pub fn ravage(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
         if let Some(i) = cx.choose(0, &prompt, opts)? {
             cx.add_tokens(g, hexes[i], DRONE, momentum);
             cx.adversary_ops(g, 1);
+        }
+    }
+    Ok(())
+}
+
+/// Difficulty 3: the foundries in a ravaged hex `h` reach out first. Each
+/// adjacent hex (any country) takes `foundry_reach` damage per foundry,
+/// less its defense, destroying players' pieces as a ravage does (players
+/// choose each). The reach adds no corruption and no Momentum.
+fn foundry_reach(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
+    let w = cx.world;
+    let reach = if level(&w, 3) {
+        w.int("adversary.foundry_reach") * g.tokens(h, FOUNDRY)
+    } else {
+        0
+    };
+    if reach <= 0 {
+        return Ok(());
+    }
+    for n in w.map.hexes[h].neighbours.clone() {
+        let has_pieces = [POPULATION, FACTORY, DATA_CENTRE].iter().any(|k| g.tokens(n, k) > 0);
+        if !has_pieces {
+            continue;
+        }
+        let prevented = prevented(&w, g, n);
+        let dmg = (reach - prevented).max(0);
+        cx.note(Some(n), || {
+            format!(
+                "Foundry reach from {} to {}: {reach} damage, {prevented} prevented",
+                hex_name(&w, h),
+                hex_name(&w, n)
+            )
+        });
+        if dmg > 0 {
+            cx.adversary_ops(g, 1);
+            lose_pieces(g, cx, n, dmg)?;
         }
     }
     Ok(())

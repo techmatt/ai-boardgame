@@ -33,6 +33,19 @@ pub static DEF: ModuleDef = ModuleDef {
         uses_cards: true,
         build,
     }, VariantDef {
+        name: "free_keep",
+        summary: "The draft, but each player's first free_keeps kept cards each round are free; further keeps cost keep_cost",
+        params: &[
+            i("deal", 0, 10, "cards each player is dealt for the draft"),
+            i("keep_cost", 0, 20, "credits to keep one drafted card beyond the free ones"),
+            i("draw_cost", 0, 20, "compute to draw one card"),
+            i("free_keeps", 0, 10, "drafted cards each player keeps free each round"),
+        ],
+        phases: PHASES,
+        rng: &["cards"],
+        uses_cards: true,
+        build,
+    }, VariantDef {
         name: "off",
         summary: "No draft and no drawing: players have only their AI's unique cards",
         params: &[],
@@ -256,6 +269,8 @@ struct Cards {
     deal: i64,
     keep_cost: i64,
     draw_cost: i64,
+    /// Variant `free_keep`: keeps per player per round that cost nothing.
+    free_keeps: i64,
     /// Selected cards (content indices).
     cards: Vec<usize>,
     /// Variant `off`: no draft, no drawing.
@@ -267,6 +282,11 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
         deal: b.int("deal")?,
         keep_cost: b.int("keep_cost")?,
         draw_cost: b.int("draw_cost")?,
+        free_keeps: if b.params.contains_key("free_keeps") {
+            b.int("free_keeps")?
+        } else {
+            0
+        },
         cards: b.cards.clone(),
         off: false,
     }))
@@ -277,9 +297,27 @@ fn build_off(b: &Build) -> Result<Box<dyn Module>, String> {
         deal: 0,
         keep_cost: 0,
         draw_cost: 0,
+        free_keeps: 0,
         cards: b.cards.clone(),
         off: true,
     }))
+}
+
+/// Drafted cards `seat` has kept this round (for `free_keeps`).
+fn kept_key(seat: usize) -> String {
+    format!("cards.kept_round.{seat}")
+}
+
+impl Cards {
+    /// What keeping one more drafted card costs `seat` now: free while it
+    /// has free keeps left this round (variant `free_keep`), else `keep_cost`.
+    fn keep_price(&self, g: &GameState, seat: usize) -> i64 {
+        if g.var(&kept_key(seat)) < self.free_keeps {
+            0
+        } else {
+            self.keep_cost
+        }
+    }
 }
 
 /// Why a card can't be played now, or `None` if it can.
@@ -435,6 +473,9 @@ impl Module for Cards {
             }
             cx.set_key(g, next_discount(s), 0);
             cx.set_key(g, civic_used(s), 0);
+            if self.free_keeps > 0 {
+                cx.set_key(g, kept_key(s), 0);
+            }
         }
     }
 
@@ -506,7 +547,7 @@ impl Module for Cards {
                 }
             }
             3 => {
-                if g.resource(s, "credits") >= self.keep_cost || g.var(opposition::FREE_LEFT) > 0 {
+                if g.resource(s, "credits") >= self.keep_price(g, s) || g.var(opposition::FREE_LEFT) > 0 {
                     for id in g.pile(&drafted(s)) {
                         out.push(Action::Keep {
                             seat,
@@ -595,13 +636,21 @@ impl Module for Cards {
                 if !g.pile(&drafted(s)).contains(card) {
                     return Err(Halt::Illegal(format!("{card} was not drafted by seat {s}")));
                 }
+                // A free keep of the round first, then a level's free
+                // purchase, then credits.
                 let free = g.var(opposition::FREE_LEFT);
-                if free > 0 {
-                    cx.set_key(g, opposition::FREE_LEFT.into(), free - 1);
-                } else if g.resource(s, "credits") >= self.keep_cost {
-                    cx.add_resource(g, s, "credits", -self.keep_cost);
-                } else {
-                    return Err("can't afford to keep it".into());
+                let price = self.keep_price(g, s);
+                if price > 0 {
+                    if free > 0 {
+                        cx.set_key(g, opposition::FREE_LEFT.into(), free - 1);
+                    } else if g.resource(s, "credits") >= price {
+                        cx.add_resource(g, s, "credits", -price);
+                    } else {
+                        return Err("can't afford to keep it".into());
+                    }
+                }
+                if self.free_keeps > 0 {
+                    cx.add_key(g, kept_key(s), 1);
                 }
                 cx.move_card(g, card, &drafted(s), &hand(s), false)?;
                 cx.count(g, &format!("kept.{card}"), 1);
@@ -702,7 +751,7 @@ impl Module for Cards {
             let dr: Vec<CardView> = g
                 .pile(&drafted(s))
                 .iter()
-                .map(|id| card(id, "drafted", Some(self.keep_cost)))
+                .map(|id| card(id, "drafted", Some(self.keep_price(g, s))))
                 .collect();
             if !dr.is_empty() {
                 out.cards(s, "drafted", "drafted (keep?)", dr);
@@ -728,7 +777,7 @@ impl Module for Cards {
         }
         // Per-seat markers: shown above as seat values, card status
         // (`unpowered`) or the draft piles (`picked`).
-        out.bookkeeping(&["cards.tier.", "cards.picked.", "cards.next_discount.", "cards.civic_used.", "cards.unpowered."]);
+        out.bookkeeping(&["cards.tier.", "cards.picked.", "cards.next_discount.", "cards.civic_used.", "cards.unpowered.", "cards.kept_round."]);
         for tier in [1u8, 2] {
             out.pile(&format!("deck.{tier}"), &format!("Tier-{tier} deck"), None, g.pile(&deck(tier)).len(), Vec::new());
             let d = g.pile(&discard_pile(tier));

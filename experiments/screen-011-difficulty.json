@@ -1,0 +1,58 @@
+{
+  "name": "screen-011-difficulty",
+  "note": "011 screen (no probes): candidate effects for difficulty levels 1 and 3. Each variant pairs a level-1 candidate with a level-3 candidate; level 1's effect reads as d1 - d0, level 3's as d3 - d2. Greedy only (the top agent at r3). Ran before extra_threats became 'in all, countries in turn': xt1 here dealt one extra threat per country (2 a round); the baseline then had r3's level 1 and 3, so variant 'old' is r3.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "old",
+      "set": []
+    },
+    {
+      "name": "cba1_reach1",
+      "set": [
+        "adversary.counter_bonus=0",
+        "adversary.counter_bonus_all=1",
+        "adversary.foundry_bonus=0",
+        "adversary.foundry_reach=1"
+      ]
+    },
+    {
+      "name": "xt1_reach2",
+      "set": [
+        "adversary.counter_bonus=0",
+        "adversary.extra_threats=1",
+        "adversary.foundry_bonus=0",
+        "adversary.foundry_reach=2"
+      ]
+    },
+    {
+      "name": "cba2_reach3",
+      "set": [
+        "adversary.counter_bonus=0",
+        "adversary.counter_bonus_all=2",
+        "adversary.foundry_bonus=0",
+        "adversary.foundry_reach=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "agents": [
+    "greedy"
+  ],
+  "games": 64,
+  "first_seed": 500000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 0
+}
