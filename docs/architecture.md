@@ -89,7 +89,7 @@ differs only in the threat variant. Abridged:
     { "module": "board", "variant": "pieces", "params": { "start_population": 1, ... } },
     { "module": "adversary", "variant": "militarist", "params": { "difficulty": 0, "stage_cards": [3, 4, 3], ... } },
     { "module": "threats", "variant": "countries", "params": { "per_country": 1 } },
-    { "module": "opposition", "variant": "pushback", "params": { "per_player": 4, ... } },
+    { "module": "alignment", "variant": "tug", "params": { "undecided_per_player": 4, "tip_per_player": 2, ... } },
     { "module": "economy", "variant": "standard", "params": { ... } },
     { "module": "ai", "variant": "boards", "params": { "boards": [0, 1], "start_credits": 12, ... } },
     { "module": "cards", "variant": "draft", "params": { "deal": 4, ... }, "cards": ["fab_line", ...] }
@@ -127,13 +127,13 @@ differs only in the threat variant. Abridged:
   - `countries=4`;
   - `adversary.stage_cards=3,4,3` (`3` or `1,2,3`);
   - `adversary.difficulty=` unsets a parameter;
-  - `opposition.variant=income` switches variant and drops the parameters the new
+  - `cards.variant=free_keep` switches variant and drops the parameters the new
     variant doesn't take, so only its new ones need setting
-    (`--set opposition.income_credits=2`);
+    (`--set cards.free_keeps=1`);
   - `<module>=off` removes a module and its phases. In v0 every module is needed by
     another (`ModuleDef::requires`), so this is rejected with the reason. To measure a
     module's effect, use its `off` *variant* instead (`threats.variant=off`,
-    `opposition.variant=off`, `cards.variant=off`): it keeps the module's phases and
+    `alignment.variant=off`, `cards.variant=off`): it keeps the module's phases and
     the parameters other modules read, and does nothing. See rules.md §2b.
   - Switching the adversary variant drops most of its parameters, so the spread
     variants have their own configs (`configs/clusters.json`, `configs/assets.json`).
@@ -154,17 +154,17 @@ way of doing it. The difference matters for tuning:
 | A new effect primitive or selector | code (`content.rs`, plus the module that runs it) |
 | A new kind of player action | code (`Action`); a structural change |
 
-The v0 modules are `board`, `adversary`, `threats`, `opposition`, `economy`, `ai` and
+The v0 modules are `board`, `adversary`, `threats`, `alignment` (013, in place of `opposition`), `economy`, `ai` and
 `cards` (`crates/aic-core/src/modules/`); `common.rs` (board queries, piece names) and
 `effects.rs` (the player effect primitives) are shared code. Rules areas lean on each
 other, so modules call each other's public functions (a card's damage calls
-`adversary::damage`, which scores `opposition::for_kill`) and read each other's
+`adversary::damage`, which sways toward Unity through `alignment::for_kill`) and read each other's
 parameters through `World::int("<module>.<param>")`. A module lists the modules it reads
 in `ModuleDef::requires`; a config missing one is rejected.
 
 A rule that depends on another module's *variant* reads `World::variant("<module>")`.
 The one case so far: the adversary variants (`militarist`, `clusters`, `assets`) use
-different pieces, so threats, opposition pushback and card effects ask
+different pieces, so threats, Unity-card pushback and card effects ask
 `adversary::style(w)` and go through adversary functions (`selects`, `kind_count`,
 `reinforce`, `forward_base`, `pushback`, `under_bar`, `ravage`, `build_hex`, `cascade`)
 that read the Militarist's piece names as the pieces in play. `common::ADVERSARY` lists
@@ -192,7 +192,7 @@ A `Module` implements whichever of these hooks it needs:
 | `can_pass(phase, seat)` | Whether the engine offers `Pass` (default yes; draft picks and growth say no, and the module passes the seat itself). |
 | `owns(phase, action)` | Whether a non-pass action is this module's (routing in combined phases). |
 | `act(phase, action)` | Validate and apply an owned action. May ask choices. On `Halt::Illegal` the engine restores the state. |
-| `after` | When an action or automatic phase finishes resolving (after the answer that completes it): standing checks (opposition levels, win and loss). May ask choices. |
+| `after` | When an action or automatic phase finishes resolving (after the answer that completes it): standing checks (Alignment tips, win and loss). May ask choices. |
 
 Modules change the state through `Cx`, which keeps the event log and counters
 consistent:
@@ -248,7 +248,7 @@ other. Order matters the way it does at a table where the team talks it through.
 
 1. In the module's file, add a `VariantDef` to its `DEF.variants`, with a build function
    and a `Module` impl. Shared behaviour can be one struct with an option, as
-   `threats::Threats` (`shared`) and `opposition::Opposition` (`reward`) do.
+   `threats::Threats` (`shared`) does (`alignment::Alignment` reads its variant where it matters).
 2. Add its parameters to a config in `configs/` and run
    `aic-sim compare configs/old.json configs/new.json`, or sweep it in place with
    `--set-b <module>.variant=<name> --set-b <module>.<new param>=...`.
@@ -365,8 +365,12 @@ In v0:
 - `threats` adds each country's threat (`threats.on`, status = counter progress such as
   `1/2 energy`; the text adds who paid what and any Jam Signals), or the shared row
   pile, and the tier dealt next. Bookkeeping: `threats.paid.*`, `threats.jam.*`.
-- `opposition` adds the track toward the next level, the level with its win condition,
-  and population against the loss threshold.
+- `alignment` adds the Undecided, both buckets (each against the size it tips at), both
+  tip counts (against the next threshold), the bar level with its win condition, and
+  population against the loss threshold; piles for both decks (counts only), each side's
+  resolved cards and the ongoing cards; each seat's antimatter actions left.
+  Bookkeeping: `alignment.used.*`. `adversary` adds the difficulty in play and, once
+  Discord has escalated it, `adversary.escalation`.
 - `ai` adds each seat's board (`ai.board`: name, text, innate rule, both tracks with
   every step, tier-2 and antimatter marks, printed slots, the AI's unique cards and
   where they are), tier-2 unlock and processor count. Bookkeeping: `ai.track.*` (the
@@ -380,7 +384,7 @@ In v0:
   Bookkeeping: `cards.tier.*`, `cards.picked.*`, `cards.next_discount.*`,
   `cards.civic_used.*`, `cards.unpowered.*` (a building's `unpowered` status).
 
-So in v0 the globals hold only game-wide tracks (opposition points and level, the
+So in v0 the globals hold only game-wide tracks (the Alignment track and tips, the
 corruption pool, adversary stage, starting population and what modules derive).
 
 The view is display data:

@@ -44,7 +44,7 @@
         "hegemonize_clusters": 1,
         "hegemonize_all": 0,
         "infection_spill": 1,
-        "cluster_opposition": 1,
+        "cluster_unity": 1,
         "purge_allowance": 2,
         "damage_bonus": 1
       }
@@ -57,16 +57,28 @@
       }
     },
     {
-      "module": "opposition",
-      "variant": "pushback",
+      "module": "alignment",
+      "variant": "tug",
       "params": {
-        "per_player": 4,
-        "max_level": 3,
+        "undecided_per_player": 4,
+        "tip_per_player": 2,
+        "momentum_every": 0,
         "outpost": 1,
         "foundry": 2,
+        "threat_discord": 1,
+        "adversary_discord": 1,
+        "antimatter_discord": 1,
+        "antimatter_uses": 1,
+        "unity_ease": [
+          2,
+          5
+        ],
+        "discord_escalate": [
+          2,
+          5
+        ],
         "loss_population_percent": 50,
-        "clear_win_stage": 2,
-        "pushback_drones": 1
+        "clear_win_stage": 2
       }
     },
     {
@@ -149,13 +161,14 @@
     }
   ],
   "round": [
+    "alignment.sway",
     "threats.deal",
     "cards.tier",
     "cards.deal",
     "cards.draft",
     "cards.keep",
     "ai.growth",
-    "cards.play+threats.counter+economy.give",
+    "cards.play+threats.counter+economy.give+alignment.act",
     "threats.execute",
     "adversary.ravage",
     "adversary.build",

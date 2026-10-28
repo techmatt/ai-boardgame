@@ -14,12 +14,12 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{ai, effects, opposition};
+use super::{ai, alignment, effects};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "cards",
     summary: "Card decks, the draft, keeping cards, playing programs and buildings",
-    requires: &["ai", "adversary", "opposition", "threats", "economy", "board"],
+    requires: &["ai", "adversary", "alignment", "threats", "economy", "board"],
     variants: &[VariantDef {
         name: "draft",
         summary: "Terraforming Mars draft: choose a tier, take one card and pass the rest, then keep any at a price",
@@ -562,7 +562,7 @@ impl Module for Cards {
                 }
             }
             3 => {
-                if g.resource(s, "credits") >= self.keep_price(g, s) || g.var(opposition::FREE_LEFT) > 0 {
+                if g.resource(s, "credits") >= self.keep_price(g, s) || g.var(alignment::FREE_LEFT) > 0 {
                     for id in g.pile(&drafted(s)) {
                         out.push(Action::Keep {
                             seat,
@@ -653,11 +653,11 @@ impl Module for Cards {
                 }
                 // A free keep of the round first, then a level's free
                 // purchase, then credits.
-                let free = g.var(opposition::FREE_LEFT);
+                let free = g.var(alignment::FREE_LEFT);
                 let price = self.keep_price(g, s);
                 if price > 0 {
                     if free > 0 {
-                        cx.set_key(g, opposition::FREE_LEFT.into(), free - 1);
+                        cx.set_key(g, alignment::FREE_LEFT.into(), free - 1);
                     } else if g.resource(s, "credits") >= price {
                         cx.add_resource(g, s, "credits", -price);
                     } else {

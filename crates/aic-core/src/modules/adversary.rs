@@ -12,7 +12,7 @@ use crate::state::{GameState, Opt};
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{board, cards, opposition};
+use super::{alignment, board, cards};
 
 /// The Militarist's parameters, then any more a variant of it adds.
 macro_rules! militarist_params {
@@ -54,7 +54,7 @@ macro_rules! militarist_params {
 pub static DEF: ModuleDef = ModuleDef {
     id: "adversary",
     summary: "The adversary deck and pipeline (explore, build, ravage), corruption, innate rules, difficulty",
-    requires: &["board", "cards", "opposition"],
+    requires: &["board", "cards", "alignment"],
     variants: &[VariantDef {
         name: "militarist",
         summary: "The Militarist: Momentum and Escalation",
@@ -107,8 +107,8 @@ pub static DEF: ModuleDef = ModuleDef {
             i("hegemonize_clusters", 0, 5, "clusters each hegemonized hex gains (build slot)"),
             i("hegemonize_all", 0, 1, "1: hegemonize every hex of the terrain (Matt's note as written); 0: only hexes holding clusters"),
             i("infection_spill", 0, 1, "1: infection excess left after flipping data centres plants one cluster"),
-            i("cluster_opposition", 0, 10, "opposition for destroying a cluster"),
-            i("purge_allowance", 0, 20, "purge win: at opposition level L, at most L x this x countries clusters may remain"),
+            i("cluster_unity", 0, 10, "Sway toward Unity for destroying a cluster"),
+            i("purge_allowance", 0, 20, "purge win: at bar level L (from Unity tips), at most L x this x countries clusters may remain"),
             i("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
             i("counter_bonus_all", 0, 10, "difficulty 1+: added to every counter requirement of every threat"),
             i("extra_threats", 0, 5, "difficulty 1+: extra threats dealt each round in all, one per country in turn"),
@@ -140,8 +140,8 @@ pub static DEF: ModuleDef = ModuleDef {
             i("pool_per_country", 0, 20, "corruption pool size per country (one per corrupted asset)"),
             i("pool_base", 0, 20, "corruption pool size on top of the per-country part"),
             i("spread", 0, 5, "assets each corrupted asset corrupts when it spreads (build slot)"),
-            i("reclaim_opposition", 0, 10, "opposition for reclaiming a corrupted asset by damage"),
-            i("purge_allowance", 0, 20, "purge win: at opposition level L, at most L x this x countries corrupted assets may remain"),
+            i("reclaim_unity", 0, 10, "Sway toward Unity for reclaiming a corrupted asset by damage"),
+            i("purge_allowance", 0, 20, "purge win: at bar level L (from Unity tips), at most L x this x countries corrupted assets may remain"),
             i("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
             i("counter_bonus_all", 0, 10, "difficulty 1+: added to every counter requirement of every threat"),
             i("extra_threats", 0, 5, "difficulty 1+: extra threats dealt each round in all, one per country in turn"),
@@ -220,9 +220,23 @@ pub fn killed_foundry(seat: usize) -> String {
     format!("adversary.killed_foundry.{seat}")
 }
 
-/// Whether the difficulty is at least `n`.
+/// How many levels Discord has escalated the adversary (module `alignment`).
+pub const ESCALATION: &str = "adversary.escalation";
+
+/// Whether the configured difficulty is at least `n` (setup rules).
 pub fn level(w: &World, n: i64) -> bool {
     w.int("adversary.difficulty") >= n
+}
+
+/// Whether the difficulty in play, the configured one plus any Discord
+/// escalation, is at least `n`.
+pub fn at(w: &World, g: &GameState, n: i64) -> bool {
+    w.int("adversary.difficulty") + g.var(ESCALATION) >= n
+}
+
+/// The difficulty in play (configured plus escalation), up to 4.
+pub fn difficulty(w: &World, g: &GameState) -> i64 {
+    (w.int("adversary.difficulty") + g.var(ESCALATION)).min(4)
 }
 
 pub fn health(w: &World, kind: &str) -> i64 {
@@ -261,7 +275,7 @@ pub fn threat_tier(w: &World, g: &GameState) -> u8 {
     if g.var(STAGE) >= 2 {
         return 2;
     }
-    if level(w, 4) {
+    if at(w, g, 4) {
         let early = w.int("adversary.tier2_early") as usize;
         let soon = g.pile(DECK).iter().take(early).any(|id| card(w, id).stage >= 2);
         if soon {
@@ -463,10 +477,19 @@ impl Module for Adversary {
         out.global(
             "difficulty",
             "difficulty",
-            w.int("adversary.difficulty"),
+            difficulty(w, g),
             Some(4),
-            "difficulty level (config)",
+            "difficulty level in play: the configured level plus Discord escalation",
         );
+        if g.var(ESCALATION) > 0 {
+            out.global(
+                "escalation",
+                "Discord escalation",
+                g.var(ESCALATION),
+                None,
+                "difficulty levels Discord tips have added",
+            );
+        }
         out.global(
             "deck",
             "adversary cards left",
@@ -489,6 +512,35 @@ impl Module for Adversary {
                     "you destroyed a foundry this round (for cards that ask)",
                 );
             }
+        }
+    }
+}
+
+/// The adversary builds (`ravage` false) or ravages now, out of turn, with
+/// the card in that slot (Discord cards). Nothing happens if the slot is empty.
+pub fn act_now(g: &mut GameState, cx: &mut Cx, ravage: bool) -> Res {
+    let a = Adversary {
+        stage_cards: Vec::new(),
+        style: style(&cx.world),
+    };
+    a.run(if ravage { 0 } else { 1 }, g, cx)
+}
+
+/// In each country, the hex with the most adversary pieces (ties: lower hex
+/// number) gains `n` corruption from the pool (Discord cards).
+pub fn corrupt_busiest(g: &mut GameState, cx: &mut Cx, n: i64) {
+    let w = cx.world;
+    for c in 0..w.map.countries.len() {
+        let mut best: Option<(usize, i64)> = None;
+        for &h in &w.map.countries[c].hexes {
+            let k = adversary_count(g, h);
+            if k > 0 && best.is_none_or(|(_, b)| k > b) {
+                best = Some((h, k));
+            }
+        }
+        if let Some((h, _)) = best {
+            cx.note(Some(h), || format!("Discord: corruption at {}", hex_name(&w, h)));
+            add_corruption(g, cx, h, n);
         }
     }
 }
@@ -691,8 +743,8 @@ pub fn ravage(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
         return Ok(());
     }
     match style(&w) {
-        Style::Militarist if level(&w, 3) && g.tokens(h, FOUNDRY) > 0 => raw += w.int("adversary.foundry_bonus"),
-        Style::Clusters if level(&w, 3) => raw += w.int("adversary.damage_bonus"),
+        Style::Militarist if at(&w, g, 3) && g.tokens(h, FOUNDRY) > 0 => raw += w.int("adversary.foundry_bonus"),
+        Style::Clusters if at(&w, g, 3) => raw += w.int("adversary.damage_bonus"),
         _ => {}
     }
     if style(&w) == Style::Militarist {
@@ -743,7 +795,7 @@ pub fn ravage(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
 /// choose each). The reach adds no corruption and no Momentum.
 fn foundry_reach(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
     let w = cx.world;
-    let reach = if level(&w, 3) {
+    let reach = if at(&w, g, 3) {
         w.int("adversary.foundry_reach") * g.tokens(h, FOUNDRY)
     } else {
         0
@@ -827,7 +879,7 @@ pub fn destroy_piece(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, h: usi
         cx.add_key(g, POOL.into(), 1);
     }
     cx.tally(g, &format!("adversary.{kind}_destroyed"), 1);
-    opposition::for_kill(g, cx, seat, kind);
+    alignment::for_kill(g, cx, seat, kind);
     if let (FOUNDRY, Some(s)) = (kind, seat) {
         cx.set_key(g, killed_foundry(s), 1);
     }
@@ -1158,7 +1210,7 @@ fn strike(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
     if raw == 0 {
         return Ok(());
     }
-    if level(&w, 3) {
+    if at(&w, g, 3) {
         raw += w.int("adversary.damage_bonus");
     }
     let prevented = prevented(&w, g, h);

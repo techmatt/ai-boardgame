@@ -9,15 +9,15 @@ fn baseline() -> Config {
     Config::from_json(BASELINE).unwrap()
 }
 
-/// Both threat variants, every opposition reward variant, difficulty 0 and 4.
+/// Both threat variants, the Alignment variants and switches, difficulty 0 and 4.
 fn variant_matrix() -> Vec<Config> {
     let mut out = Vec::new();
     let threats: [&[&str]; 2] = [&[], &["threats.variant=shared_row"]];
     let rewards: [&[&str]; 4] = [
         &[],
-        &["opposition.variant=income", "opposition.income_credits=2"],
-        &["opposition.variant=free_purchases", "opposition.free_purchases=2"],
-        &["opposition.variant=counter_threat"],
+        &["alignment.variant=still"],
+        &["alignment.momentum_every=2"],
+        &["alignment.antimatter_discord=0"],
     ];
     let levels: [&[&str]; 2] = [&[], &["adversary.difficulty=4"]];
     for t in threats {
@@ -34,8 +34,8 @@ fn variant_matrix() -> Vec<Config> {
     }
     // 011's variants and difficulty options, each on the baseline.
     let extra: [&[&str]; 5] = [
-        &["opposition.variant=insight", "opposition.insight_income=1"],
-        &["opposition.variant=counter_all", "adversary.difficulty=4"],
+        &["alignment.variant=off"],
+        &["alignment.adversary_discord=3", "alignment.tip_per_player=1", "adversary.difficulty=4"],
         &["cards.variant=free_keep", "cards.free_keeps=1"],
         &["adversary.variant=uplinks", "adversary.explore_foundries=1", "adversary.difficulty=4"],
         &[
@@ -43,7 +43,7 @@ fn variant_matrix() -> Vec<Config> {
             "adversary.counter_bonus_all=1",
             "adversary.extra_threats=1",
             "adversary.foundry_reach=2",
-            "opposition.clear_win_stage=1",
+            "alignment.clear_win_stage=1",
         ],
     ];
     for e in extra {
@@ -491,7 +491,7 @@ fn advance_to(rules: &Rules, g: &mut GameState, phase: &str) {
     panic!("never reached {phase}");
 }
 
-const ACTIONS: &str = "cards.play+threats.counter+economy.give";
+const ACTIONS: &str = "cards.play+threats.counter+economy.give+alignment.act";
 
 #[test]
 fn growth_and_draft_picks_cannot_be_passed() {
@@ -727,14 +727,26 @@ fn difficulty_levels_change_the_numbers() {
     assert_eq!(modules::threats::requirement(&w0, &g, "patrol")[0].1, 2);
 }
 
+/// Stacks the Unity deck: `card` is drawn next, whatever the tier.
+fn next_unity(g: &mut GameState, card: &str) {
+    for tier in [1, 2] {
+        g.piles.insert(format!("alignment.deck.unity.{tier}"), vec![card.to_string()]);
+    }
+}
+
 #[test]
-fn reaching_an_opposition_level_pushes_back_and_can_win() {
+fn a_full_unity_bucket_tips_a_card_and_lowers_the_bar() {
     let rules = Rules::new(&baseline()).unwrap();
     let mut g = rules.new_game(4);
     advance_to(&rules, &mut g, ACTIONS);
     g.seats[0].resources.insert("insight".into(), 1);
-    // One short of level 1 (4 per player, 2 players); no outposts or foundries.
-    g.vars.insert("opposition.points".into(), 8);
+    // One Unity tip made, the bucket full (2 per player, 2 players); no
+    // outposts or foundries. The next card is Civil Defense (pushback).
+    g.vars.insert("alignment.unity_tips".into(), 1);
+    let undecided = g.var("alignment.undecided");
+    g.vars.insert("alignment.undecided".into(), undecided - 4);
+    g.vars.insert("alignment.unity".into(), 4);
+    next_unity(&mut g, "civil_defense");
     for h in g.hexes.iter_mut() {
         h.tokens.remove("outpost");
         h.tokens.remove("foundry");
@@ -743,8 +755,7 @@ fn reaching_an_opposition_level_pushes_back_and_can_win() {
     rules
         .apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, Some(&mut events))
         .unwrap();
-    // Level 1 reached: each country removes a drone (players choose).
-    assert_eq!(g.var("opposition.level"), 1);
+    // The tip: each country removes a drone (players choose).
     while let Some(p) = &g.pending {
         assert!(p.ask.prompt.starts_with("Pushback"));
         let o = p.ask.options[0].clone();
@@ -752,9 +763,83 @@ fn reaching_an_opposition_level_pushes_back_and_can_win() {
             .apply_mut(&mut g, &Action::Choose { seat: 0, option: o.option, target: o.target }, None)
             .unwrap();
     }
-    // At level 1, players win once no outposts or foundries remain.
+    // The tip count went up, the Sway went back, the card is resolved.
+    assert_eq!(g.var("alignment.unity_tips"), 2);
+    assert_eq!(g.var("alignment.unity"), 0);
+    assert_eq!(g.var("alignment.undecided"), undecided);
+    assert_eq!(g.pile("alignment.resolved.unity"), ["civil_defense"]);
+    // Two Unity tips: the bar drops to 1, so no outposts or foundries wins.
+    assert_eq!(modules::alignment::bar_level(&rules.world(), &g), 1);
     let o = g.outcome.as_ref().expect("a win");
-    assert!(o.won && o.reason == "opposition", "{o:?}");
+    assert!(o.won && o.reason == "purge", "{o:?}");
+}
+
+/// The antimatter action sways toward Discord; with the Undecided empty
+/// the Sway comes from the Unity bucket (`tug`) or nowhere (`still`).
+#[test]
+fn the_antimatter_action_and_the_empty_undecided() {
+    for (variant, from_unity) in [("tug", true), ("still", false)] {
+        let rules = Rules::new(&baseline_with(&[&format!("alignment.variant={variant}")])).unwrap();
+        let mut g = rules.new_game(4);
+        advance_to(&rules, &mut g, ACTIONS);
+        g.vars.insert("alignment.undecided".into(), 0);
+        g.vars.insert("alignment.unity".into(), 2);
+        g.vars.insert("alignment.discord".into(), 0);
+        let am = g.resource(0, "antimatter");
+        let a = Action::Antimatter { seat: 0 };
+        assert!(rules.legal_actions(&g).contains(&a));
+        rules.apply_mut(&mut g, &a, None).unwrap();
+        assert_eq!(g.resource(0, "antimatter"), am + 1);
+        let moved = i64::from(from_unity);
+        assert_eq!((g.var("alignment.unity"), g.var("alignment.discord")), (2 - moved, moved), "{variant}");
+        // Once a round per player.
+        assert!(!rules.legal_actions(&g).contains(&a));
+        assert!(rules.apply_mut(&mut g, &a, None).is_err());
+        assert!(rules.legal_actions(&g).contains(&Action::Antimatter { seat: 1 }));
+    }
+    // Off by config.
+    let rules = Rules::new(&baseline_with(&["alignment.antimatter_discord=0"])).unwrap();
+    let mut g = rules.new_game(4);
+    advance_to(&rules, &mut g, ACTIONS);
+    assert!(rules.legal_actions(&g).iter().all(|a| !matches!(a, Action::Antimatter { .. })));
+}
+
+/// Discord tips escalate the adversary at 2 and 5; Momentum shrinks a
+/// bucket by 1 per 2 of its side's tips, down to 1 per player.
+#[test]
+fn discord_tips_escalate_and_momentum_shrinks_buckets() {
+    let rules = Rules::new(&baseline()).unwrap();
+    let mut g = rules.new_game(4);
+    advance_to(&rules, &mut g, ACTIONS);
+    g.vars.insert("alignment.discord_tips".into(), 1);
+    let undecided = g.var("alignment.undecided");
+    g.vars.insert("alignment.undecided".into(), undecided - 4);
+    g.vars.insert("alignment.discord".into(), 4);
+    g.seats[0].resources.insert("insight".into(), 1);
+    rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
+    while let Some(p) = &g.pending {
+        let o = p.ask.options[0].clone();
+        rules
+            .apply_mut(&mut g, &Action::Choose { seat: 0, option: o.option, target: o.target }, None)
+            .unwrap();
+    }
+    assert_eq!(g.var("alignment.discord_tips"), 2);
+    assert_eq!(g.var("adversary.escalation"), 1);
+    let w = rules.world();
+    assert!(modules::adversary::at(&w, &g, 1) && !modules::adversary::level(&w, 1));
+    assert_eq!(g.pile("alignment.resolved.discord").len() + g.pile("alignment.ongoing").len(), 1);
+    let d = rules.view(&g).globals.into_iter().find(|v| v.key == "adversary.difficulty").unwrap();
+    assert_eq!(d.value, 1);
+
+    use crate::content::Side;
+    let rules = Rules::new(&baseline_with(&["alignment.momentum_every=2"])).unwrap();
+    let w = rules.world();
+    let mut g = rules.new_game(4);
+    for (tips, cap) in [(0, 4), (1, 4), (2, 3), (4, 2), (9, 2)] {
+        g.vars.insert("alignment.unity_tips".into(), tips);
+        assert_eq!(modules::alignment::capacity(&w, &g, Side::Unity), cap, "{tips} tips");
+        assert_eq!(modules::alignment::capacity(&w, &g, Side::Discord), 4);
+    }
 }
 
 #[test]
@@ -777,7 +862,7 @@ fn rng_draws_are_fixed_width_and_pinned() {
 }
 
 const GOLDEN_DRAWS: [usize; 8] = [10, 13, 7, 2, 12, 9, 1, 7];
-const GOLDEN_FINGERPRINT: &str = "a08c1c27bc9d018c";
+const GOLDEN_FINGERPRINT: &str = "346f12523ee60697";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).
@@ -799,7 +884,7 @@ fn golden_game() {
     assert!(g.is_over());
     assert_eq!(
         (RULES_REVISION, g.fingerprint().as_str()),
-        (4, GOLDEN_FINGERPRINT)
+        (5, GOLDEN_FINGERPRINT)
     );
 }
 
@@ -823,7 +908,9 @@ fn the_view_shows_terrain_threats_pipeline_tracks_and_choices() {
                 assert!(pile(k).is_some(), "{k}");
             }
             let global = |k: &str| v.globals.iter().find(|x| x.key == k);
-            assert!(global("opposition.points").is_some_and(|x| x.max.is_some()));
+            assert!(global("alignment.unity").is_some_and(|x| x.max.is_some()));
+            assert!(global("alignment.discord").is_some_and(|x| x.max.is_some()));
+            assert!(global("alignment.undecided").is_some());
             assert!(global("adversary.pool").is_some());
             for s in &v.seats {
                 assert!(s.board.as_ref().is_some_and(|b| b.tracks.len() == 2));
@@ -852,6 +939,7 @@ fn the_view_names_countries_shows_boards_and_keeps_bookkeeping_out_of_globals() 
         "ai.track.",
         "adversary.killed_foundry.",
         "adversary.peek",
+        "alignment.used.",
         "board.blockade.",
         "board.sabotage.",
         "board.shelter.",
@@ -901,7 +989,7 @@ fn the_view_names_countries_shows_boards_and_keeps_bookkeeping_out_of_globals() 
             }
             saw_paid |= g.vars.keys().any(|k| k.starts_with("threats.paid."));
             saw_track_var |= g.vars.keys().any(|k| k.starts_with("ai.track."));
-            for k in ["opposition.points", "opposition.level", "adversary.pool"] {
+            for k in ["alignment.undecided", "alignment.unity_tips", "alignment.bar", "adversary.pool"] {
                 assert!(v.globals.iter().any(|x| x.key == k), "{k}");
             }
             let legal = rules.legal_actions(&g);
@@ -980,7 +1068,7 @@ fn tunables_include_card_parameters() {
         "adversary.difficulty",
         "adversary.stage_cards",
         "threats.per_country",
-        "opposition.per_player",
+        "alignment.tip_per_player",
         "economy.factory_credits",
         "ai.boards",
         "cards.keep_cost",
@@ -991,7 +1079,7 @@ fn tunables_include_card_parameters() {
 
 const CLUSTERS: &str = include_str!("../../../configs/clusters.json");
 const ASSETS: &str = include_str!("../../../configs/assets.json");
-const OFFS: [&str; 3] = ["threats.variant=off", "opposition.variant=off", "cards.variant=off"];
+const OFFS: [&str; 3] = ["threats.variant=off", "alignment.variant=off", "cards.variant=off"];
 
 /// Every adversary variant, alone and with each off-variant, at 2 and 3
 /// countries; the spread variants at difficulty 4 too.
@@ -1045,7 +1133,7 @@ fn spread_and_off_variants_play_and_replay(seeds: std::ops::Range<u64>) {
             }
             assert_eq!(s, g);
             let v = rules.view(&g);
-            assert!(v.globals.iter().any(|x| x.key == "opposition.level"));
+            assert!(v.globals.iter().any(|x| x.key == "alignment.bar"));
         }
     }
 }
@@ -1151,17 +1239,17 @@ fn asset_corruption_opens_with_a_beachhead_and_damage_reclaims() {
     assert_eq!(g.var("adversary.pool"), start - 2);
 
     // 2 damage reclaims a corrupted factory: it flips back, its corruption
-    // returns to the pool, and it scores opposition.
+    // returns to the pool, and it sways toward Unity.
     let mut g = g;
     let h = (0..g.hexes.len()).find(|&h| g.tokens(h, "rogue_factory") + g.tokens(h, "rogue_data_centre") > 0).unwrap();
     let kind = if g.tokens(h, "rogue_factory") > 0 { "factory" } else { "data_centre" };
     let before = g.tokens(h, kind);
-    let points = g.var("opposition.points");
+    let points = g.var("alignment.unity");
     with_cx(&rules, |cx| modules::adversary::damage(&mut g, cx, 0, h, 2)).unwrap();
     assert_eq!(g.tokens(h, kind), before + 1);
     assert_eq!(rogue(&g), 1);
     assert_eq!(g.var("adversary.pool"), start - 1);
-    assert_eq!(g.var("opposition.points"), points + 2);
+    assert_eq!(g.var("alignment.unity"), points + 2);
 }
 
 #[test]
@@ -1177,9 +1265,11 @@ fn asset_corruption_pushback_reclaims_and_the_purge_bar_counts_corrupted_assets(
     assert!(!modules::adversary::under_bar(&w, &g, 0));
     assert!(modules::adversary::win_text(&w, 1).contains("at most 2 corrupted assets"));
     g.seats[0].resources.insert("insight".into(), 1);
-    g.vars.insert("opposition.points".into(), 8);
+    g.vars.insert("alignment.unity_tips".into(), 1);
+    g.vars.insert("alignment.unity".into(), 4);
+    next_unity(&mut g, "civil_defense");
     rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
-    assert_eq!(g.var("opposition.level"), 1);
+    assert_eq!(modules::alignment::bar_level(&rules.world(), &g), 1);
     while let Some(p) = &g.pending {
         assert!(p.ask.prompt.starts_with("Pushback"), "{}", p.ask.prompt);
         let o = p.ask.options[0].clone();
@@ -1189,12 +1279,12 @@ fn asset_corruption_pushback_reclaims_and_the_purge_bar_counts_corrupted_assets(
     }
     if rogue(&g) <= 2 {
         let o = g.outcome.as_ref().expect("a win");
-        assert!(o.won && o.reason == "opposition", "{o:?}");
+        assert!(o.won && o.reason == "purge", "{o:?}");
     }
 }
 
 #[test]
-fn off_variants_remove_threats_level_rewards_and_the_draft() {
+fn off_variants_remove_threats_alignment_and_the_draft() {
     let mut c = baseline();
     c.apply_override("threats.variant=off").unwrap();
     let rules = Rules::new(&c).unwrap();
@@ -1203,18 +1293,18 @@ fn off_variants_remove_threats_level_rewards_and_the_draft() {
     assert!(modules::threats::active(&g).is_empty());
 
     let mut c = baseline();
-    c.apply_override("opposition.variant=off").unwrap();
+    c.apply_override("alignment.variant=off").unwrap();
     let rules = Rules::new(&c).unwrap();
     let mut g = rules.new_game(4);
     advance_to(&rules, &mut g, ACTIONS);
-    let drones = |g: &GameState| (0..g.hexes.len()).map(|h| g.tokens(h, "drone")).sum::<i64>();
-    let before = drones(&g);
+    // No Sway moves (the round's Discord included), and nothing tips.
+    assert_eq!(g.var("alignment.discord"), 0);
+    assert!(rules.legal_actions(&g).iter().all(|a| !matches!(a, Action::Antimatter { .. })));
     g.seats[0].resources.insert("insight".into(), 1);
-    g.vars.insert("opposition.points".into(), 8);
+    g.vars.insert("alignment.unity".into(), 4);
     rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
-    assert_eq!(g.var("opposition.level"), 1);
+    assert_eq!(g.var("alignment.unity_tips"), 0);
     assert!(g.pending.is_none());
-    assert_eq!(drones(&g), before);
 
     let mut c = baseline();
     c.apply_override("cards.variant=off").unwrap();
@@ -1240,7 +1330,7 @@ fn baseline_with(sets: &[&str]) -> Config {
 #[test]
 fn the_clear_board_win_waits_for_stage_two() {
     for (rule, stage, wins) in [(2, 1, false), (2, 2, true), (1, 1, true)] {
-        let rules = Rules::new(&baseline_with(&[&format!("opposition.clear_win_stage={rule}")])).unwrap();
+        let rules = Rules::new(&baseline_with(&[&format!("alignment.clear_win_stage={rule}")])).unwrap();
         let mut g = rules.new_game(4);
         advance_to(&rules, &mut g, ACTIONS);
         for h in g.hexes.iter_mut() {
@@ -1253,7 +1343,7 @@ fn the_clear_board_win_waits_for_stage_two() {
         rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
         assert_eq!(g.outcome.as_ref().is_some_and(|o| o.won), wins, "rule {rule}, stage {stage}");
         // The view says when the clear-board win starts to count.
-        let level = rules.view(&g).globals.into_iter().find(|v| v.key == "opposition.level").unwrap();
+        let level = rules.view(&g).globals.into_iter().find(|v| v.key == "alignment.bar").unwrap();
         assert_eq!(level.doc.contains("from adversary stage"), stage < rule, "{}", level.doc);
     }
 }
@@ -1382,24 +1472,31 @@ fn free_keep_makes_the_first_keep_of_the_round_free() {
     assert_eq!(g.var("cards.kept_round.0"), 0);
 }
 
-/// Rewards `insight` and `counter_all` (011).
+/// Unity cards: Think Tank (insight income) and, from the stronger tier,
+/// Global Coalition (counter every threat).
 #[test]
-fn insight_and_counter_all_rewards() {
-    for (sets, insight) in [
-        (&["opposition.variant=insight", "opposition.insight_income=1"][..], true),
-        (&["opposition.variant=counter_all"][..], false),
-    ] {
-        let rules = Rules::new(&baseline_with(sets)).unwrap();
+fn unity_cards_insight_income_and_counter_all() {
+    for (card, tips, insight) in [("think_tank", 0, true), ("global_coalition", 2, false)] {
+        let rules = Rules::new(&baseline()).unwrap();
         let mut g = rules.new_game(4);
         advance_to(&rules, &mut g, ACTIONS);
         assert!(!modules::threats::active(&g).is_empty());
-        // An outpost stays, so reaching level 1 doesn't win.
-        g.hexes[rules.map.numbered(0, 3)].tokens.insert("outpost".into(), 1);
+        // A foundry stays, so no bar is met.
+        g.hexes[rules.map.numbered(0, 3)].tokens.insert("foundry".into(), 1);
         g.seats[0].resources.insert("insight".into(), 1);
-        g.vars.insert("opposition.points".into(), 8);
+        g.vars.insert("alignment.unity_tips".into(), tips);
+        g.vars.insert("alignment.unity".into(), 4);
+        // The tier the draw uses: stronger from the first ease threshold (2).
+        let tier = if tips >= 2 { 2 } else { 1 };
+        let deck = format!("alignment.deck.unity.{tier}");
+        let mut ids = g.pile(&deck).to_vec();
+        ids.retain(|c| c != card);
+        ids.insert(0, card.to_string());
+        g.piles.insert(deck, ids);
         let before = modules::economy::income(&rules.world(), &g, 0)[4];
         rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
-        assert_eq!(g.var("opposition.level"), 1);
+        assert_eq!(g.var("alignment.unity_tips"), tips + 1);
+        assert_eq!(g.pile("alignment.resolved.unity"), [card]);
         assert!(g.outcome.is_none());
         let after = modules::economy::income(&rules.world(), &g, 0)[4];
         if insight {

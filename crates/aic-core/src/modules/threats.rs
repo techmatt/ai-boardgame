@@ -3,7 +3,7 @@
 //! threats sit on countries (default), or in one shared row.
 
 use crate::action::Action;
-use crate::content::{Passive, ThreatDef, ThreatOp};
+use crate::content::{Passive, Side, ThreatDef, ThreatOp};
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef,
     World,
@@ -13,7 +13,7 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{adversary, board, cards};
+use super::{adversary, alignment, board, cards};
 
 const PARAMS: &[ParamSpec] = &[ParamSpec {
     name: "per_country",
@@ -44,7 +44,7 @@ const PHASES: &[PhaseSpec] = &[
 pub static DEF: ModuleDef = ModuleDef {
     id: "threats",
     summary: "Threats: dealt each round, countered by pooled payments, executed if not",
-    requires: &["adversary", "board", "cards"],
+    requires: &["adversary", "alignment", "board", "cards"],
     variants: &[
         VariantDef {
             name: "countries",
@@ -136,7 +136,7 @@ fn pile_of(scope: Option<usize>) -> String {
 /// and Jam Signals applied).
 pub fn requirement(w: &World, g: &GameState, threat: &str) -> Vec<(String, i64)> {
     let jam = g.var(&jam_key(threat));
-    let (bonus, all) = if adversary::level(w, 1) {
+    let (bonus, all) = if adversary::at(w, g, 1) {
         (w.int("adversary.counter_bonus"), w.int("adversary.counter_bonus_all"))
     } else {
         (0, 0)
@@ -189,6 +189,28 @@ pub fn counter(g: &mut GameState, cx: &mut Cx, threat: &str) {
     refund(g, cx, threat);
     clear(g, cx, threat, scope);
     cx.tally(g, "threats.countered", 1);
+}
+
+/// Deals `n` extra threats of the current tier now, one per country in turn
+/// from country 0 (Discord cards). An empty deck deals nothing (no reshuffle
+/// out of turn). Variant `off`: nothing.
+pub fn deal_extra(g: &mut GameState, cx: &mut Cx, n: i64) {
+    let w = cx.world;
+    let shared = match w.variant("threats") {
+        Some("countries") => false,
+        Some("shared_row") => true,
+        _ => return,
+    };
+    let tier = adversary::threat_tier(&w, g);
+    let countries = w.map.countries.len().max(1);
+    for k in 0..n.max(0) as usize {
+        let Some(id) = g.pile(&deck(tier)).first().cloned() else {
+            return;
+        };
+        let to = if shared { ROW.to_string() } else { on(k % countries) };
+        cx.move_card(g, &id, &deck(tier), &to, false).unwrap();
+        cx.tally(g, "threats.dealt", 1);
+    }
 }
 
 /// Jam Signals: `threat` needs `n` less of each resource.
@@ -303,7 +325,7 @@ impl Module for Threats {
             // Difficulty 1: `extra_threats` more a round in all, one per
             // country in turn (country 1 first in round 1, then 2, ...).
             let n = w.map.countries.len();
-            let extra = if adversary::level(&w, 1) {
+            let extra = if adversary::at(&w, g, 1) {
                 w.int("adversary.extra_threats").max(0) as usize
             } else {
                 0
@@ -339,6 +361,7 @@ impl Module for Threats {
             for op in &d.effects {
                 execute(g, cx, op, scope)?;
             }
+            alignment::sway(g, cx, Side::Discord, w.int("alignment.threat_discord"));
             clear(g, cx, &t, scope);
         }
         Ok(())

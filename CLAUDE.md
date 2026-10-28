@@ -30,9 +30,9 @@ The standing contract for every executor working in this repo.
 ## Working rules
 
 - **Commit to the branch you are on.** Leave nothing uncommitted.
-- **Tests come in two lanes.** `cargo test --workspace` is the fast lane (~10 s): run
-  it after every change. `cargo test-all` is the full run, the `#[ignore]`d slow lane
-  included (~70 s): run it before every commit. A test slower than about a second goes
+- **Tests come in two lanes.** `cargo test --workspace` is the fast lane (~6 s once
+  built): run it after every change. `cargo test-all` is the full run, the `#[ignore]`d
+  slow lane included (~16 s): run it before every commit. A test slower than about a second goes
   in the slow lane, with a cheaper fast-lane twin where one makes sense. Details in
   the README's *Build and test*.
 - **Times are local, 12-hour clock** (2:45pm), in reports, docs and progress lines.

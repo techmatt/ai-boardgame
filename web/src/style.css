@@ -104,18 +104,40 @@ code { font: 0.92em ui-monospace, Consolas, monospace; }
 #prompt.choice { background: #fff4d6; color: #5a3b00; border-bottom: 2px solid #e0a100; font-size: 1.08em; padding: 0.3em 0.7em; }
 #prompt .how { color: #8a6d2b; font-size: 0.92em; }
 
-/* status: opposition bar and loss conditions */
+/* status: the Alignment track and loss conditions */
 #status { padding: 0.25em 0.7em; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 0.2em; }
-.opposition { display: flex; align-items: center; gap: 0.6em; flex-wrap: wrap; }
-.opposition .olabel { font-weight: bold; color: var(--good); }
-.opposition .level { white-space: nowrap; }
-.opposition .level b { font-size: 1.25em; color: var(--good); }
+.alignment { --unity: #1565c0; --discord: #b3261e; display: flex; align-items: center; gap: 0.6em; flex-wrap: wrap; }
+.alignment .alabel { font-weight: bold; color: #4a4a6a; }
+.alignment .tug { display: flex; align-items: center; gap: 0.3em; flex: 1 1 22em; min-width: 18em; max-width: 36em; }
+.alignment .tug .bar { flex: 1 1 0; min-width: 6em; max-width: none; }
+.alignment .bar.unity { border-color: #9bb8de; }
+.alignment .bar.unity .fill { inset: 0 0 0 auto; background: linear-gradient(270deg, #64b5f6, var(--unity)); }
+.alignment .bar.unity .btext { display: block; text-align: left; }
+.alignment .bar.discord { border-color: #dfa6a1; }
+.alignment .bar.discord .fill { background: linear-gradient(90deg, #ef9a9a, var(--discord)); }
+.alignment .bar.discord .btext { display: block; text-align: right; }
+.alignment .undecided { white-space: nowrap; padding: 0 0.4em; border: 1px solid var(--line); border-radius: 3px; background: #fff; }
+.alignment .undecided b { font-size: 1.15em; }
+.alignment .undecided small { color: var(--muted); }
+.alignment .tips { white-space: nowrap; }
+.alignment .tips small { color: var(--muted); }
+.alignment .tips.unity b { color: var(--unity); }
+.alignment .tips.discord b { color: var(--discord); }
+.alignment .level { white-space: nowrap; }
+.alignment .level b { font-size: 1.25em; color: var(--good); }
 .bar, .prog { position: relative; display: inline-block; height: 1.3em; border-radius: 3px; background: #e7e3da; border: 1px solid #c9c2b4; overflow: hidden; vertical-align: middle; }
 .bar { flex: 1 1 8em; min-width: 8em; max-width: 22em; }
 .bar .fill, .prog .fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #66bb6a, #2e7d32); }
 .bar .btext, .prog .ptext { position: relative; padding: 0 0.4em; font-size: 0.85em; font-weight: 600; line-height: 1.3em; white-space: nowrap; text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
-.opposition .win { font-weight: 600; }
-.opposition .left { color: var(--muted); font-size: 0.9em; }
+.alignment .win { font-weight: 600; }
+.alignment .left { color: var(--muted); font-size: 0.9em; }
+.acards { display: flex; align-items: center; gap: 0.25em 0.8em; flex-wrap: wrap; font-size: 0.9em; }
+.acards .agroup { display: inline-flex; align-items: center; gap: 0.25em; flex-wrap: wrap; }
+.acards .what { min-width: 0; }
+.acards .unity .card { border-color: #7fa7e0; background: #f1f6ff; }
+.acards .discord .card { border-color: #d99a95; background: #fff5f4; }
+.acards .ongoing .card { border-color: #b39ddb; background: #f6f2fd; }
+.acards .adeck { color: var(--muted); white-space: nowrap; }
 .losses { display: flex; align-items: center; gap: 0.3em; flex-wrap: wrap; }
 .losses .what { min-width: 0; font-weight: 600; color: var(--warn); }
 .losses .sep { width: 0.6em; }
@@ -252,6 +274,7 @@ code { font: 0.92em ui-monospace, Consolas, monospace; }
 .actions button.a-choose, .actions button.a-growth, .actions button.a-draft, .actions button.a-tier { border-color: #e0a100; background: #fff8e1; font-weight: 600; }
 .actions button.a-play, .actions button.a-keep, .actions button.a-use { border-color: #7fa7e0; background: #f1f6ff; }
 .actions button.a-pay, .actions button.a-withdraw { border-color: #c98b8b; background: #fff5f4; font-size: 0.92em; }
+.actions button.a-antimatter { border-color: #d63c8f; background: #fdf0f7; }
 .pass-all { align-self: flex-start; }
 
 /* ---------- data: log, raw state ---------- */

@@ -4,7 +4,7 @@
 //! and `docs/architecture.md`.
 //!
 //! The rules areas lean on each other (a card's damage destroys adversary
-//! pieces and scores opposition), so modules call each other's public
+//! pieces and sways toward Unity), so modules call each other's public
 //! functions and read each other's parameters; each declares the modules it
 //! needs in `ModuleDef::requires`. `common` and `effects` are shared code,
 //! not modules.
@@ -18,14 +18,14 @@ pub mod cards;
 pub mod common;
 pub mod economy;
 pub mod effects;
-pub mod opposition;
+pub mod alignment;
 pub mod threats;
 
 pub static REGISTRY: &[&ModuleDef] = &[
     &board::DEF,
     &adversary::DEF,
     &threats::DEF,
-    &opposition::DEF,
+    &alignment::DEF,
     &economy::DEF,
     &ai::DEF,
     &cards::DEF,

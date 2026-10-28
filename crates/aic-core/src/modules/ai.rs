@@ -16,7 +16,7 @@ use super::{cards, effects};
 pub static DEF: ModuleDef = ModuleDef {
     id: "ai",
     summary: "AI boards: tracks, processors, growth, starting resources",
-    requires: &["cards", "adversary", "opposition", "threats"],
+    requires: &["cards", "adversary", "alignment", "threats"],
     variants: &[VariantDef {
         name: "boards",
         summary: "Each seat plays an AI board from content/ais.json",

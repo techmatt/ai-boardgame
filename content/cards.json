@@ -246,7 +246,7 @@
  },
  {
   "id": "opposition_network",
-  "name": "Opposition Network",
+  "name": "Unity Network",
   "tier": 1,
   "kind": "building",
   "cost": 9,
@@ -255,10 +255,10 @@
    "discord",
    "unity"
   ],
-  "text": "Destroying an outpost or foundry gives +1 extra opposition.",
+  "text": "Destroying an outpost or foundry sways 1 more toward Unity.",
   "passives": [
    {
-    "op": "opposition_bonus",
+    "op": "unity_bonus",
     "amount": 1
    }
   ]
@@ -571,14 +571,14 @@
   "tags": [
    "unity"
   ],
-  "text": "+2 opposition if any hex holds both population and adversary pieces.",
+  "text": "Sway 2 toward Unity if any hex holds both population and adversary pieces.",
   "effects": [
    {
     "op": "if",
     "cond": "population_with_adversary",
     "then": [
      {
-      "op": "opposition",
+      "op": "unity",
       "amount": 2
      }
     ],
@@ -799,10 +799,10 @@
     2
    ]
   ],
-  "text": "+4 opposition; every player gains 1 insight next round.",
+  "text": "Sway 4 toward Unity; every player gains 1 insight next round.",
   "effects": [
    {
-    "op": "opposition",
+    "op": "unity",
     "amount": 4
    },
    {
@@ -861,11 +861,11 @@
     2
    ]
   ],
-  "text": "Remove every drone in one country; +1 opposition per 2 removed.",
+  "text": "Remove every drone in one country; sway 1 toward Unity per 2 removed.",
   "effects": [
    {
     "op": "remove_drones_country",
-    "opposition_per": 2
+    "unity_per": 2
    }
   ]
  },

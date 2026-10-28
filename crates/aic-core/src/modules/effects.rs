@@ -2,12 +2,12 @@
 //! abilities and growth options do. Any choice an effect needs is asked of
 //! the acting seat with `Cx::choose`.
 
-use crate::content::{Cond, CountryRule, DamageAt, Effect, Terrain};
+use crate::content::{Cond, CountryRule, DamageAt, Effect, Side, Terrain};
 use crate::module::{Cx, Res, World};
 use crate::state::GameState;
 
 use super::common::*;
-use super::{adversary, ai, board, economy, opposition, threats};
+use super::{adversary, ai, alignment, board, economy, threats};
 
 /// What earlier effects of the same card chose (the other player).
 #[derive(Debug, Default)]
@@ -194,7 +194,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 adversary::destroy_all(g, cx, seat, hexes[i]);
             }
         }
-        Effect::RemoveDronesCountry { opposition_per } => {
+        Effect::RemoveDronesCountry { unity_per } => {
             let kind = drone_kind(&w);
             let cs = countries_where(&w, |h| g.tokens(h, kind) > 0);
             let opts = cs.iter().map(|&c| country_opt(c)).collect();
@@ -206,8 +206,8 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                     let n = if kind == DRONE { g.tokens(h, DRONE) } else { 1 };
                     removed += -cx.add_tokens(g, h, kind, -n);
                 }
-                if *opposition_per > 0 {
-                    opposition::gain(g, cx, removed / opposition_per);
+                if *unity_per > 0 {
+                    alignment::sway(g, cx, Side::Unity, removed / unity_per);
                 }
             }
         }
@@ -334,7 +334,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 threats::counter(g, cx, &active[i].0);
             }
         }
-        Effect::Opposition { amount } => opposition::gain(g, cx, *amount),
+        Effect::Unity { amount } => alignment::sway(g, cx, Side::Unity, *amount),
         Effect::NextRoundInsight { amount } => cx.add_key(g, economy::BONUS_INSIGHT.into(), *amount),
         Effect::NextBuildingDiscount { amount } => cx.add_key(g, next_discount(seat), *amount),
         Effect::If {

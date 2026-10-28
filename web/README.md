@@ -49,8 +49,12 @@ npm run e2e -- <record.json>    # browser check, dev server must be running (see
   (person, factory, data centre, processor chip with its seat, defense shield in the
   seat's colour) and the adversary's on the lower row (drone, outpost, foundry, purple
   corruption blot). A number by a glyph is its count.
-- **Around the board:** the opposition bar (points to the next level, the level's win
-  condition, adversary pieces left) and the loss conditions; the adversary pipeline
+- **Around the board:** the Alignment track (the Unity bucket, blue, filling leftward
+  and the Discord bucket, red, filling rightward on either side of the Undecided; each
+  side's tip count with its next threshold; the clear-board bar level and its win
+  condition; adversary pieces left), the Unity, Discord and ongoing cards resolved so
+  far (hover a chip for its text) with what is left in each deck, and the loss
+  conditions; the adversary pipeline
   (deck → explore → build → ravage → discard, with what each slot does this round);
   the countries strip with each country's name, its threat and its counter progress
   (or the shared threat row). Country names (the printed pieces', from the view's
@@ -98,7 +102,7 @@ rules revision) and the saved outcome and final fingerprint. The engine writes i
 over the DevTools protocol, with no extra packages. Point it at the dev server with
 `AIC_URL` (default `http://localhost:5173/`), and at a browser with `AIC_BROWSER` if it
 isn't at the usual path. It checks the board drawing (terrain fills, borders,
-uplinks), the pipeline, opposition bar and threats, country names, each seat's AI board
+uplinks), the pipeline, Alignment track and threats, country names, each seat's AI board
 with two tracks, and that no bookkeeping var is among the globals, then plays a game to the end by
 clicking any action button (and a highlighted hex for hex choices), then checks the
 following:
@@ -132,5 +136,5 @@ A run takes about 15 s.
 | `src/session.ts` | `Timeline`: config + seed + actions with every replayed state, cursor, undo, localStorage. |
 | `src/board.ts` | SVG hex board drawn from the view: terrain, borders, uplinks, token glyphs. |
 | `src/format.ts` | Labels for actions (content names for cards, threats, growth options) and events; terrain and token colours. |
-| `src/panels.ts` | Opposition bar, adversary pipeline, countries strip (threats), seat panel contents, piles. |
+| `src/panels.ts` | Alignment track, adversary pipeline, countries strip (threats), seat panel contents, piles. |
 | `src/main.ts` | Wiring: choice prompt, action buttons, log, timeline, hover card, record dialog. |

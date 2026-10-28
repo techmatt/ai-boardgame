@@ -18,7 +18,8 @@
 use std::collections::BTreeMap;
 
 use aic_core::content::{Passive, RESOURCES};
-use aic_core::modules::{adversary, ai, board, cards, economy, opposition, threats};
+use aic_core::content::Side;
+use aic_core::modules::{adversary, ai, alignment, board, cards, economy, threats};
 use aic_core::{GameState, Rules};
 use serde::{Deserialize, Serialize};
 
@@ -41,13 +42,19 @@ pub struct Weights {
     pub drone: f64,
     pub outpost: f64,
     pub foundry: f64,
-    /// Each adversary piece that keeps the current opposition level's bar
-    /// from being met (the win condition).
+    /// Each adversary piece that keeps the current clear-board bar from
+    /// being met (the win condition).
     pub blocker: f64,
-    /// Each opposition point.
-    pub opposition: f64,
-    /// Each opposition level reached.
+    /// Each Unity tip made; Sway in the Unity bucket counts as its share of
+    /// the next tip (so a tip about to happen is worth nearly a tip).
+    pub unity_tip: f64,
+    /// Each Discord tip made (a cost); Sway in the Discord bucket costs its
+    /// share of the next one.
+    pub discord_tip: f64,
+    /// Each level the clear-board bar has dropped (Unity tips).
     pub level: f64,
+    /// Each difficulty level Discord has escalated the adversary (a cost).
+    pub escalation: f64,
     pub factory: f64,
     pub data_centre: f64,
     /// Each processor on the board.
@@ -80,10 +87,10 @@ pub struct Weights {
     /// buildings, rewards) is worth `horizon` × the resource's own weight ×
     /// the rounds left, replacing `income`. 0 = the flat weights above.
     pub horizon: f64,
-    /// Horizon mode: opposition points the team is assumed to gain per round
+    /// Horizon mode: Sway toward Unity the team is assumed to gain per round
     /// before it has a record of its own (round 1), for the win estimate.
     pub opp_rate: f64,
-    /// Horizon mode: rounds a win needs after the opposition bar is reached
+    /// Horizon mode: rounds a win needs after the last bar drop is reached
     /// (clearing the last foundries).
     pub win_lag: f64,
     /// Horizon mode: chance of losing per round per unit of danger (an
@@ -106,7 +113,7 @@ pub struct Weights {
     /// insight (each needs the insight of the cards before it too).
     pub insight_wait: f64,
     /// The deck clock (011), any mode: per round the team's projected win
-    /// (opposition still needed at its rate so far, plus `win_lag`) comes
+    /// (Unity still needed at its rate so far, plus `win_lag`) comes
     /// after the adversary deck runs out. 0 = off.
     pub clock: f64,
 }
@@ -127,8 +134,12 @@ impl Default for Weights {
             outpost: 5.0,
             foundry: 9.0,
             blocker: 2.0,
-            opposition: 6.0,
+            // 013: a Unity tip replaces about 4 opposition points (24) and
+            // brings a card; a Discord tip brings one of the adversary's.
+            unity_tip: 24.0,
+            discord_tip: 16.0,
             level: 10.0,
+            escalation: 20.0,
             factory: 3.0,
             data_centre: 2.0,
             processor: 4.0,
@@ -206,16 +217,16 @@ pub struct Eval {
     card_value: BTreeMap<String, f64>,
     seats: usize,
     loss_percent: i64,
-    max_level: i64,
-    per_level: i64,
+    /// Unity tip counts at which the bar drops; the last is the win target.
+    ease: Vec<i64>,
     /// The adversary variant: the Militarist's pieces and ravage forecast,
     /// or the spread variants' clusters or corrupted assets.
     style: adversary::Style,
-    /// Spread variants: pieces allowed per opposition level (purge win).
+    /// Spread variants: pieces allowed per bar level (purge win).
     allowance: i64,
     /// Ravage damage of a drone, outpost and foundry (Militarist).
     damage: [i64; 3],
-    /// Extra ravage damage where there is a foundry (difficulty 3+).
+    /// Extra ravage damage where there is a foundry (difficulty 3+ in play).
     foundry_bonus: i64,
     /// Damage a ravaged foundry deals to each adjacent hex (difficulty 3+).
     foundry_reach: i64,
@@ -240,9 +251,8 @@ impl Eval {
             w,
             card_value,
             seats,
-            loss_percent: world.int("opposition.loss_population_percent"),
-            max_level: world.int("opposition.max_level"),
-            per_level: world.int("opposition.per_player") * seats as i64,
+            loss_percent: world.int("alignment.loss_population_percent"),
+            ease: world.list("alignment.unity_ease").to_vec(),
             style: adversary::style(&world),
             allowance: match adversary::style(&world) {
                 adversary::Style::Militarist => 0,
@@ -256,12 +266,12 @@ impl Eval {
                 ],
                 _ => [0; 3],
             },
-            foundry_bonus: if adversary::style(&world) == adversary::Style::Militarist && adversary::level(&world, 3) {
+            foundry_bonus: if adversary::style(&world) == adversary::Style::Militarist {
                 world.int("adversary.foundry_bonus")
             } else {
                 0
             },
-            foundry_reach: if adversary::style(&world) == adversary::Style::Militarist && adversary::level(&world, 3) {
+            foundry_reach: if adversary::style(&world) == adversary::Style::Militarist {
                 world.int("adversary.foundry_reach")
             } else {
                 0
@@ -315,7 +325,8 @@ impl Eval {
         let slack = pop - safe;
         v += w.population * slack as f64 - w.population_danger * (2 - slack).max(0) as f64;
         v -= w.drone * drones as f64 + w.outpost * outposts as f64 + w.foundry * foundries as f64;
-        let level = g.var(opposition::LEVEL).min(self.max_level);
+        let world = rules.world();
+        let level = alignment::bar_level(&world, g);
         // A spread variant's piece weighs as an outpost; its purge bar
         // allows `allowance` pieces per level.
         v -= w.outpost * spread as f64;
@@ -323,17 +334,18 @@ impl Eval {
             adversary::Style::Militarist => match level {
                 0 => drones + outposts + foundries,
                 1 => outposts + foundries,
-                l if l < self.max_level => foundries,
-                _ => 0,
+                _ => foundries,
             },
-            _ if level >= self.max_level => 0,
             _ => (spread - level * self.allowance).max(0),
         };
         v -= w.blocker * blockers as f64;
-        let points = g
-            .var(opposition::POINTS)
-            .min(self.per_level * self.max_level);
-        v += w.opposition * points as f64 + w.level * level as f64;
+        // Alignment: tips made, and each bucket's share of its next tip.
+        for (side, weight) in [(Side::Unity, w.unity_tip), (Side::Discord, -w.discord_tip)] {
+            let cap = alignment::capacity(&world, g, side).max(1) as f64;
+            let fill = (g.var(alignment::bucket(side)) as f64 / cap).min(1.0);
+            v += weight * (g.var(alignment::tips_key(side)) as f64 + fill);
+        }
+        v += w.level * level as f64 - w.escalation * g.var(adversary::ESCALATION) as f64;
         v += w.factory * factories as f64
             + w.data_centre * dcs as f64
             + w.processor * processors as f64;
@@ -363,7 +375,7 @@ impl Eval {
         for share in unpaid {
             v -= w.threat * share;
         }
-        v -= self.clock_penalty(g);
+        v -= self.clock_penalty(rules, g);
         v
     }
 
@@ -394,16 +406,15 @@ impl Eval {
     /// The rounds of income still to come, as the table reads: the adversary
     /// deck's clock (a card is revealed each round; an empty deck at a
     /// reveal loses), cut short by when the team is on course to win
-    /// (opposition still needed at its rate so far, plus `win_lag`), then
+    /// (Unity still needed at its rate so far, plus `win_lag`), then
     /// the expected rounds survived at a per-round loss chance of `risk` per
     /// unit of danger (unpaid threats per country, the pool or population at
     /// its edge). `unpaid`: [`Eval::unpaid_threats`], which the caller has.
     fn rounds_left(&self, rules: &Rules, g: &GameState, unpaid: &[f64]) -> f64 {
         let w = &self.w;
         let clock = g.pile(adversary::DECK).len() as f64;
-        let points = g.var(opposition::POINTS) as f64;
-        let bar = (self.per_level * (self.max_level - 1).max(1)) as f64;
-        let to_win = ((bar - points).max(0.0) / self.opposition_rate(g)).ceil() + w.win_lag;
+        let (points, bar) = self.unity_progress(rules, g);
+        let to_win = ((bar - points).max(0.0) / self.unity_rate(rules, g)).ceil() + w.win_lag;
         let rounds = clock.min(to_win).max(0.0);
         let world = rules.world();
         let countries = world.map.countries.len().max(1) as f64;
@@ -430,12 +441,23 @@ impl Eval {
         total
     }
 
-    /// Opposition gained per round so far (`opp_rate` before the team has a
-    /// record of its own). Points held may include this round's, so this
-    /// round counts as played.
-    fn opposition_rate(&self, g: &GameState) -> f64 {
+    /// Unity so far, in Sway (each tip counts a full bucket at the base
+    /// size), and the Sway the last bar drop needs.
+    fn unity_progress(&self, rules: &Rules, g: &GameState) -> (f64, f64) {
+        let world = rules.world();
+        let per = (world.int("alignment.tip_per_player") * g.seats.len() as i64) as f64;
+        let tips = g.var(alignment::tips_key(Side::Unity)) as f64;
+        let points = tips * per + g.var(alignment::bucket(Side::Unity)) as f64;
+        let last = self.ease.last().copied().unwrap_or(1) as f64;
+        (points, last * per)
+    }
+
+    /// Unity gained per round so far, in Sway (`opp_rate` before the team
+    /// has a record of its own). Sway held may include this round's, so
+    /// this round counts as played.
+    fn unity_rate(&self, rules: &Rules, g: &GameState) -> f64 {
         let w = &self.w;
-        let points = g.var(opposition::POINTS) as f64;
+        let points = self.unity_progress(rules, g).0;
         if g.round > 1 {
             (points / g.round as f64).max(w.opp_rate * 0.25)
         } else {
@@ -444,23 +466,23 @@ impl Eval {
         .max(0.1)
     }
 
-    /// The deck-clock penalty: `clock` per round the team, at its
-    /// opposition rate so far, would still be short of the top level (a win
-    /// at once) when the deck runs out. With `k` cards left, `k` action
+    /// The deck-clock penalty: `clock` per round the team, at its Unity
+    /// rate so far, would still be short of the last bar drop when the deck
+    /// runs out (013: there is no instant win any more; before, the target
+    /// was the top opposition level, a win at once). With `k` cards left, `k` action
     /// phases come after this one (the reveal after the last loses); this
     /// round's points count as they are scored, not as a round still to
     /// come, so in the last round every point short costs `clock` / rate.
     /// The top level, not the purge bar: a team sitting at level 2 with
     /// foundries it can't clear is not on course (the cheap-tier-2 engine
     /// ended 19-23 points of 24 into a deck-out).
-    fn clock_penalty(&self, g: &GameState) -> f64 {
+    fn clock_penalty(&self, rules: &Rules, g: &GameState) -> f64 {
         if self.w.clock == 0.0 {
             return 0.0;
         }
         let clock = g.pile(adversary::DECK).len() as f64;
-        let points = g.var(opposition::POINTS) as f64;
-        let top = (self.per_level * self.max_level) as f64;
-        let need = (top - points).max(0.0) / self.opposition_rate(g);
+        let (points, top) = self.unity_progress(rules, g);
+        let need = (top - points).max(0.0) / self.unity_rate(rules, g);
         self.w.clock * (need - clock).max(0.0)
     }
 
@@ -614,6 +636,9 @@ impl Eval {
                 .map(|s| cards::defense_value(&world, g, s))
                 .collect()
         });
+        // Difficulty 3 in play (Discord escalation counts).
+        let d3 = adversary::at(&world, g, 3);
+        let (foundry_bonus, foundry_reach) = if d3 { (self.foundry_bonus, self.foundry_reach) } else { (0, 0) };
         let mut cost = 0.0;
         for (h, cell) in world.map.hexes.iter().enumerate() {
             if !card.terrains.contains(&cell.terrain) {
@@ -626,7 +651,7 @@ impl Eval {
                 continue;
             }
             if g.tokens(h, "foundry") > 0 {
-                raw += self.foundry_bonus;
+                raw += foundry_bonus;
             }
             let prevented_at = |x: usize| -> i64 {
                 defense
@@ -637,7 +662,7 @@ impl Eval {
             };
             // Difficulty 3: the foundries' reach into each adjacent hex
             // (population only: no corruption).
-            let reach = self.foundry_reach * g.tokens(h, "foundry");
+            let reach = foundry_reach * g.tokens(h, "foundry");
             if reach > 0 {
                 for &n in &cell.neighbours {
                     let d = (reach - prevented_at(n)).max(0);

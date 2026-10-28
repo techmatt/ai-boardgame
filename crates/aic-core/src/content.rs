@@ -20,9 +20,10 @@ const CARDS_JSON: &str = include_str!("../../../content/cards.json");
 const THREATS_JSON: &str = include_str!("../../../content/threats.json");
 const ADVERSARY_JSON: &str = include_str!("../../../content/adversary.json");
 const AIS_JSON: &str = include_str!("../../../content/ais.json");
+const ALIGNMENT_JSON: &str = include_str!("../../../content/alignment.json");
 
 /// Every content file, in hashing order.
-const FILES: [&str; 5] = [MAP_JSON, CARDS_JSON, THREATS_JSON, ADVERSARY_JSON, AIS_JSON];
+const FILES: [&str; 6] = [MAP_JSON, CARDS_JSON, THREATS_JSON, ADVERSARY_JSON, AIS_JSON, ALIGNMENT_JSON];
 
 /// Player resources, in display order.
 pub const RESOURCES: [&str; 5] = ["credits", "compute", "energy", "antimatter", "insight"];
@@ -38,6 +39,8 @@ pub struct Content {
     pub threats: Vec<ThreatDef>,
     pub adversary: Vec<AdversaryCard>,
     pub ais: Vec<AiBoard>,
+    /// The Unity and Discord decks (module `alignment`).
+    pub alignment: Vec<AlignmentCard>,
     /// Card id -> index into `cards`, for [`Content::card_index`] (rules and
     /// agents look cards up by id constantly). Built by `parse`.
     #[serde(skip)]
@@ -277,8 +280,8 @@ pub enum Effect {
     DamageCountry { amount: i64 },
     /// Destroy every adversary piece in one hex.
     DestroyAll,
-    /// Remove every drone in one country; +1 opposition per `opposition_per` removed.
-    RemoveDronesCountry { opposition_per: i64 },
+    /// Remove every drone in one country; sway 1 toward Unity per `unity_per` removed.
+    RemoveDronesCountry { unity_per: i64 },
     /// Build a factory on an Industrial hex next to population (`empty`: holding no pieces).
     BuildFactory { empty: bool },
     /// Return up to `amount` corruption to the pool, one hex at a time
@@ -294,7 +297,8 @@ pub enum Effect {
     /// One threat needs `amount` less of each resource.
     Jam { amount: i64 },
     CounterThreat,
-    Opposition { amount: i64 },
+    /// Sway `amount` toward Unity (module `alignment`).
+    Unity { amount: i64 },
     /// Every player gains `amount` insight next round.
     NextRoundInsight { amount: i64 },
     /// Your next building this round costs `amount` less.
@@ -322,8 +326,8 @@ pub enum Passive {
     Slots { amount: i64 },
     /// Gain this when a threat you paid toward is countered.
     Logistics { resource: String, amount: i64 },
-    /// Extra opposition when you destroy an outpost or foundry.
-    OppositionBonus { amount: i64 },
+    /// Extra Sway toward Unity when you destroy an outpost or foundry.
+    UnityBonus { amount: i64 },
     /// When you give insight, the receiver also gains this.
     GiveBonus { resource: String, amount: i64 },
     /// Explore adds no drone to hexes holding your processor.
@@ -411,6 +415,80 @@ pub struct AdversaryCard {
     pub escalation: bool,
 }
 
+// ---------- alignment ----------
+
+/// A side of the Alignment track: Unity (the good AIs) or Discord (the evil AI).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Side {
+    Unity,
+    Discord,
+}
+
+impl Side {
+    pub fn other(self) -> Side {
+        match self {
+            Side::Unity => Side::Discord,
+            Side::Discord => Side::Unity,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Side::Unity => "unity",
+            Side::Discord => "discord",
+        }
+    }
+}
+
+/// A Unity or Discord card, resolved when its side's bucket tips.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AlignmentCard {
+    pub id: String,
+    pub name: String,
+    pub side: Side,
+    /// 1, or 2 for the stronger tier.
+    pub tier: u8,
+    /// Ongoing: stays in play and resolves its effects at the start of every
+    /// round instead of once.
+    #[serde(default)]
+    pub ongoing: bool,
+    pub text: String,
+    pub effects: Vec<AlignOp>,
+}
+
+/// What an Alignment card does. Team choices are asked of seat 0.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AlignOp {
+    /// Every player gains `credits` credit income for the rest of the game.
+    Income { credits: i64 },
+    /// Every player gains `insight` insight each round for the rest of the game.
+    InsightIncome { insight: i64 },
+    /// Every player gains `credits` credits now.
+    Credits { credits: i64 },
+    /// The next `count` card purchases (keeping a drafted card) are free.
+    FreePurchases { count: i64 },
+    /// Counter one active threat (players choose).
+    CounterThreat,
+    /// Counter every active threat.
+    CounterAll,
+    /// In each country, remove `drones` drones (players choose).
+    Pushback { drones: i64 },
+    /// Sway `amount` toward `side`.
+    Sway { side: Side, amount: i64 },
+    /// Deal `count` extra threats now, one per country in turn.
+    Threats { count: i64 },
+    /// In each country, the hex with the most adversary pieces (ties: lower
+    /// hex number) gains `amount` corruption.
+    Corrupt { amount: i64 },
+    /// The adversary builds now with the card in its build slot.
+    Build,
+    /// The adversary ravages now with the card in its ravage slot.
+    Ravage,
+}
+
 // ---------- AI boards ----------
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -428,6 +506,9 @@ pub struct AiBoard {
     pub growth: Vec<Growth>,
     /// Unique cards, in hand at the start.
     pub cards: Vec<String>,
+    /// Sway toward Unity this board adds at the start of every round.
+    #[serde(default)]
+    pub unity: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -486,8 +567,8 @@ impl CardDef {
 }
 
 impl Content {
-    pub fn parse(files: [&str; 5]) -> Result<Content, String> {
-        let [map, cards, threats, adversary, ais] = files;
+    pub fn parse(files: [&str; 6]) -> Result<Content, String> {
+        let [map, cards, threats, adversary, ais, alignment] = files;
         fn p<T: for<'de> Deserialize<'de>>(name: &str, s: &str) -> Result<T, String> {
             serde_json::from_str(s).map_err(|e| format!("content/{name}: {e}"))
         }
@@ -497,6 +578,7 @@ impl Content {
             threats: p("threats.json", threats)?,
             adversary: p("adversary.json", adversary)?,
             ais: p("ais.json", ais)?,
+            alignment: p("alignment.json", alignment)?,
             card_ix: BTreeMap::new(),
         };
         c.card_ix = c.cards.iter().enumerate().map(|(i, d)| (d.id.clone(), i)).collect();
@@ -512,7 +594,8 @@ impl Content {
             .map(|c| &c.id)
             .chain(self.threats.iter().map(|t| &t.id))
             .chain(self.adversary.iter().map(|a| &a.id))
-            .chain(self.ais.iter().map(|a| &a.id));
+            .chain(self.ais.iter().map(|a| &a.id))
+            .chain(self.alignment.iter().map(|a| &a.id));
         for id in all {
             if !ids.insert(id.as_str()) {
                 return Err(format!("content: duplicate id {id:?} (ids are unique across all content)"));
@@ -554,6 +637,11 @@ impl Content {
         for a in &self.adversary {
             if !(1..=3).contains(&a.stage) || a.terrains.is_empty() {
                 return Err(format!("adversary card {:?}: stage 1-3 and a terrain", a.id));
+            }
+        }
+        for a in &self.alignment {
+            if !(1..=2).contains(&a.tier) || a.effects.is_empty() {
+                return Err(format!("alignment card {:?}: tier 1 or 2 and an effect", a.id));
             }
         }
         for b in &self.ais {
@@ -619,6 +707,10 @@ impl Content {
         self.threats.iter().position(|c| c.id == id)
     }
 
+    pub fn alignment_index(&self, id: &str) -> Option<usize> {
+        self.alignment.iter().position(|c| c.id == id)
+    }
+
     pub fn adversary_index(&self, id: &str) -> Option<usize> {
         self.adversary.iter().position(|c| c.id == id)
     }
@@ -635,6 +727,7 @@ impl Content {
             .chain(self.threats.iter().map(|c| (&c.id, &c.name)))
             .chain(self.adversary.iter().map(|c| (&c.id, &c.name)))
             .chain(self.ais.iter().map(|c| (&c.id, &c.name)))
+            .chain(self.alignment.iter().map(|c| (&c.id, &c.name)))
             .find(|(i, _)| *i == id)
             .map(|(_, n)| n.as_str())
     }

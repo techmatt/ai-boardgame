@@ -48,6 +48,8 @@ pub enum Action {
     },
     /// Give 1 insight to another seat.
     Give { seat: u8, to: u8 },
+    /// Sway toward Discord to produce one antimatter (module `alignment`).
+    Antimatter { seat: u8 },
 }
 
 impl Action {
@@ -64,7 +66,8 @@ impl Action {
             | Action::Draw { seat, .. }
             | Action::Pay { seat, .. }
             | Action::Withdraw { seat, .. }
-            | Action::Give { seat, .. } => *seat,
+            | Action::Give { seat, .. }
+            | Action::Antimatter { seat } => *seat,
         }
     }
 }

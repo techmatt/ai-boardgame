@@ -1,12 +1,17 @@
 # Rules as implemented
 
 What the code implements: ruleset **v0 as tuned by the 007 tuning run, with 011's
-rule changes** (rules revision 4), Militarist against Builder and Protector, 1–4
-countries. 007 changed only numbers. 011 changed three rules: the clear-board win waits
-for stage II ([§3](#3-opposition-and-the-end-of-the-game-module-opposition)), and
+rule changes and 013's Alignment** (rules revision 5), Militarist against Builder and
+Protector, 1–4 countries. 007 changed only numbers. 011 changed three rules: the
+clear-board win waits for stage II ([§3](#3-alignment-and-the-end-of-the-game-module-alignment)), and
 difficulty levels 1 and 3 have new effects ([§2](#difficulty-difficulty-04-each-level-includes-the-ones-below)).
-It also added variants that are not the default: two opposition rewards, `free_keep`
-and the `uplinks` spread. Each changed value gives the v0 value beside it, and
+It also added variants that are not the default: `free_keep` and the `uplinks` spread
+(its two opposition rewards went with opposition). **013 replaced human opposition with
+Alignment** ([§3](#3-alignment-and-the-end-of-the-game-module-alignment)): the Sway
+track, its Unity and Discord buckets that tip into cards, and a +1 Discord antimatter
+action. Opposition, its levels and its reward variants are gone.
+
+Each changed value gives the v0 value beside it, and
 [`configs/v0_untuned.json`](../configs/v0_untuned.json) keeps the v0 numbers and rules. **Keep this current with every rules change.** Design intent lives in
 [principles.md](principles.md); how the engine is put together lives in
 [architecture.md](architecture.md).
@@ -26,7 +31,7 @@ departs from the ruleset text, **Deviation**. Both are collected in the
   adjacent" keeps a factory on a populated hex working and lets an outpost's own hex
   explore.)
 - **Players choose**: the decision is an `Action::Choose` in `legal_actions`, made by the
-  one team agent. Team choices in the adversary phase and in opposition rewards are asked
+  one team agent. Team choices in the adversary phase and in Unity and Discord cards are asked
   of seat 0; a choice inside a player's own card or ability is asked of that player.
 - **Hex number**: each piece's hexes are printed 1–16 (row by row along the piece); ties
   go to the lower number.
@@ -155,7 +160,7 @@ nothing. Players **lose** when the pool is empty (**Default:** "runs out" read a
 
 Every option stays a tunable, so the r3 levels are one override away:
 `counter_bonus` 2, `counter_bonus_all` 0, `extra_threats` 0, `foundry_bonus` 1,
-`foundry_reach` 0 (and `opposition.clear_win_stage` 1 for r3's clear-board win).
+`foundry_reach` 0 (and `alignment.clear_win_stage` 1 for r3's clear-board win).
 
 **Why the new levels 1 and 3 (011).** The 007 run found level 1 barely moved a strong
 team (`counter_bonus` raises only the first requirement, and greedy counters few
@@ -203,7 +208,7 @@ those in the two configs: untuned first guesses. Every adaptation is marked
 ### Clusters and infection (`clusters`)
 
 From Matt's 2020 notes. The adversary's only piece is the **cluster** (`cluster_health`
-2 damage to destroy; `cluster_opposition` 1 opposition each). **Neutral clusters** are
+2 damage to destroy; `cluster_unity` 1 Sway toward Unity each). **Neutral clusters** are
 the data centres; **friendly clusters** are processors (any player's).
 
 - **Setup (Adaptation):** each starting drone and outpost the board places becomes one
@@ -233,9 +238,9 @@ the data centres; **friendly clusters** are processors (any player's).
      the notes' military fights first and only leftover damage hits these; v0 has no
      military, so all of it does.
 - **Difficulty 3** adds `damage_bonus` (1) to every assaulted hex.
-- **Purge win (Adaptation):** at opposition level *L* players win when at most
+- **Purge win (Adaptation):** at bar level *L* (from Unity tips) players win when at most
   *L* × `purge_allowance` (2) × countries clusters remain (level 0: none).
-- **Pushback** (opposition reward) removes a cluster instead of a drone.
+- **Pushback** (the Civil Defense Unity card) removes a cluster instead of a drone.
 
 ### Asset corruption (`assets`)
 
@@ -263,11 +268,11 @@ nothing. The pool is the limit: players lose when it is empty, so the pool size
   hexes, so a card reaches an asset "next to" its terrain (on or adjacent): every card
   stays live, and Urban and Frontier cards strike where the population is.
 - **Reclaiming:** player damage of `rogue_health` (2) reclaims a corrupted asset: it flips
-  back and its corruption returns to the pool, scoring `reclaim_opposition` (2). Purge
+  back and its corruption returns to the pool, swaying `reclaim_unity` (2) toward Unity. Purge
   Protocol reclaims every one in the hex. Rebuild and Reconstruction "return
-  corruption" by reclaiming one corrupted asset each (no opposition). Pushback reclaims
+  corruption" by reclaiming one corrupted asset each (no Sway). Pushback reclaims
   one per country (players choose).
-- **Purge win (Adaptation):** at opposition level *L*, at most *L* × `purge_allowance`
+- **Purge win (Adaptation):** at bar level *L*, at most *L* × `purge_allowance`
   (1) × countries corrupted assets remain (level 0: none).
 
 ### Explore from uplinks (`uplinks`, 011)
@@ -310,48 +315,126 @@ For measuring what a module adds, these variants remove its effect and keep the 
 | Variant | Removes |
 |---|---|
 | `threats.variant=off` | Threats: none are dealt, countered or executed. Jam Signals, Counter-intelligence and the `counter_threat` reward have no target. |
-| `opposition.variant=off` | Level rewards: levels are still reached and still relax the purge win. |
+| `alignment.variant=off` | Alignment: no Sway moves, nothing tips, no antimatter action; the bar stays at 0 (winning and losing stay). |
 | `cards.variant=off` | The draft and drawing: players have only their AI's unique cards. |
 
-Not removable: `board` (the map), `adversary` (the clock and every loss), `opposition`
-(winning and losing; only its reward is), `economy` (all income: without it nothing can
+Not removable: `board` (the map), `adversary` (the clock and every loss), `alignment`
+(winning and losing; only the track is), `economy` (all income: without it nothing can
 be paid), `ai` (seats, insight, processors). Parts of them can be switched off by
 parameters: Momentum and Escalation (`momentum_drones`, `escalation_outposts` 0),
 giving (`economy.give_insight` 0), or by leaving `ai.growth` out of the round.
 
-## 3. Opposition and the end of the game (module `opposition`)
+## 3. Alignment and the end of the game (module `alignment`)
 
-**Opposition** is a shared track (`opposition.points`). It is gained by destroying an
-outpost (`outpost` 1) or a foundry (`foundry` 2) (drones give none; Opposition Network
-adds +1 for its owner), and by cards.
+Alignment (013) replaces human opposition. The AIs' world leans toward **Unity** (the
+good AIs, the players) or **Discord** (the evil AI, the adversary). Everything on the
+track is printed: Sway tokens on three spaces, two tip-count tracks, two small decks and
+an ongoing row.
 
-Every `per_player` (4) × players opposition fills one level, up to `max_level` (3).
-Reaching a level triggers a one-time reward, by variant:
+**The track.** Sway tokens sit in three places: **the Undecided** (the middle pool,
+`alignment.undecided`), the **Unity bucket** and the **Discord bucket**. The Undecided
+starts with `undecided_per_player` (4) × players Sway; both buckets start empty.
 
-| Variant | Reward per level |
+**Swaying** toward a side moves Sway one at a time from the Undecided into that side's
+bucket. If the Undecided is empty:
+
+| Variant | Sway with the Undecided empty |
 |---|---|
-| `pushback` (default) | In each country, remove `pushback_drones` (1) drone (players choose which hex) |
-| `income` | Every player gains `income_credits` (2) credit income for the rest of the game |
-| `free_purchases` | The next `free_purchases` (2) card purchases are free. **Default:** a purchase is keeping a drafted card |
-| `counter_threat` | Counter one active threat (players choose) |
-| `insight` (011) | Every player gains `insight_income` (1) insight at the start of every round for the rest of the game |
-| `counter_all` (011) | Counter every active threat |
-| `off` | None (for measuring the rewards; [§2b](#2b-off-variants)) |
+| `tug` (default) | comes from the opposite bucket (a tug of war) |
+| `still` | nothing happens |
+| `off` | (for measuring Alignment, §2b) no Sway ever moves and nothing tips |
 
-**Winning:** players win immediately when the adversary's presence is under the bar for
-the current level: level 0, no adversary pieces; level 1, no outposts or foundries;
-level 2, no foundries; level `max_level`, at once. (The spread variants count clusters
-or corrupted assets instead: [§2a](#2a-spread-variants-module-adversary-variants-clusters-and-assets).)
+**Tipping.** A bucket holding `tip_per_player` (2) × players Sway **tips**, in this
+order: one card of its side resolves; that side's tip count goes up by one; the bucket's
+Sway returns to the Undecided. Unity tips and Discord tips are counted separately and
+only count up; there is no net meter. **Default:** buckets are checked when an action or
+automatic phase finishes resolving (with win and loss, below); a bucket may overfill
+within one action, and all its Sway returns when it tips. If both are full, Discord tips
+first; a tip's card may fill a bucket again, which then tips too.
 
-**The level-0 win waits for stage II** (011, the default): the level-0 bar ("no
+**Momentum** (`momentum_every`, 0 = off, the default): a side's bucket holds 1 fewer Sway
+for every `momentum_every` (2 when on) tips that side has made, down to 1 per player.
+
+**Sources of Sway**
+
+| Toward | From | Amount |
+|---|---|---|
+| Unity | destroying an outpost / a foundry (as opposition was) | `outpost` 1 / `foundry` 2; Unity Network +1 for its owner |
+| Unity | Rally (2, if a hex holds population and adversary pieces), Global Mandate (4), Swarm Override (1 per 2 drones removed) | card text |
+| Unity | each AI board, at the start of every round | `unity` on the board (`content/ais.json`; 0 for Builder and Protector) |
+| Unity | ongoing Unity cards | card text |
+| Discord | the adversary, at the start of every round | `adversary_discord` (1) |
+| Discord | a threat that executes uncountered | `threat_discord` (1) each |
+| Discord | the **antimatter action** (below) | `antimatter_discord` (1) |
+| Discord | ongoing Discord cards | card text |
+
+The round's Sway (adversary, then AI boards, then ongoing cards in the order they came
+into play) is the phase `alignment.sway`, first in the round.
+
+**The antimatter action.** In the action phase (`...+alignment.act`), any player may
+sway `antimatter_discord` (1) toward Discord to produce 1 antimatter, up to
+`antimatter_uses` (1) times a round each. `antimatter_discord` 0 removes the action.
+
+**The cards.** Each side has a small deck in two tiers, shuffled at setup
+(`content/alignment.json`). A tip draws from the stronger tier once that side's tip
+count, before the tip, has reached its first threshold (`unity_ease[0]` /
+`discord_escalate[0]`, both 2), else from tier 1; from the other tier if that one is
+empty; with both empty, the side's resolved cards are shuffled back first. A one-shot
+card resolves and goes face up on its side's resolved pile; an **ongoing** card goes into
+the ongoing row and resolves at the start of every round from the next one on.
+
+| Side | Tier | Card | Effect |
+|---|---|---|---|
+| Unity | 1 | Grassroots Funding | every player +2 credit income for the rest of the game |
+| Unity | 1 | Open Market | the next 2 card purchases are free |
+| Unity | 1 | Think Tank | every player +1 insight each round for the rest of the game |
+| Unity | 1 | Ceasefire | counter one active threat (players choose) |
+| Unity | 1 | Civil Defense | in each country, remove 1 drone (players choose) |
+| Unity | 1 | Volunteer Corps | ongoing: each round, sway 1 toward Unity |
+| Unity | 2 | Global Coalition | counter every active threat |
+| Unity | 2 | New Deal | every player +2 credit income and 4 credits now |
+| Discord | 1 | Incursion | deal one extra threat |
+| Discord | 1 | Blight | in each country, the hex with the most adversary pieces gains 1 corruption |
+| Discord | 1 | Buildup | the adversary builds now with the card in its build slot |
+| Discord | 1 | Propaganda | ongoing: each round, sway 1 toward Discord |
+| Discord | 2 | Offensive | the adversary ravages now with the card in its ravage slot |
+| Discord | 2 | Two Fronts | deal two extra threats |
+| Discord | 2 | Firestorm | in each country, the hex with the most adversary pieces gains 2 corruption |
+
+The Unity cards are opposition's old rewards as one-shot cards; the Discord cards are
+adversary effects the game already has. **Defaults:** extra threats come from the
+current tier's deck (no reshuffle out of turn), one per country in turn from country 0,
+and are countered or execute like any other; "most adversary pieces" ties go to the lower
+hex number, and a country with none gains nothing; Buildup and Offensive act on the slot
+cards as they are (empty slot, nothing), out of the pipeline's order.
+
+**Unity eases the win, Discord escalates the adversary.** The clear-board **bar** is the
+number of `unity_ease` thresholds (2 and 5) the Unity tip count has reached:
+
+- bar 0: win when no adversary pieces remain (from stage II, below);
+- bar 1 (2+ Unity tips): win when no outposts or foundries remain;
+- bar 2 (5+ Unity tips): win when no foundries remain.
+
+There is no instant win any more (opposition's top level was one). Each `discord_escalate`
+threshold (2 and 5) the Discord tip count reaches raises the **difficulty in play** by
+one level (`adversary.escalation`, up to 4): from then on the rules of that difficulty
+level apply as in §2 (counter bonuses and extra threats from level 1, foundry reach from
+3, early tier-2 threats at 4). Setup rules of a level (stage-I cards removed, a smaller
+pool) are not applied mid-game, and at difficulty 4 escalation adds nothing beyond the
+stronger Discord tier.
+
+**Winning:** players win immediately when the adversary's presence is under the bar.
+(The spread variants count clusters or corrupted assets instead: [§2a](#2a-spread-variants-module-adversary-variants-clusters-and-assets).)
+
+**The bar-0 win waits for stage II** (011, the default): the bar-0 condition ("no
 adversary pieces") counts only once an adversary card of stage `clear_win_stage` (2)
 has been revealed. Before that, clearing the board wins nothing. With no starting
 outpost the opening board is 4 drones, and Sweep or Watchtower Net could clear it for a
 round-2 win (007: a random team did it; greedy in 3–4% of games). `clear_win_stage` 1
 is the r3 rule (any time); `v0_untuned.json` keeps it. The stages are stacked and
-public, so the table can always see whether it counts. Levels 1 and 2 are unchanged.
-The gate applies to every adversary variant: under `clusters` and `assets`, the
-level-0 purge win (none left) also waits for stage II.
+public, so the table can always see whether it counts. The gate applies to every
+adversary variant: under `clusters` and `assets`, the bar-0 purge win (none left) also
+waits for stage II.
 
 **Losing:** total population falls below `loss_population_percent` (50) % of the start;
 the corruption pool is empty; or the adversary deck is empty when a card must be revealed.
@@ -370,7 +453,7 @@ Each player has credits, compute, energy, antimatter and insight.
 
 | Resource | Comes from | Spent on |
 |---|---|---|
-| Credits | Credit income (AI track, buildings, level rewards) in upkeep; each working factory pays `factory_credits` (3; v0 had 1) to every player with a processor in its country | Keeping drafted cards; card costs; counters |
+| Credits | Credit income (AI track, buildings, Unity cards) in upkeep; each working factory pays `factory_credits` (3; v0 had 1) to every player with a processor in its country | Keeping drafted cards; card costs; counters |
 | Compute | `processor_compute` (1) per processor on a working data centre, in upkeep; buildings | Drawing (`draw_cost` 3 → 1 card); abilities; counters |
 | Energy | Energy income (AI track, buildings); growth | Abilities; counters |
 | Antimatter | Late track values; Scavenge; Antimatter Refinery | Tier-2 cards; counters |
@@ -388,7 +471,7 @@ Each player has credits, compute, energy, antimatter and insight.
 - **Player damage** in a hex is first reduced by Fortify there (1 per Fortify token).
   The dealer then destroys adversary pieces one at a time, choosing each among those the
   remaining damage can destroy (full health needed); damage left over is lost. Destroyed
-  pieces leave the board and score opposition.
+  pieces leave the board and sway toward Unity.
 - **Defense** tokens belong to a player (`defense:<seat>`). Each prevents 1 ravage damage
   in its hex (the Protector's prevent 2). Defense and Fortify reduce every damage instance
   in the hex that round and are removed at the end of the round.
@@ -480,7 +563,7 @@ first `free_keeps` (1) kept cards each round cost nothing; each further keep cos
 `keep_cost`. 007's proposal 6 reads "keep one card free each round, others at 2", so it
 is measured with `keep_cost` 2 (`--set cards.variant=free_keep --set
 cards.free_keeps=1 --set cards.keep_cost=2`). A round's free keep is used before an
-opposition level's free purchase (`free_purchases`), then credits.
+Unity card's free purchase (Open Market), then credits.
 
 - **Decks:** a tier-1 and a tier-2 deck of the cards listed in the config (one copy of
   each; a hard constraint the tests check). Discards reshuffle into a deck when it runs
@@ -544,8 +627,8 @@ Card details beyond the ruleset text:
    reduce each damage instance that round.
 5. Cascades do not chain and may cross borders. Momentum once per ravaged hex.
 6. The corruption pool "runs out" when it reaches 0.
-7. Win and loss are checked when an action or automatic phase finishes resolving, losses
-   first. Reaching the top level wins without its reward.
+7. Win and loss are checked when an action or automatic phase finishes resolving: full
+   buckets tip first (Discord before Unity), then losses, then the win.
 8. The adversary deck deals 4/4/2 (`stage_cards`) of 4/4/6 printed cards; Escalation triggers on reveal.
 9. Difficulty 4's "a round sooner" looks `tier2_early` cards ahead in the deck.
 10. Pooled counters: countered only when fully paid; withdrawals until the action phase
@@ -569,6 +652,10 @@ Card details beyond the ruleset text:
     foundry's own hex ravages, and adds no corruption or Momentum.
 24. (011) "Stage II has begun" for the clear-board win means a stage-II card has been
     revealed into the explore slot (as for tier-2 threats).
+25. (013) Alignment: a tip draws the stronger tier when the side's tip count *before*
+    the tip has reached its first threshold; ongoing cards start the round after they
+    come into play; the antimatter action is once a round per player; Discord
+    escalation is the difficulty level in play (§3).
 
 **Deviations** (the implementation departs from the ruleset text):
 
@@ -593,6 +680,6 @@ Card details beyond the ruleset text:
    starts the corruption.
 9. Assets: cards reach assets next to their terrain; strikes hit hexes of the terrain.
 10. Assets: damage, Purge Protocol, Rebuild, Reconstruction and pushback reclaim.
-11. Both: the purge win allows *L* × `purge_allowance` × countries pieces at level *L*.
+11. Both: the purge win allows *L* × `purge_allowance` × countries pieces at bar *L*.
 12. Both: threats and cards naming drones, outposts or foundries read them as clusters or
     corrupted assets (table in §2a).

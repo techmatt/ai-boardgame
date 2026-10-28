@@ -1,6 +1,6 @@
-// HTML for the panels around the board: the opposition bar and loss conditions, the
+// HTML for the panels around the board: the Alignment track and loss conditions, the
 // adversary pipeline, the countries strip (threats), and the seat panels' contents.
-// Everything comes from the generic view; known keys (adversary.*, opposition.*,
+// Everything comes from the generic view; known keys (adversary.*, alignment.*,
 // threats.*, ai.*, economy.income.*, cards.*) get a dedicated drawing, every other
 // value, card group or pile falls back to a generic chip so nothing goes unshown.
 
@@ -12,11 +12,15 @@ const esc = escapeHtml;
 /** Global values drawn by the status strip or the pipeline; the rest are generic chips. */
 const DRAWN_GLOBALS = new Set([
   'adversary.pool', 'adversary.stage', 'adversary.difficulty', 'adversary.deck', 'adversary.peek',
-  'threats.tier', 'opposition.points', 'opposition.level', 'opposition.population',
-  'opposition.loss_population', 'board.start_population',
+  'threats.tier', 'alignment.undecided', 'alignment.unity', 'alignment.discord', 'alignment.unity_tips',
+  'alignment.discord_tips', 'alignment.bar', 'alignment.population', 'alignment.loss_population',
+  'board.start_population',
 ]);
-/** Piles drawn by the pipeline or the countries strip. */
-const DRAWN_PILES = new Set(['adversary.deck', 'adversary.explore', 'adversary.build', 'adversary.ravage', 'adversary.discard', 'threats.row']);
+/** Piles drawn by the status strip, the pipeline or the countries strip. */
+const DRAWN_PILES = new Set([
+  'adversary.deck', 'adversary.explore', 'adversary.build', 'adversary.ravage', 'adversary.discard', 'threats.row',
+  'alignment.deck.unity', 'alignment.deck.discord', 'alignment.resolved.unity', 'alignment.resolved.discord', 'alignment.ongoing',
+]);
 
 const findValue = (vs: Value[], key: string) => vs.find((v) => v.key === key);
 const pile = (v: View, key: string) => v.piles.find((p) => p.key === key);
@@ -30,7 +34,7 @@ export function valueChip(v: Value, scope: string, label = v.label, near = true)
 
 export function cardChip(c: CardView, where: string): string {
   const cost = c.cost !== undefined ? ` <small title="cost">${c.cost}</small>` : '';
-  const status = c.status && !['in slot', 'draft', 'drafted', 'built', 'slotted'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
+  const status = c.status && !['in slot', 'draft', 'drafted', 'built', 'slotted', 'resolved', 'ongoing'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
   return `<span class="card ${esc(c.status.replace(/\s+/g, '-'))}" data-card="${esc(c.id)}" data-where="${where}">${esc(c.name)}${cost}${status}</span>`;
 }
 
@@ -44,31 +48,55 @@ function onBoard(v: View, kinds: string[]): Record<string, number> {
   return n;
 }
 
-// ---------- status: opposition and losses ----------
+// ---------- status: alignment and losses ----------
+
+/** A bucket of the tug of war; Unity fills toward the left, Discord toward the right. */
+function bucketBar(b: Value | undefined, side: 'unity' | 'discord', name: string): string {
+  if (!b) return '';
+  const pct = b.max ? Math.min(100, (100 * b.value) / b.max) : 0;
+  return `<span class="bar ${side}" data-value="${esc(b.key)}" data-scope="global"><span class="fill" style="width:${pct}%"></span>
+    <span class="btext">${name} ${b.value}/${b.max ?? '?'}</span></span>`;
+}
+
+/** "Unity tips 1 (next at 2)". */
+function tipsChip(t: Value | undefined, side: 'unity' | 'discord', name: string): string {
+  if (!t) return '';
+  return `<span class="tips ${side}" data-value="${esc(t.key)}" data-scope="global">${name} tips <b>${t.value}</b>${t.max !== undefined ? `<small> (next at ${t.max})</small>` : ''}</span>`;
+}
 
 export function statusHtml(v: View): string {
   const g = v.globals;
   const parts: string[] = [];
-  const pts = findValue(g, 'opposition.points');
-  const lvl = findValue(g, 'opposition.level');
-  if (pts || lvl) {
-    const level = lvl?.value ?? 0;
-    const max = lvl?.max ?? 0;
-    const pct = pts?.max ? Math.min(100, (100 * pts.value) / pts.max) : 0;
+  const und = findValue(g, 'alignment.undecided');
+  const unity = findValue(g, 'alignment.unity');
+  const discord = findValue(g, 'alignment.discord');
+  const bar = findValue(g, 'alignment.bar');
+  if (und || unity || discord || bar) {
+    const level = bar?.value ?? 0;
+    const max = bar?.max ?? 0;
     const left = onBoard(v, ['drone', 'outpost', 'foundry']);
     const pieces = Object.entries(left).map(([k, n]) => `${n} ${k}${n === 1 ? '' : 's'}`).join(' · ');
-    parts.push(`<div class="opposition" data-value="opposition.level" data-scope="global">
-      <span class="olabel">Opposition</span>
-      <span class="level">level <b>${level}</b>/${max}</span>
-      <span class="bar" data-value="opposition.points" data-scope="global"><span class="fill" style="width:${pct}%"></span>
-        <span class="btext">${pts ? `${pts.value} / ${pts.max ?? '?'} points${level < max ? ` → level ${level + 1}` : ''}` : ''}</span></span>
-      <span class="win">${esc(lvl?.doc ?? '')}</span>
+    const undHtml = und
+      ? `<span class="undecided" data-value="${esc(und.key)}" data-scope="global"><b>${und.value}</b><small>/${und.max ?? '?'}</small> undecided</span>`
+      : '';
+    parts.push(`<div class="alignment">
+      <span class="alabel">Alignment</span>
+      <span class="tug">${bucketBar(unity, 'unity', 'Unity')}${undHtml}${bucketBar(discord, 'discord', 'Discord')}</span>
+      ${tipsChip(findValue(g, 'alignment.unity_tips'), 'unity', 'Unity')}${tipsChip(findValue(g, 'alignment.discord_tips'), 'discord', 'Discord')}
+      ${bar ? `<span class="level" data-value="${esc(bar.key)}" data-scope="global">bar <b>${level}</b>/${max}</span><span class="win">${esc(bar.doc ?? '')}</span>` : ''}
       <span class="left" title="adversary pieces on the board">on board: ${pieces}</span>
     </div>`);
+    const groups = ([['alignment.resolved.unity', 'unity'], ['alignment.resolved.discord', 'discord'], ['alignment.ongoing', 'ongoing']] as const)
+      .map(([key, cls]) => [pile(v, key), cls] as const)
+      .filter(([p]) => p && p.visible.length)
+      .map(([p, cls]) => `<span class="agroup ${cls}" data-pile="${esc(p!.key)}"><span class="what">${esc(p!.label)}</span>${p!.visible.map((c) => cardChip(c, `pile:${p!.key}`)).join('')}</span>`);
+    const decks = ['unity', 'discord'].map((s) => pile(v, `alignment.deck.${s}`)).filter((p): p is PileView => !!p)
+      .map((p) => `<span class="adeck" data-pile="${esc(p.key)}">${esc(p.label)} <b>${p.count}</b></span>`);
+    if (groups.length || decks.length) parts.push(`<div class="acards">${groups.join('')}${decks.join('')}</div>`);
   }
   const loss: string[] = [];
-  const pop = findValue(g, 'opposition.population');
-  const below = findValue(g, 'opposition.loss_population');
+  const pop = findValue(g, 'alignment.population');
+  const below = findValue(g, 'alignment.loss_population');
   if (pop) {
     const danger = below && pop.value - below.value <= 2 ? ' danger' : '';
     loss.push(`<span class="value${danger}" data-value="${pop.key}" data-scope="global"><span class="label">population</span> <b>${pop.value}</b>${below ? `<small> (lose below ${below.value})</small>` : ''}</span>`);

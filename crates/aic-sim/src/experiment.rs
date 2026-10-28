@@ -15,7 +15,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
-use aic_core::modules::{adversary, board, opposition};
+use aic_core::content::Side;
+use aic_core::modules::{adversary, alignment, board};
 use aic_core::{replay, Action, Config, GameState, Rules};
 use serde::{Deserialize, Serialize};
 
@@ -315,10 +316,9 @@ pub struct Margin {
 fn margin(rules: &Rules, g: &GameState) -> Margin {
     let w = rules.world();
     let count = |k: &str| (0..g.hexes.len()).map(|h| g.tokens(h, k)).sum::<i64>();
-    let level = g.var(opposition::LEVEL);
-    let max = w.int("opposition.max_level");
+    let level = alignment::bar_level(&w, g);
     let (d, o, f) = (count("drone"), count("outpost"), count("foundry"));
-    let blockers = if g.outcome.as_ref().is_some_and(|o| o.won) || level >= max {
+    let blockers = if g.outcome.as_ref().is_some_and(|o| o.won) {
         0
     } else {
         match level {
@@ -328,7 +328,7 @@ fn margin(rules: &Rules, g: &GameState) -> Margin {
         }
     };
     let start = g.var(board::START_POPULATION);
-    let safe = (start * w.int("opposition.loss_population_percent") + 99) / 100;
+    let safe = (start * w.int("alignment.loss_population_percent") + 99) / 100;
     Margin {
         deck_left: g.pile(adversary::DECK).len() as u32,
         pool_left: g.var(adversary::POOL),
@@ -336,7 +336,7 @@ fn margin(rules: &Rules, g: &GameState) -> Margin {
         population_slack: count("population") - safe,
         blockers,
         level,
-        points: g.var(opposition::POINTS),
+        points: g.var(alignment::tips_key(Side::Unity)),
     }
 }
 

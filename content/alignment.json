@@ -1,0 +1,124 @@
+[
+ {
+  "id": "grassroots_funding",
+  "name": "Grassroots Funding",
+  "side": "unity",
+  "tier": 1,
+  "text": "Every player gains 2 credit income for the rest of the game.",
+  "effects": [{"op": "income", "credits": 2}]
+ },
+ {
+  "id": "open_market",
+  "name": "Open Market",
+  "side": "unity",
+  "tier": 1,
+  "text": "The next 2 card purchases are free.",
+  "effects": [{"op": "free_purchases", "count": 2}]
+ },
+ {
+  "id": "think_tank",
+  "name": "Think Tank",
+  "side": "unity",
+  "tier": 1,
+  "text": "Every player gains 1 insight each round for the rest of the game.",
+  "effects": [{"op": "insight_income", "insight": 1}]
+ },
+ {
+  "id": "ceasefire",
+  "name": "Ceasefire",
+  "side": "unity",
+  "tier": 1,
+  "text": "Counter one active threat.",
+  "effects": [{"op": "counter_threat"}]
+ },
+ {
+  "id": "civil_defense",
+  "name": "Civil Defense",
+  "side": "unity",
+  "tier": 1,
+  "text": "In each country, remove 1 drone.",
+  "effects": [{"op": "pushback", "drones": 1}]
+ },
+ {
+  "id": "volunteer_corps",
+  "name": "Volunteer Corps",
+  "side": "unity",
+  "tier": 1,
+  "ongoing": true,
+  "text": "Ongoing: at the start of each round, sway 1 toward Unity.",
+  "effects": [{"op": "sway", "side": "unity", "amount": 1}]
+ },
+ {
+  "id": "global_coalition",
+  "name": "Global Coalition",
+  "side": "unity",
+  "tier": 2,
+  "text": "Counter every active threat.",
+  "effects": [{"op": "counter_all"}]
+ },
+ {
+  "id": "new_deal",
+  "name": "New Deal",
+  "side": "unity",
+  "tier": 2,
+  "text": "Every player gains 2 credit income for the rest of the game and 4 credits now.",
+  "effects": [{"op": "income", "credits": 2}, {"op": "credits", "credits": 4}]
+ },
+ {
+  "id": "incursion",
+  "name": "Incursion",
+  "side": "discord",
+  "tier": 1,
+  "text": "Deal one extra threat.",
+  "effects": [{"op": "threats", "count": 1}]
+ },
+ {
+  "id": "blight",
+  "name": "Blight",
+  "side": "discord",
+  "tier": 1,
+  "text": "In each country, the hex with the most adversary pieces gains 1 corruption.",
+  "effects": [{"op": "corrupt", "amount": 1}]
+ },
+ {
+  "id": "buildup",
+  "name": "Buildup",
+  "side": "discord",
+  "tier": 1,
+  "text": "The adversary builds now with the card in its build slot.",
+  "effects": [{"op": "build"}]
+ },
+ {
+  "id": "propaganda",
+  "name": "Propaganda",
+  "side": "discord",
+  "tier": 1,
+  "ongoing": true,
+  "text": "Ongoing: at the start of each round, sway 1 toward Discord.",
+  "effects": [{"op": "sway", "side": "discord", "amount": 1}]
+ },
+ {
+  "id": "offensive",
+  "name": "Offensive",
+  "side": "discord",
+  "tier": 2,
+  "text": "The adversary ravages now with the card in its ravage slot.",
+  "effects": [{"op": "ravage"}]
+ },
+ {
+  "id": "two_fronts",
+  "name": "Two Fronts",
+  "side": "discord",
+  "tier": 2,
+  "text": "Deal two extra threats.",
+  "effects": [{"op": "threats", "count": 2}]
+ },
+ {
+  "id": "firestorm",
+  "name": "Firestorm",
+  "side": "discord",
+  "tier": 2,
+  "text": "In each country, the hex with the most adversary pieces gains 2 corruption.",
+  "effects": [{"op": "corrupt", "amount": 2}]
+ }
+]

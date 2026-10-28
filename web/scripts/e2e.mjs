@@ -132,9 +132,10 @@ try {
   check(board.labels === board.countries && board.borders > 0, `${board.countries} countries labelled, ${board.borders} border edges`);
   check(board.fills === board.terrains, `hexes filled by terrain (${board.fills} fills for ${board.terrains} terrains)`);
   check(board.uplinks === board.antennas, `${board.antennas} uplinks marked`);
-  const panels = await js(`({ pipeline: document.querySelectorAll('#pipeline .slot-box').length, opposition: !!document.querySelector('#status .opposition .bar'),
+  const panels = await js(`({ pipeline: document.querySelectorAll('#pipeline .slot-box').length, alignment: document.querySelectorAll('#status .alignment .tug .bar').length,
+                             undecided: !!document.querySelector('#status .alignment .undecided'),
                              threats: document.querySelectorAll('#countries .threat').length })`);
-  check(panels.pipeline >= 4 && panels.opposition, `adversary pipeline (${panels.pipeline} boxes) and opposition bar drawn`);
+  check(panels.pipeline >= 4 && panels.alignment === 2 && panels.undecided, `adversary pipeline (${panels.pipeline} boxes) and Alignment track (${panels.alignment} buckets, the Undecided) drawn`);
   check(panels.threats > 0, `${panels.threats} threats shown with their countries`);
 
   // Country names, the AI boards' tracks, and no per-seat bookkeeping among the globals.

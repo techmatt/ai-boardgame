@@ -1,0 +1,35 @@
+{
+  "name": "screen-013-alignment",
+  "note": "013 quick screen of Alignment (rules r5): Unity and Discord tips per game and by round, win rates, and how often the +1 Discord antimatter action is taken, at 2 countries, d0 and d4. Variants: no_am switches the antimatter action off; off switches Alignment off (no Sway, no tips, bar 0) for reference.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "base",
+      "set": []
+    },
+    {
+      "name": "no_am",
+      "set": [
+        "alignment.antimatter_discord=0"
+      ]
+    },
+    {
+      "name": "off",
+      "set": [
+        "alignment.variant=off"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 32,
+  "records": 2
+}

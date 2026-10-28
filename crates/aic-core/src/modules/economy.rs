@@ -12,12 +12,12 @@ use crate::state::GameState;
 use crate::view::ViewOut;
 
 use super::common::*;
-use super::{ai, board, cards, opposition};
+use super::{ai, alignment, board, cards};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "economy",
     summary: "Insight, income, production and upkeep; giving insight",
-    requires: &["ai", "board", "cards", "opposition"],
+    requires: &["ai", "board", "cards", "alignment"],
     variants: &[VariantDef {
         name: "standard",
         summary: "Income in upkeep, insight at the start of each round",
@@ -114,8 +114,8 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; 5] {
             _ => {}
         }
     }
-    add("credits", g.var(opposition::INCOME_BONUS));
-    add("insight", g.var(opposition::INSIGHT_BONUS));
+    add("credits", g.var(alignment::INCOME_BONUS));
+    add("insight", g.var(alignment::INSIGHT_BONUS));
     out
 }
 

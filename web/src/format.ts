@@ -67,6 +67,10 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       const n = cx.config ? param(cx.config, 'economy', 'give_insight') : undefined;
       return `give ${typeof n === 'number' ? `${n} ` : ''}insight → seat ${a.to}`;
     }
+    case 'antimatter': {
+      const n = cx.config ? param(cx.config, 'alignment', 'antimatter_discord') : undefined;
+      return `+1 antimatter${typeof n === 'number' ? ` (${n} Sway → Discord)` : ' (Sway → Discord)'}`;
+    }
   }
   return null;
 }
