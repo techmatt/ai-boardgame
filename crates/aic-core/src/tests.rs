@@ -699,7 +699,7 @@ fn malformed_pending_states_are_errors_not_panics() {
     rules.enter(&mut g, None);
     assert!(rules.check_state(&g).is_ok());
     let mut bad = g.clone();
-    bad.pending.as_mut().unwrap().snapshot.seats.pop();
+    std::sync::Arc::make_mut(&mut bad.pending.as_mut().unwrap().snapshot).seats.pop();
     assert!(rules.check_state(&bad).is_err());
     let mut bad = g.clone();
     bad.pending.as_mut().unwrap().ask.seat = 9;

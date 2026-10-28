@@ -348,3 +348,152 @@ fn experiment_rejects_bad_specs() {
         );
     }
 }
+
+const STREAM_SPEC: &str = r#"{
+  "name": "test-stream",
+  "configs": ["configs/baseline.json"],
+  "difficulties": [0, 4],
+  "agents": ["random"],
+  "games": 6,
+  "records": 1
+}"#;
+
+fn experiment(spec: &Path, out: &Path, extra: &[&str]) -> std::process::Output {
+    sim()
+        .arg("experiment")
+        .arg(spec)
+        .arg("--out")
+        .arg(out)
+        .args(extra)
+        .output()
+        .expect("runs aic-sim")
+}
+
+/// Every game is streamed to games.jsonl as it finishes; a run killed
+/// mid-write (its last line cut short) resumes with only the missing games
+/// and reports the same as an unbroken run; another spec can't resume it.
+#[test]
+fn experiment_streams_games_and_resumes() {
+    let root = fresh_dir("aic-sim-experiment-stream");
+    let spec = root.join("spec.json");
+    std::fs::write(&spec, STREAM_SPEC).unwrap();
+    let whole = root.join("whole");
+    let res = experiment(&spec, &whole, &[]);
+    assert!(res.status.success(), "{}", String::from_utf8_lossy(&res.stderr));
+    let stream = std::fs::read_to_string(whole.join("games.jsonl")).unwrap();
+    let lines: Vec<&str> = stream.lines().collect();
+    assert_eq!(lines.len(), 1 + 12, "a header, then one line per game");
+    assert!(lines[0].contains("\"format\":\"aic-games/1\""), "{}", lines[0]);
+
+    // As a kill leaves it: five games, and half of a sixth.
+    let cut = root.join("cut");
+    std::fs::create_dir_all(&cut).unwrap();
+    let mut text = lines[..6].join("\n");
+    text.push('\n');
+    text.push_str(&lines[6][..lines[6].len() / 2]);
+    std::fs::write(cut.join("games.jsonl"), text).unwrap();
+    let res = experiment(&spec, &cut, &["--resume", "--threads", "2"]);
+    let err = String::from_utf8_lossy(&res.stderr);
+    assert!(res.status.success(), "{err}");
+    assert!(err.contains("(5 already played)"), "{err}");
+    assert_eq!(results_without_timing(&whole), results_without_timing(&cut));
+    let resumed = std::fs::read_to_string(cut.join("games.jsonl")).unwrap();
+    assert_eq!(resumed.lines().count(), 1 + 12);
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(cut.join("results.json")).unwrap()).unwrap();
+    assert_eq!(json["games_resumed"], 5);
+    assert_eq!(json["games_played"], json["games_planned"]);
+    assert!(!std::fs::read_to_string(cut.join("report.md")).unwrap().contains("Partial"));
+
+    // A different grid is not the same experiment.
+    let res = experiment(&spec, &cut, &["--resume", "--games", "7"]);
+    assert_eq!(res.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&res.stderr).contains("another spec"));
+
+    // Nor is the same spec over an edited config file.
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../configs/baseline.json");
+    let cfg = root.join("cfg.json");
+    std::fs::copy(&base, &cfg).unwrap();
+    let cfg_path = cfg.to_string_lossy().replace('\\', "/");
+    let spec2 = root.join("spec2.json");
+    std::fs::write(&spec2, STREAM_SPEC.replace("configs/baseline.json", &cfg_path)).unwrap();
+    let edited = root.join("edited");
+    assert!(experiment(&spec2, &edited, &[]).status.success());
+    let mut c: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&cfg).unwrap()).unwrap();
+    c["countries"] = serde_json::json!(3);
+    std::fs::write(&cfg, c.to_string()).unwrap();
+    let res = experiment(&spec2, &edited, &["--resume"]);
+    assert_eq!(res.status.code(), Some(2), "{}", String::from_utf8_lossy(&res.stderr));
+    // A fresh run keeps the earlier stream aside.
+    assert!(experiment(&spec2, &edited, &[]).status.success());
+    assert!(edited.join("games.jsonl.bak").exists());
+}
+
+/// `--quick`: deep-search agents are dropped, seeds capped at 16 and the
+/// probes turned off; the shallow agents stay.
+#[test]
+fn experiment_quick_keeps_shallow_agents() {
+    let root = fresh_dir("aic-sim-experiment-quick");
+    let spec = root.join("spec.json");
+    let body = STREAM_SPEC
+        .replace(
+            r#""agents": ["random"]"#,
+            r#""agents": ["random", "beam:width=2", "greedy:samples=2", "engine:width=2"]"#,
+        )
+        .replace(r#""games": 6"#, r#""games": 40, "winprob": {"games": 2}, "closeness": {"every": 1}"#)
+        .replace(r#""difficulties": [0, 4]"#, r#""difficulties": [0]"#);
+    std::fs::write(&spec, body).unwrap();
+    let out = root.join("out");
+    let res = experiment(&spec, &out, &["--quick"]);
+    let err = String::from_utf8_lossy(&res.stderr);
+    assert!(res.status.success(), "{err}");
+    assert!(
+        err.contains("dropped deep-search agents beam:width=2, greedy:samples=2, engine:width=2"),
+        "{err}"
+    );
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap()).unwrap();
+    assert_eq!(json["spec"]["agents"], serde_json::json!(["random"]));
+    assert_eq!(json["spec"]["games"], 16);
+    assert_eq!(json["spec"]["winprob"]["games"], 0);
+    assert_eq!(json["spec"]["closeness"]["every"], 0);
+}
+
+/// A run killed partway leaves readable results: the games so far in
+/// games.jsonl and, after `--report-every`, a report marked partial.
+#[test]
+#[ignore = "slow lane: greedy games, killed partway"]
+fn experiment_killed_partway_leaves_a_partial_report() {
+    let root = fresh_dir("aic-sim-experiment-killed");
+    let spec = root.join("spec.json");
+    let body = STREAM_SPEC
+        .replace(r#""agents": ["random"]"#, r#""agents": ["greedy"]"#)
+        .replace(r#""games": 6"#, r#""games": 200"#);
+    std::fs::write(&spec, body).unwrap();
+    let out = root.join("out");
+    let mut child = sim()
+        .arg("experiment")
+        .arg(&spec)
+        .arg("--out")
+        .arg(&out)
+        .args(["--report-every", "1", "--threads", "2"])
+        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let report = out.join("report.md");
+    let start = std::time::Instant::now();
+    while !report.exists() {
+        assert!(start.elapsed().as_secs() < 120, "no partial report");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    child.kill().unwrap();
+    child.wait().unwrap();
+    let text = std::fs::read_to_string(&report).unwrap();
+    assert!(text.contains("**Partial: "), "{}", &text[..300.min(text.len())]);
+    assert!(text.contains("of 400 games.**"));
+    let games = std::fs::read_to_string(out.join("games.jsonl")).unwrap();
+    assert!(games.lines().count() >= 2, "games streamed");
+    assert!(std::fs::read_to_string(out.join("games.csv")).unwrap().lines().count() >= 2);
+}

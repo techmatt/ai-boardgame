@@ -2,6 +2,7 @@
 //! Build once per config, then run any number of games with it.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use serde::Serialize;
 
@@ -26,7 +27,8 @@ const CARD_PARAM_MAX: i64 = 1000;
 
 pub struct Rules {
     /// The resolved config: validated, lists normalized, `round` filled in.
-    pub config: Config,
+    /// Every game's state shares it.
+    pub config: Arc<Config>,
     pub config_hash: String,
     pub map: Map,
     pub round: Vec<PhaseRef>,
@@ -227,7 +229,7 @@ impl Rules {
 
         let config_hash = resolved.hash();
         Ok(Rules {
-            config: resolved,
+            config: Arc::new(resolved),
             config_hash,
             map,
             round,
@@ -460,8 +462,72 @@ impl Rules {
         &self,
         g: &mut GameState,
         a: &Action,
-        mut events: Option<&mut Vec<Event>>,
+        events: Option<&mut Vec<Event>>,
     ) -> Result<(), String> {
+        match self.check(g, a)? {
+            Step::Answer(pick) => {
+                let Pending {
+                    trigger,
+                    mut made,
+                    snapshot,
+                    ..
+                } = *g.pending.take().unwrap();
+                made.push(pick);
+                *g = (*snapshot).clone();
+                self.resolve(g, Snap::Shared(snapshot), trigger, made, events)
+            }
+            Step::Pass => {
+                self.pass(g, a.seat() as usize, events);
+                Ok(())
+            }
+            Step::Act => {
+                let snapshot = Arc::new(g.clone());
+                let trigger = Trigger::Action { action: a.clone() };
+                let r = self.resolve(g, Snap::Shared(snapshot.clone()), trigger, Vec::new(), events);
+                if r.is_err() {
+                    *g = Arc::unwrap_or_clone(snapshot);
+                }
+                r
+            }
+        }
+    }
+
+    /// `g` after `a`, as a new state; `g` is untouched. The same as cloning
+    /// and [`Rules::apply_mut`], with one state copy where that makes two
+    /// (the copy, and the snapshot an action keeps in case it asks a
+    /// choice): what a search should call.
+    pub fn apply_to(
+        &self,
+        g: &GameState,
+        a: &Action,
+        events: Option<&mut Vec<Event>>,
+    ) -> Result<GameState, String> {
+        match self.check(g, a)? {
+            Step::Answer(pick) => {
+                let pend = g.pending.as_ref().unwrap();
+                let mut made = pend.made.clone();
+                made.push(pick);
+                let mut next = (*pend.snapshot).clone();
+                let snap = Snap::Shared(pend.snapshot.clone());
+                self.resolve(&mut next, snap, pend.trigger.clone(), made, events)?;
+                Ok(next)
+            }
+            Step::Pass => {
+                let mut next = g.clone();
+                self.pass(&mut next, a.seat() as usize, events);
+                Ok(next)
+            }
+            Step::Act => {
+                let mut next = g.clone();
+                let trigger = Trigger::Action { action: a.clone() };
+                self.resolve(&mut next, Snap::Borrowed(g), trigger, Vec::new(), events)?;
+                Ok(next)
+            }
+        }
+    }
+
+    /// What `a` does on `g`, or why it can't be played.
+    fn check(&self, g: &GameState, a: &Action) -> Result<Step, String> {
         let p = self.phase(g).ok_or("the game is over")?;
         let seat = a.seat() as usize;
         if seat >= g.seats.len() {
@@ -480,18 +546,10 @@ impl Rules {
             {
                 return Err(format!("not an option of {:?}: {a:?}", pend.ask.prompt));
             }
-            let Pending {
-                trigger,
-                mut made,
-                snapshot,
-                ..
-            } = *g.pending.take().unwrap();
-            made.push(Pick {
+            return Ok(Step::Answer(Pick {
                 option: option.clone(),
                 target: *target,
-            });
-            *g = snapshot.clone();
-            return self.resolve(g, snapshot, trigger, made, events);
+            }));
         }
         if matches!(a, Action::Choose { .. }) {
             return Err("there is no choice to make".into());
@@ -503,29 +561,31 @@ impl Rules {
             if !self.can_pass(p, g, seat as u8) {
                 return Err(format!("seat {seat} can't pass yet"));
             }
-            g.seats[seat].passed = true;
-            if let Some(log) = events.as_deref_mut() {
-                log.push(Event::Passed { seat: seat as u8 });
-            }
-            g.stats.actions += 1;
-            if g.seats.iter().all(|s| s.passed) {
-                g.phase += 1;
-                self.enter(g, events);
-            }
-            return Ok(());
+            return Ok(Step::Pass);
         }
-        let snapshot = g.clone();
-        let trigger = Trigger::Action { action: a.clone() };
-        self.resolve(g, snapshot, trigger, Vec::new(), events)
+        Ok(Step::Act)
+    }
+
+    fn pass(&self, g: &mut GameState, seat: usize, mut events: Option<&mut Vec<Event>>) {
+        g.seats[seat].passed = true;
+        if let Some(log) = events.as_deref_mut() {
+            log.push(Event::Passed { seat: seat as u8 });
+        }
+        g.stats.actions += 1;
+        if g.seats.iter().all(|s| s.passed) {
+            g.phase += 1;
+            self.enter(g, events);
+        }
     }
 
     /// Resolves a phase or an action (then every module's `after`) on `g`,
     /// which equals `snapshot`, replaying the answers in `made`. Stops at
-    /// the next unanswered choice, or goes on to the next decision.
+    /// the next unanswered choice, or goes on to the next decision. On an
+    /// illegal action `g` is left part-resolved: the caller restores it.
     fn resolve(
         &self,
         g: &mut GameState,
-        snapshot: GameState,
+        snapshot: Snap,
         trigger: Trigger,
         made: Vec<Pick>,
         mut events: Option<&mut Vec<Event>>,
@@ -549,7 +609,7 @@ impl Rules {
                     trigger,
                     made: ch.made,
                     ask: ch.asked.expect("a halted choice records its question"),
-                    snapshot,
+                    snapshot: snapshot.share(),
                 }));
                 Ok(())
             }
@@ -557,7 +617,6 @@ impl Rules {
                 if !is_action || answered > 0 {
                     panic!("resolution failed on replay: {e}");
                 }
-                *g = snapshot;
                 Err(e)
             }
         }
@@ -606,9 +665,8 @@ impl Rules {
 
     /// Applies an action to a copy; returns the new state and its events.
     pub fn apply(&self, g: &GameState, a: &Action) -> Result<(GameState, Vec<Event>), String> {
-        let mut next = g.clone();
         let mut events = Vec::new();
-        self.apply_mut(&mut next, a, Some(&mut events))?;
+        let next = self.apply_to(g, a, Some(&mut events))?;
         Ok((next, events))
     }
 
@@ -674,7 +732,7 @@ impl Rules {
                                 trigger: Trigger::Phase,
                                 made: Vec::new(),
                                 ask: ch.asked.expect("a halted choice records its question"),
-                                snapshot,
+                                snapshot: Arc::new(snapshot),
                             }));
                             return;
                         }
@@ -704,6 +762,31 @@ impl Rules {
                     return;
                 }
             }
+        }
+    }
+}
+
+/// What a checked action does.
+enum Step {
+    /// Answers the pending choice.
+    Answer(Pick),
+    Pass,
+    /// Resolves through the phase's module.
+    Act,
+}
+
+/// The state a resolution started from, kept if it stops at a choice.
+enum Snap<'a> {
+    Shared(Arc<GameState>),
+    /// Copied only if a choice is asked.
+    Borrowed(&'a GameState),
+}
+
+impl Snap<'_> {
+    fn share(self) -> Arc<GameState> {
+        match self {
+            Snap::Shared(s) => s,
+            Snap::Borrowed(g) => Arc::new(g.clone()),
         }
     }
 }

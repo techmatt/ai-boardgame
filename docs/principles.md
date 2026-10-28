@@ -54,5 +54,9 @@ Agents get no information or help the printed game couldn't give players.
 
 Weigh each measure's cost against the decision it informs: screen cheaply first, and run expensive measures only on finalists.
 
+Until the rules are close to final, scoping runs use shallow, fast agents (greedy,
+engine) and short runs (`aic-sim experiment --quick`); deep-search agents stay in the
+code, ready, but don't get run time until the rules settle.
+
 The agents (random, greedy, beam, rollout) and how each measure is computed are in the
 README (*Agents*, *Experiments*); `aic-sim experiment` writes them up as a cycle report.

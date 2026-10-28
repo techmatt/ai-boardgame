@@ -4,6 +4,7 @@
 
 mod agents;
 mod experiment;
+mod prof;
 mod report;
 
 use std::collections::BTreeMap;
@@ -15,6 +16,12 @@ use aic_core::{
     content_hash, play, replay, Action, Config, Event, GameRecord, Outcome, Rules, SavedGame,
 };
 use serde::Serialize;
+
+/// The search clones game states by the hundred thousand, and the system
+/// allocator serializes them across workers: on 12 threads a state clone
+/// took 134 us against 24 us on one (012). mimalloc keeps a heap per thread.
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 const USAGE: &str = "\
 usage: aic-sim run <config.json> [options]
@@ -62,7 +69,16 @@ experiment:
                     (about 5x an experiment's time at N = 10 of 200)
     --closeness N   closeness probe on every N-th real choice
     --variants A,B  play only these of the spec's variants (the base is always
-                    kept, first): screen without probes, then probe the finalists";
+                    kept, first): screen without probes, then probe the finalists
+  Scoping runs, results as they go:
+    --quick         the cheap preset: shallow agents only (deep-search agents are
+                    dropped), at most 16 seeds per cell unless --games is given, no
+                    probes unless --winprob or --closeness is given
+    --report-every S  rewrite the report from the games finished so far every S
+                    seconds (default 60; 0 = only at the end). Every game is also
+                    appended to DIR/games.jsonl as it finishes
+    --resume        continue a stopped run of the same spec from DIR/games.jsonl:
+                    play only the games it lacks, then report them all";
 
 struct Options {
     command: String,
@@ -90,6 +106,11 @@ struct Options {
     winprob: Option<u64>,
     closeness: Option<usize>,
     variants: Option<Vec<String>>,
+    /// `experiment`: the scoping preset, continuing a stopped run, and how
+    /// often (seconds) the report of the games so far is rewritten.
+    quick: bool,
+    resume: bool,
+    report_every: u64,
 }
 
 fn die(msg: &str) -> ! {
@@ -124,8 +145,12 @@ fn parse_args() -> Options {
         winprob: None,
         closeness: None,
         variants: None,
+        quick: false,
+        resume: false,
+        report_every: 60,
     };
     let mut save_max_given = false;
+    let mut report_every_given = false;
     while let Some(a) = args.next() {
         let mut value = |name: &str| {
             args.next()
@@ -155,6 +180,12 @@ fn parse_args() -> Options {
                         .filter(|s| !s.is_empty())
                         .collect(),
                 )
+            }
+            "--quick" => o.quick = true,
+            "--resume" => o.resume = true,
+            "--report-every" => {
+                o.report_every = num("--report-every", value("--report-every"));
+                report_every_given = true;
             }
             "--set" => o.set.push(value("--set")),
             "--set-a" => o.set_a.push(value("--set-a")),
@@ -225,6 +256,9 @@ fn parse_args() -> Options {
     }
     if o.out.is_some() && o.command != "experiment" {
         die("--out needs experiment");
+    }
+    if (o.quick || o.resume || report_every_given) && o.command != "experiment" {
+        die("--quick, --resume and --report-every need experiment");
     }
     if o.save.is_none() && (!o.save_when.is_empty() || !o.save_seeds.is_empty() || save_max_given) {
         die("--save-when, --save-seed and --save-max need --save DIR");
@@ -801,7 +835,7 @@ fn simulate(
         config_hash: r.config_hash.clone(),
         content_hash: first.map_or_else(content_hash, |f| f.content_hash.clone()),
         engine_version: aic_core::VERSION.to_string(),
-        config: r.config.clone(),
+        config: (*r.config).clone(),
         games: played.len() as u64,
         wins,
         win_rate: p,
@@ -996,6 +1030,9 @@ fn run_experiment(path: &str, o: &Options) -> i32 {
     if let Some(keep) = &o.variants {
         experiment::keep_variants(&mut spec, keep).unwrap_or_else(|e| die(&format!("--variants: {e}")));
     }
+    if o.quick {
+        quick(&mut spec, o);
+    }
     let cells = experiment::cells(&spec).unwrap_or_else(|e| die(&format!("{path}: {e}")));
     let dir = o
         .out
@@ -1003,17 +1040,42 @@ fn run_experiment(path: &str, o: &Options) -> i32 {
         .unwrap_or_else(|| format!("out/experiments/{}", file_stem(&spec.name)));
     let dir = dir.trim_end_matches(['/', '\\']).to_string();
     std::fs::create_dir_all(&dir).unwrap_or_else(|e| die(&format!("--out {dir}: {e}")));
-    let total = cells.len() as u64 * spec.games;
+    let total = cells.len() * spec.games as usize;
+    // Every finished game goes to games.jsonl at once (a header line, then
+    // one game per line), so a stopped or killed run keeps what it played;
+    // --resume reads it back and plays only the rest.
+    let stream_path = format!("{dir}/games.jsonl");
+    let prior = if o.resume && std::path::Path::new(&stream_path).exists() {
+        experiment::read_stream(&stream_path, &spec, &cells).unwrap_or_else(|e| die(&format!("--resume: {e}")))
+    } else {
+        Vec::new()
+    };
+    let resumed = prior.len();
+    let stream = std::sync::Mutex::new(open_stream(&stream_path, o.resume, &spec, &cells, &prior));
     eprintln!(
-        "{}: {} cells x {} seeds = {total} games on {} threads",
+        "{}: {} cells x {} seeds = {total} games on {} threads{}; streaming to {stream_path}",
         spec.name,
         cells.len(),
         spec.games,
-        o.threads
+        o.threads,
+        if resumed > 0 {
+            format!(" ({resumed} already played)")
+        } else {
+            String::new()
+        }
     );
     let start = Instant::now();
     let last = std::sync::Mutex::new(Instant::now());
-    let progress = |done: usize, all: usize| {
+    let on_game = |g: &experiment::GameResult, done: usize, all: usize| {
+        let line = serde_json::to_string(g).expect("a game result serializes");
+        {
+            use std::io::Write;
+            let mut w = stream.lock().expect("stream lock");
+            if let Err(e) = writeln!(w, "{line}").and_then(|_| w.flush()) {
+                eprintln!("cannot write {stream_path}: {e}");
+                exit(2)
+            }
+        }
         let mut l = last.lock().expect("progress lock");
         if done == all || l.elapsed().as_secs() >= 10 {
             *l = Instant::now();
@@ -1023,42 +1085,50 @@ fn run_experiment(path: &str, o: &Options) -> i32 {
             );
         }
     };
-    let games = experiment::run(&spec, &cells, o.threads, &progress);
+    let results = std::sync::Mutex::new(prior);
+    let playing = std::sync::atomic::AtomicBool::new(true);
+    let reports = |games: &mut Vec<experiment::GameResult>| {
+        experiment::sort(games);
+        let wall_s = start.elapsed().as_secs_f64();
+        write_reports(&dir, &spec, &cells, games, wall_s, o.threads, total, resumed)
+    };
+    std::thread::scope(|s| {
+        // Meanwhile, the report of the games finished so far, every
+        // --report-every seconds.
+        if o.report_every > 0 {
+            s.spawn(|| {
+                let mut since = Instant::now();
+                while playing.load(std::sync::atomic::Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    if since.elapsed().as_secs() >= o.report_every {
+                        let mut snap = results.lock().expect("results lock").clone();
+                        // A file held open elsewhere (a CSV in a spreadsheet)
+                        // skips this report; it must not stop the run.
+                        if !snap.is_empty() && snap.len() < total {
+                            if let Err(e) = reports(&mut snap) {
+                                eprintln!("partial report skipped: {e}");
+                            }
+                        }
+                        since = Instant::now();
+                    }
+                }
+            });
+        }
+        experiment::run(&spec, &cells, o.threads, &results, &on_game);
+        playing.store(false, std::sync::atomic::Ordering::Relaxed);
+    });
+    let mut games = results.into_inner().expect("results lock");
     let wall_s = start.elapsed().as_secs_f64();
-    let sums = report::summarize(&cells, &games);
-    let groups = report::groups(&cells, &sums, &games);
-    let cards = report::card_table(&cells, &games);
-    let records = report::save_records(&dir, &spec, &cells, &games).unwrap_or_else(|e| {
-        eprintln!("cannot write records: {e}");
+    let report_start = Instant::now();
+    let (sums, records) = reports(&mut games).unwrap_or_else(|e| {
+        eprintln!("{e}");
         exit(2)
     });
-    let run = report::Run {
-        spec: &spec,
-        cells: &cells,
-        games: &games,
-        sums: &sums,
-        groups: &groups,
-        cards: &cards,
-        records: &records,
-        wall_s,
-        threads: o.threads,
-        out_dir: &dir,
-    };
-    let write = |name: &str, body: String| {
-        let f = format!("{dir}/{name}");
-        std::fs::write(&f, body).unwrap_or_else(|e| {
-            eprintln!("cannot write {f}: {e}");
-            exit(2)
-        });
-    };
-    write("report.md", report::markdown(&run));
-    write("results.json", report::results_json(&run));
-    write("games.csv", report::games_csv(&cells, &games));
-    write("cards.csv", report::cards_csv(&cells, &games));
+    print_timing(&games, wall_s, report_start.elapsed().as_secs_f64());
     println!(
         "{} games in {wall_s:.1} s; report {dir}/report.md, {} record(s) in {dir}/records",
         games.len(),
-        records.len()
+        records
     );
     for s in &sums {
         println!(
@@ -1076,4 +1146,150 @@ fn run_experiment(path: &str, o: &Options) -> i32 {
         return 1;
     }
     0
+}
+
+/// `--quick`: the scoping run. Shallow agents only (deep search is kept for
+/// later, when the rules settle), at most 16 seeds per cell unless --games
+/// says otherwise, and no probes unless --winprob or --closeness asks.
+fn quick(spec: &mut experiment::Spec, o: &Options) {
+    if !o.games_given {
+        spec.games = spec.games.min(QUICK_GAMES);
+    }
+    if o.winprob.is_none() {
+        spec.winprob.games = 0;
+    }
+    if o.closeness.is_none() {
+        spec.closeness.every = 0;
+    }
+    let (keep, drop): (Vec<String>, Vec<String>) = spec
+        .agents
+        .iter()
+        .cloned()
+        // A spec that doesn't parse is kept, for `cells` to reject as usual.
+        .partition(|a| AgentSpec::parse(a).map_or(true, |s| s.shallow()));
+    if keep.is_empty() {
+        die("--quick: every agent of the spec searches deep; name a shallow one (greedy, engine)");
+    }
+    if !drop.is_empty() {
+        eprintln!("--quick: dropped deep-search agents {}", drop.join(", "));
+    }
+    spec.agents = keep;
+}
+
+/// Seeds per cell under `--quick`.
+const QUICK_GAMES: u64 = 16;
+
+/// `games.jsonl`, started afresh and open for appending: the header, then
+/// `prior` (a resumed run's games, rewritten so a line the kill cut short
+/// is gone). Written whole and renamed into place, so the old stream is
+/// intact until the new one is; a fresh run (no --resume) moves an earlier
+/// run's stream to `games.jsonl.bak` rather than lose it.
+fn open_stream(
+    path: &str,
+    resume: bool,
+    spec: &experiment::Spec,
+    cells: &[experiment::Cell],
+    prior: &[experiment::GameResult],
+) -> std::io::BufWriter<std::fs::File> {
+    use std::io::Write;
+    let fail = |e: std::io::Error| -> ! {
+        eprintln!("cannot write {path}: {e}");
+        exit(2)
+    };
+    if !resume && std::fs::metadata(path).is_ok_and(|m| m.len() > 0) {
+        std::fs::rename(path, format!("{path}.bak")).unwrap_or_else(|e| fail(e));
+    }
+    let mut text = serde_json::to_string(&experiment::StreamHeader::new(spec, cells))
+        .expect("header serializes");
+    text.push('\n');
+    for g in prior {
+        text.push_str(&serde_json::to_string(g).expect("a game result serializes"));
+        text.push('\n');
+    }
+    report::write_whole(path, &text).unwrap_or_else(|e| {
+        eprintln!("{e}");
+        exit(2)
+    });
+    let f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(path)
+        .unwrap_or_else(|e| fail(e));
+    let mut w = std::io::BufWriter::new(f);
+    w.flush().unwrap_or_else(|e| fail(e));
+    w
+}
+
+/// Writes the cycle report of `games` (sorted) into `dir`: report.md,
+/// results.json, games.csv, cards.csv and records/. Each file is written
+/// whole and then renamed into place (records too; stale ones go last), so
+/// a run killed mid-write leaves the last complete report. Returns the cell
+/// summaries and the records saved.
+#[allow(clippy::too_many_arguments)]
+fn write_reports(
+    dir: &str,
+    spec: &experiment::Spec,
+    cells: &[experiment::Cell],
+    games: &[experiment::GameResult],
+    wall_s: f64,
+    threads: usize,
+    planned: usize,
+    resumed: usize,
+) -> Result<(Vec<report::CellSummary>, usize), String> {
+    let sums = report::summarize(cells, games);
+    let groups = report::groups(cells, &sums, games);
+    let cards = report::card_table(cells, games);
+    let records = report::save_records(dir, spec, cells, games)
+        .map_err(|e| format!("cannot write records: {e}"))?;
+    let run = report::Run {
+        spec,
+        cells,
+        games,
+        sums: &sums,
+        groups: &groups,
+        cards: &cards,
+        records: &records,
+        wall_s,
+        threads,
+        out_dir: dir,
+        planned,
+        resumed,
+    };
+    // report.md last: once it is there, so is the rest of its set.
+    for (name, body) in [
+        ("results.json", report::results_json(&run)),
+        ("games.csv", report::games_csv(cells, games)),
+        ("cards.csv", report::cards_csv(cells, games)),
+        ("report.md", report::markdown(&run)),
+    ] {
+        report::write_whole(&format!("{dir}/{name}"), &body)?;
+    }
+    report::prune_records(dir, &records)?;
+    Ok((sums, records.len()))
+}
+
+/// Where a run's time went, on stderr: each part's share of the games' own
+/// time (summed over workers), the report's writing, and, in a `profile`
+/// build, the agents' search split.
+fn print_timing(games: &[experiment::GameResult], wall_s: f64, report_s: f64) {
+    let sum = |f: fn(&experiment::GameResult) -> f64| games.iter().map(f).sum::<f64>();
+    let total = sum(|g| g.ms);
+    let line: Vec<String> = report::time_split(games)
+        .iter()
+        .map(|(n, share)| format!("{n} {:.1}%", 100.0 * share))
+        .collect();
+    eprintln!(
+        "time: wall {wall_s:.1} s, games {:.1} s summed over workers: {}; report {report_s:.2} s",
+        total / 1000.0,
+        line.join(", ")
+    );
+    if let Some(t) = prof::totals() {
+        let agent = sum(|g| g.agent_ms + g.probe_ms).max(1e-9);
+        let line: Vec<String> = t
+            .iter()
+            .map(|(n, ms, calls)| {
+                format!("{n} {:.1}% ({calls} calls, {:.2} us each)", 100.0 * ms / agent, 1000.0 * ms / (*calls).max(1) as f64)
+            })
+            .collect();
+        eprintln!("search (of agents + probes): {}", line.join(", "));
+    }
 }

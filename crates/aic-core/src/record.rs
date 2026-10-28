@@ -59,7 +59,7 @@ impl SavedGame {
         SavedGame {
             format: RECORD_FORMAT.to_string(),
             note: note.to_string(),
-            config: rules.config.clone(),
+            config: (*rules.config).clone(),
             seed,
             config_hash: rules.config_hash.clone(),
             content_hash: content_hash(),

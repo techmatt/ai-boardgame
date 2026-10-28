@@ -23,7 +23,7 @@ use crate::agents::determinize::determinize;
 use crate::agents::eval::{Eval, Weights};
 use crate::agents::{agent_rng, search, AgentSpec};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Spec {
     pub name: String,
@@ -74,7 +74,7 @@ mod seed_string {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
     pub name: String,
@@ -82,7 +82,7 @@ pub struct Variant {
     pub set: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct WinProb {
     /// Games per cell (the first seeds) that get win-probability checkpoints;
@@ -104,7 +104,7 @@ impl Default for WinProb {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Closeness {
     /// Probe every n-th decision that offers a real choice; 0 = off.
@@ -241,8 +241,8 @@ pub fn cells(spec: &Spec) -> Result<Vec<Cell>, String> {
     Ok(out)
 }
 
-/// Everything measured in one game.
-#[derive(Debug, Clone, Serialize)]
+/// Everything measured in one game; one line of `games.jsonl`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameResult {
     pub cell: usize,
     #[serde(with = "seed_string")]
@@ -282,15 +282,22 @@ pub struct GameResult {
     /// closeness and win-probability probes.
     pub agent_ms: f64,
     pub probe_ms: f64,
+    /// The rest of `ms`: building the game and the agent, generating the
+    /// legal actions, applying the chosen ones (with the measures' own
+    /// bookkeeping), and the replay check.
+    pub setup_ms: f64,
+    pub legal_ms: f64,
+    pub apply_ms: f64,
+    pub replay_ms: f64,
     pub replay_ok: bool,
-    #[serde(skip)]
     pub actions: Vec<Action>,
+    /// Rebuilt from the actions when read back.
     #[serde(skip)]
     pub final_state: Option<Box<GameState>>,
 }
 
 /// How a game ended, measured on the final table.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Margin {
     /// Adversary cards still in the deck: rounds to spare on a win.
     pub deck_left: u32,
@@ -425,14 +432,21 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         ms: 0.0,
         agent_ms: 0.0,
         probe_ms: 0.0,
+        setup_ms: 0.0,
+        legal_ms: 0.0,
+        apply_ms: 0.0,
+        replay_ms: 0.0,
         replay_ok: false,
         actions: Vec::new(),
         final_state: None,
     };
     let (mut offered_round, mut checked_round, mut real_choices) = (0u32, 0u32, 0usize);
     let mut picks = vec![0u32; g.seats.len()];
+    r.setup_ms = ms_since(start);
     while r.actions.len() < spec.max_actions {
+        let t = Instant::now();
         rules.legal_actions_into(&g, &mut legal);
+        r.legal_ms += ms_since(t);
         if legal.is_empty() {
             break;
         }
@@ -491,6 +505,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         let t = Instant::now();
         let i = agent.choose(rules, &g, &legal);
         r.agent_ms += t.elapsed().as_secs_f64() * 1000.0;
+        let t = Instant::now();
         let a = legal[i].clone();
         match &a {
             Action::Draft { seat, card } => {
@@ -528,9 +543,11 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
             }
         }
         r.actions.push(a);
+        r.apply_ms += ms_since(t);
     }
-    r.ms = start.elapsed().as_secs_f64() * 1000.0;
+    let t = Instant::now();
     r.replay_ok = replay(rules, seed, &r.actions).is_ok_and(|h| h == g);
+    r.replay_ms = ms_since(t);
     r.won = g.outcome.as_ref().is_some_and(|o| o.won);
     r.reason = g
         .outcome
@@ -543,40 +560,146 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
     r.counters = g.stats.counters.clone();
     r.build = build_signature(rules, &g);
     r.final_state = Some(Box::new(g));
+    r.ms = ms_since(start);
     r
 }
 
-/// Plays every (cell, seed) on `threads` workers. Work is handed out one
-/// game at a time (agents differ a hundredfold in cost); results come back
-/// sorted by cell then seed, so nothing depends on the thread count.
+fn ms_since(t: Instant) -> f64 {
+    t.elapsed().as_secs_f64() * 1000.0
+}
+
+/// Plays every (cell, seed) not already in `results` on `threads` workers,
+/// adding each game to `results` as it finishes and handing it to
+/// `on_game` (with the games finished and the total) under the same lock,
+/// so a caller can stream games to disk and report from `results` while
+/// the run goes on. Work is handed out one game at a time (agents differ a
+/// hundredfold in cost), seed by seed across every cell, the most expensive
+/// agents first within a seed: a run stopped early has every cell's first
+/// seeds, not some cells whole and others missing. Sort the results by cell
+/// then seed ([`sort`]) and nothing depends on the thread count or order.
 pub fn run(
     spec: &Spec,
     cells: &[Cell],
     threads: usize,
-    progress: &(dyn Fn(usize, usize) + Sync),
-) -> Vec<GameResult> {
-    let jobs: Vec<(usize, u64)> = (0..cells.len())
-        .flat_map(|c| (0..spec.games).map(move |k| (c, spec.first_seed + k)))
+    results: &Mutex<Vec<GameResult>>,
+    on_game: &(dyn Fn(&GameResult, usize, usize) + Sync),
+) {
+    let have: std::collections::BTreeSet<(usize, u64)> = results
+        .lock()
+        .expect("results lock")
+        .iter()
+        .map(|r| (r.cell, r.seed))
         .collect();
-    // Expensive cells first, so the last games to finish are cheap ones.
-    let mut order: Vec<usize> = (0..jobs.len()).collect();
-    order.sort_by_key(|&j| std::cmp::Reverse(cells[jobs[j].0].agent.tier()));
+    let total = cells.len() * spec.games as usize;
+    let mut jobs: Vec<(usize, u64)> = (0..spec.games)
+        .flat_map(|k| (0..cells.len()).map(move |c| (c, spec.first_seed + k)))
+        .filter(|j| !have.contains(j))
+        .collect();
+    jobs.sort_by_key(|&(c, seed)| (seed, std::cmp::Reverse(cells[c].agent.tier())));
     let next = AtomicUsize::new(0);
-    let done = AtomicUsize::new(0);
-    let out = Mutex::new(Vec::with_capacity(jobs.len()));
     std::thread::scope(|s| {
         for _ in 0..threads.max(1) {
-            s.spawn(|| loop {
-                let k = next.fetch_add(1, Ordering::Relaxed);
-                let Some(&j) = order.get(k) else { break };
-                let (c, seed) = jobs[j];
-                let res = play_one(spec, cells, c, seed);
-                out.lock().expect("results lock").push(res);
-                progress(done.fetch_add(1, Ordering::Relaxed) + 1, jobs.len());
+            s.spawn(|| {
+                loop {
+                    let k = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(&(c, seed)) = jobs.get(k) else { break };
+                    let res = play_one(spec, cells, c, seed);
+                    let mut out = results.lock().expect("results lock");
+                    on_game(&res, out.len() + 1, total);
+                    out.push(res);
+                }
+                crate::prof::flush();
             });
         }
     });
-    let mut v = out.into_inner().expect("results lock");
-    v.sort_by_key(|r| (r.cell, r.seed));
-    v
+}
+
+/// Results in report order: by cell, then seed.
+pub fn sort(games: &mut [GameResult]) {
+    games.sort_by_key(|r| (r.cell, r.seed));
+}
+
+/// The first line of `games.jsonl`: what the games that follow were played
+/// under, so a resumed run only adds games of the same experiment.
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct StreamHeader {
+    pub format: String,
+    pub spec: Spec,
+    pub engine_version: String,
+    pub rules_revision: u32,
+    pub content_hash: String,
+    /// Each cell's resolved config hash: the spec names config files, and
+    /// an edited file is another experiment.
+    pub config_hashes: Vec<String>,
+}
+
+impl StreamHeader {
+    pub fn new(spec: &Spec, cells: &[Cell]) -> StreamHeader {
+        StreamHeader {
+            format: STREAM_FORMAT.into(),
+            spec: spec.clone(),
+            engine_version: aic_core::VERSION.into(),
+            rules_revision: aic_core::RULES_REVISION,
+            content_hash: aic_core::content_hash(),
+            config_hashes: cells.iter().map(|c| c.rules.config_hash.clone()).collect(),
+        }
+    }
+}
+
+pub const STREAM_FORMAT: &str = "aic-games/1";
+
+/// Reads a `games.jsonl` written for `spec` and `cells`: the games in it,
+/// each replayed from its seed and actions to rebuild its final table (and
+/// checked to end as it recorded). A last line cut short (the run was
+/// killed mid-write) is dropped.
+pub fn read_stream(path: &str, spec: &Spec, cells: &[Cell]) -> Result<Vec<GameResult>, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+    let mut lines = text.lines();
+    let head: StreamHeader = lines
+        .next()
+        .ok_or_else(|| format!("{path}: empty"))
+        .and_then(|l| serde_json::from_str(l).map_err(|e| format!("{path}: header: {e}")))?;
+    let want = StreamHeader::new(spec, cells);
+    if head.format != want.format {
+        return Err(format!("{path}: format {:?}, expected {:?}", head.format, want.format));
+    }
+    if head != want {
+        return Err(format!(
+            "{path} was written by another spec, config, engine, rules revision or content \
+             (written: rules r{}, content {}); start afresh without --resume",
+            head.rules_revision, head.content_hash
+        ));
+    }
+    let lines: Vec<&str> = lines.filter(|l| !l.trim().is_empty()).collect();
+    let mut games = Vec::with_capacity(lines.len());
+    for (i, l) in lines.iter().enumerate() {
+        let mut g: GameResult = match serde_json::from_str(l) {
+            Ok(g) => g,
+            Err(_) if i + 1 == lines.len() => break,
+            Err(e) => return Err(format!("{path}: line {}: {e}", i + 2)),
+        };
+        let cell = cells
+            .get(g.cell)
+            .ok_or_else(|| format!("{path}: line {}: no cell {}", i + 2, g.cell))?;
+        match replay(&cell.rules, g.seed, &g.actions) {
+            Ok(fin) => {
+                let won = fin.outcome.as_ref().is_some_and(|o| o.won);
+                if g.replay_ok && (won != g.won || fin.round != g.rounds) {
+                    return Err(format!(
+                        "{path}: line {}: the game replays to another end than it recorded",
+                        i + 2
+                    ));
+                }
+                g.final_state = Some(Box::new(fin));
+            }
+            // It failed its replay check when played, too: kept, and counted
+            // as the mismatch it is, without a final table.
+            Err(_) if !g.replay_ok => {}
+            Err(e) => return Err(format!("{path}: line {}: replay: {e}", i + 2)),
+        }
+        games.push(g);
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    games.retain(|g| seen.insert((g.cell, g.seed)));
+    Ok(games)
 }

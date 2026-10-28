@@ -6,6 +6,7 @@
 //! [`crate::Map`].
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -20,8 +21,9 @@ pub struct GameState {
     #[serde(with = "as_string")]
     pub seed: u64,
     /// The resolved config this game was built from (round filled in), so a
-    /// state is self-describing and replayable.
-    pub config: Config,
+    /// state is self-describing and replayable. Shared, never changed by
+    /// play: cloning a state (search does it constantly) does not copy it.
+    pub config: Arc<Config>,
     /// 1-based once play starts.
     pub round: u32,
     /// Index into `config.round` of the current phase.
@@ -72,7 +74,9 @@ pub struct Pending {
     pub made: Vec<Pick>,
     /// The question now open.
     pub ask: Ask,
-    pub snapshot: GameState,
+    /// Shared: a search clones pending states far more often than it
+    /// answers them (`Arc::make_mut` to change one).
+    pub snapshot: Arc<GameState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

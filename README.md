@@ -66,9 +66,9 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 
 ```sh
 cargo build --workspace
-cargo test --workspace                             # fast lane: ~10 s once built, ~18 s after an edit in aic-core (rebuild included); after every change
-cargo test-all                                     # full run, slow lane included: ~70 s; before every commit
-cargo test-slow                                    # the slow lane alone: ~65 s
+cargo test --workspace                             # fast lane: ~5 s once built (012; was ~10 s), ~13 s after an edit in aic-sim (rebuild included); after every change
+cargo test-all                                     # full run, slow lane included: ~15 s (012; was ~70 s); before every commit
+cargo test-slow                                    # the slow lane alone: ~13 s
 cargo build --release -p aic-sim                   # ~12 s
 wasm-pack build crates/aic-wasm --target web       # ~20 s cold, ~9 s warm -> crates/aic-wasm/pkg (git-ignored)
 node scripts/wasm-smoke.mjs                        # needs the wasm build; checks native = wasm
@@ -81,8 +81,8 @@ whose first seed runs in the fast lane. `test-all` and `test-slow` are cargo ali
 `-- --ignored`; one slow test runs with `cargo test -p aic-sim -- --ignored <name>`. A
 new test that takes more than about a second goes in the slow lane, ideally with a
 cheaper fast-lane twin (fewer seeds, fewer actions). Times measured on this 12-thread
-machine with nothing else heavy running (010); the first build of the test profile
-takes about 40 s.
+machine with nothing else heavy running (010, the lanes remeasured after 012's
+speed-up); the first build of the test profile takes about 40 s.
 
 - The test profile is optimized (`[profile.test] opt-level = 1` in `Cargo.toml`;
   debug assertions and overflow checks stay on): unoptimized, the same tests took
@@ -243,6 +243,8 @@ S=target/release/aic-sim
 $S experiment experiments/ladder-v0.json                    # -> out/experiments/ladder-v0/
 $S experiment experiments/smoke.json --out out/smoke        # a quick check (6 seeds)
 $S experiment experiments/ladder-v0.json --games 20 --seed 1000 --threads 6
+$S experiment experiments/proposals-011.json --quick        # scoping: shallow agents, 16 seeds, no probes
+$S experiment experiments/proposals-011.json --resume       # continue a stopped run from its games.jsonl
 ```
 
 **Tuning sweeps** (`scripts/tune/`, from the repo root): `sweep.py` runs `aic-sim run --json`
@@ -296,8 +298,58 @@ t2_half+t2_noam`, then `out/patch-bin/t2_half+t2_noam.exe experiment ...`; 192�
 greedy + engine games, 7–12 min). The measurement, `experiments/proposals-011.json`
 (10 variants × d0–d4 × greedy, engine × 64 seeds = 6,400 games, no probes), was
 stopped unfinished: 2,109 games in 28 minutes alone on 12 threads (about 1.25 greedy +
-engine games a second), so about 85 minutes for the whole grid. An experiment writes
-nothing until its grid finishes, so a stopped run leaves no results.
+engine games a second), so about 85 minutes for the whole grid. Since 012 the whole
+grid ran in **10.6 minutes** (633 s, about 10 games a second; report 0.3 s; measured
+before the last heuristic fixes below, so now somewhat less), and a stopped run keeps
+its games.
+
+**Speed (012).** A 400-game slice of `proposals-011` (`--games 4`: every variant,
+difficulty and agent) took **263.8 s** before 012 and **34.5 s** after, alone on 12
+threads, with identical games (`python scripts/bench/same_results.py DIR_A DIR_B`
+compares two output directories, timing aside). Greedy now takes about 0.6 s a game and
+the engine agent about 1.3 s, with every core busy. Where the time went, and what fixed
+it (times for a 20-game slice):
+
+- The agents are 99% of a run; rules apply, legal actions, the replay check and setup
+  are each under 1%, and writing the report well under a second.
+- Most of the agents' time was the system allocator: search clones game states by the
+  hundred thousand, and on 12 threads Windows' heap serialized them (a state clone took
+  134 µs on 12 threads, 24 µs on one). `aic-sim` uses **mimalloc** (19.6 s → 4.8 s on a
+  20-game slice).
+- A state shares its config, and a pending choice its snapshot, through `Arc` (they
+  serialize as before), and searches call `Rules::apply_to`, which copies the state once
+  where clone + `apply_mut` copied it twice (the action's snapshot): 4.8 s → 2.7 s.
+- The heuristic (the engine agent's horizon mode most): the economy's production built
+  token keys per hex and looked at the adversary's reach everywhere; each building in
+  hand worked the seat's building discount out again; cards were found by id with a
+  linear search (now an index in `Content`); the defense values and unpaid threats were
+  each worked out twice per position. 2.7 s → 2.3 s, the heuristic 38 → 22 µs a call.
+- Left: the heuristic (~50% of search time, ~22 µs a call) and apply with its state copy
+  (~40%, ~17 µs). A state is ~200 small allocations (string keys and card ids); interning
+  them is the next big step.
+- To see the split: every run prints it (`time: ...` on stderr, and in the report's
+  *Timing*); `cargo build --release -p aic-sim --features profile` adds the search's
+  own split (apply, legal, heuristic, determinization) with call counts.
+
+**Results as they go.** Every finished game is appended to `DIR/games.jsonl` (a header
+line with the spec, engine, rules revision and content hash, then one game per line,
+actions included), and the whole report is rewritten from the games so far every
+`--report-every` seconds (default 60; files are written whole and renamed into place),
+marked **Partial: N of M games** at the top. A stopped or killed run leaves both.
+`--resume` (same spec, same `--out`) reads the stream back, replays each game to rebuild
+it, plays only the games missing and reports them all; a different spec, edited config
+file, engine, rules revision or content is refused. Without `--resume`, an earlier
+stream in the directory is moved to `games.jsonl.bak`. A partial report that can't be
+written (say, `games.csv` open in a spreadsheet, which locks it on Windows) is skipped
+with a warning; the run goes on. Games are handed out seed by seed across all cells, so
+a stopped run has every cell's first seeds.
+
+**Fast by default (`--quick`).** Until the rules are close to final, scoping runs use
+shallow agents and short runs (`docs/principles.md`): `--quick` keeps only shallow agents
+(random, greedy and engine at their defaults; beam, rollout, `samples`/`depth` > 1 and
+`engine:width` > 0 are dropped, with a note), caps seeds at 16 per cell unless
+`--games` is given, and turns the probes off unless `--winprob`/`--closeness` is given.
+`proposals-011 --quick` is 1,600 greedy + engine games, about 3 minutes.
 
 An experiment is configs × variants × difficulties × agents over a seed range, played
 on every core (one game at a time per worker, results sorted, so nothing depends on the
@@ -334,7 +386,8 @@ is always kept, first, so the comparisons still have their reference). The repor
 The output directory (`--out`, default `out/experiments/<name>/`) holds `report.md` (the
 cycle report: findings, then the tables), `results.json` (`aic-experiment/1`: the
 spec, every cell's and group's measures, the card table, the records), `games.csv` (one
-row per game) and `cards.csv` (per agent, difficulty and card), and `records/`.
+row per game) and `cards.csv` (per agent, difficulty and card), and `records/`, plus
+`games.jsonl` (`aic-games/1`, written as the games finish; see *Results as they go*).
 
 **Measures** (all read from the public state or the actions, so the engine records
 nothing extra):
@@ -381,6 +434,9 @@ nothing extra):
   config/variant/difficulty: the seed's share (luck), the agent's (skill), the rest
   (interaction and the agents' own randomness). Raw sums-of-squares shares, no
   degrees-of-freedom correction. On win/loss and on survival.
+
+The timings below predate 012's speed-up (*Speed (012)* above: about 7.6× faster on
+12 threads, 5× on one: 10 games of `proposals-011` on one thread took 29.0 s, now 5.8 s).
 
 **Timing** (v0 baseline, 2 countries, release build, this 12-thread machine; games last
 3–5 rounds, about 85–120 decisions). One game on one thread:

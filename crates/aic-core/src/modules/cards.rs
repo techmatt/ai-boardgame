@@ -343,19 +343,34 @@ fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static s
 
 /// Credits to play a card: buildings get the seat's discounts.
 pub fn play_cost(w: &World, g: &GameState, seat: usize, d: &CardDef) -> i64 {
-    let cost = w.amount(&d.cost);
     if !d.is_building() {
-        return cost;
+        return w.amount(&d.cost);
     }
-    let discount: i64 = passives(w, g, seat)
+    discounted_cost(w, d, building_discount(w, g, seat))
+}
+
+/// The credits seat `s`'s buildings cost less now (its passives and a
+/// one-off discount): what [`play_cost`] takes off a building.
+pub fn building_discount(w: &World, g: &GameState, seat: usize) -> i64 {
+    passives(w, g, seat)
         .iter()
         .map(|p| match p {
             Passive::BuildingDiscount { amount } => *amount,
             _ => 0,
         })
         .sum::<i64>()
-        + g.var(&next_discount(seat));
-    (cost - discount).max(0)
+        + g.var(&next_discount(seat))
+}
+
+/// [`play_cost`] with the seat's [`building_discount`] already known (a
+/// caller pricing a whole hand works it out once).
+pub fn discounted_cost(w: &World, d: &CardDef, discount: i64) -> i64 {
+    let cost = w.amount(&d.cost);
+    if d.is_building() {
+        (cost - discount).max(0)
+    } else {
+        cost
+    }
 }
 
 /// Why a building's ability can't be used now, or `None` if it can.

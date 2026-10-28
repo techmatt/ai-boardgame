@@ -33,6 +33,10 @@ const SHUFFLED: [&str; 4] = [
 
 /// Replaces the hidden parts of `g` with a sample drawn from `rng`.
 pub fn determinize(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
+    crate::prof::time(crate::prof::Part::Determinize, || guess(rules, g, rng))
+}
+
+fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
     let original = g.clone();
     for key in SHUFFLED {
         if let Some(pile) = g.piles.get_mut(key) {
@@ -49,7 +53,7 @@ pub fn determinize(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
             .insert(purpose.clone(), aic_core::rng::Stream::new(*seed, purpose));
     }
     if let Some(p) = g.pending.as_mut() {
-        let snap = &mut p.snapshot;
+        let snap = std::sync::Arc::make_mut(&mut p.snapshot);
         // Usually the step that asked has not drawn, so its snapshot's
         // hidden piles are the same as the state's: give them the same
         // guess. A step may draw before it asks (asset corruption reveals,

@@ -340,24 +340,27 @@ impl Eval {
         v += w.defense * defense as f64;
         // Added in place, term by term, so the flat agents' values (and so
         // their games) are bit-for-bit what they were before horizon mode.
+        let unpaid = self.unpaid_threats(rules, g);
         if w.horizon > 0.0 {
-            self.horizon_value(rules, g, &mut v);
+            self.horizon_value(rules, g, &unpaid, &mut v);
         } else {
             self.flat_value(rules, g, &mut v);
         }
         // The coming ravages are public (the ravage and build slots): what
-        // they would cost if the table stayed as it is.
+        // they would cost if the table stayed as it is. Each seat's defense
+        // value is the same for both: worked out once, when first needed.
+        let mut defense = None;
         for (slot, share) in [
             (adversary::SLOTS[2], w.forecast),
             (adversary::SLOTS[1], w.forecast_next),
         ] {
             if share != 0.0 {
                 if let Some(id) = g.pile(slot).first() {
-                    v -= share * self.ravage_cost(rules, g, id);
+                    v -= share * self.ravage_cost(rules, g, id, &mut defense);
                 }
             }
         }
-        for share in self.unpaid_threats(rules, g) {
+        for share in unpaid {
             v -= w.threat * share;
         }
         v -= self.clock_penalty(g);
@@ -394,8 +397,8 @@ impl Eval {
     /// (opposition still needed at its rate so far, plus `win_lag`), then
     /// the expected rounds survived at a per-round loss chance of `risk` per
     /// unit of danger (unpaid threats per country, the pool or population at
-    /// its edge).
-    pub fn rounds_left(&self, rules: &Rules, g: &GameState) -> f64 {
+    /// its edge). `unpaid`: [`Eval::unpaid_threats`], which the caller has.
+    fn rounds_left(&self, rules: &Rules, g: &GameState, unpaid: &[f64]) -> f64 {
         let w = &self.w;
         let clock = g.pile(adversary::DECK).len() as f64;
         let points = g.var(opposition::POINTS) as f64;
@@ -404,7 +407,7 @@ impl Eval {
         let rounds = clock.min(to_win).max(0.0);
         let world = rules.world();
         let countries = world.map.countries.len().max(1) as f64;
-        let mut danger = self.unpaid_threats(rules, g).iter().sum::<f64>() / countries;
+        let mut danger = unpaid.iter().sum::<f64>() / countries;
         if g.var(adversary::POOL) <= 4 {
             danger += 0.5;
         }
@@ -493,10 +496,10 @@ impl Eval {
     }
 
     /// Per-seat resources, income, hands and buildings in horizon mode.
-    fn horizon_value(&self, rules: &Rules, g: &GameState, out: &mut f64) {
+    fn horizon_value(&self, rules: &Rules, g: &GameState, unpaid: &[f64], out: &mut f64) {
         let w = &self.w;
         let world = rules.world();
-        let left = self.rounds_left(rules, g);
+        let left = self.rounds_left(rules, g, unpaid);
         // Factories' credits and processors' compute, if upkeep came now.
         let prod = economy::production(&world, g);
         // Resources fade once fewer than `spend_horizon` rounds are left.
@@ -550,6 +553,8 @@ impl Eval {
             let tier2 = ai::tier2(&world, g, s);
             let earn_credits = income[0] + pc;
             let mut insight_queue = 0i64;
+            // The same for every building in hand: worked out once.
+            let discount = cards::building_discount(&world, g, s);
             let mut play = |id: &str| -> f64 {
                 let d = cards::def(&world, id);
                 let mut p = 1.0;
@@ -557,7 +562,7 @@ impl Eval {
                 insight_queue += insight;
                 let insight_need = if w.insight_wait > 0.0 { insight_queue } else { 0 };
                 for (have, need, earn) in [
-                    (res("credits"), cards::play_cost(&world, g, s, d), earn_credits),
+                    (res("credits"), cards::discounted_cost(&world, d, discount), earn_credits),
                     (res("antimatter"), world.amount(&d.antimatter), income[3]),
                     (res("insight"), insight_need, income[4]),
                 ] {
@@ -587,7 +592,13 @@ impl Eval {
 
     /// What a ravage with adversary card `id` would cost now, in heuristic
     /// units: corruption (and cascades) and population lost.
-    fn ravage_cost(&self, rules: &Rules, g: &GameState, id: &str) -> f64 {
+    fn ravage_cost(
+        &self,
+        rules: &Rules,
+        g: &GameState,
+        id: &str,
+        defense: &mut Option<Vec<i64>>,
+    ) -> f64 {
         let world = rules.world();
         let content = world.content;
         let Some(card) = content.adversary_index(id).map(|i| &content.adversary[i]) else {
@@ -598,9 +609,11 @@ impl Eval {
         }
         let corruption_at = world.int("adversary.corruption_at");
         let pop_health = world.int("adversary.population_health").max(1);
-        let defense: Vec<i64> = (0..self.seats)
-            .map(|s| cards::defense_value(&world, g, s))
-            .collect();
+        let defense: &[i64] = defense.get_or_insert_with(|| {
+            (0..self.seats)
+                .map(|s| cards::defense_value(&world, g, s))
+                .collect()
+        });
         let mut cost = 0.0;
         for (h, cell) in world.map.hexes.iter().enumerate() {
             if !card.terrains.contains(&cell.terrain) {

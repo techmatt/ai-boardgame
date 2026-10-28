@@ -134,28 +134,37 @@ impl Economy {
     /// Production per seat: (credits from factories, compute from processors).
     fn production(&self, w: &World, g: &GameState) -> Vec<(i64, i64)> {
         let mut out = vec![(0, 0); g.seats.len()];
+        // The search's heuristic calls this for every position it scores:
+        // token keys are built once, and the adversary's reach only looked
+        // at where a blockade or sabotage could stop production.
+        let keys: Vec<String> = (0..g.seats.len()).map(processor).collect();
         for c in 0..w.map.countries.len() {
             let blockade = board::flagged(g, "blockade", c);
             let sabotage = board::flagged(g, "sabotage", c);
             let mut factories = 0;
-            for &h in &w.map.countries[c].hexes {
-                let clean = g.tokens(h, CORRUPTION) == 0;
-                let near_adversary = next_to(w, h, |x| has_adversary(g, x));
-                if clean
-                    && g.tokens(h, FACTORY) > 0
-                    && next_to(w, h, |x| g.tokens(x, POPULATION) > 0)
-                    && !(blockade && near_adversary)
-                {
-                    factories += g.tokens(h, FACTORY);
+            let hexes = &w.map.countries[c].hexes;
+            for &h in hexes {
+                if g.tokens(h, CORRUPTION) != 0 {
+                    continue;
                 }
-                if clean && g.tokens(h, DATA_CENTRE) > 0 && !(sabotage && near_adversary) {
-                    for (s, o) in out.iter_mut().enumerate() {
-                        o.1 += g.tokens(h, &processor(s)) * self.processor_compute;
+                let near_adversary = || next_to(w, h, |x| has_adversary(g, x));
+                let f = g.tokens(h, FACTORY);
+                if f > 0
+                    && next_to(w, h, |x| g.tokens(x, POPULATION) > 0)
+                    && !(blockade && near_adversary())
+                {
+                    factories += f;
+                }
+                if g.tokens(h, DATA_CENTRE) > 0 && !(sabotage && near_adversary()) {
+                    for (o, k) in out.iter_mut().zip(&keys) {
+                        o.1 += g.tokens(h, k) * self.processor_compute;
                     }
                 }
             }
-            for s in seats_in_country(w, g, c) {
-                out[s].0 += factories * self.factory_credits;
+            for (o, k) in out.iter_mut().zip(&keys) {
+                if hexes.iter().any(|&h| g.tokens(h, k) > 0) {
+                    o.0 += factories * self.factory_credits;
+                }
             }
         }
         out

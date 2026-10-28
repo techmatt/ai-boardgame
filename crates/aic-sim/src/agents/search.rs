@@ -11,6 +11,7 @@ use rand_chacha::ChaCha8Rng;
 
 use super::determinize::determinize;
 use super::eval::Eval;
+use crate::prof::{self, Part};
 
 /// Hidden piles: compared by size only when checking a plan against the table.
 const HIDDEN: [&str; 5] = [
@@ -24,9 +25,15 @@ const HIDDEN: [&str; 5] = [
 /// `g` after `a`, or `None` if the rules refuse it (a guess of the hidden
 /// cards can, rarely, make a replayed choice impossible).
 fn step(rules: &Rules, g: &GameState, a: &Action) -> Option<GameState> {
-    let mut c = g.clone();
-    rules.apply_mut(&mut c, a, None).ok()?;
-    Some(c)
+    prof::time(Part::Apply, || rules.apply_to(g, a, None)).ok()
+}
+
+fn value(rules: &Rules, ev: &Eval, g: &GameState) -> f64 {
+    prof::time(Part::Eval, || ev.value(rules, g))
+}
+
+fn legal_into(rules: &Rules, g: &GameState, out: &mut Vec<Action>) {
+    prof::time(Part::Legal, || rules.legal_actions_into(g, out))
 }
 
 /// The value of `g`, with any choice it is waiting on answered best-first
@@ -39,9 +46,9 @@ fn settled(
     legal: &mut Vec<Action>,
 ) -> f64 {
     if g.is_over() || g.pending.is_none() || choices == 0 {
-        return ev.value(rules, g);
+        return value(rules, ev, g);
     }
-    rules.legal_actions_into(g, legal);
+    legal_into(rules, g, legal);
     let opts = std::mem::take(legal);
     let best = opts
         .iter()
@@ -51,7 +58,7 @@ fn settled(
     if best.is_finite() {
         best
     } else {
-        ev.value(rules, g)
+        value(rules, ev, g)
     }
 }
 
@@ -61,7 +68,7 @@ fn lookahead(rules: &Rules, ev: &Eval, g: &GameState, depth: usize, choices: usi
     if depth == 0 || g.is_over() {
         return settled(rules, ev, g, choices, &mut legal);
     }
-    rules.legal_actions_into(g, &mut legal);
+    legal_into(rules, g, &mut legal);
     let best = legal
         .iter()
         .filter_map(|a| step(rules, g, a))
@@ -313,7 +320,7 @@ impl Beam {
         for _ in 0..self.depth {
             let mut children: Vec<(f64, Node)> = Vec::new();
             for node in &beam {
-                rules.legal_actions_into(&node.g, &mut legal);
+                legal_into(rules, &node.g, &mut legal);
                 let mut kids: Vec<(f64, Node)> = Vec::new();
                 for a in &legal {
                     if undoes(&node.seq, a) {
@@ -336,7 +343,7 @@ impl Beam {
                 }
                 for (v, kid) in kids {
                     if kid.g.is_over() || kid.g.round > round {
-                        let v = self.ev.value(rules, &kid.g) - moves_cost(&kid.seq);
+                        let v = value(rules, &self.ev,&kid.g) - moves_cost(&kid.seq);
                         finished.push((v, kid));
                     } else {
                         children.push((v, kid));
@@ -360,7 +367,7 @@ impl Beam {
             // The round did not end within `depth` steps: plan what was searched.
             finished = beam
                 .into_iter()
-                .map(|n| (self.ev.value(rules, &n.g) - moves_cost(&n.seq), n))
+                .map(|n| (value(rules, &self.ev,&n.g) - moves_cost(&n.seq), n))
                 .collect();
         }
         finished.sort_by(|x, y| y.0.total_cmp(&x.0));
@@ -379,7 +386,7 @@ impl Beam {
             let stop = s.round + cfg.horizon as u32;
             let mut guard = 0;
             while !s.is_over() && s.round < stop && guard < 2000 {
-                rules.legal_actions_into(&s, &mut legal);
+                legal_into(rules, &s, &mut legal);
                 if legal.is_empty() {
                     break;
                 }
@@ -394,7 +401,7 @@ impl Beam {
                 }
                 guard += 1;
             }
-            total += self.ev.value(rules, &s);
+            total += value(rules, &self.ev,&s);
         }
         total / cfg.rollouts as f64
     }

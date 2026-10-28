@@ -725,9 +725,28 @@ pub fn groups(cells: &[Cell], sums: &[CellSummary], games: &[GameResult]) -> Vec
             };
             let ordered =
                 |v: &[(String, f64)]| best_per_tier(v).windows(2).all(|w| w[1] >= w[0] - 1e-9);
+            // Rows are seeds: only those every agent of the group has
+            // played (all of them, unless the report is partial).
+            let common = idx
+                .iter()
+                .map(|&i| {
+                    games
+                        .iter()
+                        .filter(|g| g.cell == i)
+                        .map(|g| g.seed)
+                        .collect::<BTreeSet<u64>>()
+                })
+                .reduce(|a, b| &a & &b)
+                .unwrap_or_default();
             let table = |f: &dyn Fn(&GameResult) -> f64| -> Vec<Vec<f64>> {
                 idx.iter()
-                    .map(|&i| games.iter().filter(|g| g.cell == i).map(f).collect())
+                    .map(|&i| {
+                        games
+                            .iter()
+                            .filter(|g| g.cell == i && common.contains(&g.seed))
+                            .map(f)
+                            .collect()
+                    })
                     .collect()
             };
             GroupSummary {
@@ -790,20 +809,6 @@ pub fn save_records(
 ) -> Result<Vec<SavedRecord>, String> {
     let rec_dir = format!("{dir}/records");
     std::fs::create_dir_all(&rec_dir).map_err(|e| format!("{rec_dir}: {e}"))?;
-    // Records from an earlier run of this experiment would sit next to the
-    // new ones unlisted: remove the ones this harness names.
-    for e in std::fs::read_dir(&rec_dir)
-        .map_err(|e| format!("{rec_dir}: {e}"))?
-        .flatten()
-    {
-        let name = e.file_name().to_string_lossy().to_string();
-        let ours = ["close-loss-", "early-lock-in-", "surprising-win-"]
-            .iter()
-            .any(|p| name.starts_with(p));
-        if ours && name.ends_with(".json") {
-            std::fs::remove_file(e.path()).map_err(|err| format!("{name}: {err}"))?;
-        }
-    }
     let top_d = cells.iter().map(|c| c.difficulty).max().unwrap_or(0);
     // Agents ranked by measured strength, not by ladder tier (011): the
     // ladder's top tier is not always the strongest agent.
@@ -948,7 +953,7 @@ pub fn save_records(
             c.difficulty,
             g.seed
         );
-        std::fs::write(&file, rec.to_text()).map_err(|e| format!("{file}: {e}"))?;
+        write_whole(&file, &rec.to_text())?;
         out.push(SavedRecord {
             category: cat,
             path: file,
@@ -956,6 +961,40 @@ pub fn save_records(
         });
     }
     Ok(out)
+}
+
+/// Removes the records an earlier report of this experiment saved that the
+/// latest one (`keep`) did not, so none sit there unlisted. Called once the
+/// latest report is in place.
+pub fn prune_records(dir: &str, keep: &[SavedRecord]) -> Result<(), String> {
+    let rec_dir = format!("{dir}/records");
+    let keep: BTreeSet<std::path::PathBuf> = keep.iter().map(|r| r.path.clone().into()).collect();
+    for e in std::fs::read_dir(&rec_dir)
+        .map_err(|e| format!("{rec_dir}: {e}"))?
+        .flatten()
+    {
+        let name = e.file_name().to_string_lossy().to_string();
+        let ours = ["close-loss-", "early-lock-in-", "surprising-win-"]
+            .iter()
+            .any(|p| name.starts_with(p));
+        let path = std::path::PathBuf::from(format!("{rec_dir}/{name}"));
+        if ours && name.ends_with(".json") && !keep.contains(&path) {
+            std::fs::remove_file(e.path()).map_err(|err| format!("{name}: {err}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// Writes `body` to `path` whole: into `path.tmp`, then renamed over
+/// `path`, so a run killed mid-write never leaves half a file.
+pub fn write_whole(path: &str, body: &str) -> Result<(), String> {
+    let tmp = format!("{path}.tmp");
+    std::fs::write(&tmp, body)
+        .and_then(|_| std::fs::rename(&tmp, path))
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            format!("cannot write {path}: {e}")
+        })
 }
 
 /// A CSV text field, quoted (with `"` doubled).
@@ -1060,6 +1099,11 @@ pub struct Run<'a> {
     pub wall_s: f64,
     pub threads: usize,
     pub out_dir: &'a str,
+    /// Games the grid has; fewer in `games` is a partial report (a run
+    /// still going, or stopped).
+    pub planned: usize,
+    /// Of `games`, those read back from an earlier run (`--resume`).
+    pub resumed: usize,
 }
 
 pub fn results_json(run: &Run) -> String {
@@ -1088,6 +1132,9 @@ pub fn results_json(run: &Run) -> String {
         "format": "aic-experiment/1",
         "spec": run.spec,
         "wall_seconds": run.wall_s,
+        "games_played": run.games.len(),
+        "games_planned": run.planned,
+        "games_resumed": run.resumed,
         "threads": run.threads,
         "engine_version": aic_core::VERSION,
         "rules_revision": aic_core::RULES_REVISION,
@@ -1122,6 +1169,24 @@ fn short(c: &CellSummary, multi_config: bool, multi_variant: bool) -> String {
     format!("{s}d{} {}", c.difficulty, c.agent)
 }
 
+/// Each part's share of the games' own time: agents, probes, applying the
+/// actions, legal-action generation, the replay check, setup, and the rest.
+pub fn time_split(games: &[GameResult]) -> Vec<(&'static str, f64)> {
+    let sum = |f: fn(&GameResult) -> f64| games.iter().map(f).sum::<f64>();
+    let total = sum(|g| g.ms).max(1e-9);
+    let mut parts = vec![
+        ("agents", sum(|g| g.agent_ms)),
+        ("probes", sum(|g| g.probe_ms)),
+        ("apply", sum(|g| g.apply_ms)),
+        ("legal", sum(|g| g.legal_ms)),
+        ("replay check", sum(|g| g.replay_ms)),
+        ("setup", sum(|g| g.setup_ms)),
+    ];
+    let other = total - parts.iter().map(|p| p.1).sum::<f64>();
+    parts.push(("other", other.max(0.0)));
+    parts.into_iter().map(|(n, ms)| (n, ms / total)).collect()
+}
+
 pub fn markdown(run: &Run) -> String {
     let spec = run.spec;
     let sums = run.sums;
@@ -1130,6 +1195,15 @@ pub fn markdown(run: &Run) -> String {
     let mut m = String::new();
     let w = &mut m;
     let _ = writeln!(w, "# Cycle report: {}\n", spec.name);
+    if run.games.len() < run.planned {
+        let _ = writeln!(
+            w,
+            "**Partial: {} of {} games.** The run is still going or was stopped; every \
+             table below covers only the games finished (`--resume` plays the rest).\n",
+            run.games.len(),
+            run.planned
+        );
+    }
     if !spec.note.is_empty() {
         let _ = writeln!(w, "{}\n", spec.note);
     }
@@ -1147,6 +1221,13 @@ pub fn markdown(run: &Run) -> String {
         aic_core::RULES_REVISION,
         content_hash()
     );
+    if run.resumed > 0 {
+        let _ = writeln!(
+            w,
+            "{} of the games were played by an earlier, stopped run (`--resume`); the time is this run's.\n",
+            run.resumed
+        );
+    }
     let _ = writeln!(w, "- Configs: {}", spec.configs.join(", "));
     let vs: Vec<String> = spec
         .variants
@@ -1633,6 +1714,15 @@ pub fn markdown(run: &Run) -> String {
             s.ms_per_game
         );
     }
+    let split: Vec<String> = time_split(run.games)
+        .iter()
+        .map(|(n, share)| format!("{n} {:.1}%", 100.0 * share))
+        .collect();
+    let _ = writeln!(
+        w,
+        "\nWhere the games' time went (summed over workers): {}. Apply: the chosen actions and the measures' bookkeeping; legal: generating the legal actions; setup: building the game and the agent.",
+        split.join(", ")
+    );
 
     let _ = writeln!(w, "\n## Saved records\n");
     if run.records.is_empty() {

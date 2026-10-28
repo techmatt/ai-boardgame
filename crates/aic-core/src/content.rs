@@ -7,7 +7,7 @@
 //! adversary card or AI board that only combines existing primitives is a
 //! data change.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
@@ -38,6 +38,10 @@ pub struct Content {
     pub threats: Vec<ThreatDef>,
     pub adversary: Vec<AdversaryCard>,
     pub ais: Vec<AiBoard>,
+    /// Card id -> index into `cards`, for [`Content::card_index`] (rules and
+    /// agents look cards up by id constantly). Built by `parse`.
+    #[serde(skip)]
+    card_ix: BTreeMap<String, usize>,
 }
 
 // ---------- map ----------
@@ -487,13 +491,15 @@ impl Content {
         fn p<T: for<'de> Deserialize<'de>>(name: &str, s: &str) -> Result<T, String> {
             serde_json::from_str(s).map_err(|e| format!("content/{name}: {e}"))
         }
-        let c = Content {
+        let mut c = Content {
             map: p("map.json", map)?,
             cards: p("cards.json", cards)?,
             threats: p("threats.json", threats)?,
             adversary: p("adversary.json", adversary)?,
             ais: p("ais.json", ais)?,
+            card_ix: BTreeMap::new(),
         };
+        c.card_ix = c.cards.iter().enumerate().map(|(i, d)| (d.id.clone(), i)).collect();
         c.check()?;
         Ok(c)
     }
@@ -606,7 +612,7 @@ impl Content {
     }
 
     pub fn card_index(&self, id: &str) -> Option<usize> {
-        self.cards.iter().position(|c| c.id == id)
+        self.card_ix.get(id).copied()
     }
 
     pub fn threat_index(&self, id: &str) -> Option<usize> {

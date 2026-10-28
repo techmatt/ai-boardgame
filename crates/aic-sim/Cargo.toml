@@ -8,6 +8,12 @@ license.workspace = true
 [dependencies]
 aic-core.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+# Exact f64s when a stopped run's games.jsonl is read back (--resume).
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 rand.workspace = true
 rand_chacha.workspace = true
+mimalloc = { version = "0.1.52", default-features = false }
+
+[features]
+# Times the search's hot calls; `experiment` prints the split (src/prof.rs).
+profile = []

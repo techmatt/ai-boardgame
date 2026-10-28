@@ -9,7 +9,9 @@ license = "MIT"
 
 [workspace.dependencies]
 aic-core = { path = "crates/aic-core" }
-serde = { version = "1", features = ["derive"] }
+# `rc`: the state shares its config and a pending choice's snapshot through
+# `Arc` (cheap clones for search); they serialize as the plain value.
+serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 rand = { version = "0.8", default-features = false }
 rand_chacha = { version = "0.3", default-features = false, features = ["serde1"] }

@@ -251,6 +251,19 @@ impl AgentSpec {
             .unwrap_or(0)
     }
 
+    /// A shallow agent: one action at a time on one guess (random, greedy
+    /// and engine at their defaults), not a beam, rollouts, more guesses or
+    /// a deeper look-ahead. The scoping runs' agents (`--quick`): deep
+    /// search waits until the rules are close to final.
+    pub fn shallow(&self) -> bool {
+        match self.kind.as_str() {
+            "random" => true,
+            "greedy" => self.p("samples") <= 1 && self.p("depth") <= 1,
+            "engine" => self.p("width") == 0 && self.p("samples") <= 1,
+            _ => false,
+        }
+    }
+
     fn p(&self, k: &str) -> usize {
         self.params[k].round() as usize
     }
