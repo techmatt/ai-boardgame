@@ -14,5 +14,11 @@ serde_json = "1"
 rand = { version = "0.8", default-features = false }
 rand_chacha = { version = "0.3", default-features = false, features = ["serde1"] }
 
+# Tests play whole games, which unoptimized code runs many times slower. The test
+# build is optimized but keeps debug assertions and overflow checks (inherited
+# from dev).
+[profile.test]
+opt-level = 1
+
 [profile.release.package.aic-wasm]
 opt-level = "s"

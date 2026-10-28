@@ -322,11 +322,22 @@ fn state_round_trips_through_json_with_string_seeds() {
     }
 }
 
+/// Fast lane: one seed per variant; the slow lane plays five more.
 #[test]
 fn random_games_replay_exactly_in_every_variant() {
+    random_games_replay_in_every_variant(0..1);
+}
+
+#[test]
+#[ignore = "slow lane: more seeds of the variant replay check"]
+fn random_games_replay_exactly_in_every_variant_more_seeds() {
+    random_games_replay_in_every_variant(1..6);
+}
+
+fn random_games_replay_in_every_variant(seeds: std::ops::Range<u64>) {
     for config in variant_matrix() {
         let rules = Rules::new(&config).unwrap();
-        for seed in 0..6 {
+        for seed in seeds.clone() {
             let (g, actions) = random_game(&rules, seed);
             assert!(g.is_over(), "{} seed {seed} did not finish", config.hash());
             assert_eq!(replay(&rules, seed, &actions).unwrap(), g);
@@ -983,11 +994,22 @@ fn spread_and_off_configs() -> Vec<Config> {
     out
 }
 
+/// Fast lane: one seed per config; the slow lane plays three more.
 #[test]
 fn spread_and_off_variants_play_and_replay_at_2_and_3_countries() {
+    spread_and_off_variants_play_and_replay(0..1);
+}
+
+#[test]
+#[ignore = "slow lane: more seeds of the spread and off-variant replay check"]
+fn spread_and_off_variants_play_and_replay_more_seeds() {
+    spread_and_off_variants_play_and_replay(1..4);
+}
+
+fn spread_and_off_variants_play_and_replay(seeds: std::ops::Range<u64>) {
     for config in spread_and_off_configs() {
         let rules = Rules::new(&config).unwrap();
-        for seed in 0..4 {
+        for seed in seeds.clone() {
             let (g, actions) = random_game(&rules, seed);
             assert!(g.is_over(), "{} seed {seed} did not finish", config.hash());
             assert_eq!(replay(&rules, seed, &actions).unwrap(), g);

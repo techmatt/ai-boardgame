@@ -65,22 +65,49 @@ fn results_without_timing(dir: &Path) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// Fast lane: the grid with random only and a closeness probe every fourth
+/// choice (2–4 s; greedy games are seconds each even optimized).
 #[test]
+fn experiment_writes_report_and_records_random() {
+    let body = SPEC
+        .replace(r#"["random", "greedy"]"#, r#"["random"]"#)
+        .replace(r#""records": 2"#, r#""closeness": {"every": 4}, "records": 2"#);
+    writes_report_and_records("aic-sim-experiment-random", &body, 2);
+}
+
+/// Slow lane: the whole grid, greedy included, every choice probed.
+#[test]
+#[ignore = "slow lane: greedy experiment games, twice"]
 fn experiment_writes_report_and_records() {
-    let root = fresh_dir("aic-sim-experiment");
+    writes_report_and_records("aic-sim-experiment", SPEC, 4);
+}
+
+fn writes_report_and_records(dir: &str, body: &str, cells: usize) {
+    let root = fresh_dir(dir);
     let spec = root.join("spec.json");
-    std::fs::write(&spec, SPEC).unwrap();
+    std::fs::write(&spec, body).unwrap();
+    // Both runs at once: the one-thread run is the long one.
+    let runs = std::thread::scope(|s| {
+        ["1", "3"]
+            .map(|threads| {
+                let out = root.join(format!("out-{threads}"));
+                let spec = &spec;
+                s.spawn(move || {
+                    let res = sim()
+                        .arg("experiment")
+                        .arg(spec)
+                        .arg("--out")
+                        .arg(&out)
+                        .args(["--threads", threads])
+                        .output()
+                        .expect("runs aic-sim");
+                    (out, res)
+                })
+            })
+            .map(|h| h.join().unwrap())
+    });
     let mut outs = Vec::new();
-    for threads in ["1", "3"] {
-        let out = root.join(format!("out-{threads}"));
-        let res = sim()
-            .arg("experiment")
-            .arg(&spec)
-            .arg("--out")
-            .arg(&out)
-            .args(["--threads", threads])
-            .output()
-            .expect("runs aic-sim");
+    for (out, res) in runs {
         assert!(
             res.status.success(),
             "experiment failed: {}",
@@ -103,15 +130,15 @@ fn experiment_writes_report_and_records() {
         let results: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap())
                 .unwrap();
-        assert_eq!(results["cells"].as_array().unwrap().len(), 4);
+        assert_eq!(results["cells"].as_array().unwrap().len(), cells);
         assert_eq!(results["format"], "aic-experiment/1");
-        // 12 games, one row each.
+        // 3 games per cell, one row each.
         assert_eq!(
             std::fs::read_to_string(out.join("games.csv"))
                 .unwrap()
                 .lines()
                 .count(),
-            13
+            3 * cells + 1
         );
         let records: Vec<PathBuf> = std::fs::read_dir(out.join("records"))
             .unwrap()

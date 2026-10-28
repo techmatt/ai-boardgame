@@ -344,27 +344,64 @@ mod tests {
         Rules::new(&c).unwrap()
     }
 
-    /// Games replay from seed + actions, and the same agent on the same seed
-    /// plays the same game: its RNG is its own and seeded per game.
-    #[test]
-    fn agents_replay_and_repeat() {
+    const GREEDY: &str = "greedy";
+    const BEAM: &str = "beam:width=2";
+    const ROLLOUT: &str = "rollout:width=2,candidates=2,rollouts=1,horizon=1";
+    // The engine's beam is beam's code with another heuristic.
+    const ENGINE: &str = "engine";
+
+    /// The agent plays seed 3 at difficulty 4 for up to `max_actions`; the
+    /// game replays from seed + actions, and the same agent on the same seed
+    /// plays the same actions: its RNG is its own and seeded per game.
+    fn replay_and_repeat(spec: &str, max_actions: usize, to_the_end: bool) {
         let r = rules(4);
-        for spec in [
-            "greedy",
-            "beam:width=2",
-            "rollout:width=2,candidates=2,rollouts=1,horizon=1",
-            // The engine's beam is beam's code with another heuristic; a
-            // whole debug game of it costs minutes.
-            "engine",
-        ] {
-            let spec = AgentSpec::parse(spec).unwrap();
-            let seed = 3;
-            let (g, rec) = play(&r, seed, &mut *spec.build(&r, seed), 3000);
+        let spec = AgentSpec::parse(spec).unwrap();
+        let seed = 3;
+        let (g, rec) = play(&r, seed, &mut *spec.build(&r, seed), max_actions);
+        if to_the_end {
             assert!(g.is_over(), "{}", spec.label());
-            assert_eq!(replay(&r, seed, &rec.actions).unwrap(), g);
-            let (_, again) = play(&r, seed, &mut *spec.build(&r, seed), 3000);
-            assert_eq!(rec.actions, again.actions, "{}", spec.label());
+        } else {
+            assert_eq!(rec.actions.len(), max_actions, "{}", spec.label());
         }
+        assert_eq!(replay(&r, seed, &rec.actions).unwrap(), g);
+        let (_, again) = play(&r, seed, &mut *spec.build(&r, seed), max_actions);
+        assert_eq!(rec.actions, again.actions, "{}", spec.label());
+    }
+
+    /// Fast lane: the first 30 actions, which take every agent into round 2
+    /// (about 1 s; whole games are 200–300 actions).
+    #[test]
+    fn agents_replay_and_repeat_opening() {
+        for spec in [GREEDY, BEAM, ROLLOUT, ENGINE] {
+            replay_and_repeat(spec, 30, false);
+        }
+    }
+
+    // Slow lane: whole games, one test per agent so they run side by side
+    // (optimized, with the rest of the lane running: rollout ~35 s, engine
+    // ~20 s, beam ~15 s, greedy ~10 s).
+    #[test]
+    #[ignore = "slow lane: a whole search-agent game"]
+    fn greedy_replays_and_repeats() {
+        replay_and_repeat(GREEDY, 3000, true);
+    }
+
+    #[test]
+    #[ignore = "slow lane: a whole search-agent game"]
+    fn beam_replays_and_repeats() {
+        replay_and_repeat(BEAM, 3000, true);
+    }
+
+    #[test]
+    #[ignore = "slow lane: a whole search-agent game"]
+    fn rollout_replays_and_repeats() {
+        replay_and_repeat(ROLLOUT, 3000, true);
+    }
+
+    #[test]
+    #[ignore = "slow lane: a whole search-agent game"]
+    fn engine_replays_and_repeats() {
+        replay_and_repeat(ENGINE, 3000, true);
     }
 
     /// An agent's decision is the same on two tables that differ only in

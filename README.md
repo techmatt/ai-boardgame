@@ -66,11 +66,32 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 
 ```sh
 cargo build --workspace
-cargo test --workspace                             # ~4 min (debug, idle machine, 008): core ~22 s, sim unit tests ~150 s (whole agent games in debug), experiment ~64 s; twice that or more with other runs on every core
+cargo test --workspace                             # fast lane: ~10 s once built, ~18 s after an edit in aic-core (rebuild included); after every change
+cargo test-all                                     # full run, slow lane included: ~70 s; before every commit
+cargo test-slow                                    # the slow lane alone: ~65 s
 cargo build --release -p aic-sim                   # ~12 s
 wasm-pack build crates/aic-wasm --target web       # ~20 s cold, ~9 s warm -> crates/aic-wasm/pkg (git-ignored)
 node scripts/wasm-smoke.mjs                        # needs the wasm build; checks native = wasm
 ```
+
+**Test lanes.** The slow lane is the tests marked `#[ignore = "slow lane: ..."]`: whole
+search-agent games, the greedy experiment grid, and more seeds of the replay checks
+whose first seed runs in the fast lane. `test-all` and `test-slow` are cargo aliases
+(`.cargo/config.toml`) for `cargo test --workspace -- --include-ignored` and
+`-- --ignored`; one slow test runs with `cargo test -p aic-sim -- --ignored <name>`. A
+new test that takes more than about a second goes in the slow lane, ideally with a
+cheaper fast-lane twin (fewer seeds, fewer actions). Times measured on this 12-thread
+machine with nothing else heavy running (010); the first build of the test profile
+takes about 40 s.
+
+- The test profile is optimized (`[profile.test] opt-level = 1` in `Cargo.toml`;
+  debug assertions and overflow checks stay on): unoptimized, the same tests took
+  4 min. `opt-level = 2` built 6 s slower and ran no faster.
+- `cargo test` runs test binaries one after another, so the fast lane's wall clock
+  is roughly the sum of each binary's slowest test. Today that is
+  `experiment_reports_comparisons` (~5 s, six greedy games).
+- Per-test times: `RUSTC_BOOTSTRAP=1 target/debug/deps/<binary>.exe --include-ignored -Z
+  unstable-options --report-time` (the binary paths are printed by `cargo test --no-run`).
 
 `Cargo.lock` started as a copy of corelight-engine's lock, so dependency versions match a
 known-good wasm build.

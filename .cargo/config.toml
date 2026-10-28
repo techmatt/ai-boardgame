@@ -1,0 +1,5 @@
+# Test lanes (README "Build and test"): `cargo test --workspace` runs the fast lane;
+# `cargo test-all` runs everything, the slow lane's #[ignore]d tests included.
+[alias]
+test-all = "test --workspace -- --include-ignored"
+test-slow = "test --workspace -- --ignored"

@@ -227,17 +227,26 @@ mod tests {
     /// and then asks which asset to corrupt, so a guess (reseeded dice) can
     /// replay another first card. The guess still accepts every answer
     /// there (the agents no longer crash), it can just play out differently.
+    /// Fast lane: seeds 0..8; the slow lane plays 8..40.
     #[test]
     fn pending_choices_replay_on_the_guess() {
         for name in ["baseline", "clusters"] {
-            pending_choices_replay(&config_rules(name, 0));
+            pending_choices_replay(&config_rules(name, 0), 0..8);
         }
     }
 
-    fn pending_choices_replay(r: &Rules) {
+    #[test]
+    #[ignore = "slow lane: more seeds of the pending-choice guess check"]
+    fn pending_choices_replay_on_the_guess_more_seeds() {
+        for name in ["baseline", "clusters"] {
+            pending_choices_replay(&config_rules(name, 0), 8..40);
+        }
+    }
+
+    fn pending_choices_replay(r: &Rules, seeds: std::ops::Range<u64>) {
         let mut found = 0;
         let mut legal = Vec::new();
-        for seed in 0..40u64 {
+        for seed in seeds {
             let mut g = r.new_game(seed);
             let mut k = seed;
             while !g.is_over() {
