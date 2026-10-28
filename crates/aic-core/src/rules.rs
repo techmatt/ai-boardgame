@@ -34,6 +34,8 @@ pub struct Rules {
     modules: Vec<Instance>,
     /// Every module's resolved parameters, `"<module>.<param>"`.
     params: BTreeMap<String, ParamValue>,
+    /// Each configured module's variant, by module id.
+    variants: BTreeMap<String, String>,
 }
 
 /// One phase of the round: one module's phase, or several modules'
@@ -137,6 +139,11 @@ impl Rules {
                 params.insert(format!("{}.{k}", mc.module), v.clone());
             }
         }
+        let variants: BTreeMap<String, String> = resolved
+            .modules
+            .iter()
+            .map(|mc| (mc.module.clone(), mc.variant.clone()))
+            .collect();
         let ids: Vec<&str> = to_build.iter().map(|(d, ..)| d.id).collect();
         for (def, ..) in &to_build {
             for r in def.requires {
@@ -152,6 +159,7 @@ impl Rules {
             map: &map,
             content,
             params: &params,
+            variants: &variants,
         };
         for ((def, variant, cards, specs), mc) in to_build.into_iter().zip(&resolved.modules) {
             let b = Build {
@@ -226,6 +234,7 @@ impl Rules {
             content,
             modules: instances,
             params,
+            variants,
         })
     }
 
@@ -234,6 +243,7 @@ impl Rules {
             map: &self.map,
             content: self.content,
             params: &self.params,
+            variants: &self.variants,
         }
     }
 

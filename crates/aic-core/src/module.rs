@@ -153,9 +153,18 @@ pub struct World<'a> {
     pub content: &'a Content,
     /// Every module's resolved parameters, keyed `"<module>.<param>"`.
     pub params: &'a BTreeMap<String, ParamValue>,
+    /// Each configured module's variant, by module id.
+    pub variants: &'a BTreeMap<String, String>,
 }
 
 impl World<'_> {
+    /// The variant a module is configured in, if the module is configured.
+    /// For rules that depend on another module's variant (threats acting
+    /// on whichever adversary pieces the adversary variant uses).
+    pub fn variant(&self, module: &str) -> Option<&str> {
+        self.variants.get(module).map(|v| v.as_str())
+    }
+
     /// An integer parameter of any configured module, `"<module>.<param>"`.
     /// Panics if absent: a module may read only parameters of modules it
     /// `requires`, which the config is checked for.

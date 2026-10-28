@@ -150,6 +150,127 @@ Level 4's "a round sooner" is implemented as: tier-2 threats are dealt once any 
 top `tier2_early` deck cards is stage II or later (the stage boundary is public: the
 stages are stacked).
 
+## 2a. Spread variants (module `adversary`, variants `clusters` and `assets`)
+
+Two other ways for the adversary to spread, adapted from design notes for comparison
+runs ([`configs/clusters.json`](../configs/clusters.json),
+[`configs/assets.json`](../configs/assets.json); each differs from the baseline only in
+the adversary module). Both keep the Militarist's deck (the clock, the same cards, the
+same deal and difficulty 1, 2 and 4), the three-slot pipeline and its four phases
+(`ravage`, `build`, `explore`, `slide`), the corruption pool and every loss condition.
+Neither has the Militarist's innate rules (Momentum, Escalation). Values below are
+those in the two configs: untuned first guesses. Every adaptation is marked
+**Adaptation** and listed [at the end](#defaults-and-deviations).
+
+### Clusters and infection (`clusters`)
+
+From Matt's 2020 notes. The adversary's only piece is the **cluster** (`cluster_health`
+2 damage to destroy; `cluster_opposition` 1 opposition each). **Neutral clusters** are
+the data centres; **friendly clusters** are processors (any player's).
+
+- **Setup (Adaptation):** each starting drone and outpost the board places becomes one
+  cluster (so each uplink starts with 1, the printed outpost uplink with 2). The
+  opening is the Militarist's: reveal, place, slide.
+- **Place** (explore slot, on reveal): each hex of the card's terrain that is an uplink,
+  or next to a hex with `source_clusters` (2) or more clusters, gains `explore_clusters`
+  (1). Firewall Node stops it as it stops explore. (**Adaptation**: the notes say only
+  "the adversary places clusters"; this is v0's explore with a stack of clusters as the
+  source.)
+- **Hegemonize** (build slot): each hex of the card's terrain that holds a cluster gains
+  `hegemonize_clusters` (1). (**Adaptation**: the notes add a cluster to *every* hex of
+  the terrain; `hegemonize_all` 1 plays that reading. Off by default: 8 clusters per
+  card at 2 countries swamps the board.)
+- **Assault** (ravage slot), on every hex of the card's terrain:
+  1. **Infection**, hex by hex in board order: offense = clusters on adjacent hexes;
+     defense = processors on the hex + its defense tokens (the firewall; each prevents
+     its owner's defense value). Each point of excess flips a data centre on the hex into
+     a cluster (neutral first). **Adaptation:** processors never flip (losing one would
+     need a way back onto an AI track, which v0 lacks); with `infection_spill` 1, excess
+     left after that plants one cluster on a hex that has none, so infection spreads.
+  2. **Combat**, on each hex of the terrain that now holds clusters: `cluster_damage` (1)
+     per cluster, less defense, destroys players' pieces as a ravage does (players choose
+     each piece): population `population_health` 1, factories and data centres
+     `building_health` 2 (the notes' "clusters 2, factories 2, population 1"; a data
+     centre is a neutral cluster). Corruption and cascades as in a ravage. **Adaptation:**
+     the notes' military fights first and only leftover damage hits these; v0 has no
+     military, so all of it does.
+- **Difficulty 3** adds `damage_bonus` (1) to every assaulted hex.
+- **Purge win (Adaptation):** at opposition level *L* players win when at most
+  *L* × `purge_allowance` (2) × countries clusters remain (level 0: none).
+- **Pushback** (opposition reward) removes a cluster instead of a drone.
+
+### Asset corruption (`assets`)
+
+The adversary has no pieces of its own. It **corrupts** factories and data centres (the
+assets): the asset's token is flipped to the adversary's side (`rogue_factory`,
+`rogue_data_centre`) and one corruption from the pool goes with it. A corrupted asset
+counts as an adversary piece (for Blockade, Sabotage, Panic, card targets) and produces
+nothing. The pool is the limit: players lose when it is empty, so the pool size
+(`pool_per_country` 3, `pool_base` 1) is how many assets the adversary may hold.
+
+- **Setup (Adaptation):** the board's starting drones and outposts are not used. After
+  the first reveal, a **beachhead** in each country: the asset nearest its printed
+  outpost uplink is corrupted (ties: lower hex number; a factory before a data centre).
+- **Corrupt** (explore slot, on reveal): in each country, one asset next to a hex of the
+  card's terrain is corrupted; players choose which. Firewall Node protects assets on
+  hexes holding its owner's processor (**Adaptation**: it stops explore).
+- **Spread** (build slot): each corrupted asset (as the step starts) corrupts `spread`
+  (1) assets on its hex or an adjacent one (any country), each next to a hex of the
+  card's terrain; players choose each.
+- **Strike** (ravage slot): each hex of the card's terrain next to a corrupted asset
+  takes `rogue_damage` (1) per corrupted asset next to it (+ `damage_bonus` at difficulty
+  3), less defense, destroying players' pieces as a ravage does. No corruption is added
+  (corruption only comes with assets).
+- **Adaptation, terrain:** factories and data centres sit on Industrial and Network
+  hexes, so a card reaches an asset "next to" its terrain (on or adjacent): every card
+  stays live, and Urban and Frontier cards strike where the population is.
+- **Reclaiming:** player damage of `rogue_health` (2) reclaims a corrupted asset: it flips
+  back and its corruption returns to the pool, scoring `reclaim_opposition` (2). Purge
+  Protocol reclaims every one in the hex. Rebuild and Reconstruction "return
+  corruption" by reclaiming one corrupted asset each (no opposition). Pushback reclaims
+  one per country (players choose).
+- **Purge win (Adaptation):** at opposition level *L*, at most *L* × `purge_allowance`
+  (1) × countries corrupted assets remain (level 0: none).
+
+### Threats and cards under the spread variants (Adaptation)
+
+Threats and cards name the Militarist's pieces. Under `clusters`, a drone, outpost or
+foundry they name reads as a cluster; under `assets`, as a corrupted asset, and adding
+one means the corruption spreads from that hex (to an asset on it or adjacent, players
+choose).
+
+| Threat | `clusters` | `assets` |
+|---|---|---|
+| Conscription | Each hex with clusters gains 1 | Each hex with a corrupted asset spreads |
+| Drone surge | Each uplink gains 1 cluster | Each uplink spreads |
+| Forward base | The lowest-numbered uplink with a cluster gains 1 | The lowest-numbered uplink spreads |
+| Fortify | Each hex with clusters gains 1 Fortify per cluster | Per corrupted asset |
+| Patrol | Hexes with clusters and population | With a corrupted asset and population |
+| Total war | Each hex with clusters fights (combat) | Each hex with a corrupted asset strikes |
+| Cascade | Unchanged | Each hex with a corrupted asset spreads |
+| Mass production | Each hex with clusters is hegemonized | Each hex with a corrupted asset spreads |
+| Overrun | Unchanged (3+ clusters) | 3+ corrupted assets: the hex spreads |
+
+- **Sweep, Swarm Override** ("remove every drone in a country"): `clusters`, each hex of
+  the country loses one cluster; `assets`, never offered (nothing to remove).
+- Cards that check for a destroyed foundry this round take their other branch.
+
+## 2b. Off-variants
+
+For measuring what a module adds, these variants remove its effect and keep the round:
+
+| Variant | Removes |
+|---|---|
+| `threats.variant=off` | Threats: none are dealt, countered or executed. Jam Signals, Counter-intelligence and the `counter_threat` reward have no target. |
+| `opposition.variant=off` | Level rewards: levels are still reached and still relax the purge win. |
+| `cards.variant=off` | The draft and drawing: players have only their AI's unique cards. |
+
+Not removable: `board` (the map), `adversary` (the clock and every loss), `opposition`
+(winning and losing; only its reward is), `economy` (all income: without it nothing can
+be paid), `ai` (seats, insight, processors). Parts of them can be switched off by
+parameters: Momentum and Escalation (`momentum_drones`, `escalation_outposts` 0),
+giving (`economy.give_insight` 0), or by leaving `ai.growth` out of the round.
+
 ## 3. Opposition and the end of the game (module `opposition`)
 
 **Opposition** is a shared track (`opposition.points`). It is gained by destroying an
@@ -165,10 +286,12 @@ Reaching a level triggers a one-time reward, by variant:
 | `income` | Every player gains `income_credits` (2) credit income for the rest of the game |
 | `free_purchases` | The next `free_purchases` (2) card purchases are free. **Default:** a purchase is keeping a drafted card |
 | `counter_threat` | Counter one active threat (players choose) |
+| `off` | None (for measuring the rewards; [§2b](#2b-off-variants)) |
 
 **Winning:** players win immediately when the adversary's presence is under the bar for
 the current level: level 0, no adversary pieces; level 1, no outposts or foundries;
-level 2, no foundries; level `max_level`, at once.
+level 2, no foundries; level `max_level`, at once. (The spread variants count clusters
+or corrupted assets instead: [§2a](#2a-spread-variants-module-adversary-variants-clusters-and-assets).)
 
 **Losing:** total population falls below `loss_population_percent` (50) % of the start;
 the corruption pool is empty; or the adversary deck is empty when a card must be revealed.
@@ -258,6 +381,7 @@ processor and gain 1 energy; place 2 defense in any one country and gain 2 credi
 - Variant **`shared_row`**: threats sit in one row, act in every country, and anyone may
   pay. **Default:** the row is still dealt `per_country` threats per country, so with
   more countries there are more threats and each acts everywhere.
+- Variant **`off`**: no threats ([§2b](#2b-off-variants)).
 
 **Countering (Default):** a threat is countered only when fully paid. Payments are
 pooled across players (`Pay` 1 or as much as is useful at a time, `Withdraw` takes back
@@ -288,6 +412,8 @@ Population lost to Patrol or Panic is protected by Shelter Order and Civic Shelt
 any population loss.
 
 ## 7. Player cards (module `cards`, variant `draft`; content [`content/cards.json`](../content/cards.json))
+
+(Variant `off`: no draft and no drawing, [§2b](#2b-off-variants).)
 
 - **Decks:** a tier-1 and a tier-2 deck of the cards listed in the config (one copy of
   each; a hard constraint the tests check). Discards reshuffle into a deck when it runs
@@ -377,3 +503,24 @@ Card details beyond the ruleset text:
 1. Logistics AI triggers on a countered threat you paid toward, not on every payment.
 2. Modular Expansion takes no slot.
 3. The 5-country layout is gone (v0 has four country pieces).
+
+**Adaptations** (the spread variants, §2a, fitting design notes to the v0 game):
+
+1. Both keep the Militarist's deck, pipeline slots, phases, pool and losses; no
+   Momentum or Escalation.
+2. Clusters: starting drones and outposts become one cluster each.
+3. Clusters: placing is v0's explore, sourced from hexes with `source_clusters`.
+4. Clusters: Hegemonize only hexes holding a cluster (`hegemonize_all` 1: every hex).
+5. Clusters: data centres are the neutral clusters, processors the friendly ones;
+   processors never flip; `infection_spill` plants one cluster with leftover excess.
+6. Clusters: no military, so all combat damage hits clusters, factories and population;
+   data centres and factories 2 health, population 1.
+7. Assets: a corrupted asset is its token flipped plus one corruption from the pool;
+   losing on an empty pool caps the assets the adversary may hold.
+8. Assets: the board's starting adversary pieces are unused; a beachhead per country
+   starts the corruption.
+9. Assets: cards reach assets next to their terrain; strikes hit hexes of the terrain.
+10. Assets: damage, Purge Protocol, Rebuild, Reconstruction and pushback reclaim.
+11. Both: the purge win allows *L* × `purge_allowance` × countries pieces at level *L*.
+12. Both: threats and cards naming drones, outposts or foundries read them as clusters or
+    corrupted assets (table in §2a).

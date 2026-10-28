@@ -128,7 +128,12 @@ differs only in the threat variant. Abridged:
     variant doesn't take, so only its new ones need setting
     (`--set opposition.income_credits=2`);
   - `<module>=off` removes a module and its phases. In v0 every module is needed by
-    another (`ModuleDef::requires`), so this is rejected with the reason.
+    another (`ModuleDef::requires`), so this is rejected with the reason. To measure a
+    module's effect, use its `off` *variant* instead (`threats.variant=off`,
+    `opposition.variant=off`, `cards.variant=off`): it keeps the module's phases and
+    the parameters other modules read, and does nothing. See rules.md §2b.
+  - Switching the adversary variant drops most of its parameters, so the spread
+    variants have their own configs (`configs/clusters.json`, `configs/assets.json`).
 - **`aic-sim show <config>`** prints the resolved config, its hash and every tunable
   (card-derived ones included), with its range.
 
@@ -153,6 +158,14 @@ other, so modules call each other's public functions (a card's damage calls
 `adversary::damage`, which scores `opposition::for_kill`) and read each other's
 parameters through `World::int("<module>.<param>")`. A module lists the modules it reads
 in `ModuleDef::requires`; a config missing one is rejected.
+
+A rule that depends on another module's *variant* reads `World::variant("<module>")`.
+The one case so far: the adversary variants (`militarist`, `clusters`, `assets`) use
+different pieces, so threats, opposition pushback and card effects ask
+`adversary::style(w)` and go through adversary functions (`selects`, `kind_count`,
+`reinforce`, `forward_base`, `pushback`, `under_bar`, `ravage`, `build_hex`, `cascade`)
+that read the Militarist's piece names as the pieces in play. `common::ADVERSARY` lists
+every variant's piece kinds; a game holds only its own.
 
 Each variant is a `VariantDef` (in `module.rs`), holding:
 

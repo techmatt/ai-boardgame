@@ -882,3 +882,227 @@ fn tunables_include_card_parameters() {
         assert!(keys.iter().any(|x| x == k), "{k} missing from {keys:?}");
     }
 }
+
+const CLUSTERS: &str = include_str!("../../../configs/clusters.json");
+const ASSETS: &str = include_str!("../../../configs/assets.json");
+const OFFS: [&str; 3] = ["threats.variant=off", "opposition.variant=off", "cards.variant=off"];
+
+/// Every adversary variant, alone and with each off-variant, at 2 and 3
+/// countries; the spread variants at difficulty 4 too.
+fn spread_and_off_configs() -> Vec<Config> {
+    let mut out = Vec::new();
+    for base in [BASELINE, CLUSTERS, ASSETS] {
+        for off in std::iter::once(None).chain(OFFS.iter().map(Some)) {
+            for n in [2, 3] {
+                let mut c = Config::from_json(base).unwrap();
+                c.countries = n;
+                if let Some(o) = off {
+                    c.apply_override(o).unwrap();
+                }
+                out.push(c);
+            }
+        }
+    }
+    for base in [CLUSTERS, ASSETS] {
+        let mut c = Config::from_json(base).unwrap();
+        c.apply_override("adversary.difficulty=4").unwrap();
+        out.push(c);
+    }
+    out
+}
+
+#[test]
+fn spread_and_off_variants_play_and_replay_at_2_and_3_countries() {
+    for config in spread_and_off_configs() {
+        let rules = Rules::new(&config).unwrap();
+        for seed in 0..4 {
+            let (g, actions) = random_game(&rules, seed);
+            assert!(g.is_over(), "{} seed {seed} did not finish", config.hash());
+            assert_eq!(replay(&rules, seed, &actions).unwrap(), g);
+            let mut s = new_game(&config, seed).unwrap();
+            for (i, a) in actions.iter().enumerate() {
+                if i % 7 == 0 {
+                    s = serde_json::from_str(&s.to_json()).unwrap();
+                }
+                s = apply(&s, a).unwrap().0;
+            }
+            assert_eq!(s, g);
+            let v = rules.view(&g);
+            assert!(v.globals.iter().any(|x| x.key == "opposition.level"));
+        }
+    }
+}
+
+#[test]
+fn the_spread_configs_differ_from_baseline_only_in_the_adversary() {
+    let a = Rules::new(&baseline()).unwrap();
+    for json in [CLUSTERS, ASSETS] {
+        let b = Rules::new(&Config::from_json(json).unwrap()).unwrap();
+        assert!(
+            a.config.diff(&b.config).iter().all(|d| d.starts_with("adversary.")),
+            "{:?}",
+            a.config.diff(&b.config)
+        );
+    }
+}
+
+/// A Cx for calling module functions directly on a crafted state.
+fn with_cx<T>(rules: &Rules, f: impl FnOnce(&mut module::Cx) -> T) -> T {
+    let mut choices = module::Choices::new(Vec::new());
+    let mut cx = module::Cx {
+        world: rules.world(),
+        module: "adversary",
+        purposes: &[],
+        events: None,
+        choices: &mut choices,
+    };
+    f(&mut cx)
+}
+
+#[test]
+fn clusters_start_from_the_militarist_pieces_and_assault_with_infection_then_combat() {
+    let mut c = Config::from_json(CLUSTERS).unwrap();
+    let rules = Rules::new(&c).unwrap();
+    let g = rules.new_game(1);
+    let count = |g: &GameState, k: &str| (0..g.hexes.len()).map(|h| g.tokens(h, k)).sum::<i64>();
+    assert_eq!(count(&g, "drone") + count(&g, "outpost") + count(&g, "foundry"), 0);
+    // One cluster per starting drone and outpost (2 uplinks + 1 outpost per
+    // country), plus whatever the opening placed.
+    assert!(count(&g, "cluster") >= 6, "{}", count(&g, "cluster"));
+
+    c.round = vec!["adversary.ravage".into(), ACTIONS.into()];
+    let rules = Rules::new(&c).unwrap();
+    let mut g = rules.new_game(1);
+    for h in g.hexes.iter_mut() {
+        h.tokens.clear();
+    }
+    let map = &rules.map;
+    let h = map.numbered(0, 5);
+    assert_eq!(map.hexes[h].terrain, content::Terrain::Urban);
+    g.piles.insert("adversary.ravage".into(), vec!["s1_urban".into()]);
+    for (k, n) in [("data_centre", 1), ("population", 1), ("processor:0", 1)] {
+        g.hexes[h].tokens.insert(k.into(), n);
+    }
+    // Two non-Urban neighbours with 2 clusters each: offense 4, defense 1
+    // (the processor). Excess 3 flips the data centre; the hex now holds a
+    // cluster, so nothing spills.
+    let next: Vec<usize> = map.hexes[h]
+        .neighbours
+        .iter()
+        .copied()
+        .filter(|&n| map.hexes[n].terrain != content::Terrain::Urban)
+        .take(2)
+        .collect();
+    assert_eq!(next.len(), 2);
+    for &n in &next {
+        g.hexes[n].tokens.insert("cluster".into(), 2);
+    }
+    g.vars.insert("board.start_population".into(), 0);
+    g.phase = 0;
+    rules.enter(&mut g, None);
+    assert!(g.pending.is_none());
+    assert_eq!(g.tokens(h, "data_centre"), 0);
+    assert_eq!(g.tokens(h, "cluster"), 1);
+    // Combat: 1 cluster deals 1, which destroys the population (health 1).
+    assert_eq!(g.tokens(h, "population"), 0);
+    assert_eq!(g.tokens(h, "corruption"), 0);
+    assert_eq!(g.stats.counters["adversary.infected"], 1 + count_spills(&g, &rules, h, &next));
+}
+
+/// Urban hexes other than `h` and its sources that picked up a cluster
+/// (spilled infection).
+fn count_spills(g: &GameState, rules: &Rules, h: usize, sources: &[usize]) -> i64 {
+    (0..g.hexes.len())
+        .filter(|&x| x != h && !sources.contains(&x))
+        .filter(|&x| rules.map.hexes[x].terrain == content::Terrain::Urban)
+        .map(|x| g.tokens(x, "cluster"))
+        .sum()
+}
+
+#[test]
+fn asset_corruption_opens_with_a_beachhead_and_damage_reclaims() {
+    let rules = Rules::new(&Config::from_json(ASSETS).unwrap()).unwrap();
+    let g = rules.new_game(3);
+    let count = |g: &GameState, k: &str| (0..g.hexes.len()).map(|h| g.tokens(h, k)).sum::<i64>();
+    assert_eq!(count(&g, "drone") + count(&g, "outpost"), 0);
+    let rogue = |g: &GameState| count(g, "rogue_factory") + count(g, "rogue_data_centre");
+    assert_eq!(rogue(&g), 2);
+    let w = rules.world();
+    let start = modules::adversary::start_pool(&w);
+    assert_eq!(g.var("adversary.pool"), start - 2);
+
+    // 2 damage reclaims a corrupted factory: it flips back, its corruption
+    // returns to the pool, and it scores opposition.
+    let mut g = g;
+    let h = (0..g.hexes.len()).find(|&h| g.tokens(h, "rogue_factory") + g.tokens(h, "rogue_data_centre") > 0).unwrap();
+    let kind = if g.tokens(h, "rogue_factory") > 0 { "factory" } else { "data_centre" };
+    let before = g.tokens(h, kind);
+    let points = g.var("opposition.points");
+    with_cx(&rules, |cx| modules::adversary::damage(&mut g, cx, 0, h, 2)).unwrap();
+    assert_eq!(g.tokens(h, kind), before + 1);
+    assert_eq!(rogue(&g), 1);
+    assert_eq!(g.var("adversary.pool"), start - 1);
+    assert_eq!(g.var("opposition.points"), points + 2);
+}
+
+#[test]
+fn asset_corruption_pushback_reclaims_and_the_purge_bar_counts_corrupted_assets() {
+    let rules = Rules::new(&Config::from_json(ASSETS).unwrap()).unwrap();
+    let mut g = rules.new_game(4);
+    advance_to(&rules, &mut g, ACTIONS);
+    let rogue = |g: &GameState| {
+        (0..g.hexes.len()).map(|h| g.tokens(h, "rogue_factory") + g.tokens(h, "rogue_data_centre")).sum::<i64>()
+    };
+    assert!(rogue(&g) > 0);
+    let w = rules.world();
+    assert!(!modules::adversary::under_bar(&w, &g, 0));
+    assert!(modules::adversary::win_text(&w, 1).contains("at most 2 corrupted assets"));
+    g.seats[0].resources.insert("insight".into(), 1);
+    g.vars.insert("opposition.points".into(), 8);
+    rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
+    assert_eq!(g.var("opposition.level"), 1);
+    while let Some(p) = &g.pending {
+        assert!(p.ask.prompt.starts_with("Pushback"), "{}", p.ask.prompt);
+        let o = p.ask.options[0].clone();
+        rules
+            .apply_mut(&mut g, &Action::Choose { seat: 0, option: o.option, target: o.target }, None)
+            .unwrap();
+    }
+    if rogue(&g) <= 2 {
+        let o = g.outcome.as_ref().expect("a win");
+        assert!(o.won && o.reason == "opposition", "{o:?}");
+    }
+}
+
+#[test]
+fn off_variants_remove_threats_level_rewards_and_the_draft() {
+    let mut c = baseline();
+    c.apply_override("threats.variant=off").unwrap();
+    let rules = Rules::new(&c).unwrap();
+    let mut g = rules.new_game(4);
+    advance_to(&rules, &mut g, ACTIONS);
+    assert!(modules::threats::active(&g).is_empty());
+
+    let mut c = baseline();
+    c.apply_override("opposition.variant=off").unwrap();
+    let rules = Rules::new(&c).unwrap();
+    let mut g = rules.new_game(4);
+    advance_to(&rules, &mut g, ACTIONS);
+    let drones = |g: &GameState| (0..g.hexes.len()).map(|h| g.tokens(h, "drone")).sum::<i64>();
+    let before = drones(&g);
+    g.seats[0].resources.insert("insight".into(), 1);
+    g.vars.insert("opposition.points".into(), 8);
+    rules.apply_mut(&mut g, &Action::Give { seat: 0, to: 1 }, None).unwrap();
+    assert_eq!(g.var("opposition.level"), 1);
+    assert!(g.pending.is_none());
+    assert_eq!(drones(&g), before);
+
+    let mut c = baseline();
+    c.apply_override("cards.variant=off").unwrap();
+    let rules = Rules::new(&c).unwrap();
+    let mut g = rules.new_game(4);
+    advance_to(&rules, &mut g, ACTIONS);
+    // Only the AIs' unique cards: nothing dealt, drafted or drawable.
+    assert_eq!(g.pile("cards.hand.0").len(), 3);
+    assert!(rules.legal_actions(&g).iter().all(|a| !matches!(a, Action::Draw { .. })));
+}

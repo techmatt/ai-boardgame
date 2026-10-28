@@ -64,9 +64,9 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
     effects.iter().all(|e| match e {
         Effect::Damage { at, .. } => !damage_hexes(w, g, seat, *at).is_empty(),
         Effect::DamageCountry { .. } | Effect::DestroyAll => any_hex(g, |h| has_adversary(g, h)),
-        Effect::RemoveDronesCountry { .. } => any_hex(g, |h| g.tokens(h, DRONE) > 0),
+        Effect::RemoveDronesCountry { .. } => any_hex(g, |h| g.tokens(h, drone_kind(w)) > 0),
         Effect::BuildFactory { empty } => !factory_hexes(w, g, *empty).is_empty(),
-        Effect::RemoveCorruption { .. } => any_hex(g, |h| g.tokens(h, CORRUPTION) > 0),
+        Effect::RemoveCorruption { .. } => any_hex(g, |h| corrupted(w, g, h)),
         Effect::Jam { .. } | Effect::CounterThreat => !threats::active(g).is_empty(),
         Effect::MovePopulation { .. } => any_hex(g, |h| g.tokens(h, POPULATION) > 0),
         Effect::PlaceProcessor { .. } => ai::can_place(w, g, seat),
@@ -74,6 +74,26 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
         Effect::Transfer { .. } => g.seats.len() > 1,
         _ => true,
     })
+}
+
+/// What "drones" means to a card: the Militarist's drones; with clusters,
+/// clusters (a hex loses one); with asset corruption, nothing (a token kind
+/// no hex ever holds).
+fn drone_kind(w: &World) -> &'static str {
+    match adversary::style(w) {
+        adversary::Style::Militarist => DRONE,
+        adversary::Style::Clusters => CLUSTER,
+        adversary::Style::Assets => "no_drones",
+    }
+}
+
+/// What "corruption" means to a card: corruption on the hex; with asset
+/// corruption, a corrupted asset there (returning it reclaims the asset).
+fn corrupted(w: &World, g: &GameState, h: usize) -> bool {
+    match adversary::style(w) {
+        adversary::Style::Assets => ROGUE.iter().any(|k| g.tokens(h, k) > 0),
+        _ => g.tokens(h, CORRUPTION) > 0,
+    }
 }
 
 fn cond(g: &GameState, seat: usize, c: Cond) -> bool {
@@ -175,14 +195,16 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             }
         }
         Effect::RemoveDronesCountry { opposition_per } => {
-            let cs = countries_where(&w, |h| g.tokens(h, DRONE) > 0);
+            let kind = drone_kind(&w);
+            let cs = countries_where(&w, |h| g.tokens(h, kind) > 0);
             let opts = cs.iter().map(|&c| country_opt(c)).collect();
             let prompt = format!("Seat {seat}: remove every drone in which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 let mut removed = 0;
                 for &h in &w.map.countries[cs[i]].hexes {
-                    let n = g.tokens(h, DRONE);
-                    removed += -cx.add_tokens(g, h, DRONE, -n);
+                    // Clusters: one per hex (clusters are every adversary piece).
+                    let n = if kind == DRONE { g.tokens(h, DRONE) } else { 1 };
+                    removed += -cx.add_tokens(g, h, kind, -n);
                 }
                 if *opposition_per > 0 {
                     opposition::gain(g, cx, removed / opposition_per);
@@ -201,7 +223,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             let mut country: Option<u8> = None;
             for k in 0..*amount {
                 let hexes: Vec<usize> = (0..g.hexes.len())
-                    .filter(|&h| g.tokens(h, CORRUPTION) > 0)
+                    .filter(|&h| corrupted(&w, g, h))
                     .filter(|&h| country.is_none_or(|c| w.map.hexes[h].country == c))
                     .collect();
                 if hexes.is_empty() {
@@ -218,7 +240,11 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 if i >= hexes.len() {
                     break;
                 }
-                adversary::remove_corruption(g, cx, hexes[i], 1);
+                if adversary::style(&w) == adversary::Style::Assets {
+                    adversary::reclaim_any(g, cx, hexes[i]);
+                } else {
+                    adversary::remove_corruption(g, cx, hexes[i], 1);
+                }
                 if *one_country {
                     country = Some(w.map.hexes[hexes[i]].country);
                 }

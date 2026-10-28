@@ -64,8 +64,27 @@ pub static DEF: ModuleDef = ModuleDef {
             uses_cards: false,
             build: build_shared,
         },
+        VariantDef {
+            name: "off",
+            summary: "No threats: nothing is dealt, countered or executed (cards that act on threats have no target)",
+            params: &[],
+            phases: PHASES,
+            rng: &[],
+            uses_cards: false,
+            build: build_off,
+        },
     ],
 };
+
+/// Variant `off`: the threat phases stay in the round and do nothing.
+#[derive(Debug)]
+struct NoThreats;
+
+impl Module for NoThreats {}
+
+fn build_off(_: &Build) -> Result<Box<dyn Module>, String> {
+    Ok(Box::new(NoThreats))
+}
 
 pub const ROW: &str = "threats.row";
 
@@ -443,7 +462,7 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
     let w = cx.world;
     let hexes = scope_hexes(&w, scope);
     let select = |g: &GameState, sel| -> Vec<usize> {
-        hexes.iter().copied().filter(|&h| matches(&w, g, h, sel)).collect()
+        hexes.iter().copied().filter(|&h| adversary::selects(&w, g, h, sel)).collect()
     };
     match op {
         ThreatOp::AddPiece {
@@ -453,9 +472,8 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
             per,
         } => {
             for h in select(g, at) {
-                let n = amount * per.as_ref().map_or(1, |k| g.tokens(h, k));
-                cx.add_tokens(g, h, piece, n);
-                cx.adversary_ops(g, 1);
+                let n = amount * per.as_ref().map_or(1, |k| adversary::kind_count(&w, g, h, k));
+                adversary::reinforce(g, cx, h, piece, n)?;
             }
         }
         ThreatOp::PlayersLose { resource, amount } => {
@@ -471,16 +489,7 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
         }
         ThreatOp::UpgradeUplink => {
             for c in scope_countries(&w, scope) {
-                let up = w.map.countries[c]
-                    .hexes
-                    .iter()
-                    .copied()
-                    .find(|&h| w.map.hexes[h].uplink && g.tokens(h, DRONE) > 0);
-                if let Some(h) = up {
-                    cx.add_tokens(g, h, DRONE, -1);
-                    cx.add_tokens(g, h, OUTPOST, 1);
-                    cx.adversary_ops(g, 1);
-                }
+                adversary::forward_base(g, cx, c)?;
             }
         }
         ThreatOp::Panic => {
@@ -581,7 +590,7 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
         }
         ThreatOp::Build { at } => {
             for h in select(g, at) {
-                adversary::build_hex(g, cx, h);
+                adversary::build_hex(g, cx, h)?;
             }
         }
         ThreatOp::DiscardMostExpensive => {
@@ -601,7 +610,14 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
         }
         ThreatOp::AddCorruption { at, amount } => {
             for h in select(g, at) {
-                adversary::add_corruption(g, cx, h, *amount);
+                if adversary::style(&w) == adversary::Style::Assets {
+                    // No hex corruption: the corruption spreads to an asset.
+                    for _ in 0..*amount {
+                        adversary::spread_from(g, cx, h, None)?;
+                    }
+                } else {
+                    adversary::add_corruption(g, cx, h, *amount);
+                }
             }
         }
     }

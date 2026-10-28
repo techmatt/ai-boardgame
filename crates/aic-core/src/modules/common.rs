@@ -6,7 +6,7 @@
 //! - **adjacent**: a neighbouring hex on the board (across country borders too);
 //! - **next to X**: holding X, or adjacent to a hex holding X.
 
-use crate::content::{Selector, Terrain};
+use crate::content::Terrain;
 use crate::hex::Hex;
 use crate::module::World;
 use crate::state::{GameState, Opt};
@@ -21,8 +21,21 @@ pub const CORRUPTION: &str = "corruption";
 /// Adversary defense from the Fortify threat: prevents player damage.
 pub const FORTIFY: &str = "fortify";
 
-/// Adversary pieces, weakest first.
-pub const ADVERSARY: [&str; 3] = [DRONE, OUTPOST, FOUNDRY];
+/// The adversary's cluster (adversary variant `clusters`).
+pub const CLUSTER: &str = "cluster";
+/// A factory or data centre corrupted to the adversary's side: the asset's
+/// token flipped over (adversary variant `assets`).
+pub const ROGUE_FACTORY: &str = "rogue_factory";
+pub const ROGUE_DATA_CENTRE: &str = "rogue_data_centre";
+
+/// The Militarist's pieces, weakest first.
+pub const MILITARIST: [&str; 3] = [DRONE, OUTPOST, FOUNDRY];
+/// Corrupted assets (adversary variant `assets`).
+pub const ROGUE: [&str; 2] = [ROGUE_FACTORY, ROGUE_DATA_CENTRE];
+
+/// Adversary pieces of every adversary variant, the Militarist's weakest
+/// first. A game only ever holds the kinds its adversary variant uses.
+pub const ADVERSARY: [&str; 6] = [DRONE, OUTPOST, FOUNDRY, CLUSTER, ROGUE_FACTORY, ROGUE_DATA_CENTRE];
 
 /// Seat `s`'s processors on a hex.
 pub fn processor(seat: usize) -> String {
@@ -89,13 +102,6 @@ pub fn seats_in_scope(w: &World, g: &GameState, scope: Option<usize>) -> Vec<usi
         Some(c) => seats_in_country(w, g, c),
         None => (0..g.seats.len()).collect(),
     }
-}
-
-pub fn matches(w: &World, g: &GameState, h: usize, sel: &Selector) -> bool {
-    (!sel.uplink || w.map.hexes[h].uplink)
-        && sel.has.iter().all(|k| g.tokens(h, k) > 0)
-        && sel.adversary_at_least.is_none_or(|n| adversary_count(g, h) >= n)
-        && (!sel.corrupted || g.tokens(h, CORRUPTION) > 0)
 }
 
 pub fn has_terrain(w: &World, h: usize, terrains: &[Terrain]) -> bool {

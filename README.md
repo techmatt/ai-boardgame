@@ -22,7 +22,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `crates/aic-sim` | Native CLI: seeded random-agent games over a seed range, one config or two side by side, with every game replay-checked. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 (2 countries, difficulty 0); `shared_row.json` differs only in the threat variant. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 (2 countries, difficulty 0); `shared_row.json` differs only in the threat variant; `clusters.json` and `assets.json` only in the adversary (the two spread variants, rules.md §2a). Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §2b): `--set threats.variant=off`, `opposition.variant=off`, `cards.variant=off`. |
 | `scripts/wasm-smoke.mjs` | Plays one game through the wasm package in Node. |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
@@ -83,6 +83,10 @@ S=target/release/aic-sim
 $S run configs/baseline.json --games 2000                          # v0, 2 countries, difficulty 0
 for n in 1 2 3 4; do $S run configs/baseline.json --games 500 --set countries=$n; done
 $S compare configs/baseline.json configs/shared_row.json --games 2000  # threat variants
+$S compare configs/baseline.json configs/clusters.json --games 2000    # spread variants
+$S compare configs/baseline.json configs/assets.json --games 2000
+$S compare configs/baseline.json configs/baseline.json --set-b threats.variant=off  # off-variants
+$S compare configs/clusters.json configs/clusters.json --set-b opposition.variant=off
 $S run configs/baseline.json --set opposition.variant=income --set opposition.income_credits=2
 $S compare configs/baseline.json configs/baseline.json --set-b adversary.difficulty=4
 $S run configs/baseline.json --games 1 --trace     # first game as JSON lines
@@ -127,7 +131,10 @@ overflows `u64`).
 Measured on this machine (v0, 2 countries): about 1.4 ms per game, replay included
 (every action and automatic phase clones the state for choice replay); 2,000 games take
 about 3 s. Random-agent v0 games end in 2–6 rounds, almost all on the corruption pool:
-the draft numbers are not tuned. (The placeholder loop ran at 0.03–0.05 ms per game.)
+the draft numbers are not tuned. The spread variants (2,000 games each, 2 / 3
+countries): `clusters` 1.2 / 1.9 ms per game, 2.8 rounds, about a quarter lost on
+population; `assets` 0.9 / 1.3 ms, 2.0 rounds, all on the pool. Random agents won none
+of the three. (The placeholder loop ran at 0.03–0.05 ms per game.)
 
 **Game records** (`aic-game-record/1`, `aic_core::SavedGame`) are JSON: the resolved
 config, the seed and the action list (one action per line), plus a `note` saying why the

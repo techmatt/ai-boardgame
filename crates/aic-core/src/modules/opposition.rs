@@ -96,8 +96,21 @@ pub static DEF: ModuleDef = ModuleDef {
             uses_cards: false,
             build,
         },
+        VariantDef {
+            name: "off",
+            summary: "Reaching a level gives no reward (the level still lowers the purge bar)",
+            params: &BASE,
+            phases: &[],
+            rng: &[],
+            uses_cards: false,
+            build: build_off,
+        },
     ],
 };
+
+fn build_off(_: &Build) -> Result<Box<dyn Module>, String> {
+    Ok(Box::new(Opposition { reward: Reward::None }))
+}
 
 pub const POINTS: &str = "opposition.points";
 pub const LEVEL: &str = "opposition.level";
@@ -112,6 +125,7 @@ enum Reward {
     Income(i64),
     Free(i64),
     Counter,
+    None,
 }
 
 #[derive(Debug)]
@@ -146,6 +160,8 @@ pub fn for_kill(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, kind: &str)
     let base = match kind {
         OUTPOST => w.int("opposition.outpost"),
         FOUNDRY => w.int("opposition.foundry"),
+        CLUSTER => w.int("adversary.cluster_opposition"),
+        ROGUE_FACTORY | ROGUE_DATA_CENTRE => w.int("adversary.reclaim_opposition"),
         _ => return,
     };
     let bonus: i64 = seat.map_or(0, |s| {
@@ -170,17 +186,10 @@ fn population(g: &GameState) -> i64 {
     (0..g.hexes.len()).map(|h| g.tokens(h, POPULATION)).sum()
 }
 
-/// Whether the adversary's presence is under the bar for `level`.
+/// Whether the adversary's presence is under the bar for `level` (the
+/// bars per adversary variant are in `adversary::under_bar`).
 fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
-    let count = |k: &str| (0..g.hexes.len()).map(|h| g.tokens(h, k)).sum::<i64>();
-    if level >= w.int("opposition.max_level") {
-        return true;
-    }
-    match level {
-        0 => count(DRONE) + count(OUTPOST) + count(FOUNDRY) == 0,
-        1 => count(OUTPOST) + count(FOUNDRY) == 0,
-        _ => count(FOUNDRY) == 0,
-    }
+    level >= w.int("opposition.max_level") || adversary::under_bar(w, g, level)
 }
 
 impl Module for Opposition {
@@ -236,7 +245,7 @@ impl Module for Opposition {
             Some(per * (level + 1).min(max)),
             "humanity rising: every per_player x players opposition fills a level",
         );
-        out.global("level", "opposition level", level, Some(max), win_text(level, max));
+        out.global("level", "opposition level", level, Some(max), &win_text(w, level, max));
         let start = g.var(board::START_POPULATION);
         out.global(
             "population",
@@ -261,15 +270,11 @@ impl Module for Opposition {
     }
 }
 
-fn win_text(level: i64, max: i64) -> &'static str {
+fn win_text(w: &World, level: i64, max: i64) -> String {
     if level >= max {
-        return "players win";
+        return "players win".into();
     }
-    match level {
-        0 => "win when no adversary pieces remain",
-        1 => "win when no outposts or foundries remain",
-        _ => "win when no foundries remain",
-    }
+    adversary::win_text(w, level)
 }
 
 impl Opposition {
@@ -279,20 +284,11 @@ impl Opposition {
             Reward::Pushback(n) => {
                 for c in 0..w.map.countries.len() {
                     for _ in 0..n {
-                        let hexes: Vec<usize> = w.map.countries[c]
-                            .hexes
-                            .iter()
-                            .copied()
-                            .filter(|&h| g.tokens(h, DRONE) > 0)
-                            .collect();
-                        let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
-                        let prompt = format!("Pushback in country {c}: remove a drone from which hex?");
-                        if let Some(i) = cx.choose(0, &prompt, opts)? {
-                            cx.add_tokens(g, hexes[i], DRONE, -1);
-                        }
+                        adversary::pushback(g, cx, c)?;
                     }
                 }
             }
+            Reward::None => {}
             Reward::Income(n) => cx.add_key(g, INCOME_BONUS.into(), n),
             Reward::Free(n) => cx.add_key(g, FREE_LEFT.into(), n),
             Reward::Counter => {

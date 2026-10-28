@@ -28,38 +28,48 @@ pub static DEF: ModuleDef = ModuleDef {
             i("keep_cost", 0, 20, "credits to keep one drafted card"),
             i("draw_cost", 0, 20, "compute to draw one card"),
         ],
-        phases: &[
-            PhaseSpec {
-                name: "tier",
-                kind: PhaseKind::Decision,
-                doc: "players who have unlocked tier 2 choose which tier they are dealt from",
-            },
-            PhaseSpec {
-                name: "deal",
-                kind: PhaseKind::Auto,
-                doc: "deal each player their draft hand",
-            },
-            PhaseSpec {
-                name: "draft",
-                kind: PhaseKind::Decision,
-                doc: "take one card and pass the rest to the next seat, until the hands are gone",
-            },
-            PhaseSpec {
-                name: "keep",
-                kind: PhaseKind::Decision,
-                doc: "buy any drafted cards into your hand; the rest are discarded",
-            },
-            PhaseSpec {
-                name: "play",
-                kind: PhaseKind::Decision,
-                doc: "play cards, use building abilities, draw with compute",
-            },
-        ],
+        phases: PHASES,
         rng: &["cards"],
         uses_cards: true,
         build,
+    }, VariantDef {
+        name: "off",
+        summary: "No draft and no drawing: players have only their AI's unique cards",
+        params: &[],
+        phases: PHASES,
+        rng: &["cards"],
+        uses_cards: true,
+        build: build_off,
     }],
 };
+
+const PHASES: &[PhaseSpec] = &[
+    PhaseSpec {
+        name: "tier",
+        kind: PhaseKind::Decision,
+        doc: "players who have unlocked tier 2 choose which tier they are dealt from",
+    },
+    PhaseSpec {
+        name: "deal",
+        kind: PhaseKind::Auto,
+        doc: "deal each player their draft hand",
+    },
+    PhaseSpec {
+        name: "draft",
+        kind: PhaseKind::Decision,
+        doc: "take one card and pass the rest to the next seat, until the hands are gone",
+    },
+    PhaseSpec {
+        name: "keep",
+        kind: PhaseKind::Decision,
+        doc: "buy any drafted cards into your hand; the rest are discarded",
+    },
+    PhaseSpec {
+        name: "play",
+        kind: PhaseKind::Decision,
+        doc: "play cards, use building abilities, draw with compute",
+    },
+];
 
 const fn i(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSpec {
     ParamSpec {
@@ -248,6 +258,8 @@ struct Cards {
     draw_cost: i64,
     /// Selected cards (content indices).
     cards: Vec<usize>,
+    /// Variant `off`: no draft, no drawing.
+    off: bool,
 }
 
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
@@ -256,6 +268,17 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
         keep_cost: b.int("keep_cost")?,
         draw_cost: b.int("draw_cost")?,
         cards: b.cards.clone(),
+        off: false,
+    }))
+}
+
+fn build_off(b: &Build) -> Result<Box<dyn Module>, String> {
+    Ok(Box::new(Cards {
+        deal: 0,
+        keep_cost: 0,
+        draw_cost: 0,
+        cards: b.cards.clone(),
+        off: true,
     }))
 }
 
@@ -420,7 +443,7 @@ impl Module for Cards {
         match phase {
             0 => {
                 for s in 0..g.seats.len() {
-                    if !ai::tier2(&w, g, s) {
+                    if self.off || !ai::tier2(&w, g, s) {
                         g.seats[s].passed = true;
                     }
                 }
@@ -510,7 +533,7 @@ impl Module for Cards {
                     }
                 }
                 for tier in [1, 2] {
-                    if can_draw(w, g, s, tier, self.draw_cost) {
+                    if !self.off && can_draw(w, g, s, tier, self.draw_cost) {
                         out.push(Action::Draw { seat, tier });
                     }
                 }
@@ -603,7 +626,7 @@ impl Module for Cards {
                 effects::run(g, cx, s, &ab.effects, &mut effects::Ctx::default())?;
             }
             Action::Draw { tier, .. } => {
-                if !can_draw(&w, g, s, *tier, self.draw_cost) {
+                if self.off || !can_draw(&w, g, s, *tier, self.draw_cost) {
                     return Err("can't draw".into());
                 }
                 cx.add_resource(g, s, "compute", -self.draw_cost);

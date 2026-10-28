@@ -3,12 +3,12 @@
 //! levels. Also the rules for destroying pieces on either side, which
 //! cards, threats and the pipeline share.
 
-use crate::content::{AdversaryCard, Passive};
+use crate::content::{AdversaryCard, Passive, Selector, Terrain};
 use crate::module::{
     Build, Cx, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef, World,
 };
 use crate::rng::shuffle;
-use crate::state::GameState;
+use crate::state::{GameState, Opt};
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
@@ -57,8 +57,94 @@ pub static DEF: ModuleDef = ModuleDef {
         rng: &["adversary"],
         uses_cards: false,
         build,
+    }, VariantDef {
+        name: "clusters",
+        summary: "Clusters and infection: the adversary places clusters, hegemonizes and assaults by terrain; infection flips data centres",
+        params: &[
+            i("difficulty", 0, 4, "difficulty level 0-4 (each level includes the ones below)"),
+            l("stage_cards", "adversary cards dealt from stage I, II and III (before difficulty)"),
+            i("cluster_health", 1, 10, "damage to destroy an adversary cluster"),
+            i("cluster_damage", 0, 10, "assault damage each adversary cluster deals in its hex"),
+            i("population_health", 1, 10, "damage to destroy a population"),
+            i("building_health", 1, 10, "damage to destroy a factory or data centre"),
+            i("defense_value", 0, 10, "assault damage and infection one defense token (firewall) prevents"),
+            i("corruption_at", 1, 20, "an assault dealing at least this much damage adds corruption"),
+            i("corruption_per_ravage", 0, 5, "corruption an assault adds"),
+            i("cascade", 0, 5, "corruption a cascade adds to an adjacent hex"),
+            i("pool_per_country", 0, 20, "corruption pool size per country"),
+            i("pool_base", 0, 20, "corruption pool size on top of the per-country part"),
+            i("explore_clusters", 0, 5, "clusters a hex gains when the adversary places (explore slot)"),
+            i("source_clusters", 1, 10, "a hex with at least this many clusters is a source to place from"),
+            i("hegemonize_clusters", 0, 5, "clusters each hegemonized hex gains (build slot)"),
+            i("hegemonize_all", 0, 1, "1: hegemonize every hex of the terrain (Matt's note as written); 0: only hexes holding clusters"),
+            i("infection_spill", 0, 1, "1: infection excess left after flipping data centres plants one cluster"),
+            i("cluster_opposition", 0, 10, "opposition for destroying a cluster"),
+            i("purge_allowance", 0, 20, "purge win: at opposition level L, at most L x this x countries clusters may remain"),
+            i("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
+            i("stage1_removed", 0, 3, "difficulty 2+: stage-I cards removed"),
+            i("damage_bonus", 0, 10, "difficulty 3+: extra assault damage in each hex assaulted"),
+            i("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
+            i("pool_reduction", 0, 10, "difficulty 4+: corruption pool smaller by this per country"),
+        ],
+        phases: &[
+            ph("ravage", "assault with the card in the ravage slot: infection, then combat"),
+            ph("build", "hegemonize with the card in the build slot"),
+            ph("explore", "reveal a card into the explore slot and place clusters"),
+            ph("slide", "slide the cards one slot along; the ravage card is discarded"),
+        ],
+        rng: &["adversary"],
+        uses_cards: false,
+        build,
+    }, VariantDef {
+        name: "assets",
+        summary: "Asset corruption: no adversary pieces; it corrupts factories and data centres and spreads between them by terrain",
+        params: &[
+            i("difficulty", 0, 4, "difficulty level 0-4 (each level includes the ones below)"),
+            l("stage_cards", "adversary cards dealt from stage I, II and III (before difficulty)"),
+            i("rogue_health", 1, 10, "player damage that reclaims a corrupted asset"),
+            i("rogue_damage", 0, 10, "strike damage each corrupted asset next to a hex deals there"),
+            i("population_health", 1, 10, "damage to destroy a population"),
+            i("building_health", 1, 10, "damage to destroy a factory or data centre"),
+            i("defense_value", 0, 10, "strike damage one defense token prevents"),
+            i("pool_per_country", 0, 20, "corruption pool size per country (one per corrupted asset)"),
+            i("pool_base", 0, 20, "corruption pool size on top of the per-country part"),
+            i("spread", 0, 5, "assets each corrupted asset corrupts when it spreads (build slot)"),
+            i("reclaim_opposition", 0, 10, "opposition for reclaiming a corrupted asset by damage"),
+            i("purge_allowance", 0, 20, "purge win: at opposition level L, at most L x this x countries corrupted assets may remain"),
+            i("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
+            i("stage1_removed", 0, 3, "difficulty 2+: stage-I cards removed"),
+            i("damage_bonus", 0, 10, "difficulty 3+: extra strike damage in each hex struck"),
+            i("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
+            i("pool_reduction", 0, 10, "difficulty 4+: corruption pool smaller by this per country"),
+        ],
+        phases: &[
+            ph("ravage", "strike with the card in the ravage slot: hexes of its terrain next to corrupted assets take damage"),
+            ph("build", "spread with the card in the build slot: corrupted assets corrupt adjacent assets"),
+            ph("explore", "reveal a card into the explore slot and corrupt one asset in each country"),
+            ph("slide", "slide the cards one slot along; the ravage card is discarded"),
+        ],
+        rng: &["adversary"],
+        uses_cards: false,
+        build,
     }],
 };
+
+/// Which adversary is in play: the adversary variant, read by the rules
+/// that touch adversary pieces (threats, opposition, card effects).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Style {
+    Militarist,
+    Clusters,
+    Assets,
+}
+
+pub fn style(w: &World) -> Style {
+    match w.variant("adversary") {
+        Some("clusters") => Style::Clusters,
+        Some("assets") => Style::Assets,
+        _ => Style::Militarist,
+    }
+}
 
 const fn i(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSpec {
     ParamSpec {
@@ -111,6 +197,8 @@ pub fn health(w: &World, kind: &str) -> i64 {
         DRONE => w.int("adversary.drone_health"),
         OUTPOST => w.int("adversary.outpost_health"),
         FOUNDRY => w.int("adversary.foundry_health"),
+        CLUSTER => w.int("adversary.cluster_health"),
+        ROGUE_FACTORY | ROGUE_DATA_CENTRE => w.int("adversary.rogue_health"),
         POPULATION => w.int("adversary.population_health"),
         _ => w.int("adversary.building_health"),
     }
@@ -167,6 +255,7 @@ pub fn card_text(c: &AdversaryCard) -> String {
 #[derive(Debug)]
 struct Adversary {
     stage_cards: Vec<i64>,
+    style: Style,
 }
 
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
@@ -186,7 +275,10 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
             return Err(format!("stage_cards: stage {} has only {have} cards", s + 1));
         }
     }
-    Ok(Box::new(Adversary { stage_cards }))
+    Ok(Box::new(Adversary {
+        stage_cards,
+        style: style(&b.world),
+    }))
 }
 
 impl Module for Adversary {
@@ -210,9 +302,41 @@ impl Module for Adversary {
             deck.extend(ids.into_iter().take(n as usize));
         }
         cx.set_pile(g, DECK, deck);
-        // Opening: reveal the first card and explore, then slide.
-        if reveal(g, cx) {
-            explore(g, cx);
+        match self.style {
+            Style::Militarist => {
+                // Opening: reveal the first card and explore, then slide.
+                if reveal(g, cx) {
+                    explore(g, cx);
+                }
+            }
+            Style::Clusters => {
+                // The board's starting adversary pieces are placed as one
+                // cluster each; then the opening as the Militarist's.
+                for h in 0..g.hexes.len() {
+                    let n: i64 = MILITARIST.iter().map(|k| g.tokens(h, k)).sum();
+                    for k in MILITARIST {
+                        let have = g.tokens(h, k);
+                        cx.add_tokens(g, h, k, -have);
+                    }
+                    cx.add_tokens(g, h, CLUSTER, n);
+                }
+                if reveal(g, cx) {
+                    place(g, cx);
+                }
+            }
+            Style::Assets => {
+                // No pieces of its own: the board's starting adversary
+                // pieces are not used. Opening: reveal, then a beachhead in
+                // each country.
+                for h in 0..g.hexes.len() {
+                    for k in MILITARIST {
+                        let have = g.tokens(h, k);
+                        cx.add_tokens(g, h, k, -have);
+                    }
+                }
+                reveal(g, cx);
+                beachhead(g, cx);
+            }
         }
         slide(g, cx);
     }
@@ -225,6 +349,9 @@ impl Module for Adversary {
 
     fn run(&self, phase: usize, g: &mut GameState, cx: &mut Cx) -> Res {
         let w = cx.world;
+        if self.style != Style::Militarist {
+            return self.run_spread(phase, g, cx);
+        }
         match phase {
             0 => {
                 if let Some(id) = g.pile(SLOTS[2]).first().cloned() {
@@ -246,7 +373,7 @@ impl Module for Adversary {
                         .filter(|&h| has_terrain(&w, h, &c.terrains) && has_adversary(g, h))
                         .collect();
                     for h in hexes {
-                        build_hex(g, cx, h);
+                        build_hex(g, cx, h)?;
                     }
                 }
             }
@@ -412,8 +539,19 @@ fn slide(g: &mut GameState, cx: &mut Cx) {
 }
 
 /// Build in one hex: a foundry if it has more outposts than foundries,
-/// otherwise an outpost.
-pub fn build_hex(g: &mut GameState, cx: &mut Cx, h: usize) {
+/// otherwise an outpost. Clusters: the hex is hegemonized. Assets: the hex
+/// spreads (an asset on or adjacent to it is corrupted).
+pub fn build_hex(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
+    match style(&cx.world) {
+        Style::Militarist => {}
+        Style::Clusters => {
+            let n = cx.world.int("adversary.hegemonize_clusters");
+            cx.add_tokens(g, h, CLUSTER, n);
+            cx.adversary_ops(g, 1);
+            return Ok(());
+        }
+        Style::Assets => return spread_from(g, cx, h, None),
+    }
     let kind = if g.tokens(h, OUTPOST) > g.tokens(h, FOUNDRY) {
         FOUNDRY
     } else {
@@ -422,6 +560,7 @@ pub fn build_hex(g: &mut GameState, cx: &mut Cx, h: usize) {
     let n = cx.world.int("adversary.build_pieces");
     cx.add_tokens(g, h, kind, n);
     cx.adversary_ops(g, 1);
+    Ok(())
 }
 
 /// Adds up to `n` corruption from the pool to hex `h`; returns how much.
@@ -446,8 +585,12 @@ pub fn remove_corruption(g: &mut GameState, cx: &mut Cx, h: usize, n: i64) -> i6
 }
 
 /// A cascade: corruption on an adjacent hex of the players' choice.
+/// Assets: the corruption spreads to an asset on or adjacent to `from`.
 pub fn cascade(g: &mut GameState, cx: &mut Cx, from: usize) -> Res {
     let w = cx.world;
+    if style(&w) == Style::Assets {
+        return spread_from(g, cx, from, None);
+    }
     let hexes = w.map.hexes[from].neighbours.clone();
     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
     let prompt = format!("Corruption cascades from {}: onto which adjacent hex?", hex_name(&w, from));
@@ -479,18 +622,24 @@ pub fn lose_population(g: &mut GameState, cx: &mut Cx, h: usize) -> bool {
 
 /// A ravage in hex `h`: the adversary pieces there deal their damage, less
 /// defense, to the players' pieces; then corruption and Momentum.
+/// (Clusters: the combat half of an assault, without Momentum. Assets: a
+/// strike, below.)
 pub fn ravage(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
     let w = cx.world;
-    let mut raw: i64 = ADVERSARY.iter().map(|k| g.tokens(h, k) * piece_damage(&w, k)).sum();
+    let mut raw: i64 = match style(&w) {
+        Style::Militarist => MILITARIST.iter().map(|k| g.tokens(h, k) * piece_damage(&w, k)).sum(),
+        Style::Clusters => g.tokens(h, CLUSTER) * w.int("adversary.cluster_damage"),
+        Style::Assets => return strike(g, cx, h),
+    };
     if raw == 0 {
         return Ok(());
     }
-    if level(&w, 3) && g.tokens(h, FOUNDRY) > 0 {
-        raw += w.int("adversary.foundry_bonus");
+    match style(&w) {
+        Style::Militarist if level(&w, 3) && g.tokens(h, FOUNDRY) > 0 => raw += w.int("adversary.foundry_bonus"),
+        Style::Clusters if level(&w, 3) => raw += w.int("adversary.damage_bonus"),
+        _ => {}
     }
-    let prevented: i64 = (0..g.seats.len())
-        .map(|s| g.tokens(h, &defense(s)) * cards::defense_value(&w, g, s))
-        .sum();
+    let prevented = prevented(&w, g, h);
     let dmg = (raw - prevented).max(0);
     cx.adversary_ops(g, 1);
     cx.note(Some(h), || {
@@ -499,6 +648,49 @@ pub fn ravage(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
     if dmg == 0 {
         return Ok(());
     }
+    let lost_population = lose_pieces(g, cx, h, dmg)?;
+    if dmg >= w.int("adversary.corruption_at") {
+        let had = g.tokens(h, CORRUPTION) > 0;
+        add_corruption(g, cx, h, w.int("adversary.corruption_per_ravage"));
+        if had {
+            cascade(g, cx, h)?;
+        }
+    }
+    if style(&w) != Style::Militarist {
+        return Ok(());
+    }
+    let c = w.map.hexes[h].country as usize;
+    let momentum = w.int("adversary.momentum_drones");
+    if lost_population && momentum > 0 {
+        let hexes: Vec<usize> = w.map.hexes[h]
+            .neighbours
+            .iter()
+            .copied()
+            .filter(|&n| w.map.hexes[n].country as usize == c)
+            .collect();
+        let opts = hexes.iter().map(|&n| hex_opt(&w, n)).collect();
+        let prompt = format!("Momentum: a drone joins next to {}. Onto which adjacent hex?", hex_name(&w, h));
+        if let Some(i) = cx.choose(0, &prompt, opts)? {
+            cx.add_tokens(g, hexes[i], DRONE, momentum);
+            cx.adversary_ops(g, 1);
+        }
+    }
+    Ok(())
+}
+
+/// Damage the players' defense tokens in `h` prevent (each token its
+/// owner's defense value).
+fn prevented(w: &World, g: &GameState, h: usize) -> i64 {
+    (0..g.seats.len())
+        .map(|s| g.tokens(h, &defense(s)) * cards::defense_value(w, g, s))
+        .sum()
+}
+
+/// `dmg` adversary damage destroys the players' pieces in `h` one at a
+/// time, the players choosing each among those it can still destroy.
+/// Returns whether population was lost.
+fn lose_pieces(g: &mut GameState, cx: &mut Cx, h: usize, dmg: i64) -> Res<bool> {
+    let w = cx.world;
     let c = w.map.hexes[h].country as usize;
     let sheltered = board::flagged(g, "shelter", c);
     let mut left = dmg;
@@ -524,36 +716,20 @@ pub fn ravage(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
             cx.tally(g, "adversary.buildings_lost", 1);
         }
     }
-    if dmg >= w.int("adversary.corruption_at") {
-        let had = g.tokens(h, CORRUPTION) > 0;
-        add_corruption(g, cx, h, w.int("adversary.corruption_per_ravage"));
-        if had {
-            cascade(g, cx, h)?;
-        }
-    }
-    let momentum = w.int("adversary.momentum_drones");
-    if lost_population && momentum > 0 {
-        let hexes: Vec<usize> = w.map.hexes[h]
-            .neighbours
-            .iter()
-            .copied()
-            .filter(|&n| w.map.hexes[n].country as usize == c)
-            .collect();
-        let opts = hexes.iter().map(|&n| hex_opt(&w, n)).collect();
-        let prompt = format!("Momentum: a drone joins next to {}. Onto which adjacent hex?", hex_name(&w, h));
-        if let Some(i) = cx.choose(0, &prompt, opts)? {
-            cx.add_tokens(g, hexes[i], DRONE, momentum);
-            cx.adversary_ops(g, 1);
-        }
-    }
-    Ok(())
+    Ok(lost_population)
 }
 
 /// Destroys one adversary piece of `kind` in `h`, scoring opposition for
-/// `seat` (if a player destroyed it).
+/// `seat` (if a player destroyed it). A corrupted asset is reclaimed
+/// instead: it flips back to the players and its corruption returns to
+/// the pool.
 pub fn destroy_piece(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, h: usize, kind: &str) {
     if cx.add_tokens(g, h, kind, -1) == 0 {
         return;
+    }
+    if let Some(asset) = asset_of(kind) {
+        cx.add_tokens(g, h, asset, 1);
+        cx.add_key(g, POOL.into(), 1);
     }
     cx.tally(g, &format!("adversary.{kind}_destroyed"), 1);
     opposition::for_kill(g, cx, seat, kind);
@@ -591,5 +767,482 @@ pub fn destroy_all(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
         while g.tokens(h, kind) > 0 {
             destroy_piece(g, cx, Some(seat), h, kind);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Spread variants: clusters and asset corruption.
+// ---------------------------------------------------------------------------
+
+/// The asset a corrupted asset was (and flips back to when reclaimed).
+pub fn asset_of(kind: &str) -> Option<&'static str> {
+    match kind {
+        ROGUE_FACTORY => Some(FACTORY),
+        ROGUE_DATA_CENTRE => Some(DATA_CENTRE),
+        _ => None,
+    }
+}
+
+fn rogue_of(asset: &str) -> &'static str {
+    if asset == FACTORY {
+        ROGUE_FACTORY
+    } else {
+        ROGUE_DATA_CENTRE
+    }
+}
+
+/// Every adversary piece on the board (clusters, or corrupted assets).
+pub fn presence(g: &GameState) -> i64 {
+    (0..g.hexes.len()).map(|h| adversary_count(g, h)).sum()
+}
+
+/// Whether the adversary's presence is under the purge bar for opposition
+/// `level` (below the top level, which wins at once).
+pub fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
+    let count = |k: &str| (0..g.hexes.len()).map(|h| g.tokens(h, k)).sum::<i64>();
+    match style(w) {
+        Style::Militarist => match level {
+            0 => count(DRONE) + count(OUTPOST) + count(FOUNDRY) == 0,
+            1 => count(OUTPOST) + count(FOUNDRY) == 0,
+            _ => count(FOUNDRY) == 0,
+        },
+        _ => presence(g) <= allowance(w, level),
+    }
+}
+
+/// Clusters or corrupted assets allowed to remain for the purge win at `level`.
+fn allowance(w: &World, level: i64) -> i64 {
+    level * w.int("adversary.purge_allowance") * w.map.countries.len() as i64
+}
+
+/// The purge win at `level`, in words.
+pub fn win_text(w: &World, level: i64) -> String {
+    let what = match style(w) {
+        Style::Militarist => {
+            return match level {
+                0 => "win when no adversary pieces remain",
+                1 => "win when no outposts or foundries remain",
+                _ => "win when no foundries remain",
+            }
+            .to_string()
+        }
+        Style::Clusters => "clusters",
+        Style::Assets => "corrupted assets",
+    };
+    match allowance(w, level) {
+        0 => format!("win when no {what} remain"),
+        n => format!("win when at most {n} {what} remain"),
+    }
+}
+
+/// How many of `kind` hex `h` holds, reading a Militarist piece kind (named
+/// by threats) as the adversary in play: any cluster, or any corrupted asset.
+pub fn kind_count(w: &World, g: &GameState, h: usize, kind: &str) -> i64 {
+    if !MILITARIST.contains(&kind) {
+        return g.tokens(h, kind);
+    }
+    match style(w) {
+        Style::Militarist => g.tokens(h, kind),
+        Style::Clusters => g.tokens(h, CLUSTER),
+        Style::Assets => ROGUE.iter().map(|k| g.tokens(h, k)).sum(),
+    }
+}
+
+/// A threat's hex selector, with piece kinds read by [`kind_count`]. With
+/// asset corruption, "corrupted" means holding a corrupted asset.
+pub fn selects(w: &World, g: &GameState, h: usize, sel: &Selector) -> bool {
+    let corrupted = match style(w) {
+        Style::Assets => ROGUE.iter().any(|k| g.tokens(h, k) > 0),
+        _ => g.tokens(h, CORRUPTION) > 0,
+    };
+    (!sel.uplink || w.map.hexes[h].uplink)
+        && sel.has.iter().all(|k| kind_count(w, g, h, k) > 0)
+        && sel.adversary_at_least.is_none_or(|n| adversary_count(g, h) >= n)
+        && (!sel.corrupted || corrupted)
+}
+
+/// A threat adds `n` of `piece` to `h`. A Militarist piece kind is read as
+/// the adversary in play: `n` clusters, or `n` spreads from `h`.
+pub fn reinforce(g: &mut GameState, cx: &mut Cx, h: usize, piece: &str, n: i64) -> Res {
+    let w = cx.world;
+    let piece = match style(&w) {
+        Style::Clusters if MILITARIST.contains(&piece) => CLUSTER,
+        Style::Assets if MILITARIST.contains(&piece) => {
+            for _ in 0..n {
+                spread_from(g, cx, h, None)?;
+            }
+            return Ok(());
+        }
+        _ => piece,
+    };
+    cx.add_tokens(g, h, piece, n);
+    cx.adversary_ops(g, 1);
+    Ok(())
+}
+
+/// Forward base in country `c`: one drone on the lowest-numbered uplink
+/// holding a drone becomes an outpost. Clusters: that uplink (holding a
+/// cluster) gains a cluster. Assets: the lowest-numbered uplink spreads.
+pub fn forward_base(g: &mut GameState, cx: &mut Cx, c: usize) -> Res {
+    let w = cx.world;
+    let uplinks: Vec<usize> = w.map.countries[c]
+        .hexes
+        .iter()
+        .copied()
+        .filter(|&h| w.map.hexes[h].uplink)
+        .collect();
+    match style(&w) {
+        Style::Militarist => {
+            if let Some(&h) = uplinks.iter().find(|&&h| g.tokens(h, DRONE) > 0) {
+                cx.add_tokens(g, h, DRONE, -1);
+                cx.add_tokens(g, h, OUTPOST, 1);
+                cx.adversary_ops(g, 1);
+            }
+        }
+        Style::Clusters => {
+            if let Some(&h) = uplinks.iter().find(|&&h| g.tokens(h, CLUSTER) > 0) {
+                cx.add_tokens(g, h, CLUSTER, 1);
+                cx.adversary_ops(g, 1);
+            }
+        }
+        Style::Assets => {
+            if let Some(&h) = uplinks.first() {
+                spread_from(g, cx, h, None)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Opposition pushback in country `c`: remove one drone (players choose the
+/// hex). Clusters: one cluster. Assets: reclaim one corrupted asset.
+pub fn pushback(g: &mut GameState, cx: &mut Cx, c: usize) -> Res {
+    let w = cx.world;
+    let kinds: &[&str] = match style(&w) {
+        Style::Militarist => &[DRONE],
+        Style::Clusters => &[CLUSTER],
+        Style::Assets => &ROGUE,
+    };
+    let mut picks = Vec::new();
+    for &h in &w.map.countries[c].hexes {
+        for &k in kinds {
+            if g.tokens(h, k) > 0 {
+                picks.push((h, k));
+            }
+        }
+    }
+    let opts = picks.iter().map(|&(h, k)| piece_opt(&w, h, k, kinds.len() > 1)).collect();
+    let prompt = match style(&w) {
+        Style::Assets => format!("Pushback in country {c}: reclaim which corrupted asset?"),
+        _ => format!("Pushback in country {c}: remove a {} from which hex?", kinds[0]),
+    };
+    if let Some(i) = cx.choose(0, &prompt, opts)? {
+        let (h, k) = picks[i];
+        match asset_of(k) {
+            Some(_) => reclaim(g, cx, h, k),
+            None => {
+                cx.add_tokens(g, h, k, -1);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A hex option, naming the piece too when a hex may offer several.
+fn piece_opt(w: &World, h: usize, kind: &str, named: bool) -> Opt {
+    let mut o = hex_opt(w, h);
+    if named {
+        o.option = format!("{} {kind}", o.option);
+    }
+    o
+}
+
+/// Flips one `asset` (factory or data centre) in `h` to the adversary,
+/// taking one corruption from the pool. Nothing if the pool is empty.
+fn corrupt(g: &mut GameState, cx: &mut Cx, h: usize, asset: &str) {
+    let w = cx.world;
+    let pool = g.var(POOL);
+    if pool <= 0 || g.tokens(h, asset) == 0 {
+        return;
+    }
+    cx.set_key(g, POOL.into(), pool - 1);
+    cx.add_tokens(g, h, asset, -1);
+    cx.add_tokens(g, h, rogue_of(asset), 1);
+    cx.adversary_ops(g, 1);
+    cx.tally(g, "adversary.assets_corrupted", 1);
+    cx.note(Some(h), || format!("The {asset} at {} is corrupted", hex_name(&w, h)));
+}
+
+/// Flips a corrupted asset back to the players; its corruption returns to
+/// the pool. No opposition (that is for reclaiming by damage).
+pub fn reclaim(g: &mut GameState, cx: &mut Cx, h: usize, rogue: &str) {
+    let Some(asset) = asset_of(rogue) else {
+        return;
+    };
+    if cx.add_tokens(g, h, rogue, -1) == 0 {
+        return;
+    }
+    cx.add_tokens(g, h, asset, 1);
+    cx.add_key(g, POOL.into(), 1);
+    cx.tally(g, "adversary.reclaimed", 1);
+}
+
+/// Reclaims one corrupted asset in `h` (a factory first).
+pub fn reclaim_any(g: &mut GameState, cx: &mut Cx, h: usize) {
+    if let Some(k) = ROGUE.iter().copied().find(|k| g.tokens(h, k) > 0) {
+        reclaim(g, cx, h, k);
+    }
+}
+
+/// Whether hex `h` is of, or adjacent to a hex of, one of `terrains`.
+fn near_terrain(w: &World, h: usize, terrains: &[Terrain]) -> bool {
+    next_to(w, h, |x| has_terrain(w, x, terrains))
+}
+
+/// Uncorrupted assets among `hexes`, as (hex, asset), factories first in
+/// each hex.
+fn assets_in(g: &GameState, hexes: impl IntoIterator<Item = usize>) -> Vec<(usize, &'static str)> {
+    let mut out = Vec::new();
+    for h in hexes {
+        for a in [FACTORY, DATA_CENTRE] {
+            if g.tokens(h, a) > 0 {
+                out.push((h, a));
+            }
+        }
+    }
+    out
+}
+
+/// The corruption spreads from `h`: one uncorrupted asset on `h` or an
+/// adjacent hex (any country), and if `terrains` is given, on a hex next to
+/// one of them, is corrupted (players choose which).
+pub fn spread_from(g: &mut GameState, cx: &mut Cx, h: usize, terrains: Option<&[Terrain]>) -> Res {
+    let w = cx.world;
+    let around = std::iter::once(h).chain(w.map.hexes[h].neighbours.iter().copied());
+    let picks: Vec<(usize, &str)> = assets_in(g, around)
+        .into_iter()
+        .filter(|&(x, _)| terrains.is_none_or(|t| near_terrain(&w, x, t)))
+        .collect();
+    let opts = picks.iter().map(|&(x, a)| piece_opt(&w, x, a, true)).collect();
+    let prompt = format!("Corruption spreads from {}: which asset is corrupted?", hex_name(&w, h));
+    if let Some(i) = cx.choose(0, &prompt, opts)? {
+        corrupt(g, cx, picks[i].0, picks[i].1);
+    }
+    Ok(())
+}
+
+/// Opening beachhead: in each country, the asset nearest its printed
+/// outpost uplink is corrupted (ties: lower hex number; a factory before a
+/// data centre on the same hex).
+fn beachhead(g: &mut GameState, cx: &mut Cx) {
+    let w = cx.world;
+    for c in 0..w.map.countries.len() {
+        let piece = &w.content.map.countries[c];
+        let Some(&n) = piece.outposts.first().or(piece.uplinks.first()) else {
+            continue;
+        };
+        let from = w.map.numbered(c, n);
+        let best = assets_in(g, w.map.countries[c].hexes.iter().copied())
+            .into_iter()
+            .min_by_key(|&(h, _)| (w.map.distance(from, h), w.map.hexes[h].number));
+        if let Some((h, a)) = best {
+            corrupt(g, cx, h, a);
+        }
+    }
+}
+
+/// A strike in hex `h`: each corrupted asset on or adjacent to it deals
+/// `rogue_damage`, less defense, to the players' pieces there.
+fn strike(g: &mut GameState, cx: &mut Cx, h: usize) -> Res {
+    let w = cx.world;
+    let near: i64 = std::iter::once(h)
+        .chain(w.map.hexes[h].neighbours.iter().copied())
+        .map(|x| ROGUE.iter().map(|k| g.tokens(x, k)).sum::<i64>())
+        .sum();
+    let mut raw = near * w.int("adversary.rogue_damage");
+    if raw == 0 {
+        return Ok(());
+    }
+    if level(&w, 3) {
+        raw += w.int("adversary.damage_bonus");
+    }
+    let prevented = prevented(&w, g, h);
+    let dmg = (raw - prevented).max(0);
+    cx.adversary_ops(g, 1);
+    cx.note(Some(h), || {
+        format!("Strike at {}: {raw} damage, {prevented} prevented", hex_name(&w, h))
+    });
+    if dmg > 0 {
+        lose_pieces(g, cx, h, dmg)?;
+    }
+    Ok(())
+}
+
+/// Clusters' place step (the explore slot): each hex of the card's terrain
+/// that is an uplink or next to a source (a hex with `source_clusters`)
+/// gains `explore_clusters`. Firewall Node stops it as it stops explore.
+fn place(g: &mut GameState, cx: &mut Cx) {
+    let w = cx.world;
+    let Some(id) = g.pile(SLOTS[0]).first().cloned() else {
+        return;
+    };
+    let c = card(&w, &id);
+    cx.note(None, || format!("Place: {}", card_text(c)));
+    let n = w.int("adversary.explore_clusters");
+    let source_at = w.int("adversary.source_clusters");
+    let shields: Vec<usize> = (0..g.seats.len())
+        .filter(|&s| cards::has_passive(&w, g, s, |p| matches!(p, Passive::ExploreShield)))
+        .collect();
+    let mut hits = Vec::new();
+    for h in 0..g.hexes.len() {
+        if !has_terrain(&w, h, &c.terrains) {
+            continue;
+        }
+        let source = |x: usize| g.tokens(x, CLUSTER) >= source_at;
+        if !(w.map.hexes[h].uplink || next_to(&w, h, source)) {
+            continue;
+        }
+        if shields.iter().any(|&s| g.tokens(h, &processor(s)) > 0) {
+            cx.note(Some(h), || format!("Firewall Node: no cluster at {}", hex_name(&w, h)));
+            continue;
+        }
+        hits.push(h);
+    }
+    for h in hits {
+        cx.add_tokens(g, h, CLUSTER, n);
+        cx.adversary_ops(g, 1);
+    }
+}
+
+/// Infection in hex `h`: offense is the clusters on adjacent hexes;
+/// defense is the processors on `h` (friendly clusters) plus its defense
+/// tokens (the firewall). Each point of excess flips a data centre (a
+/// neutral cluster) to an adversary cluster; with `infection_spill`, excess
+/// left over plants one cluster on a hex that has none.
+fn infect(g: &mut GameState, cx: &mut Cx, h: usize) {
+    let w = cx.world;
+    let offense: i64 = w.map.hexes[h].neighbours.iter().map(|&n| g.tokens(n, CLUSTER)).sum();
+    let friendly: i64 = (0..g.seats.len()).map(|s| g.tokens(h, &processor(s))).sum();
+    let defense = friendly + prevented(&w, g, h);
+    let excess = offense - defense;
+    if excess <= 0 {
+        return;
+    }
+    let flips = excess.min(g.tokens(h, DATA_CENTRE));
+    if flips > 0 {
+        cx.add_tokens(g, h, DATA_CENTRE, -flips);
+        cx.add_tokens(g, h, CLUSTER, flips);
+        cx.tally(g, "adversary.buildings_lost", flips);
+        cx.tally(g, "adversary.infected", flips);
+    }
+    let spill = excess > flips && w.int("adversary.infection_spill") > 0 && g.tokens(h, CLUSTER) == 0;
+    if spill {
+        cx.add_tokens(g, h, CLUSTER, 1);
+        cx.tally(g, "adversary.infected", 1);
+    }
+    if flips > 0 || spill {
+        cx.adversary_ops(g, 1);
+        cx.note(Some(h), || {
+            format!("Infection at {}: {offense} against {defense}", hex_name(&w, h))
+        });
+    }
+}
+
+impl Adversary {
+    /// The pipeline of the spread variants (`clusters`, `assets`).
+    fn run_spread(&self, phase: usize, g: &mut GameState, cx: &mut Cx) -> Res {
+        let w = cx.world;
+        let slot = match phase {
+            0 => SLOTS[2],
+            1 => SLOTS[1],
+            2 => {
+                if !reveal(g, cx) {
+                    return Ok(());
+                }
+                SLOTS[0]
+            }
+            _ => {
+                slide(g, cx);
+                return Ok(());
+            }
+        };
+        let Some(id) = g.pile(slot).first().cloned() else {
+            return Ok(());
+        };
+        let c = card(&w, &id);
+        let terrain: Vec<usize> = (0..g.hexes.len()).filter(|&h| has_terrain(&w, h, &c.terrains)).collect();
+        match (self.style, phase) {
+            // Assault: infection on every hex of the terrain, then combat
+            // where clusters are.
+            (Style::Clusters, 0) => {
+                cx.note(None, || format!("Assault: {}", card_text(c)));
+                for &h in &terrain {
+                    infect(g, cx, h);
+                }
+                let fighting: Vec<usize> = terrain.into_iter().filter(|&h| g.tokens(h, CLUSTER) > 0).collect();
+                for h in fighting {
+                    ravage(g, cx, h)?;
+                }
+            }
+            // Hegemonize: a cluster on each hex of the terrain holding one
+            // (or on every hex of it, with `hegemonize_all`).
+            (Style::Clusters, 1) => {
+                cx.note(None, || format!("Hegemonize: {}", card_text(c)));
+                let all = w.int("adversary.hegemonize_all") > 0;
+                let hexes: Vec<usize> = terrain.into_iter().filter(|&h| all || g.tokens(h, CLUSTER) > 0).collect();
+                for h in hexes {
+                    build_hex(g, cx, h)?;
+                }
+            }
+            (Style::Clusters, _) => place(g, cx),
+            // Strike: hexes of the terrain next to corrupted assets.
+            (_, 0) => {
+                cx.note(None, || format!("Strike: {}", card_text(c)));
+                let hexes: Vec<usize> = terrain
+                    .into_iter()
+                    .filter(|&h| next_to(&w, h, |x| ROGUE.iter().any(|k| g.tokens(x, k) > 0)))
+                    .collect();
+                for h in hexes {
+                    strike(g, cx, h)?;
+                }
+            }
+            // Spread: each corrupted asset corrupts `spread` assets on or
+            // adjacent to it, on hexes next to the terrain.
+            (_, 1) => {
+                cx.note(None, || format!("Spread: {}", card_text(c)));
+                let k = w.int("adversary.spread");
+                let sources: Vec<(usize, i64)> = (0..g.hexes.len())
+                    .map(|h| (h, ROGUE.iter().map(|r| g.tokens(h, r)).sum::<i64>()))
+                    .filter(|&(_, n)| n > 0)
+                    .collect();
+                for (h, n) in sources {
+                    for _ in 0..n * k {
+                        spread_from(g, cx, h, Some(&c.terrains))?;
+                    }
+                }
+            }
+            // Corrupt: one asset in each country, next to the terrain
+            // (players choose which). Firewall Node protects assets on its
+            // owner's processor hexes, as it stops explore.
+            _ => {
+                cx.note(None, || format!("Corrupt: {}", card_text(c)));
+                let shields: Vec<usize> = (0..g.seats.len())
+                    .filter(|&s| cards::has_passive(&w, g, s, |p| matches!(p, Passive::ExploreShield)))
+                    .collect();
+                for country in 0..w.map.countries.len() {
+                    let picks: Vec<(usize, &str)> = assets_in(g, w.map.countries[country].hexes.iter().copied())
+                        .into_iter()
+                        .filter(|&(h, _)| near_terrain(&w, h, &c.terrains))
+                        .filter(|&(h, _)| !shields.iter().any(|&s| g.tokens(h, &processor(s)) > 0))
+                        .collect();
+                    let opts = picks.iter().map(|&(h, a)| piece_opt(&w, h, a, true)).collect();
+                    let prompt = format!("Corrupt in country {country}: which asset is corrupted?");
+                    if let Some(i) = cx.choose(0, &prompt, opts)? {
+                        corrupt(g, cx, picks[i].0, picks[i].1);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
