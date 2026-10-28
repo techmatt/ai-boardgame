@@ -1,0 +1,24 @@
+{
+  "name": "cards-t2cut",
+  "note": "007 card health: tier-2 costs cut ~30% (content edit, separate binary), same seeds as tune-agents-007.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "greedy:w.built_cost=1.2,w.hand=1,w.hand_cost=0.2"
+  ],
+  "games": 160,
+  "first_seed": 100000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 0
+}

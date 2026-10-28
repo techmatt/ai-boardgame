@@ -1,0 +1,25 @@
+{
+  "name": "tune-agents-007",
+  "note": "007: which greedy is strongest on the tuned baseline, same seeds. greedy (default weights) never plays buildings; built_cost 1.2 makes it build; hand 1 / hand_cost 0.2 also makes it play economy programs. Also the card-health data.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "greedy:w.built_cost=1.2",
+    "greedy:w.hand=1,w.hand_cost=0.2,w.built_cost=1.2"
+  ],
+  "games": 160,
+  "first_seed": 100000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 0
+}

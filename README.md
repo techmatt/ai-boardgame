@@ -23,7 +23,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports with their records. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 (2 countries, difficulty 0); `shared_row.json` differs only in the threat variant; `clusters.json` and `assets.json` only in the adversary (the two spread variants, rules.md §2a). Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §2b): `--set threats.variant=off`, `opposition.variant=off`, `cards.variant=off`. |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 as tuned by the 007 run (2 countries, difficulty 0); `v0_untuned.json` keeps v0's numbers; `shared_row.json` differs only in the threat variant; `clusters.json` and `assets.json` only in the adversary (the two spread variants, rules.md §2a). Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §2b): `--set threats.variant=off`, `opposition.variant=off`, `cards.variant=off`. |
 | `scripts/wasm-smoke.mjs` | Plays one game through the wasm package in Node. |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
@@ -81,7 +81,7 @@ Always run the sim in release.
 
 ```sh
 S=target/release/aic-sim
-$S run configs/baseline.json --games 2000                          # v0, 2 countries, difficulty 0
+$S run configs/baseline.json --games 2000                          # tuned v0, 2 countries, difficulty 0
 for n in 1 2 3 4; do $S run configs/baseline.json --games 500 --set countries=$n; done
 $S compare configs/baseline.json configs/shared_row.json --games 2000  # threat variants
 $S compare configs/baseline.json configs/clusters.json --games 2000    # spread variants
@@ -132,8 +132,9 @@ overflows `u64`).
 
 Measured on this machine (v0, 2 countries): about 1.4 ms per game, replay included
 (every action and automatic phase clones the state for choice replay); 2,000 games take
-about 3 s. Random-agent v0 games end in 2–6 rounds, almost all on the corruption pool:
-the draft numbers are not tuned. The spread variants (2,000 games each, 2 / 3
+about 3 s. Untuned v0 (`configs/v0_untuned.json`): random-agent games end in 2–6 rounds,
+almost all on the corruption pool. Tuned baseline: random games last about 6.5 rounds
+(max 10) and still lose (0 of 1,000; 3 ms per game). The spread variants (2,000 games each, 2 / 3
 countries): `clusters` 1.2 / 1.9 ms per game, 2.8 rounds, about a quarter lost on
 population; `assets` 0.9 / 1.3 ms, 2.0 rounds, all on the pool. Random agents won none
 of the three. (The placeholder loop ran at 0.03–0.05 ms per game.)
@@ -179,13 +180,16 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
   centres, processors, track income, resources, cards in hand and built), unpaid threats,
   and a forecast of the coming ravages (the ravage- and build-slot cards are public).
   Every weight is a parameter: `w.<name>=V` in an agent spec.
+  The 007 tuning run re-fit two defaults to the tuned ruleset: `pool` 12 → 6 and
+  `opposition` 3 → 6. With the old values, on the larger tuned pool, beam bought back
+  corruption instead of purging and ran out the deck (58% won against greedy's 94%).
 
 | Spec | What it does | Budget parameters (defaults) |
 |---|---|---|
 | `random` | Uniform over legal actions. | none |
 | `greedy` | One action at a time: each scored by the heuristic after it, its own choices resolved best-first. A pass scores the table as it is (else stalling beats stopping). | `samples` 1 (guesses averaged), `depth` 1 (actions looked ahead), `choices` 2 |
-| `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all) |
-| `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `candidates` 3, `rollouts` 4, `horizon` 2 |
+| `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all), `choices` 2 (levels of an action's own choices resolved before scoring it; with 1, placing a processor, which asks a track and then a hex, looks worthless and beam stops growing its engine) |
+| `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `choices` 2, `candidates` 3, `rollouts` 4, `horizon` 2 |
 
 Spec syntax: `kind[:key=value,...]`, for example `beam:width=12`,
 `rollout:rollouts=8,horizon=3`, `greedy:w.pool=20`. `aic-sim run ... --agent SPEC` plays
@@ -199,6 +203,21 @@ $S experiment experiments/ladder-v0.json                    # -> out/experiments
 $S experiment experiments/smoke.json --out out/smoke        # a quick check (6 seeds)
 $S experiment experiments/ladder-v0.json --games 20 --seed 1000 --threads 6
 ```
+
+**Tuning sweeps** (`scripts/tune/`, from the repo root): `sweep.py` runs `aic-sim run --json`
+once per variant and agent and prints one row each (win %, rounds, adversary operations,
+corruption added, how games ended), appending every result to `out/tune/log.jsonl`.
+`log_table.py TAG...` turns logged rows into a markdown table, and `trace_summary.py`
+summarises one `--trace` game round by round (adversary pieces, pool, opposition, plays).
+
+```sh
+python scripts/tune/sweep.py --agents "greedy;beam" --games 64 --tag try1 \
+    --var "base=" --var "pool8=adversary.pool_per_country=8;cards.keep_cost=2"
+target/release/aic-sim run configs/baseline.json --games 1 --seed 3 --agent greedy --trace 2>/dev/null \
+    | python scripts/tune/trace_summary.py
+```
+
+The 007 run's log, change log and proposals: `experiments/tuning-007.md`.
 
 An experiment is configs × variants × difficulties × agents over a seed range, played
 on every core (one game at a time per worker, results sorted, so nothing depends on the
@@ -271,8 +290,28 @@ costs about as much as a greedy decision per probed decision. Measured:
 `experiments/ladder-v0.json` (600 games: 2 difficulties × random, greedy, beam × 100
 seeds, 10 probed seeds per cell) took **3.7–4.3 minutes** (two runs); `experiments/smoke.json` (36
 games) 30 s. The per-cell split (agent, probes, total) is in each report's *Timing*
-table and in `games.csv`. Longer games will cost proportionally more: a tuned 8–10
-round game roughly doubles every figure.
+table and in `games.csv`.
+
+**Timing on the tuned baseline** (007: games last 7–8 rounds, about 200 decisions; 12
+threads busy, so per-game times are under load):
+
+| Agent | s/game under load | Throughput (12 threads) |
+|---|---|---|
+| `random` | 0.003 | ~300 games/s |
+| `greedy` | 4–9 | ~1.5–2 games/s |
+| `beam` | 45–60 | ~0.2–0.25 games/s |
+| `rollout` | 60–80 | ~0.15–0.2 games/s |
+
+- `experiments/tune-after.json` (2,000 games: random and greedy × d0–d4 × 200, 10 seeds
+  per cell probed for win probability): **45 minutes**. The probes are most of it;
+  without them it is about 12 minutes.
+- `experiments/tune-after-search.json` (greedy, beam, rollout × d0, d4 × 24): 8 minutes.
+- `experiments/variants-modules.json` (3,072 games, no probes): 11 minutes.
+- `scripts/tune/sweep.py`: one `--set` point of 64 greedy games takes about 45–60 s.
+
+**Background runs:** the tool runner stops a background command after 10 minutes unless
+it is given a longer timeout. Windows can't replace `target/release/aic-sim.exe` while
+an experiment runs it: copy the exe aside to run one build while rebuilding another.
 
 **Saved records** (open in the viewer, or `aic-sim replay`), up to `records` each, with
 the reason in the record's `note`: *close losses* at the top difficulty (fewest pieces

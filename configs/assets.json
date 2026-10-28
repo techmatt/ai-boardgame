@@ -10,7 +10,7 @@
         "start_factories": 1,
         "start_data_centres": 1,
         "start_drones": 1,
-        "start_outposts": 1
+        "start_outposts": 0
       }
     },
     {
@@ -19,16 +19,16 @@
       "params": {
         "difficulty": 0,
         "stage_cards": [
-          3,
           4,
-          3
+          4,
+          2
         ],
         "population_health": 2,
         "building_health": 3,
         "defense_value": 1,
         "pool_per_country": 3,
         "pool_base": 1,
-        "counter_bonus": 1,
+        "counter_bonus": 2,
         "stage1_removed": 1,
         "tier2_early": 1,
         "pool_reduction": 1,
@@ -63,7 +63,7 @@
       "module": "economy",
       "variant": "standard",
       "params": {
-        "factory_credits": 1,
+        "factory_credits": 3,
         "processor_compute": 1,
         "give_insight": 1
       }
@@ -85,7 +85,7 @@
       "variant": "draft",
       "params": {
         "deal": 4,
-        "keep_cost": 3,
+        "keep_cost": 1,
         "draw_cost": 3
       },
       "cards": [

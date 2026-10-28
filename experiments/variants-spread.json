@@ -1,0 +1,26 @@
+{
+  "name": "variants-spread",
+  "note": "007: the three spread variants at the tuned numbers (the tuning was fitted to the Militarist; the others share its non-adversary numbers, so their results are indicative).",
+  "configs": [
+    "configs/baseline.json",
+    "configs/clusters.json",
+    "configs/assets.json"
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "random",
+    "greedy"
+  ],
+  "games": 96,
+  "first_seed": 200000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

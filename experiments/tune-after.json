@@ -1,0 +1,28 @@
+{
+  "name": "tune-after",
+  "note": "007 tuning run, after: the tuned baseline on fresh seeds (100000+), random and greedy (today's strongest agent) at every difficulty. Win-probability probes off for the final run (an earlier probed run of the same games took 45 min: 15%/48% uncertain checkpoints at d0/d4).",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "difficulties": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "agents": [
+    "random",
+    "greedy"
+  ],
+  "games": 200,
+  "first_seed": 100000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 4,
+    "gap": 2.0
+  },
+  "records": 4
+}

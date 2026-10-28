@@ -50,15 +50,28 @@ pub fn determinize(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
     }
     if let Some(p) = g.pending.as_mut() {
         let snap = &mut p.snapshot;
-        // The step that asked has not drawn (no resolution with a choice
-        // draws), so its snapshot's hidden piles are the same as the
-        // state's: give them the same guess. Any that differ get their own.
+        // Usually the step that asked has not drawn, so its snapshot's
+        // hidden piles are the same as the state's: give them the same
+        // guess. A step may draw before it asks (asset corruption reveals,
+        // then asks which asset): then the snapshot's pile is the drawn
+        // cards (now public) on top of the state's, and gets them on top of
+        // the same guess, so replaying draws them again. Any other
+        // difference gets its own guess.
         for key in SHUFFLED.iter().copied().chain([adversary::DECK]) {
-            if snap.pile(key) == original.pile(key) {
+            let (was, now) = (snap.pile(key), original.pile(key));
+            if was == now {
                 match g.piles.get(key) {
                     Some(v) => snap.piles.insert(key.to_string(), v.clone()),
                     None => snap.piles.remove(key),
                 };
+            } else if was.len() > now.len() && was.ends_with(now) {
+                let mut pile = was[..was.len() - now.len()].to_vec();
+                pile.extend(g.piles.get(key).into_iter().flatten().cloned());
+                snap.piles.insert(key.to_string(), pile);
+            } else if was.len() > now.len() && was.starts_with(now) {
+                let mut pile: Vec<String> = g.piles.get(key).cloned().unwrap_or_default();
+                pile.extend(was[now.len()..].iter().cloned());
+                snap.piles.insert(key.to_string(), pile);
             } else if key == adversary::DECK {
                 resample_adversary_deck(rules, snap, rng);
             } else if let Some(pile) = snap.piles.get_mut(key) {
@@ -115,9 +128,13 @@ mod tests {
     use rand::SeedableRng;
 
     fn rules(difficulty: i64) -> Rules {
-        let text = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../configs/baseline.json"
+        config_rules("baseline", difficulty)
+    }
+
+    fn config_rules(name: &str, difficulty: i64) -> Rules {
+        let text = std::fs::read_to_string(format!(
+            "{}/../../configs/{name}.json",
+            env!("CARGO_MANIFEST_DIR")
         ))
         .unwrap();
         let mut c = Config::from_json(&text).unwrap();
@@ -206,9 +223,18 @@ mod tests {
 
     /// In the middle of a resolution (a pending choice), answering on the
     /// guess plays out on the same public table as answering on the truth.
+    /// Not `assets`: its opening shuffles the adversary deck with the dice
+    /// and then asks which asset to corrupt, so a guess (reseeded dice) can
+    /// replay another first card. The guess still accepts every answer
+    /// there (the agents no longer crash), it can just play out differently.
     #[test]
     fn pending_choices_replay_on_the_guess() {
-        let r = rules(0);
+        for name in ["baseline", "clusters"] {
+            pending_choices_replay(&config_rules(name, 0));
+        }
+    }
+
+    fn pending_choices_replay(r: &Rules) {
         let mut found = 0;
         let mut legal = Vec::new();
         for seed in 0..40u64 {
@@ -219,7 +245,7 @@ mod tests {
                 if g.pending.is_some() {
                     found += 1;
                     let mut h = g.clone();
-                    determinize(&r, &mut h, &mut ChaCha8Rng::seed_from_u64(k));
+                    determinize(r, &mut h, &mut ChaCha8Rng::seed_from_u64(k));
                     for a in &legal {
                         let mut x = g.clone();
                         let mut y = h.clone();

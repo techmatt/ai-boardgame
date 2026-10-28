@@ -241,11 +241,11 @@ fn setup_follows_the_ruleset() {
             assert_eq!(total("population", country), 6);
             assert_eq!(total("factory", country), 2);
             assert_eq!(total("data_centre", country), 2);
-            assert_eq!(total("outpost", country), 1);
+            assert_eq!(total("outpost", country), w.int("board.start_outposts"));
             // Opening explore: uplinks may have gained a drone.
             assert!(total("drone", country) >= 2);
         }
-        assert_eq!(g.var("adversary.pool"), 2 * n as i64 + 2);
+        assert_eq!(g.var("adversary.pool"), w.int("adversary.pool_per_country") * n as i64 + w.int("adversary.pool_base"));
         assert_eq!(g.var("board.start_population"), 6 * n as i64);
         // Opening: the first card explored and slid into the build slot.
         assert_eq!(g.pile("adversary.build").len(), 1);
@@ -680,11 +680,15 @@ fn difficulty_levels_change_the_numbers() {
     let rules = Rules::new(&c).unwrap();
     let g = rules.new_game(1);
     let w = rules.world();
-    // Level 4: pool 1 smaller per country; level 2: one stage-I card fewer.
-    assert_eq!(g.var("adversary.pool"), 2 * 2 + 2 - 2);
-    assert_eq!(g.pile("adversary.deck").len(), 8);
-    // Level 1: the first counter requirement is +1.
-    assert_eq!(modules::threats::requirement(&w, &g, "patrol"), [("energy".to_string(), 3), ("credits".to_string(), 2)]);
+    // Level 4: pool `pool_reduction` smaller per country; level 2:
+    // `stage1_removed` stage-I cards fewer (one already revealed).
+    let per = w.int("adversary.pool_per_country") - w.int("adversary.pool_reduction");
+    assert_eq!(g.var("adversary.pool"), per * 2 + w.int("adversary.pool_base"));
+    let dealt: i64 = w.list("adversary.stage_cards").iter().sum();
+    assert_eq!(g.pile("adversary.deck").len() as i64, dealt - w.int("adversary.stage1_removed") - 1);
+    // Level 1: the first counter requirement is `counter_bonus` higher.
+    let bonus = w.int("adversary.counter_bonus");
+    assert_eq!(modules::threats::requirement(&w, &g, "patrol"), [("energy".to_string(), 2 + bonus), ("credits".to_string(), 2)]);
     let base = Rules::new(&baseline()).unwrap();
     let w0 = base.world();
     assert_eq!(modules::threats::requirement(&w0, &g, "patrol")[0].1, 2);
@@ -740,7 +744,7 @@ fn rng_draws_are_fixed_width_and_pinned() {
 }
 
 const GOLDEN_DRAWS: [usize; 8] = [10, 13, 7, 2, 12, 9, 1, 7];
-const GOLDEN_FINGERPRINT: &str = "4140c11858dbf6fd";
+const GOLDEN_FINGERPRINT: &str = "ae84b873819c2651";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).
@@ -762,7 +766,7 @@ fn golden_game() {
     assert!(g.is_over());
     assert_eq!(
         (RULES_REVISION, g.fingerprint().as_str()),
-        (2, GOLDEN_FINGERPRINT)
+        (3, GOLDEN_FINGERPRINT)
     );
 }
 
@@ -966,9 +970,11 @@ fn clusters_start_from_the_militarist_pieces_and_assault_with_infection_then_com
     let g = rules.new_game(1);
     let count = |g: &GameState, k: &str| (0..g.hexes.len()).map(|h| g.tokens(h, k)).sum::<i64>();
     assert_eq!(count(&g, "drone") + count(&g, "outpost") + count(&g, "foundry"), 0);
-    // One cluster per starting drone and outpost (2 uplinks + 1 outpost per
-    // country), plus whatever the opening placed.
-    assert!(count(&g, "cluster") >= 6, "{}", count(&g, "cluster"));
+    // One cluster per starting drone and outpost (2 uplinks, plus the
+    // printed outpost uplink, per country), plus whatever the opening placed.
+    let w = rules.world();
+    let start = c.countries as i64 * (2 * w.int("board.start_drones") + w.int("board.start_outposts"));
+    assert!(count(&g, "cluster") >= start, "{}", count(&g, "cluster"));
 
     c.round = vec!["adversary.ravage".into(), ACTIONS.into()];
     let rules = Rules::new(&c).unwrap();

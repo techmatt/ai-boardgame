@@ -200,6 +200,8 @@ pub struct Beam {
     width: usize,
     depth: usize,
     branch: usize,
+    /// Levels of an action's own choices resolved best-first when scoring it.
+    choices: usize,
     rollout: Option<RolloutCfg>,
     /// The rest of the current plan, next action last.
     plan: Vec<Planned>,
@@ -278,6 +280,7 @@ impl Beam {
         width: usize,
         depth: usize,
         branch: usize,
+        choices: usize,
         rollout: Option<RolloutCfg>,
     ) -> Self {
         Beam {
@@ -286,6 +289,7 @@ impl Beam {
             width,
             depth,
             branch,
+            choices,
             rollout,
             plan: Vec::new(),
         }
@@ -322,7 +326,7 @@ impl Beam {
                     // so an action is not judged by its first open question.
                     let mut seq = node.seq.clone();
                     seq.push(a.clone());
-                    let v = settled(rules, &self.ev, &c, 1, &mut scratch) - moves_cost(&seq);
+                    let v = settled(rules, &self.ev, &c, self.choices, &mut scratch) - moves_cost(&seq);
                     let key = node.key.wrapping_add(action_hash(a));
                     kids.push((v, Node { g: c, seq, key }));
                 }

@@ -114,6 +114,11 @@ pub const LADDER: &[(&str, &[Param])] = &[
                 0.0,
                 "children kept per sequence, best first (0 = all)",
             ),
+            (
+                "choices",
+                2.0,
+                "levels of an action's own choices resolved best-first before scoring",
+            ),
         ],
     ),
     (
@@ -122,6 +127,7 @@ pub const LADDER: &[(&str, &[Param])] = &[
             ("width", 4.0, "beam width for the round's candidates"),
             ("depth", 120.0, "most beam steps"),
             ("branch", 0.0, "children kept per sequence (0 = all)"),
+            ("choices", 2.0, "levels of an action's own choices resolved before scoring"),
             ("candidates", 3.0, "end-of-round positions rolled out"),
             ("rollouts", 4.0, "greedy playouts per candidate"),
             (
@@ -241,6 +247,7 @@ impl AgentSpec {
                 self.p("width").max(1),
                 self.p("depth").max(1),
                 self.p("branch"),
+                self.p("choices"),
                 None,
             )),
             "rollout" => Box::new(Beam::new(
@@ -249,6 +256,7 @@ impl AgentSpec {
                 self.p("width").max(1),
                 self.p("depth").max(1),
                 self.p("branch"),
+                self.p("choices"),
                 Some(search::RolloutCfg {
                     candidates: self.p("candidates").max(1),
                     rollouts: self.p("rollouts").max(1),

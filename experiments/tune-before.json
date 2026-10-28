@@ -1,0 +1,12 @@
+{
+  "name": "tune-before",
+  "note": "007 tuning run, before: ruleset v0 as handed over (configs/v0_untuned.json), the whole ladder at every difficulty.",
+  "configs": ["configs/v0_untuned.json"],
+  "difficulties": [0, 1, 2, 3, 4],
+  "agents": ["random", "greedy", "beam", "rollout"],
+  "games": 50,
+  "first_seed": 0,
+  "winprob": {"games": 0},
+  "closeness": {"every": 4, "gap": 2.0},
+  "records": 2
+}

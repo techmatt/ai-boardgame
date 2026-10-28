@@ -1,0 +1,25 @@
+{
+  "name": "tune-after-search",
+  "note": "007 tuning run, after: the search agents on the tuned baseline, fresh seeds (100000+), difficulties 0 and 4.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "beam",
+    "rollout"
+  ],
+  "games": 24,
+  "first_seed": 100000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

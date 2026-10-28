@@ -1,7 +1,9 @@
 # Rules as implemented
 
-What the code implements: ruleset **v0**, Militarist against Builder and Protector, 1–4
-countries. **Keep this current with every rules change.** Design intent lives in
+What the code implements: ruleset **v0 as tuned by the 007 tuning run** (rules revision 3),
+Militarist against Builder and Protector, 1–4 countries. The rules are v0's; only numbers
+changed. Each changed value gives the v0 value beside it, and
+[`configs/v0_untuned.json`](../configs/v0_untuned.json) keeps the v0 numbers. **Keep this current with every rules change.** Design intent lives in
 [principles.md](principles.md); how the engine is put together lives in
 [architecture.md](architecture.md).
 
@@ -53,11 +55,12 @@ v0 has four pieces.
 Each country starts with `start_population` (1) population on each printed population
 hex (all 4 Urban hexes and 2 Industrial ones: 6), `start_factories` (1) factory on each
 printed factory hex, `start_data_centres` (1) data centre on each printed data centre
-hex, `start_drones` (1) drone on each uplink, and `start_outposts` (1) outpost on the
-printed outpost uplink. The starting population total is recorded
+hex, `start_drones` (1) drone on each uplink, and `start_outposts` (0; v0 had 1) outposts on
+the printed outpost uplink. The starting population total is recorded
 (`board.start_population`) for the loss condition.
 
-The **corruption pool** holds `pool_per_country` (2) per country + `pool_base` (2).
+The **corruption pool** holds `pool_per_country` (10; v0 had 2) per country + `pool_base`
+(2): 22 at 2 countries.
 
 ### Players (module `ai`, variant `boards`)
 
@@ -88,7 +91,7 @@ Before round 1: reveal the first adversary card into the explore slot, explore, 
 The printed adversary deck ([`content/adversary.json`](../content/adversary.json)) has
 4 stage-I cards (one terrain each), 4 stage-II cards (one terrain each, with Escalation)
 and 6 stage-III cards (each pair of terrains). **Default:** a game deals `stage_cards`
-(3, 4, 3) of them at random per stage, so a game's deck is 10 unique cards: stage I on
+(4, 4, 2; v0 had 3, 4, 3) of them at random per stage, so a game's deck is 10 unique cards: stage I on
 top, then II, then III, each stage shuffled on its own. Players **lose** if a card must be
 revealed and the deck is empty.
 
@@ -118,7 +121,7 @@ fixed when the step starts.
   **Default:** players choose each next piece among those that the remaining damage can
   destroy (needs its full health); damage left that can destroy nothing is lost. A
   choice with one option is taken without asking.
-  If the damage (after defense) is `corruption_at` (2) or more, add
+  If the damage (after defense) is `corruption_at` (3; v0 had 2) or more, add
   `corruption_per_ravage` (1) corruption from the pool to the hex. If the hex already had
   corruption, it **cascades**: add `cascade` (1) to an adjacent hex of the players'
   choice (**Default:** any adjacent hex, any country; a cascade does not cascade again).
@@ -141,10 +144,16 @@ nothing. Players **lose** when the pool is empty (**Default:** "runs out" read a
 | Level | Adds | Tunable |
 |---|---|---|
 | 0 | Base rules | |
-| 1 | Every threat's first counter requirement is higher | `counter_bonus` 1 |
+| 1 | Every threat's first counter requirement is higher | `counter_bonus` 2 (v0: 1) |
 | 2 | Stage-I cards removed from the deck: stage II arrives sooner | `stage1_removed` 1 |
 | 3 | Ravage deals more damage in hexes with a foundry | `foundry_bonus` 1 |
-| 4 | Tier-2 threats start sooner; the corruption pool is smaller per country | `tier2_early` 1 (rounds), `pool_reduction` 1 |
+| 4 | Tier-2 threats start sooner; the corruption pool is smaller per country | `tier2_early` 1 (rounds), `pool_reduction` 4 (v0: 1) |
+
+**Measured (007 tuning run):** levels 2 and 3 play identically. Foundries grow where
+adversary pieces pile up, on uplinks and outpost hexes, which hold no population or
+buildings, so `foundry_bonus` has destroyed nothing in any game measured (even at 5).
+`tier2_early` moved no win rate either; level 4's bite is `pool_reduction`. Proposals
+for levels 3 and 4 are in the 007 cycle report (`experiments/tuning-007.md`).
 
 Level 4's "a round sooner" is implemented as: tier-2 threats are dealt once any of the
 top `tier2_early` deck cards is stage II or later (the stage boundary is public: the
@@ -310,7 +319,7 @@ Each player has credits, compute, energy, antimatter and insight.
 
 | Resource | Comes from | Spent on |
 |---|---|---|
-| Credits | Credit income (AI track, buildings, level rewards) in upkeep; each working factory pays `factory_credits` (1) to every player with a processor in its country | Keeping drafted cards; card costs; counters |
+| Credits | Credit income (AI track, buildings, level rewards) in upkeep; each working factory pays `factory_credits` (3; v0 had 1) to every player with a processor in its country | Keeping drafted cards; card costs; counters |
 | Compute | `processor_compute` (1) per processor on a working data centre, in upkeep; buildings | Drawing (`draw_cost` 3 → 1 card); abilities; counters |
 | Energy | Energy income (AI track, buildings); growth | Abilities; counters |
 | Antimatter | Late track values; Scavenge; Antimatter Refinery | Tier-2 cards; counters |
@@ -342,7 +351,7 @@ Each player has credits, compute, energy, antimatter and insight.
 | 2 | `cards.tier` | Players who have unlocked tier 2 choose the tier they are dealt from |
 | 3 | `cards.deal` | Each player is dealt `deal` (4) cards from their tier |
 | 4 | `cards.draft` | Take one card, pass the rest to the next seat until the hands are gone: to seat *s*+1 in odd rounds, *s*−1 in even rounds (as in Terraforming Mars). No passing |
-| 5 | `cards.keep` | Keep any drafted cards at `keep_cost` (3) credits each; the rest are discarded when the action phase begins |
+| 5 | `cards.keep` | Keep any drafted cards at `keep_cost` (1; v0 had 3) credit each; the rest are discarded when the action phase begins |
 | 6 | `ai.growth` | Each player picks one growth option (mandatory) |
 | 7 | `cards.play+threats.counter+economy.give` | Actions, simultaneous: play cards, use abilities, draw, pay or withdraw counter payments, give insight. Each seat acts until it passes |
 | 8 | `threats.execute` | Partial payments are refunded; uncountered threats execute in order and are discarded |
@@ -479,7 +488,7 @@ Card details beyond the ruleset text:
 6. The corruption pool "runs out" when it reaches 0.
 7. Win and loss are checked when an action or automatic phase finishes resolving, losses
    first. Reaching the top level wins without its reward.
-8. The adversary deck deals 3/4/3 of 4/4/6 printed cards; Escalation triggers on reveal.
+8. The adversary deck deals 4/4/2 (`stage_cards`) of 4/4/6 printed cards; Escalation triggers on reveal.
 9. Difficulty 4's "a round sooner" looks `tier2_early` cards ahead in the deck.
 10. Pooled counters: countered only when fully paid; withdrawals until the action phase
     ends; partial payments refunded then.

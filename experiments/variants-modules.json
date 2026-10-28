@@ -1,0 +1,74 @@
+{
+  "name": "variants-modules",
+  "note": "007: opposition rewards, threat placement and the off-variants at the tuned baseline.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "pushback",
+      "set": []
+    },
+    {
+      "name": "income",
+      "set": [
+        "opposition.variant=income",
+        "opposition.income_credits=2"
+      ]
+    },
+    {
+      "name": "free_purchases",
+      "set": [
+        "opposition.variant=free_purchases",
+        "opposition.free_purchases=2"
+      ]
+    },
+    {
+      "name": "counter_threat",
+      "set": [
+        "opposition.variant=counter_threat"
+      ]
+    },
+    {
+      "name": "opposition_off",
+      "set": [
+        "opposition.variant=off"
+      ]
+    },
+    {
+      "name": "shared_row",
+      "set": [
+        "threats.variant=shared_row"
+      ]
+    },
+    {
+      "name": "threats_off",
+      "set": [
+        "threats.variant=off"
+      ]
+    },
+    {
+      "name": "cards_off",
+      "set": [
+        "cards.variant=off"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "random",
+    "greedy"
+  ],
+  "games": 96,
+  "first_seed": 200000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}
