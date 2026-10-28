@@ -1,0 +1,225 @@
+[
+ {
+  "id": "builder",
+  "name": "Builder",
+  "text": "The wide engine: mostly off the board. Many building slots, strong credit income, late tier 2.",
+  "slots": 6,
+  "innate": {
+   "name": "Economies of scale",
+   "text": "Each building you play costs 2 credits less.",
+   "passives": [
+    {
+     "op": "building_discount",
+     "amount": 2
+    }
+   ]
+  },
+  "tracks": [
+   {
+    "resource": "insight",
+    "values": [
+     {
+      "value": 2
+     },
+     {
+      "value": 2
+     },
+     {
+      "value": 3
+     },
+     {
+      "value": 3
+     },
+     {
+      "value": 4
+     },
+     {
+      "value": 4
+     }
+    ]
+   },
+   {
+    "resource": "credits",
+    "values": [
+     {
+      "value": 1
+     },
+     {
+      "value": 2
+     },
+     {
+      "value": 3
+     },
+     {
+      "value": 4,
+      "tier2": true
+     },
+     {
+      "value": 5
+     },
+     {
+      "value": 6,
+      "antimatter": 1
+     }
+    ]
+   }
+  ],
+  "growth": [
+   {
+    "name": "Place 1 processor, gain 3 credits",
+    "effects": [
+     {
+      "op": "place_processor",
+      "count": 1
+     },
+     {
+      "op": "gain",
+      "resource": "credits",
+      "amount": 3
+     }
+    ]
+   },
+   {
+    "name": "Gain 8 credits",
+    "effects": [
+     {
+      "op": "gain",
+      "resource": "credits",
+      "amount": 8
+     }
+    ]
+   },
+   {
+    "name": "Gain 2 energy; next building this round costs 4 less",
+    "effects": [
+     {
+      "op": "gain",
+      "resource": "energy",
+      "amount": 2
+     },
+     {
+      "op": "next_building_discount",
+      "amount": 4
+     }
+    ]
+   }
+  ],
+  "cards": [
+   "turnkey_factory",
+   "venture_capital",
+   "modular_expansion"
+  ]
+ },
+ {
+  "id": "protector",
+  "name": "Protector",
+  "text": "The board guardian: lives on the map. Few slots, energy income, early tier 2.",
+  "slots": 3,
+  "innate": {
+   "name": "Bulwark",
+   "text": "Your defense tokens each prevent 2 damage.",
+   "passives": [
+    {
+     "op": "defense_value",
+     "amount": 2
+    }
+   ]
+  },
+  "tracks": [
+   {
+    "resource": "insight",
+    "values": [
+     {
+      "value": 1
+     },
+     {
+      "value": 2
+     },
+     {
+      "value": 2
+     },
+     {
+      "value": 3
+     },
+     {
+      "value": 3
+     },
+     {
+      "value": 4
+     }
+    ]
+   },
+   {
+    "resource": "energy",
+    "values": [
+     {
+      "value": 1
+     },
+     {
+      "value": 1,
+      "tier2": true
+     },
+     {
+      "value": 2
+     },
+     {
+      "value": 2
+     },
+     {
+      "value": 3
+     },
+     {
+      "value": 3,
+      "antimatter": 1
+     }
+    ]
+   }
+  ],
+  "growth": [
+   {
+    "name": "Place 1 processor, gain 1 energy",
+    "effects": [
+     {
+      "op": "place_processor",
+      "count": 1
+     },
+     {
+      "op": "gain",
+      "resource": "energy",
+      "amount": 1
+     }
+    ]
+   },
+   {
+    "name": "Place 2 defense in any one country, gain 2 credits",
+    "effects": [
+     {
+      "op": "place_defense",
+      "count": 2,
+      "where": "any"
+     },
+     {
+      "op": "gain",
+      "resource": "credits",
+      "amount": 2
+     }
+    ]
+   },
+   {
+    "name": "Gain 3 energy",
+    "effects": [
+     {
+      "op": "gain",
+      "resource": "energy",
+      "amount": 3
+     }
+    ]
+   }
+  ],
+  "cards": [
+   "point_defense",
+   "strike_team",
+   "shelter_order"
+  ]
+ }
+]

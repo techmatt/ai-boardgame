@@ -1,10 +1,13 @@
-//! Game content as data: map pieces and layouts, cards built from effect
-//! primitives. Embedded from `content/` at compile time (no I/O at runtime).
+//! Game content as data, embedded from `content/` at compile time (no I/O
+//! at runtime): the map (piece shape, layouts, the printed country pieces),
+//! player cards, threats, the adversary deck and the AI boards.
 //!
-//! A new *effect primitive* (a new [`Effect`] or [`TargetRule`] variant) is a
-//! code change. A new card that only combines existing primitives is a data
-//! change to `content/cards.json`.
+//! Effects are composed from code primitives ([`Effect`], [`Passive`],
+//! [`ThreatOp`]). A new primitive is a code change; a new card, threat,
+//! adversary card or AI board that only combines existing primitives is a
+//! data change.
 
+use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
@@ -14,19 +17,38 @@ use crate::hex::{Dir, Hex};
 
 const MAP_JSON: &str = include_str!("../../../content/map.json");
 const CARDS_JSON: &str = include_str!("../../../content/cards.json");
+const THREATS_JSON: &str = include_str!("../../../content/threats.json");
+const ADVERSARY_JSON: &str = include_str!("../../../content/adversary.json");
+const AIS_JSON: &str = include_str!("../../../content/ais.json");
+
+/// Every content file, in hashing order.
+const FILES: [&str; 5] = [MAP_JSON, CARDS_JSON, THREATS_JSON, ADVERSARY_JSON, AIS_JSON];
+
+/// Player resources, in display order.
+pub const RESOURCES: [&str; 5] = ["credits", "compute", "energy", "antimatter", "insight"];
+
+/// Card tags.
+pub const TAGS: [&str; 5] = ["economy", "cyber", "power", "unity", "discord"];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Content {
     pub map: MapContent,
     pub cards: Vec<CardDef>,
+    pub threats: Vec<ThreatDef>,
+    pub adversary: Vec<AdversaryCard>,
+    pub ais: Vec<AiBoard>,
 }
+
+// ---------- map ----------
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MapContent {
     pub piece: PieceDef,
     pub layouts: Vec<LayoutDef>,
+    /// The printed country pieces: country `i` of every layout uses piece `i`.
+    pub countries: Vec<CountryPiece>,
 }
 
 /// The country piece: a `size` x `size` rhombus of hexes with a strip of
@@ -38,7 +60,7 @@ pub struct PieceDef {
     pub card_slots: u8,
 }
 
-/// Where the pieces go for a given number of countries. Piece `i` is seat `i`.
+/// Where the pieces go for a given number of countries. Piece `i` is country `i`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LayoutDef {
@@ -58,9 +80,74 @@ pub struct PiecePlacement {
     pub colour: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Terrain {
+    Urban,
+    Industrial,
+    Network,
+    Frontier,
+}
+
+impl Terrain {
+    pub const ALL: [Terrain; 4] = [
+        Terrain::Urban,
+        Terrain::Industrial,
+        Terrain::Network,
+        Terrain::Frontier,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Terrain::Urban => "urban",
+            Terrain::Industrial => "industrial",
+            Terrain::Network => "network",
+            Terrain::Frontier => "frontier",
+        }
+    }
+
+    fn from_letter(c: char) -> Option<Terrain> {
+        match c {
+            'U' => Some(Terrain::Urban),
+            'I' => Some(Terrain::Industrial),
+            'N' => Some(Terrain::Network),
+            'F' => Some(Terrain::Frontier),
+            _ => None,
+        }
+    }
+}
+
+/// A printed country piece. Hexes are numbered 1-16 in piece order
+/// (`i * size + j + 1` for piece position `(i, j)`); the numbers are
+/// printed and break ties. `terrain` holds one row of letters per `i`
+/// (U, I, N, F). The lists are hex numbers where the setup pieces go.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CountryPiece {
+    pub name: String,
+    pub terrain: Vec<String>,
+    pub uplinks: Vec<u8>,
+    /// Uplinks that start with an outpost.
+    pub outposts: Vec<u8>,
+    pub population: Vec<u8>,
+    pub factories: Vec<u8>,
+    pub data_centres: Vec<u8>,
+}
+
+impl CountryPiece {
+    /// Terrain of hex number `n` (1-based).
+    pub fn terrain_at(&self, n: u8, size: u8) -> Terrain {
+        let (i, j) = ((n - 1) / size, (n - 1) % size);
+        let c = self.terrain[i as usize].chars().nth(j as usize).unwrap();
+        Terrain::from_letter(c).unwrap()
+    }
+}
+
+// ---------- player cards ----------
+
 /// A number in content: a literal, or `{"param": "name"}` naming a tunable
-/// of the module that uses the content. Only parameter references are
-/// tunable from config; literals change only by editing content.
+/// of the module that uses the content (for cards, `cards`). Card costs
+/// accept either; other content numbers are literals.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Amount {
@@ -68,69 +155,318 @@ pub enum Amount {
     Param { param: String },
 }
 
+impl Default for Amount {
+    fn default() -> Self {
+        Amount::Lit(0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CardKind {
+    Building,
+    Program,
+}
+
+/// A resource and an amount, written `["energy", 2]`.
+pub type Cost = (String, i64);
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CardDef {
     pub id: String,
     pub name: String,
-    #[serde(default)]
-    pub text: String,
-    /// Paid in credits when played.
+    /// 1 or 2 for the draft decks; 0 for an AI's unique cards.
+    pub tier: u8,
+    pub kind: CardKind,
+    /// Credits.
     pub cost: Amount,
     #[serde(default)]
-    pub target: Option<TargetRule>,
+    pub antimatter: Amount,
+    /// Insight to play it.
+    pub insight: Amount,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Tags you must have (on your buildings) to play it.
+    #[serde(default)]
+    pub needs: Vec<Cost>,
+    #[serde(default)]
+    pub text: String,
+    /// On play (a program), or when built (a building).
+    #[serde(default)]
+    pub effects: Vec<Effect>,
+    /// A building's standing effects.
+    #[serde(default)]
+    pub passives: Vec<Passive>,
+    /// A building's once-a-round ability.
+    #[serde(default)]
+    pub ability: Option<Ability>,
+    /// A building's upkeep: paid automatically in upkeep if possible;
+    /// otherwise its passives do nothing next round.
+    #[serde(default)]
+    pub upkeep: Vec<Cost>,
+    /// A building that takes no building slot.
+    #[serde(default)]
+    pub slotless: bool,
+    /// The AI board this card is unique to.
+    #[serde(default)]
+    pub unique: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Ability {
+    pub cost: Vec<Cost>,
     pub effects: Vec<Effect>,
 }
 
-/// What a card is played on. Targets are always within the playing seat's
-/// own country: a simultaneous phase must not let seats interfere.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub enum TargetRule {
-    /// A hex in the player's own country, optionally one holding at least
-    /// one of a token kind (no useless targets are offered).
-    OwnHex {
-        #[serde(default)]
-        with_token: Option<String>,
+/// Where a damage effect may land.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DamageAt {
+    /// Any hex holding adversary pieces.
+    Any,
+    /// A hex within 1 of one of your processors.
+    NearProcessor,
+    /// A hex in a country where you have a processor.
+    ProcessorCountry,
+}
+
+/// Which country a placement may go to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CountryRule {
+    Any,
+    ProcessorCountry,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Cond {
+    /// You destroyed a foundry this round.
+    DestroyedFoundry,
+    /// Some hex holds both population and adversary pieces.
+    PopulationWithAdversary,
+}
+
+/// Player effect primitives (cards, abilities, growth options), resolved in
+/// order for the acting player. Choices they need are asked as
+/// `Action::Choose`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Effect {
+    Gain { resource: String, amount: i64 },
+    /// 1 of `resource` per processor you have on the board, up to `max`.
+    GainPerProcessor { resource: String, max: i64 },
+    /// Choose another player for the `other_gain` / `transfer` that follow.
+    ChoosePlayer,
+    OtherGain { resource: String, amount: i64 },
+    /// Give up to `max` of `resource` to the chosen player; they gain
+    /// `bonus` more if you gave any.
+    Transfer { resource: String, max: i64, bonus: i64 },
+    /// Convert up to `max` of `from` into `rate` of `to` each.
+    Convert { from: String, to: String, max: i64, rate: i64 },
+    PlaceProcessor { count: i64 },
+    /// `amount` damage in one hex.
+    Damage { amount: i64, at: DamageAt },
+    /// `amount` damage in each hex of one country that holds adversary pieces.
+    DamageCountry { amount: i64 },
+    /// Destroy every adversary piece in one hex.
+    DestroyAll,
+    /// Remove every drone in one country; +1 opposition per `opposition_per` removed.
+    RemoveDronesCountry { opposition_per: i64 },
+    /// Build a factory on an Industrial hex next to population (`empty`: holding no pieces).
+    BuildFactory { empty: bool },
+    /// Return up to `amount` corruption to the pool, one hex at a time
+    /// (`one_country`: all from the first hex's country).
+    RemoveCorruption { amount: i64, one_country: bool },
+    PlaceDefense { count: i64, #[serde(rename = "where")] in_country: CountryRule },
+    /// Move up to `max` population, one at a time, within one country.
+    MovePopulation { max: i64 },
+    /// In one country, population can't be destroyed this round.
+    Shelter,
+    /// The next `count` adversary cards are shown.
+    Peek { count: i64 },
+    /// One threat needs `amount` less of each resource.
+    Jam { amount: i64 },
+    CounterThreat,
+    Opposition { amount: i64 },
+    /// Every player gains `amount` insight next round.
+    NextRoundInsight { amount: i64 },
+    /// Your next building this round costs `amount` less.
+    NextBuildingDiscount { amount: i64 },
+    If {
+        cond: Cond,
+        then: Vec<Effect>,
+        #[serde(rename = "else")]
+        otherwise: Vec<Effect>,
     },
 }
 
-/// Effect primitives. Adding one is a code change (here, in
-/// `modules/actions.rs`, and in `docs/architecture.md`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Standing effects of a building or an AI's innate rule.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Effect {
-    /// The playing seat gains `amount` of `resource`.
-    Gain { resource: String, amount: Amount },
-    /// Remove up to `amount` tokens of `token` from the target hex.
-    RemoveTokens { token: String, amount: Amount },
-    /// Add `amount` tokens of `token` to the target hex.
-    PlaceTokens { token: String, amount: Amount },
+pub enum Passive {
+    Income { resource: String, amount: i64 },
+    /// `1` per `per` of your `tag` tags, up to `max`.
+    IncomePerTag { resource: String, tag: String, per: i64, max: i64 },
+    /// `amount` if you have at least `count` `tag` tags.
+    IncomeIfTags { resource: String, tag: String, count: i64, amount: i64 },
+    BuildingDiscount { amount: i64 },
+    /// Each of your defense tokens prevents this much damage.
+    DefenseValue { amount: i64 },
+    Slots { amount: i64 },
+    /// Gain this when a threat you paid toward is countered.
+    Logistics { resource: String, amount: i64 },
+    /// Extra opposition when you destroy an outpost or foundry.
+    OppositionBonus { amount: i64 },
+    /// When you give insight, the receiver also gains this.
+    GiveBonus { resource: String, amount: i64 },
+    /// Explore adds no drone to hexes holding your processor.
+    ExploreShield,
+    /// Once a round, prevent the first population loss in a country where
+    /// you have a processor.
+    CivicShelter,
+    /// In upkeep, convert `amount` `from` into `gain` `to` (if you have it).
+    ConvertUpkeep { from: String, amount: i64, to: String, gain: i64 },
 }
 
-impl Effect {
-    pub fn amount(&self) -> &Amount {
-        match self {
-            Effect::Gain { amount, .. }
-            | Effect::RemoveTokens { amount, .. }
-            | Effect::PlaceTokens { amount, .. } => amount,
-        }
-    }
+// ---------- threats ----------
 
-    pub fn needs_target(&self) -> bool {
-        matches!(
-            self,
-            Effect::RemoveTokens { .. } | Effect::PlaceTokens { .. }
-        )
-    }
+/// Which hexes a threat or adversary step touches (all conditions must hold).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Selector {
+    #[serde(default)]
+    pub uplink: bool,
+    /// Token kinds the hex must hold (each at least one).
+    #[serde(default)]
+    pub has: Vec<String>,
+    #[serde(default)]
+    pub adversary_at_least: Option<i64>,
+    #[serde(default)]
+    pub corrupted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ThreatDef {
+    pub id: String,
+    pub name: String,
+    pub tier: u8,
+    #[serde(default)]
+    pub text: String,
+    /// What countering it costs, in order (difficulty 1 raises the first).
+    pub counter: Vec<Cost>,
+    pub effects: Vec<ThreatOp>,
+}
+
+/// Threat effect primitives. Each applies to the threat's scope: its
+/// country, or every country for a shared-row threat.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ThreatOp {
+    /// Each selected hex gains `amount` of `piece` (times the number of
+    /// `per` tokens there, if given).
+    AddPiece {
+        piece: String,
+        at: Selector,
+        amount: i64,
+        #[serde(default)]
+        per: Option<String>,
+    },
+    /// Each player with a processor in scope loses `amount` of `resource`.
+    PlayersLose { resource: String, amount: i64 },
+    /// A round marker on the country, read by production.
+    Flag { name: String },
+    /// One drone on the lowest-numbered uplink holding drones becomes an outpost.
+    UpgradeUplink,
+    Panic,
+    /// Each player in scope discards 1 card or pays `amount` `resource`.
+    Requisition { resource: String, amount: i64 },
+    RemovePopulation { at: Selector, amount: i64 },
+    Ravage { at: Selector },
+    Cascade { at: Selector },
+    /// Destroy the factory with the most adjacent population.
+    DestroyFactory,
+    Build { at: Selector },
+    DiscardMostExpensive,
+    AddCorruption { at: Selector, amount: i64 },
+}
+
+// ---------- adversary ----------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AdversaryCard {
+    pub id: String,
+    pub name: String,
+    pub stage: u8,
+    pub terrains: Vec<Terrain>,
+    #[serde(default)]
+    pub escalation: bool,
+}
+
+// ---------- AI boards ----------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AiBoard {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub text: String,
+    /// Building slots.
+    pub slots: i64,
+    pub innate: Innate,
+    /// Two tracks, each covered by processors except the first value.
+    pub tracks: Vec<Track>,
+    pub growth: Vec<Growth>,
+    /// Unique cards, in hand at the start.
+    pub cards: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Innate {
+    pub name: String,
+    #[serde(default)]
+    pub text: String,
+    pub passives: Vec<Passive>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Track {
+    /// The income this track sets: `insight`, `credits` or `energy`.
+    pub resource: String,
+    pub values: Vec<TrackValue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrackValue {
+    pub value: i64,
+    /// Uncovering this value unlocks tier 2.
+    #[serde(default)]
+    pub tier2: bool,
+    /// Antimatter income while this is the track's current value.
+    #[serde(default)]
+    pub antimatter: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Growth {
+    pub name: String,
+    pub effects: Vec<Effect>,
 }
 
 impl CardDef {
     /// Parameter names this card refers to, in first-use order.
     pub fn params(&self) -> Vec<&str> {
         let mut out: Vec<&str> = Vec::new();
-        let amounts = std::iter::once(&self.cost).chain(self.effects.iter().map(Effect::amount));
-        for a in amounts {
+        for a in [&self.cost, &self.antimatter, &self.insight] {
             if let Amount::Param { param } = a {
                 if !out.contains(&param.as_str()) {
                     out.push(param);
@@ -139,32 +475,110 @@ impl CardDef {
         }
         out
     }
+
+    pub fn is_building(&self) -> bool {
+        self.kind == CardKind::Building
+    }
 }
 
 impl Content {
-    pub fn parse(map_json: &str, cards_json: &str) -> Result<Content, String> {
-        let map: MapContent =
-            serde_json::from_str(map_json).map_err(|e| format!("content/map.json: {e}"))?;
-        let cards: Vec<CardDef> =
-            serde_json::from_str(cards_json).map_err(|e| format!("content/cards.json: {e}"))?;
-        let c = Content { map, cards };
+    pub fn parse(files: [&str; 5]) -> Result<Content, String> {
+        let [map, cards, threats, adversary, ais] = files;
+        fn p<T: for<'de> Deserialize<'de>>(name: &str, s: &str) -> Result<T, String> {
+            serde_json::from_str(s).map_err(|e| format!("content/{name}: {e}"))
+        }
+        let c = Content {
+            map: p("map.json", map)?,
+            cards: p("cards.json", cards)?,
+            threats: p("threats.json", threats)?,
+            adversary: p("adversary.json", adversary)?,
+            ais: p("ais.json", ais)?,
+        };
         c.check()?;
         Ok(c)
     }
 
     fn check(&self) -> Result<(), String> {
-        let mut ids: Vec<&str> = self.cards.iter().map(|c| c.id.as_str()).collect();
-        ids.sort_unstable();
-        if let Some(w) = ids.windows(2).find(|w| w[0] == w[1]) {
-            return Err(format!("content/cards.json: duplicate card id {:?}", w[0]));
+        let mut ids = BTreeSet::new();
+        let all = self
+            .cards
+            .iter()
+            .map(|c| &c.id)
+            .chain(self.threats.iter().map(|t| &t.id))
+            .chain(self.adversary.iter().map(|a| &a.id))
+            .chain(self.ais.iter().map(|a| &a.id));
+        for id in all {
+            if !ids.insert(id.as_str()) {
+                return Err(format!("content: duplicate id {id:?} (ids are unique across all content)"));
+            }
         }
+        let resource = |r: &str, what: &str| -> Result<(), String> {
+            if RESOURCES.contains(&r) {
+                Ok(())
+            } else {
+                Err(format!("{what}: unknown resource {r:?}"))
+            }
+        };
         for c in &self.cards {
-            let targeted = c.effects.iter().any(Effect::needs_target);
-            if targeted != c.target.is_some() {
-                return Err(format!(
-                    "card {:?}: a target rule is needed exactly when an effect acts on a hex",
-                    c.id
-                ));
+            for t in c.tags.iter().chain(c.needs.iter().map(|(t, _)| t)) {
+                if !TAGS.contains(&t.as_str()) {
+                    return Err(format!("card {:?}: unknown tag {t:?}", c.id));
+                }
+            }
+            if !c.is_building()
+                && (!c.passives.is_empty() || c.ability.is_some() || !c.upkeep.is_empty() || c.slotless)
+            {
+                return Err(format!("card {:?}: only buildings have passives, abilities or upkeep", c.id));
+            }
+            if c.tier > 2 || (c.tier == 0) != c.unique.is_some() {
+                return Err(format!("card {:?}: tier 0 exactly for unique cards, else 1 or 2", c.id));
+            }
+            for (r, _) in c.upkeep.iter().chain(c.ability.iter().flat_map(|a| &a.cost)) {
+                resource(r, &format!("card {:?}", c.id))?;
+            }
+        }
+        for t in &self.threats {
+            if !(1..=2).contains(&t.tier) || t.counter.is_empty() {
+                return Err(format!("threat {:?}: tier 1 or 2 and a counter cost", t.id));
+            }
+            for (r, _) in &t.counter {
+                resource(r, &format!("threat {:?}", t.id))?;
+            }
+        }
+        for a in &self.adversary {
+            if !(1..=3).contains(&a.stage) || a.terrains.is_empty() {
+                return Err(format!("adversary card {:?}: stage 1-3 and a terrain", a.id));
+            }
+        }
+        for b in &self.ais {
+            if b.tracks.len() != 2 || b.tracks.iter().any(|t| t.values.is_empty()) {
+                return Err(format!("AI board {:?}: two non-empty tracks", b.id));
+            }
+            for c in &b.cards {
+                match self.card_index(c) {
+                    Some(i) if self.cards[i].unique.as_deref() == Some(b.id.as_str()) => {}
+                    _ => return Err(format!("AI board {:?}: {c:?} is not a card unique to it", b.id)),
+                }
+            }
+        }
+        let size = self.map.piece.size;
+        let n = size as usize * size as usize;
+        for (i, p) in self.map.countries.iter().enumerate() {
+            let letters: String = p.terrain.concat();
+            if p.terrain.len() != size as usize
+                || p.terrain.iter().any(|r| r.chars().count() != size as usize)
+                || letters.chars().any(|c| Terrain::from_letter(c).is_none())
+            {
+                return Err(format!("country piece {i}: terrain must be {size} rows of {size} of U, I, N, F"));
+            }
+            let lists = [&p.uplinks, &p.outposts, &p.population, &p.factories, &p.data_centres];
+            if lists.iter().flat_map(|l| l.iter()).any(|&h| h == 0 || h as usize > n) {
+                return Err(format!("country piece {i}: hex numbers are 1-{n}"));
+            }
+            if p.uplinks.iter().any(|&u| p.terrain_at(u, size) != Terrain::Frontier)
+                || p.outposts.iter().any(|o| !p.uplinks.contains(o))
+            {
+                return Err(format!("country piece {i}: uplinks are Frontier and outposts start on uplinks"));
             }
         }
         for l in &self.map.layouts {
@@ -174,6 +588,9 @@ impl Content {
                     l.countries,
                     l.pieces.len()
                 ));
+            }
+            if l.countries as usize > self.map.countries.len() {
+                return Err(format!("layout for {} countries: not enough country pieces", l.countries));
             }
             for p in &l.pieces {
                 let d = (p.axes[0].index() + 6 - p.axes[1].index()) % 6;
@@ -192,23 +609,44 @@ impl Content {
         self.cards.iter().position(|c| c.id == id)
     }
 
+    pub fn threat_index(&self, id: &str) -> Option<usize> {
+        self.threats.iter().position(|c| c.id == id)
+    }
+
+    pub fn adversary_index(&self, id: &str) -> Option<usize> {
+        self.adversary.iter().position(|c| c.id == id)
+    }
+
     pub fn layout(&self, countries: u8) -> Option<&LayoutDef> {
         self.map.layouts.iter().find(|l| l.countries == countries)
+    }
+
+    /// Display name of any content id (card, threat, adversary card, AI board).
+    pub fn name_of(&self, id: &str) -> Option<&str> {
+        self.cards
+            .iter()
+            .map(|c| (&c.id, &c.name))
+            .chain(self.threats.iter().map(|c| (&c.id, &c.name)))
+            .chain(self.adversary.iter().map(|c| (&c.id, &c.name)))
+            .chain(self.ais.iter().map(|c| (&c.id, &c.name)))
+            .find(|(i, _)| *i == id)
+            .map(|(_, n)| n.as_str())
     }
 }
 
 /// The embedded content, parsed once.
 pub fn content() -> &'static Content {
     static C: OnceLock<Content> = OnceLock::new();
-    C.get_or_init(|| Content::parse(MAP_JSON, CARDS_JSON).expect("embedded content is valid"))
+    C.get_or_init(|| Content::parse(FILES).expect("embedded content is valid"))
 }
 
 /// Hash of the embedded content files, recorded with every result so a
 /// content edit is never mistaken for the same experiment.
 pub fn content_hash() -> String {
-    let mut bytes = Vec::with_capacity(MAP_JSON.len() + CARDS_JSON.len() + 1);
-    bytes.extend_from_slice(MAP_JSON.as_bytes());
-    bytes.push(0);
-    bytes.extend_from_slice(CARDS_JSON.as_bytes());
+    let mut bytes = Vec::new();
+    for f in FILES {
+        bytes.extend_from_slice(f.as_bytes());
+        bytes.push(0);
+    }
     format!("{:016x}", fnv1a64(&bytes))
 }

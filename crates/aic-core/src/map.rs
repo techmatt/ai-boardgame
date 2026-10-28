@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::content::Content;
+use crate::content::{Content, Terrain};
 use crate::hex::Hex;
 
 #[derive(Debug, Clone, Serialize)]
@@ -28,6 +28,11 @@ pub struct Cell {
     pub piece_pos: [u8; 2],
     /// Indices of on-board neighbours, in `Dir::ALL` order.
     pub neighbours: Vec<usize>,
+    /// The printed hex number on its piece (1-16), for tie-breaks.
+    pub number: u8,
+    pub terrain: Terrain,
+    /// A printed uplink: where the adversary enters.
+    pub uplink: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -48,6 +53,11 @@ impl Map {
         let mut index = BTreeMap::new();
         let mut geo = Vec::new();
         for (c, p) in layout.pieces.iter().enumerate() {
+            let design = content
+                .map
+                .countries
+                .get(c)
+                .ok_or_else(|| format!("no country piece for country {c} (content/map.json)"))?;
             let (a, b) = (p.axes[0].offset(), p.axes[1].offset());
             let mut mine = Vec::new();
             for i in 0..size {
@@ -59,11 +69,15 @@ impl Map {
                         ));
                     }
                     mine.push(hexes.len());
+                    let number = (i * size + j + 1) as u8;
                     hexes.push(Cell {
                         hex,
                         country: c as u8,
                         piece_pos: [i as u8, j as u8],
                         neighbours: Vec::new(),
+                        number,
+                        terrain: design.terrain_at(number, size as u8),
+                        uplink: design.uplinks.contains(&number),
                     });
                 }
             }
@@ -94,5 +108,20 @@ impl Map {
 
     pub fn country_of(&self, hex_index: usize) -> u8 {
         self.hexes[hex_index].country
+    }
+
+    /// Hex index of printed number `n` in country `c`.
+    pub fn numbered(&self, c: usize, n: u8) -> usize {
+        self.countries[c].hexes[n as usize - 1]
+    }
+
+    /// Whether two hexes are adjacent (neighbours on the board).
+    pub fn adjacent(&self, a: usize, b: usize) -> bool {
+        self.hexes[a].neighbours.contains(&b)
+    }
+
+    /// Hex distance between two hexes.
+    pub fn distance(&self, a: usize, b: usize) -> i32 {
+        self.hexes[a].hex.distance(self.hexes[b].hex)
     }
 }

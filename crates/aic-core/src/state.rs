@@ -9,7 +9,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::action::Action;
 use crate::config::Config;
+use crate::hex::Hex;
 use crate::rng::{as_string, RngStreams};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,13 +31,21 @@ pub struct GameState {
     pub hexes: Vec<HexState>,
     /// Global tracks owned by modules, keyed `"<module>.<name>"`.
     pub vars: BTreeMap<String, i64>,
+    /// Ordered card piles (decks, discards, hands, slots, building rows),
+    /// keyed `"<module>.<name>"`; index 0 is the top. Missing means empty.
+    #[serde(default)]
+    pub piles: BTreeMap<String, Vec<String>>,
+    /// A choice the players must make before the game goes on: the rules
+    /// stopped in the middle of resolving something (see [`Pending`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending: Option<Box<Pending>>,
     pub rng: RngStreams,
     pub stats: Stats,
     pub outcome: Option<Outcome>,
 }
 
-/// One seat = one country = one megacorp. All seats are driven by the same
-/// team agent; hands are open.
+/// One seat per player (as many players as countries). All seats are driven
+/// by the same team agent; hands are open.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Seat {
     pub resources: BTreeMap<String, i64>,
@@ -46,6 +56,55 @@ pub struct Seat {
     pub exhausted: Vec<String>,
     /// The country piece's card strip: a content card id per slot. Unused so far.
     pub slots: Vec<Option<String>>,
+}
+
+/// A choice in the middle of resolving a phase or an action ("players
+/// choose"). The state shown is partly resolved; `snapshot` is the state
+/// before the phase or action began. Answering (`Action::Choose`) replays the
+/// phase or action from `snapshot` with every choice made so far, so a
+/// module's resolution code is written straight through and never has to
+/// store where it stopped. At a table this is the step the players are in
+/// the middle of.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Pending {
+    pub trigger: Trigger,
+    /// Choices made so far in this resolution, in order.
+    pub made: Vec<Pick>,
+    /// The question now open.
+    pub ask: Ask,
+    pub snapshot: GameState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Trigger {
+    /// The current (automatic) phase.
+    Phase,
+    /// A player action.
+    Action { action: Action },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Pick {
+    pub option: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<Hex>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Ask {
+    /// The seat that answers (a team choice goes to the seat that started it,
+    /// or seat 0 in an adversary step).
+    pub seat: u8,
+    pub prompt: String,
+    pub options: Vec<Opt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Opt {
+    pub option: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<Hex>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -91,6 +150,11 @@ impl GameState {
 
     pub fn var(&self, key: &str) -> i64 {
         self.vars.get(key).copied().unwrap_or(0)
+    }
+
+    /// A card pile (empty if absent).
+    pub fn pile(&self, key: &str) -> &[String] {
+        self.piles.get(key).map_or(&[], |v| v.as_slice())
     }
 
     pub fn is_over(&self) -> bool {

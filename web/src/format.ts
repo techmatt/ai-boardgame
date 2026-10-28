@@ -1,7 +1,8 @@
 // Labels and colours for engine data. Generic: any action, event or token kind gets a
-// readable label without code here; known card ids get their content names.
+// readable label without code here; known action types, card ids, threat ids and
+// growth options get their content names.
 
-import { cardName, type Action, type GameEvent, type Hex } from './engine';
+import { aiBoard, cardName, param, threatName, type Action, type Config, type GameEvent, type Hex, type View } from './engine';
 
 export const hexKey = (h: Hex) => `${h[0]},${h[1]}`;
 
@@ -13,19 +14,76 @@ const words = (s: string) => s.replace(/_/g, ' ');
 function field(k: string, v: unknown): string {
   if (isHex(v)) return `@${hexKey(v)}`;
   if (k === 'card' && typeof v === 'string') return cardName(v);
+  if (k === 'threat' && typeof v === 'string') return threatName(v);
   if (typeof v === 'number' && k === 'delta') return v > 0 ? `+${v}` : `${v}`;
   return typeof v === 'string' ? v : JSON.stringify(v);
 }
 
+/** What labels may look up: the game's config, and the shown view for costs. */
+export interface LabelContext {
+  config?: Config;
+  view?: View;
+}
+
+/** The cost a card shows in a seat's card group (hand, drafted), if any. */
+function cardCost(view: View | undefined, seat: number, group: string, id: string): number | undefined {
+  return view?.seats[seat]?.cards.find((g) => g.key === group)?.cards.find((c) => c.id === id)?.cost;
+}
+
+/** The action's own words, without seat; null for a type with no special label. */
+function known(a: Action, withTarget: boolean, cx: LabelContext): string | null {
+  const card = typeof a.card === 'string' ? cardName(a.card) : '';
+  const cost = (n: number | undefined, what: string) => (n !== undefined && n > 0 ? ` (${n} ${what})` : '');
+  switch (a.type) {
+    case 'pass':
+      return 'pass';
+    case 'choose': {
+      const t = withTarget && isHex(a.target) ? ` @${hexKey(a.target)}` : '';
+      return `${String(a.option ?? 'choose')}${t}`;
+    }
+    case 'tier':
+      return `draft from tier ${a.tier}`;
+    case 'draft':
+      return `draft ${card}`;
+    case 'keep':
+      return `keep ${card}${cost(cardCost(cx.view, a.seat, 'cards.drafted', a.card ?? ''), 'credits')}`;
+    case 'growth': {
+      const g = cx.config && aiBoard(cx.config, a.seat)?.growth[Number(a.option)];
+      return `growth: ${g ? g.name : `option ${a.option}`}`;
+    }
+    case 'play':
+      return `play ${card}${cost(cardCost(cx.view, a.seat, 'cards.hand', a.card ?? ''), 'credits')}`;
+    case 'use':
+      return `use ${card}`;
+    case 'draw': {
+      const c = cx.config ? param(cx.config, 'cards', 'draw_cost') : undefined;
+      return `draw a tier-${a.tier} card${typeof c === 'number' ? ` (${c} compute)` : ''}`;
+    }
+    case 'pay':
+      return `pay ${a.amount} ${a.resource} → ${threatName(String(a.threat))}`;
+    case 'withdraw':
+      return `take back ${a.resource} ← ${threatName(String(a.threat))}`;
+    case 'give': {
+      const n = cx.config ? param(cx.config, 'economy', 'give_insight') : undefined;
+      return `give ${typeof n === 'number' ? `${n} ` : ''}insight → seat ${a.to}`;
+    }
+  }
+  return null;
+}
+
 /**
- * "seat 1: play Scrub @-3,4". The seat is left out with `withSeat` false, and the
+ * "seat 1: play Fab Line". The seat is left out with `withSeat` false, and the
  * target with `withTarget` false (a choice's label, before its hex is picked).
+ * Unknown action types are labelled from their fields.
  */
-export function actionLabel(a: Action, withSeat = true, withTarget = true): string {
-  const rest = Object.entries(a)
-    .filter(([k]) => k !== 'type' && k !== 'seat' && (withTarget || k !== 'target'))
-    .map(([k, v]) => (k === 'card' || k === 'target' ? field(k, v) : `${k}=${field(k, v)}`));
-  const body = [words(a.type), ...rest].join(' ');
+export function actionLabel(a: Action, withSeat = true, withTarget = true, cx: LabelContext = {}): string {
+  let body = known(a, withTarget, cx);
+  if (body === null) {
+    const rest = Object.entries(a)
+      .filter(([k]) => k !== 'type' && k !== 'seat' && (withTarget || k !== 'target'))
+      .map(([k, v]) => (k === 'card' || k === 'target' ? field(k, v) : `${k}=${field(k, v)}`));
+    body = [words(a.type), ...rest].join(' ');
+  }
   return withSeat ? `seat ${a.seat}: ${body}` : body;
 }
 
@@ -42,20 +100,80 @@ export function hexesIn(x: object): Hex[] {
   return Object.values(x).filter(isHex);
 }
 
-/** The key that groups actions into one choice: everything but the seat and target. */
+/**
+ * The key that groups actions into one choice: everything but the seat and target.
+ * A `choose` with a hex target also drops its option (the option names the hex), so
+ * every hex answer to one question is one pick.
+ */
 export function choiceKey(a: Action): string {
+  if (a.type === 'choose' && isHex(a.target)) return JSON.stringify({ type: 'choose', hex: true });
   const { seat: _s, target: _t, ...rest } = a;
   return JSON.stringify(rest);
 }
 
-// Token colours: a few kinds with chosen colours, every other kind hashed to a hue.
-const KNOWN: Record<string, string> = { blight: '#5b2a86' };
+// ---------- colours ----------
+
+/** Terrain fills: four distinct, light enough for tokens on top. */
+export const TERRAIN: Record<string, { fill: string; label: string }> = {
+  urban: { fill: '#c9cfdc', label: 'urban' },
+  industrial: { fill: '#e2c08f', label: 'industrial' },
+  network: { fill: '#9fd6d2', label: 'network' },
+  frontier: { fill: '#c4dc9a', label: 'frontier' },
+};
+export const terrainFill = (t: string) => TERRAIN[t]?.fill ?? '#e4e0d8';
+
+/** A `#rrggbb` colour mixed toward black by `k` (0..1). */
+export function darken(hex: string, k: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = (s: number) => Math.round(((n >> s) & 255) * (1 - k)).toString(16).padStart(2, '0');
+  return `#${ch(16)}${ch(8)}${ch(0)}`;
+}
+
+/** A `#rrggbb` colour pushed to a saturated, mid-dark version of its hue (for borders). */
+export function strong(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => x / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  if (max !== min) {
+    const d = max - min;
+    h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  }
+  return `hsl(${Math.round((h * 60 + 360) % 360)} 70% 42%)`;
+}
+
+// Token colours: chosen colours for the kinds the board draws, every other kind
+// hashed to a hue.
+const KNOWN: Record<string, string> = {
+  population: '#2f4b7c',
+  factory: '#7a5230',
+  data_centre: '#37474f',
+  drone: '#ef5350',
+  outpost: '#c62828',
+  foundry: '#6d0000',
+  corruption: '#4a148c',
+  fortify: '#8d6e63',
+  blight: '#5b2a86',
+};
 
 export function tokenColour(kind: string): string {
   if (KNOWN[kind]) return KNOWN[kind];
+  if (kind.startsWith('processor:')) return '#1f6feb';
+  if (kind.startsWith('defense:')) return '#1565c0';
   let h = 0;
   for (const c of kind) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return `hsl(${h % 360} 65% 38%)`;
+}
+
+/** "processor:1" → "processor (seat 1)": a readable token name. */
+export function tokenName(kind: string): string {
+  const [base, seat] = kind.split(':');
+  return seat !== undefined ? `${words(base)} (seat ${seat})` : words(base);
 }
 
 export function escapeHtml(s: string): string {

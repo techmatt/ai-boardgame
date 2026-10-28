@@ -33,10 +33,22 @@ pub enum Event {
         delta: i64,
         total: i64,
     },
-    CardPlayed {
-        seat: u8,
+    /// A card moved between piles (`""` for nowhere: the box).
+    CardMoved {
         card: String,
-        target: Option<Hex>,
+        from: String,
+        to: String,
+    },
+    /// A rules step worth a line in the log ("ravage 3 damage at ...").
+    Note {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        hex: Option<Hex>,
+    },
+    /// The rules stopped for a choice.
+    Asked {
+        seat: u8,
+        prompt: String,
     },
     Passed {
         seat: u8,

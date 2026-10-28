@@ -1,31 +1,994 @@
 [
-  {
-    "id": "scrub",
-    "name": "Scrub",
-    "text": "Remove blight from a hex in your country.",
-    "cost": { "param": "scrub_cost" },
-    "target": { "own_hex": { "with_token": "blight" } },
-    "effects": [
-      { "op": "remove_tokens", "token": "blight", "amount": { "param": "scrub_amount" } }
+ {
+  "id": "fab_line",
+  "name": "Fab Line",
+  "tier": 1,
+  "kind": "building",
+  "cost": 8,
+  "insight": 1,
+  "tags": [
+   "economy"
+  ],
+  "text": "+2 credit income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "trade_office",
+  "name": "Trade Office",
+  "tier": 1,
+  "kind": "building",
+  "cost": 10,
+  "insight": 1,
+  "tags": [
+   "economy"
+  ],
+  "text": "+1 credit income per 2 Economy tags you have.",
+  "passives": [
+   {
+    "op": "income_per_tag",
+    "resource": "credits",
+    "tag": "economy",
+    "per": 2,
+    "max": 99
+   }
+  ]
+ },
+ {
+  "id": "assembly_cluster",
+  "name": "Assembly Cluster",
+  "tier": 1,
+  "kind": "building",
+  "cost": 11,
+  "insight": 1,
+  "tags": [
+   "economy",
+   "power"
+  ],
+  "text": "Your buildings cost 2 less.",
+  "passives": [
+   {
+    "op": "building_discount",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "logistics_ai",
+  "name": "Logistics AI",
+  "tier": 1,
+  "kind": "building",
+  "cost": 10,
+  "insight": 1,
+  "tags": [
+   "economy"
+  ],
+  "text": "Whenever a threat you paid toward is countered, gain 2 credits.",
+  "passives": [
+   {
+    "op": "logistics",
+    "resource": "credits",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "solar_field",
+  "name": "Solar Field",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 0,
+  "tags": [
+   "power"
+  ],
+  "text": "+1 energy income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "microgrid",
+  "name": "Microgrid",
+  "tier": 1,
+  "kind": "building",
+  "cost": 6,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "+1 energy income; +1 more if you have 2 Power tags.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 1
+   },
+   {
+    "op": "income_if_tags",
+    "resource": "energy",
+    "tag": "power",
+    "count": 2,
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "grid_battery",
+  "name": "Grid Battery",
+  "tier": 1,
+  "kind": "building",
+  "cost": 7,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "Once a round: pay 1 compute, gain 2 energy.",
+  "ability": {
+   "cost": [
+    [
+     "compute",
+     1
     ]
-  },
-  {
-    "id": "invest",
-    "name": "Invest",
-    "text": "Pay credits now, gain more credits now.",
-    "cost": { "param": "invest_cost" },
-    "effects": [
-      { "op": "gain", "resource": "credits", "amount": { "param": "invest_gain" } }
-    ]
-  },
-  {
-    "id": "purge",
-    "name": "Purge",
-    "text": "Remove up to 3 blight from a hex in your country.",
-    "cost": 4,
-    "target": { "own_hex": { "with_token": "blight" } },
-    "effects": [
-      { "op": "remove_tokens", "token": "blight", "amount": 3 }
-    ]
+   ],
+   "effects": [
+    {
+     "op": "gain",
+     "resource": "energy",
+     "amount": 2
+    }
+   ]
   }
+ },
+ {
+  "id": "server_farm",
+  "name": "Server Farm",
+  "tier": 1,
+  "kind": "building",
+  "cost": 9,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "text": "+1 compute each round; place 1 processor.",
+  "effects": [
+   {
+    "op": "place_processor",
+    "count": 1
+   }
+  ],
+  "passives": [
+   {
+    "op": "income",
+    "resource": "compute",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "overclock_rig",
+  "name": "Overclock Rig",
+  "tier": 1,
+  "kind": "building",
+  "cost": 12,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "text": "+1 insight income; in upkeep pay 1 energy or it does nothing next round.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "insight",
+    "amount": 1
+   }
+  ],
+  "upkeep": [
+   [
+    "energy",
+    1
+   ]
+  ]
+ },
+ {
+  "id": "firewall_node",
+  "name": "Firewall Node",
+  "tier": 1,
+  "kind": "building",
+  "cost": 8,
+  "insight": 1,
+  "tags": [
+   "cyber",
+   "discord"
+  ],
+  "text": "Explore adds no drone to hexes holding your processor.",
+  "passives": [
+   {
+    "op": "explore_shield"
+   }
+  ]
+ },
+ {
+  "id": "watchtower_net",
+  "name": "Watchtower Net",
+  "tier": 1,
+  "kind": "building",
+  "cost": 8,
+  "insight": 1,
+  "tags": [
+   "discord"
+  ],
+  "text": "Once a round: pay 2 energy for 1 damage in a country where you have a processor.",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "damage",
+     "amount": 1,
+     "at": "processor_country"
+    }
+   ]
+  }
+ },
+ {
+  "id": "opposition_network",
+  "name": "Opposition Network",
+  "tier": 1,
+  "kind": "building",
+  "cost": 9,
+  "insight": 1,
+  "tags": [
+   "discord",
+   "unity"
+  ],
+  "text": "Destroying an outpost or foundry gives +1 extra opposition.",
+  "passives": [
+   {
+    "op": "opposition_bonus",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "civic_shelter",
+  "name": "Civic Shelter",
+  "tier": 1,
+  "kind": "building",
+  "cost": 7,
+  "insight": 1,
+  "tags": [
+   "unity"
+  ],
+  "text": "Once a round, prevent the first population loss in a country where you have a processor.",
+  "passives": [
+   {
+    "op": "civic_shelter"
+   }
+  ]
+ },
+ {
+  "id": "recruitment_hub",
+  "name": "Recruitment Hub",
+  "tier": 1,
+  "kind": "building",
+  "cost": 9,
+  "insight": 1,
+  "tags": [
+   "unity"
+  ],
+  "text": "When you give insight, the receiver also gains 2 credits.",
+  "passives": [
+   {
+    "op": "give_bonus",
+    "resource": "credits",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "contract_bid",
+  "name": "Contract Bid",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 0,
+  "tags": [
+   "economy"
+  ],
+  "text": "Gain 4 credits.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 4
+   }
+  ]
+ },
+ {
+  "id": "emergency_fab",
+  "name": "Emergency Fab",
+  "tier": 1,
+  "kind": "program",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "economy"
+  ],
+  "text": "Build a factory on an empty Industrial hex next to population.",
+  "effects": [
+   {
+    "op": "build_factory",
+    "empty": true
+   }
+  ]
+ },
+ {
+  "id": "rebuild",
+  "name": "Rebuild",
+  "tier": 1,
+  "kind": "program",
+  "cost": 6,
+  "insight": 1,
+  "tags": [
+   "economy"
+  ],
+  "text": "Return 1 corruption from a hex to the pool.",
+  "effects": [
+   {
+    "op": "remove_corruption",
+    "amount": 1,
+    "one_country": false
+   }
+  ]
+ },
+ {
+  "id": "liquidate_reserves",
+  "name": "Liquidate Reserves",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "Convert up to 3 energy into 2 credits each.",
+  "effects": [
+   {
+    "op": "convert",
+    "from": "energy",
+    "to": "credits",
+    "max": 3,
+    "rate": 2
+   }
+  ]
+ },
+ {
+  "id": "data_mining",
+  "name": "Data Mining",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "text": "Gain 1 compute per processor you have (max 4).",
+  "effects": [
+   {
+    "op": "gain_per_processor",
+    "resource": "compute",
+    "max": 4
+   }
+  ]
+ },
+ {
+  "id": "fork_process",
+  "name": "Fork Process",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "text": "Place 1 processor.",
+  "effects": [
+   {
+    "op": "place_processor",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "recon_sweep",
+  "name": "Recon Sweep",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "cyber"
+  ],
+  "text": "Look at the next 2 adversary cards; gain 1 compute.",
+  "effects": [
+   {
+    "op": "peek",
+    "count": 2
+   },
+   {
+    "op": "gain",
+    "resource": "compute",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "jam_signals",
+  "name": "Jam Signals",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 0,
+  "tags": [
+   "cyber",
+   "discord"
+  ],
+  "text": "One threat needs 1 less of each resource it asks for.",
+  "effects": [
+   {
+    "op": "jam",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "precision_strike",
+  "name": "Precision Strike",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "discord"
+  ],
+  "text": "2 damage in one hex.",
+  "effects": [
+   {
+    "op": "damage",
+    "amount": 2,
+    "at": "any"
+   }
+  ]
+ },
+ {
+  "id": "sweep",
+  "name": "Sweep",
+  "tier": 1,
+  "kind": "program",
+  "cost": 6,
+  "insight": 1,
+  "tags": [
+   "discord"
+  ],
+  "text": "1 damage in each hex of one country that holds adversary pieces.",
+  "effects": [
+   {
+    "op": "damage_country",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "scavenge",
+  "name": "Scavenge",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 1,
+  "tags": [
+   "discord"
+  ],
+  "text": "If you destroyed a foundry this round, gain 1 antimatter; otherwise gain 2 energy.",
+  "effects": [
+   {
+    "op": "if",
+    "cond": "destroyed_foundry",
+    "then": [
+     {
+      "op": "gain",
+      "resource": "antimatter",
+      "amount": 1
+     }
+    ],
+    "else": [
+     {
+      "op": "gain",
+      "resource": "energy",
+      "amount": 2
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "evacuate",
+  "name": "Evacuate",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "unity"
+  ],
+  "text": "Move up to 3 population within one country.",
+  "effects": [
+   {
+    "op": "move_population",
+    "max": 3
+   }
+  ]
+ },
+ {
+  "id": "shore_up",
+  "name": "Shore Up",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "unity"
+  ],
+  "text": "Place 3 defense in one country.",
+  "effects": [
+   {
+    "op": "place_defense",
+    "count": 3,
+    "where": "any"
+   }
+  ]
+ },
+ {
+  "id": "rally",
+  "name": "Rally",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "unity"
+  ],
+  "text": "+2 opposition if any hex holds both population and adversary pieces.",
+  "effects": [
+   {
+    "op": "if",
+    "cond": "population_with_adversary",
+    "then": [
+     {
+      "op": "opposition",
+      "amount": 2
+     }
+    ],
+    "else": []
+   }
+  ]
+ },
+ {
+  "id": "grant",
+  "name": "Grant",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 1,
+  "tags": [
+   "unity"
+  ],
+  "text": "Another player gains 1 insight and 3 credits; you gain 1 credit.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "other_gain",
+    "resource": "credits",
+    "amount": 3
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "power_share",
+  "name": "Power Share",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 1,
+  "tags": [
+   "unity",
+   "power"
+  ],
+  "text": "Give up to 3 energy to another player; they gain 1 more.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "transfer",
+    "resource": "energy",
+    "max": 3,
+    "bonus": 1
+   }
+  ]
+ },
+ {
+  "id": "fusion_plant",
+  "name": "Fusion Plant",
+  "tier": 2,
+  "kind": "building",
+  "cost": 18,
+  "antimatter": 1,
+  "insight": 1,
+  "needs": [
+   [
+    "power",
+    2
+   ]
+  ],
+  "text": "+3 energy income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "quantum_core",
+  "name": "Quantum Core",
+  "tier": 2,
+  "kind": "building",
+  "cost": 16,
+  "antimatter": 1,
+  "insight": 1,
+  "needs": [
+   [
+    "cyber",
+    2
+   ]
+  ],
+  "text": "+1 insight income; +1 compute per Cyber tag each round (max 5).",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "income_per_tag",
+    "resource": "compute",
+    "tag": "cyber",
+    "per": 1,
+    "max": 5
+   }
+  ]
+ },
+ {
+  "id": "orbital_lance",
+  "name": "Orbital Lance",
+  "tier": 2,
+  "kind": "building",
+  "cost": 20,
+  "insight": 1,
+  "needs": [
+   [
+    "discord",
+    2
+   ]
+  ],
+  "text": "Once a round: pay 1 antimatter for 4 damage in any hex.",
+  "ability": {
+   "cost": [
+    [
+     "antimatter",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "damage",
+     "amount": 4,
+     "at": "any"
+    }
+   ]
+  }
+ },
+ {
+  "id": "antimatter_refinery",
+  "name": "Antimatter Refinery",
+  "tier": 2,
+  "kind": "building",
+  "cost": 14,
+  "insight": 1,
+  "needs": [
+   [
+    "power",
+    2
+   ]
+  ],
+  "text": "In upkeep, convert 4 energy into 1 antimatter.",
+  "passives": [
+   {
+    "op": "convert_upkeep",
+    "from": "energy",
+    "amount": 4,
+    "to": "antimatter",
+    "gain": 1
+   }
+  ]
+ },
+ {
+  "id": "megastructure",
+  "name": "Megastructure",
+  "tier": 2,
+  "kind": "building",
+  "cost": 25,
+  "insight": 2,
+  "needs": [
+   [
+    "economy",
+    3
+   ]
+  ],
+  "text": "+5 credit income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 5
+   }
+  ]
+ },
+ {
+  "id": "purge_protocol",
+  "name": "Purge Protocol",
+  "tier": 2,
+  "kind": "program",
+  "cost": 8,
+  "antimatter": 1,
+  "insight": 1,
+  "text": "Destroy every adversary piece in one hex.",
+  "effects": [
+   {
+    "op": "destroy_all"
+   }
+  ]
+ },
+ {
+  "id": "global_mandate",
+  "name": "Global Mandate",
+  "tier": 2,
+  "kind": "program",
+  "cost": 10,
+  "insight": 1,
+  "needs": [
+   [
+    "unity",
+    2
+   ]
+  ],
+  "text": "+4 opposition; every player gains 1 insight next round.",
+  "effects": [
+   {
+    "op": "opposition",
+    "amount": 4
+   },
+   {
+    "op": "next_round_insight",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "reconstruction",
+  "name": "Reconstruction",
+  "tier": 2,
+  "kind": "program",
+  "cost": 12,
+  "insight": 1,
+  "needs": [
+   [
+    "economy",
+    2
+   ]
+  ],
+  "text": "Return up to 3 corruption in one country to the pool.",
+  "effects": [
+   {
+    "op": "remove_corruption",
+    "amount": 3,
+    "one_country": true
+   }
+  ]
+ },
+ {
+  "id": "counter_intelligence",
+  "name": "Counter-intelligence",
+  "tier": 2,
+  "kind": "program",
+  "cost": 6,
+  "antimatter": 1,
+  "insight": 0,
+  "text": "Counter any one threat.",
+  "effects": [
+   {
+    "op": "counter_threat"
+   }
+  ]
+ },
+ {
+  "id": "swarm_override",
+  "name": "Swarm Override",
+  "tier": 2,
+  "kind": "program",
+  "cost": 9,
+  "insight": 2,
+  "needs": [
+   [
+    "cyber",
+    2
+   ]
+  ],
+  "text": "Remove every drone in one country; +1 opposition per 2 removed.",
+  "effects": [
+   {
+    "op": "remove_drones_country",
+    "opposition_per": 2
+   }
+  ]
+ },
+ {
+  "id": "turnkey_factory",
+  "name": "Turnkey Factory",
+  "tier": 0,
+  "kind": "building",
+  "cost": 6,
+  "insight": 1,
+  "text": "Build a factory on any Industrial hex next to population; +1 credit income.",
+  "effects": [
+   {
+    "op": "build_factory",
+    "empty": false
+   }
+  ],
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 1
+   }
+  ],
+  "unique": "builder"
+ },
+ {
+  "id": "venture_capital",
+  "name": "Venture Capital",
+  "tier": 0,
+  "kind": "program",
+  "cost": 0,
+  "insight": 0,
+  "text": "Gain 5 credits; another player gains 2.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 5
+   },
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "credits",
+    "amount": 2
+   }
+  ],
+  "unique": "builder"
+ },
+ {
+  "id": "modular_expansion",
+  "name": "Modular Expansion",
+  "tier": 0,
+  "kind": "building",
+  "cost": 8,
+  "insight": 1,
+  "text": "+1 building slot (takes no slot itself).",
+  "passives": [
+   {
+    "op": "slots",
+    "amount": 1
+   }
+  ],
+  "slotless": true,
+  "unique": "builder"
+ },
+ {
+  "id": "point_defense",
+  "name": "Point Defense",
+  "tier": 0,
+  "kind": "building",
+  "cost": 6,
+  "insight": 1,
+  "text": "Once a round, pay 1 energy to place 2 defense in a country where you have a processor.",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "place_defense",
+     "count": 2,
+     "where": "processor_country"
+    }
+   ]
+  },
+  "unique": "protector"
+ },
+ {
+  "id": "strike_team",
+  "name": "Strike Team",
+  "tier": 0,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "text": "3 damage in a hex within 1 of your processor.",
+  "effects": [
+   {
+    "op": "damage",
+    "amount": 3,
+    "at": "near_processor"
+   }
+  ],
+  "unique": "protector"
+ },
+ {
+  "id": "shelter_order",
+  "name": "Shelter Order",
+  "tier": 0,
+  "kind": "program",
+  "cost": 0,
+  "insight": 0,
+  "text": "In one country, population can't be destroyed this round.",
+  "effects": [
+   {
+    "op": "shelter"
+   }
+  ],
+  "unique": "protector"
+ }
 ]

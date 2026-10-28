@@ -91,6 +91,12 @@ async function until(expr, what, ms = 10000) {
   }
   throw new Error(`timed out waiting for ${what}`);
 }
+/** Reloads the page and waits for the new document's viewer (not the old one's) and `expr`. */
+async function reload(expr, what) {
+  await js('(window.__aicOld = true)');
+  await send('Page.reload');
+  await until(`!window.__aicOld && window.aic && window.aic.view && (${expr})`, what, 30000);
+}
 async function size(w, h) {
   await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
   await sleep(150);
@@ -109,8 +115,7 @@ try {
   await send('Page.navigate', { url });
   await until('window.aic && window.aic.view', 'the viewer to start', 30000);
   await js('localStorage.clear()');
-  await send('Page.reload');
-  await until('window.aic && window.aic.view && window.aic.timeline.last === 0', 'a fresh game');
+  await reload('window.aic.timeline.last === 0', 'a fresh game');
 
   // Board: one data-hex per view hex, in the view's coordinates.
   const board = await js(`(() => {
@@ -118,10 +123,19 @@ try {
     const keys = [...document.querySelectorAll('#board .hex')].map((e) => e.dataset.hex);
     return { n: v.hexes.length, keys, want: v.hexes.map((h) => h.hex.join(',')),
              labels: document.querySelectorAll('#board .country-label').length, countries: v.countries.length,
-             fills: new Set([...document.querySelectorAll('#board .hex polygon')].map((p) => p.getAttribute('fill'))).size };
+             borders: document.querySelectorAll('#board .border').length,
+             terrains: new Set(v.hexes.map((h) => h.terrain)).size,
+             fills: new Set([...document.querySelectorAll('#board .hex .cell')].map((p) => p.getAttribute('fill'))).size,
+             uplinks: v.hexes.filter((h) => h.uplink).length, antennas: document.querySelectorAll('#board .uplink').length };
   })()`);
   check(board.n > 0 && JSON.stringify(board.keys) === JSON.stringify(board.want), `board has ${board.n} hexes with data-hex="q,r"`);
-  check(board.labels === board.countries && board.fills === board.countries, `${board.countries} countries labelled and tinted`);
+  check(board.labels === board.countries && board.borders > 0, `${board.countries} countries labelled, ${board.borders} border edges`);
+  check(board.fills === board.terrains, `hexes filled by terrain (${board.fills} fills for ${board.terrains} terrains)`);
+  check(board.uplinks === board.antennas, `${board.antennas} uplinks marked`);
+  const panels = await js(`({ pipeline: document.querySelectorAll('#pipeline .slot-box').length, opposition: !!document.querySelector('#status .opposition .bar'),
+                             threats: document.querySelectorAll('#countries .threat').length })`);
+  check(panels.pipeline >= 4 && panels.opposition, `adversary pipeline (${panels.pipeline} boxes) and opposition bar drawn`);
+  check(panels.threats > 0, `${panels.threats} threats shown with their countries`);
 
   // Hover a hex and a token: the details card shows.
   const hover = async (sel) => {
@@ -132,13 +146,34 @@ try {
     return js(`document.getElementById('tip').hidden ? '' : document.getElementById('tip').textContent`);
   };
   check((await hover('#board .hex polygon')).includes('hex'), 'hovering a hex shows its details');
-  check((await hover('#board .token circle')).includes('×'), 'hovering a token shows its details');
+  check((await hover('#board .token .hit')).includes('×'), 'hovering a token shows its details');
   check((await hover('.value')).length > 0, 'hovering a value shows its details');
+  check((await hover('#pipeline .slot-box.build')).length > 0, 'hovering an adversary slot shows its pile');
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
   await shot('play-start-1366');
 
-  // Play the whole game through the UI: random clicks on what the seat panels offer.
+  // Play the whole game through the UI: random clicks on what the seat panels offer
+  // (any action button: growth and draft phases offer no pass). An open choice answered
+  // by a hex must highlight its hexes without a click first.
   let clicks = 0;
+  let hexChoices = 0;
+  let armedAtOnce = 0;
+  const shots = new Set();
   while (clicks < 3000 && !(await js(`!!document.querySelector('#phase-bar .outcome')`))) {
+    const st = await js(`(() => {
+      const v = window.aic.view;
+      const hexPick = !!v.choice && window.aic.legal.some((a) => a.type === 'choose' && a.target);
+      return { hexPick, targets: document.querySelectorAll('#board .hex.target').length, prompt: document.querySelector('#prompt.choice') ? 1 : 0,
+               phase: v.phase?.name ?? '', round: v.round };
+    })()`);
+    if (st.hexPick) {
+      hexChoices++;
+      if (st.targets > 0 && st.prompt) armedAtOnce++;
+      if (!shots.has('choice')) { shots.add('choice'); await shot('play-choice-1366'); }
+    }
+    if (st.round >= 2 && st.phase.includes('cards.play') && !shots.has('mid')) { shots.add('mid'); await shot('play-mid-1366'); }
+    if (st.phase === 'cards.draft' && !shots.has('draft')) { shots.add('draft'); await shot('play-draft-1366'); }
+    if (st.phase === 'ai.growth' && !shots.has('growth')) { shots.add('growth'); await shot('play-growth-1366'); }
     const did = await js(`(() => {
       const tgt = document.querySelectorAll('#board .hex.target polygon');
       if (tgt.length) { tgt[Math.floor(Math.random() * tgt.length)].dispatchEvent(new MouseEvent('click', { bubbles: true })); return 'hex'; }
@@ -158,6 +193,7 @@ try {
   check(!!end.outcome && end.legal === 0, `played to the end in ${clicks} clicks, ${end.n} actions: ${end.text}`);
   const played = await js(`window.aic.timeline.actions.filter((a) => a.type !== 'pass').length`);
   check(played > 0, `${played} non-pass actions taken through the UI`);
+  check(armedAtOnce === hexChoices, `hex choices highlight their hexes at once (${armedAtOnce}/${hexChoices})`);
   await shot('play-end-1366');
 
   // Layout: no page scroll at both ends of the supported range.
@@ -174,8 +210,7 @@ try {
   await js(`document.getElementById('undo').click()`);
   const afterUndo = await js('window.aic.timeline.last');
   check(afterUndo === end.n - 1 && !(await js('window.aic.view.outcome')), 'undo drops the last action and reopens the game');
-  await send('Page.reload');
-  await until('window.aic && window.aic.view', 'reload');
+  await reload('true', 'reload');
   check((await js('window.aic.timeline.last')) === afterUndo, 'the session is restored from localStorage after a reload');
 
   // Bug report: the record dialog holds the game in the record format.
@@ -185,6 +220,38 @@ try {
     `record dialog: ${rec.format}, seed ${rec.seed}, ${rec.actions.length} actions`);
   await shot('record-dialog');
   await js(`document.getElementById('record-close').click()`);
+
+  // Four countries (64 hexes): the default config with `countries: 4`, played a while
+  // with random actions, still fits without page scroll and keeps a usable board.
+  const four = await js(`(() => {
+    const t = window.aic.timeline;
+    const cfg = JSON.parse(t.configJson);
+    cfg.countries = 4;
+    cfg.name = (cfg.name ?? 'config') + ' (4 countries, e2e)';
+    localStorage.setItem('aic.session', JSON.stringify({ config: JSON.stringify(cfg), seed: '7', actions: [], cursor: 0, source: { kind: 'play', file: 'e2e-4-countries' } }));
+    return cfg.countries;
+  })()`);
+  await reload(`window.aic.view.hexes.length === ${four * 16}`, 'the 4-country game');
+  for (let i = 0; i < 40; i++) await js(`document.getElementById('random-action').click()`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
+  for (const [w, h] of [[1366, 768], [1920, 1080]]) {
+    await size(w, h);
+    const svg = await js(`(() => { const r = document.getElementById('board').getBoundingClientRect(); return [r.width, r.height]; })()`);
+    check(await noScroll() && svg[1] > h * 0.4, `4 countries: no page scroll, board ${svg.map(Math.round).join('x')} at ${w}x${h}`);
+    await shot(`four-countries-${w}x${h}`);
+  }
+  await size(1366, 768);
+
+  // The shared-row threat variant shows its threats in their own box by the countries.
+  if (await js(`[...document.querySelectorAll('#config option')].some((o) => o.value === 'shared_row.json')`)) {
+    await js(`(() => { document.getElementById('config').value = 'shared_row.json'; document.getElementById('seed').value = '3';
+                        document.getElementById('new-form').requestSubmit(); })()`);
+    await until(`window.aic.timeline.source.file === 'shared_row.json'`, 'the shared-row game');
+    for (let i = 0; i < 12; i++) await js(`document.getElementById('random-action').click()`);
+    const row = await js(`({ pile: !!window.aic.view.piles.find((p) => p.key === 'threats.row'), shown: document.querySelectorAll('#countries .shared .threat').length })`);
+    check(!row.pile || row.shown > 0, `shared threat row shown (${row.shown} threats)`);
+    await shot('shared-row-1366');
+  }
 
   // Watch a record from the simulator: load, step forward and back, reach its end.
   if (recordPath) {

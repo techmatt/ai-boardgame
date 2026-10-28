@@ -4,10 +4,14 @@
 
 import { renderBoard } from './board';
 import {
-  checkRecord, legalActions, load, recordText, resolveConfig, version, view as engineView,
-  type Action, type CardView, type Value, type View,
+  aiBoard, checkRecord, legalActions, load, recordText, resolveConfig, version, view as engineView,
+  type Action, type CardView, type View,
 } from './engine';
-import { actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, tokenColour } from './format';
+import {
+  actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, strong, tokenColour, tokenName,
+  type LabelContext,
+} from './format';
+import { cardChip, countriesHtml, legendHtml, pilesHtml, pipelineHtml, seatCardsHtml, seatValuesHtml, statusHtml, varsHtml } from './panels';
 import { Timeline, parseSeed, randomSeed, readRecord } from './session';
 import './style.css';
 
@@ -23,7 +27,9 @@ const ui = {
   phaseBar: $('phase-bar'),
   board: document.getElementById('board') as unknown as SVGSVGElement,
   prompt: $('prompt'),
-  globals: $('globals'),
+  status: $('status'),
+  pipeline: $('pipeline'),
+  countries: $('countries'),
   seats: $('seats'),
   piles: $('piles'),
   log: $('tab-log'),
@@ -55,6 +61,8 @@ let legal: Action[] = [];
 let armed: { seat: number; key: string } | null = null;
 let autoplay: number | null = null;
 let activeTab = 'log';
+/** Whether the raw-vars section under the piles is unfolded. */
+let varsOpen = false;
 
 // ---------- errors ----------
 
@@ -123,6 +131,11 @@ function render() {
   shown = engineView(f.snap);
   legal = legalActions(f.snap);
   if (armed && !legal.some((a) => a.seat === armed!.seat && choiceKey(a) === armed!.key)) armed = null;
+  // An open choice answered by picking a hex arms that pick at once.
+  if (!armed && shown.choice) {
+    const pick = legal.find((a) => a.seat === shown.choice!.seat && a.type === 'choose' && isHex(a.target));
+    if (pick) armed = { seat: pick.seat, key: choiceKey(pick) };
+  }
 
   const src = tl.source;
   const cfgName = f.snap.state.config.name || 'config';
@@ -136,14 +149,16 @@ function render() {
     for (const a of legal) if (a.seat === armed.seat && choiceKey(a) === armed.key && isHex(a.target)) targets.add(hexKey(a.target));
   }
   const changed = new Set<string>();
-  for (const e of f.events) for (const h of hexesIn(e)) changed.add(hexKey(h));
-  if (f.action) for (const h of hexesIn(f.action)) changed.add(hexKey(h));
+  // Setup touches every hex: only mark what an action changed.
+  if (f.action) {
+    for (const e of f.events) for (const h of hexesIn(e)) changed.add(hexKey(h));
+    for (const h of hexesIn(f.action)) changed.add(hexKey(h));
+  }
   renderBoard(ui.board, shown, { targets, changed });
-  ui.prompt.textContent = armed
-    ? `Seat ${armed.seat}: pick a highlighted hex for ${actionLabel(legal.find((a) => a.seat === armed!.seat && choiceKey(a) === armed!.key)!, false, false)} (Esc cancels)`
-    : '';
-
-  renderValues(ui.globals, 'Game', shown.globals);
+  renderPrompt(targets.size);
+  ui.status.innerHTML = statusHtml(shown);
+  ui.pipeline.innerHTML = pipelineHtml(shown);
+  ui.countries.innerHTML = countriesHtml(shown, f.snap.state.config);
   renderSeats();
   renderPiles();
   renderLog();
@@ -151,64 +166,89 @@ function render() {
   renderTab();
 }
 
+/** "cards.play+threats.counter" → "play + counter". */
+const shortPhase = (name: string) => name.split('+').map((x) => x.split('.').pop()).join(' + ');
+
+/** Who the game waits for, and the open choice's question, above the board. */
+function renderPrompt(targets: number) {
+  const v = shown;
+  const seatName = (s: number) => {
+    const ai = aiBoard(tl.frame.snap.state.config, s)?.name;
+    return `Seat ${s}${ai ? ` (${escapeHtml(ai)})` : ''}`;
+  };
+  ui.prompt.className = '';
+  if (v.outcome) {
+    ui.prompt.innerHTML = '';
+    return;
+  }
+  if (v.choice) {
+    ui.prompt.className = 'choice';
+    const how = targets ? `click one of the ${targets} highlighted hexes` : `answer in ${seatName(v.choice.seat)}'s panel`;
+    ui.prompt.innerHTML = `<b>${seatName(v.choice.seat)} decides:</b> ${escapeHtml(v.choice.prompt.replace(/^Seat \d+:\s*/, ''))} <span class="how">— ${how}</span>`;
+    return;
+  }
+  if (armed) {
+    ui.prompt.className = 'choice';
+    const a = legal.find((x) => x.seat === armed!.seat && choiceKey(x) === armed!.key)!;
+    ui.prompt.innerHTML = `<b>${seatName(armed.seat)}:</b> pick a highlighted hex for ${escapeHtml(actionLabel(a, false, false, labels()))} <span class="how">(Esc cancels)</span>`;
+    return;
+  }
+  const acting = [...new Set(legal.map((a) => a.seat))];
+  ui.prompt.innerHTML = v.phase && acting.length
+    ? `<b>${escapeHtml(shortPhase(v.phase.name))}:</b> ${acting.map(seatName).join(', ')} to act`
+    : '';
+}
+
+function labels(): LabelContext {
+  return { config: tl.frame.snap.state.config, view: shown };
+}
+
 function renderPhase() {
   const v = shown;
   const order = v.round_order
-    .map((p, i) => `<span class="phase ${p.kind}${v.phase?.index === i ? ' now' : ''}" title="${p.kind}">${escapeHtml(p.name)}</span>`)
-    .join('<span class="arrow">→</span>');
+    .map((p, i) => `<span class="phase ${p.kind}${v.phase?.index === i ? ' now' : ''}" title="${escapeHtml(p.name)} (${p.kind})">${escapeHtml(shortPhase(p.name))}</span>`)
+    .join('<span class="arrow">›</span>');
   let status: string;
   if (v.outcome) {
     const o = v.outcome;
     status = `<span class="outcome ${o.won ? 'won' : 'lost'}">${o.won ? 'WON' : 'LOST'} in round ${o.round}: ${escapeHtml(o.reason)} (${escapeHtml(o.detail)})</span>`;
-  } else if (v.phase) {
-    status = `waiting on seat${v.phase.waiting.length === 1 ? '' : 's'} ${v.phase.waiting.join(', ') || '—'}`;
-  } else status = '';
+  } else status = ''; // who is to act is in #prompt
   ui.phaseBar.innerHTML = `<b>Round ${v.round}</b> <span class="order">${order}</span> ${status}`;
-}
-
-function valueChip(v: Value, scope: string): string {
-  const val = v.max !== undefined ? `${v.value}<small>/${v.max}</small>` : `${v.value}`;
-  const near = v.max !== undefined && v.max > 0 && v.value >= v.max * 0.75 ? ' near' : '';
-  return `<span class="value${near}" data-value="${escapeHtml(v.key)}" data-scope="${scope}"><span class="label">${escapeHtml(v.label)}</span> <b>${val}</b></span>`;
-}
-
-function renderValues(box: HTMLElement, title: string, values: Value[]) {
-  box.innerHTML = values.length ? `<h3>${title}</h3><div class="values">${values.map((v) => valueChip(v, 'global')).join('')}</div>` : '';
-}
-
-function cardChip(c: CardView, where: string): string {
-  const cost = c.cost !== undefined ? ` <small>${c.cost}</small>` : '';
-  return `<span class="card ${escapeHtml(c.status.replace(/\s+/g, '-'))}" data-card="${escapeHtml(c.id)}" data-where="${where}">${escapeHtml(c.name)}${cost}<em>${escapeHtml(c.status)}</em></span>`;
 }
 
 function renderSeats() {
   const v = shown;
+  const config = tl.frame.snap.state.config;
   ui.seats.innerHTML = '';
   for (const seat of v.seats) {
     const country = v.countries[seat.country];
     const mine = legal.filter((a) => a.seat === seat.index);
     const waiting = v.phase?.waiting.includes(seat.index);
+    const choosing = v.choice?.seat === seat.index;
     const box = document.createElement('div');
-    box.className = `seat${seat.passed ? ' passed' : ''}${waiting && mine.length ? ' active' : ''}`;
+    box.className = `seat${seat.passed && !choosing ? ' passed' : ''}${mine.length ? ' active' : ''}`;
     box.dataset.seat = String(seat.index);
-    box.style.setProperty('--tint', country?.colour ?? '#ccc');
-    const status = v.outcome ? '' : seat.passed ? 'passed' : waiting ? 'to act' : '';
+    box.style.setProperty('--tint', strong(country?.colour ?? '#cccccc'));
+    const status = v.outcome ? '' : choosing ? 'deciding' : mine.length ? 'to act' : seat.passed ? 'passed' : waiting ? 'waiting' : '';
+    const ai = aiBoard(config, seat.index);
     const slots = country?.slots.length
-      ? `<div class="row"><span class="what">slots</span>${country.slots.map((s, i) => (s ? cardChip(s, `slot:${seat.country}:${i}`) : '<span class="slot">—</span>')).join('')}</div>`
+      ? `<div class="row"><span class="what">card strip</span>${country.slots.map((s, i) => (s ? cardChip(s, `slot:${seat.country}:${i}`) : '<span class="slot">—</span>')).join('')}</div>`
       : '';
     box.innerHTML = `
-      <h3><span class="swatch"></span>Seat ${seat.index} · Country ${seat.country} <span class="status">${status}</span></h3>
-      <div class="values">${seat.values.map((x) => valueChip(x, `seat:${seat.index}`)).join('')}${(country?.values ?? []).map((x) => valueChip(x, `country:${seat.country}`)).join('')}</div>
-      ${seat.cards.map((g) => `<div class="row"><span class="what" title="${escapeHtml(g.key)}">${escapeHtml(g.label)}</span>${g.cards.map((c) => cardChip(c, `seat:${seat.index}:${g.key}`)).join('')}</div>`).join('')}
+      <h3><span class="swatch"></span>Seat ${seat.index}${ai ? ` · <span data-value="ai.board" data-scope="seat:${seat.index}">${escapeHtml(ai.name)}</span>` : ''} <small>C${seat.country}</small><span class="status">${status}</span></h3>
+      ${ai ? `<div class="innate" title="${escapeHtml(ai.text)}"><b>${escapeHtml(ai.innate.name)}:</b> ${escapeHtml(ai.innate.text)}</div>` : ''}
+      ${seatValuesHtml(v, seat.index)}
+      ${seatCardsHtml(v, seat.index)}
       ${slots}`;
     if (mine.length) box.append(actionButtons(seat.index, mine));
     ui.seats.append(box);
   }
-  if (!v.outcome && v.phase && v.phase.waiting.length > 1) {
+  const passers = (v.phase?.waiting ?? []).filter((s) => legal.some((a) => a.seat === s && a.type === 'pass'));
+  if (!v.outcome && !v.choice && passers.length > 1) {
     const all = document.createElement('button');
     all.type = 'button';
     all.className = 'pass-all';
-    all.textContent = `Pass every seat still to act (${v.phase.waiting.join(', ')})`;
+    all.textContent = `Pass every seat still to act (${passers.join(', ')})`;
     all.onclick = () => passAll();
     ui.seats.append(all);
   }
@@ -219,15 +259,19 @@ function actionButtons(seat: number, mine: Action[]): HTMLElement {
   const row = document.createElement('div');
   row.className = 'actions';
   const groups = new Map<string, Action[]>();
-  for (const a of mine) {
+  const sorted = [...mine].sort((a, b) => typeRank(a.type) - typeRank(b.type));
+  for (const a of sorted) {
     const k = choiceKey(a);
     groups.set(k, [...(groups.get(k) ?? []), a]);
   }
+  const cx = labels();
   for (const [key, acts] of groups) {
     if (acts.every((a) => isHex(a.target))) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = `${actionLabel(acts[0], false, false)} ▸ hex (${acts.length})`;
+      b.textContent = acts[0].type === 'choose'
+        ? `pick a hex ▸ (${acts.length})`
+        : `${actionLabel(acts[0], false, false, cx)} ▸ hex (${acts.length})`;
       b.className = armed?.seat === seat && armed.key === key ? 'armed' : '';
       b.dataset.hexes = acts.map((a) => hexKey(a.target!)).join(' ');
       b.dataset.action = JSON.stringify(acts[0]);
@@ -242,8 +286,8 @@ function actionButtons(seat: number, mine: Action[]): HTMLElement {
     for (const a of acts) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = actionLabel(a, false);
-      if (a.type === 'pass') b.className = 'pass';
+      b.textContent = actionLabel(a, false, true, cx);
+      b.className = `a-${a.type}${a.type === 'pass' ? ' pass' : ''}`;
       b.dataset.action = JSON.stringify(a);
       b.onclick = () => act(a);
       row.append(b);
@@ -251,6 +295,10 @@ function actionButtons(seat: number, mine: Action[]): HTMLElement {
   }
   return row;
 }
+
+/** Button order: answers and decisions first, threat counters and gifts next, pass last. */
+const TYPE_ORDER = ['choose', 'growth', 'tier', 'draft', 'keep', 'play', 'use', 'draw', 'pay', 'withdraw', 'give'];
+const typeRank = (t: string) => (t === 'pass' ? 99 : TYPE_ORDER.indexOf(t) < 0 ? 50 : TYPE_ORDER.indexOf(t));
 
 function passAll() {
   const later = tl.last - tl.cursor;
@@ -267,17 +315,17 @@ function passAll() {
 }
 
 function renderPiles() {
-  const piles = shown.piles;
-  ui.piles.innerHTML = piles.length
-    ? `<h3>Piles</h3>${piles.map((p) => `<div class="row"><span class="what" title="${escapeHtml(p.key)}">${escapeHtml(p.label)}${p.owner !== null ? ` (seat ${p.owner})` : ''}: ${p.count}</span>${p.visible.map((c) => cardChip(c, `pile:${p.key}`)).join('')}</div>`).join('')}`
-    : '';
+  ui.piles.innerHTML = pilesHtml(shown) + varsHtml(shown, varsOpen);
+  ui.piles.querySelector('#vars')?.addEventListener('toggle', (e) => {
+    varsOpen = (e.target as HTMLDetailsElement).open;
+  });
 }
 
 function renderLog() {
   const parts: string[] = [];
   tl.frames.forEach((f, i) => {
     const cls = `entry${i === tl.cursor ? ' now' : ''}${i > tl.cursor ? ' future' : ''}`;
-    const head = f.action ? `#${i} ${escapeHtml(actionLabel(f.action))}` : '#0 setup';
+    const head = f.action ? `#${i} ${escapeHtml(actionLabel(f.action, true, true, { config: f.snap.state.config }))}` : '#0 setup';
     const hexes = [...(f.action ? hexesIn(f.action) : []), ...f.events.flatMap(hexesIn)].map(hexKey);
     const evs = f.events
       .map((e) => {
@@ -295,7 +343,7 @@ function renderTimeline() {
   ui.scrub.max = String(tl.last);
   ui.scrub.value = String(tl.cursor);
   const a = tl.frame.action;
-  ui.step.textContent = `step ${tl.cursor} / ${tl.last}${a ? ` · ${actionLabel(a)}` : ' · setup'}`;
+  ui.step.textContent = `step ${tl.cursor} / ${tl.last}${a ? ` · ${actionLabel(a, true, true, { config: tl.frame.snap.state.config })}` : ' · setup'}`;
   ui.play.textContent = autoplay !== null ? '⏸ pause' : '▶ play';
 }
 
@@ -324,13 +372,18 @@ function details(t: HTMLElement | SVGElement): string | null {
   if (d.token !== undefined && d.hex) {
     const h = shown.hexes.find((x) => hexKey(x.hex) === d.hex);
     const tok = h?.tokens.find((x) => x.kind === d.token);
-    return `<b>${escapeHtml(d.token)}</b> × ${tok?.count ?? 0}<br>on hex ${d.hex} (country ${h?.country})`;
+    return `<b>${escapeHtml(tokenName(d.token))}</b> × ${tok?.count ?? 0}<br><code>${escapeHtml(d.token)}</code> on C${h?.country} #${h?.number} (${escapeHtml(h?.terrain ?? '')}, hex ${d.hex})`;
   }
   if (d.hex && d.index !== undefined) {
     const h = shown.hexes[Number(d.index)];
-    const toks = h.tokens.map((x) => `<span class="dot" style="background:${tokenColour(x.kind)}"></span>${escapeHtml(x.kind)} ${x.count}`).join('<br>') || 'no tokens';
-    const here = legal.filter((a) => isHex(a.target) && hexKey(a.target) === d.hex).map((a) => escapeHtml(actionLabel(a)));
-    return `<b>hex ${d.hex}</b> · index ${h.index}<br>country ${h.country}, piece position ${h.piece_pos.join(',')}<br>${h.neighbours.length} neighbours<hr>${toks}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
+    const toks = h.tokens.map((x) => `<span class="dot" style="background:${tokenColour(x.kind)}"></span>${escapeHtml(tokenName(x.kind))} × ${x.count}`).join('<br>') || 'no tokens';
+    const here = legal.filter((a) => isHex(a.target) && hexKey(a.target) === d.hex).map((a) => escapeHtml(actionLabel(a, true, true, labels())));
+    return `<b>C${h.country} #${h.number}</b> · ${escapeHtml(h.terrain)}${h.uplink ? ' · <b>uplink</b> (the adversary enters here)' : ''}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
+  }
+  if (d.pile) {
+    const p = shown.piles.find((x) => x.key === d.pile);
+    if (!p || d.card) return null;
+    return `<b>${escapeHtml(p.label)}</b>: ${p.count} card${p.count === 1 ? '' : 's'}<br><code>${escapeHtml(p.key)}</code> · from ${escapeHtml(p.source)}${p.visible.length ? `<hr>${p.visible.map((c) => `${escapeHtml(c.name)}${c.text ? ` <small>${escapeHtml(c.text)}</small>` : ''}`).join('<br>')}` : ''}`;
   }
   if (d.value) {
     const [scope, idx] = (d.scope ?? 'global').split(':');
@@ -347,6 +400,7 @@ function details(t: HTMLElement | SVGElement): string | null {
     const pool: (CardView | null)[] =
       kind === 'seat' ? shown.seats[Number(a)]?.cards.find((g) => g.key === key)?.cards ?? []
       : kind === 'slot' ? [shown.countries[Number(a)]?.slots[Number(key)] ?? null]
+      : kind === 'country' ? shown.countries[Number(a)]?.cards.find((g) => g.key === key)?.cards ?? []
       : kind === 'pile' ? shown.piles.find((p) => p.key === [a, ...rest].join(':'))?.visible ?? []
       : [];
     const c = pool.find((x) => x?.id === d.card);
@@ -363,7 +417,7 @@ function highlight(hexes: string[]) {
 }
 
 document.addEventListener('mousemove', (e) => {
-  const target = (e.target as Element).closest?.('[data-token],[data-hex][data-index],[data-value],[data-card],[data-action]') as HTMLElement | null;
+  const target = (e.target as Element).closest?.('[data-token],[data-hex][data-index],[data-value],[data-card],[data-pile],[data-action]') as HTMLElement | null;
   const html = target ? details(target) : null;
   const hl = (e.target as Element).closest?.('[data-hexes]') as HTMLElement | null;
   highlight(hl?.dataset.hexes ? hl.dataset.hexes.split(' ').filter(Boolean) : []);
@@ -550,6 +604,7 @@ document.addEventListener('drop', (e) => {
 async function main() {
   await load();
   ui.version.textContent = version;
+  $('legend').innerHTML = legendHtml();
   ui.config.innerHTML = Object.keys(CONFIGS).map((f) => `<option>${escapeHtml(f)}</option>`).join('');
   let restored: Timeline | null = null;
   try {

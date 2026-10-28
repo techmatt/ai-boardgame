@@ -34,8 +34,16 @@ pub struct View {
     /// Values that belong to the whole game: every `vars` track, plus what
     /// modules add.
     pub globals: Vec<Value>,
-    /// Ordered card piles (decks, discards, queues). No module has any yet.
+    /// Ordered card piles (decks, discards, queues) modules show.
     pub piles: Vec<PileView>,
+    /// The open choice, if the rules are waiting for one.
+    pub choice: Option<ChoiceView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ChoiceView {
+    pub seat: u8,
+    pub prompt: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -64,6 +72,12 @@ pub struct HexView {
     pub piece_pos: [u8; 2],
     /// Indices of on-board neighbours.
     pub neighbours: Vec<usize>,
+    /// The printed hex number (1-16 on its piece), for tie-breaks.
+    pub number: u8,
+    /// `urban`, `industrial`, `network` or `frontier`.
+    pub terrain: &'static str,
+    /// A printed uplink, where the adversary enters.
+    pub uplink: bool,
     /// Non-zero token stacks, by kind (sorted).
     pub tokens: Vec<Token>,
 }
@@ -87,6 +101,8 @@ pub struct CountryView {
     /// Token totals over the country's hexes (`tokens.<kind>`), then what
     /// modules add.
     pub values: Vec<Value>,
+    /// Card groups modules show on this country (threats, ...).
+    pub cards: Vec<CardGroup>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -206,6 +222,17 @@ impl ViewOut<'_> {
         upsert(&mut self.view.seats[seat].values, v);
     }
 
+    /// A card group on a country (say, the threat on it).
+    pub fn country_cards(&mut self, country: usize, key: &str, label: &str, cards: Vec<CardView>) {
+        let group = CardGroup {
+            key: format!("{}.{key}", self.module),
+            label: label.to_string(),
+            source: self.module.to_string(),
+            cards,
+        };
+        self.view.countries[country].cards.push(group);
+    }
+
     pub fn cards(&mut self, seat: usize, key: &str, label: &str, cards: Vec<CardView>) {
         let group = CardGroup {
             key: format!("{}.{key}", self.module),
@@ -262,7 +289,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
         },
         None => CardView {
             id: id.to_string(),
-            name: id.to_string(),
+            name: content.name_of(id).unwrap_or(id).to_string(),
             text: String::new(),
             status: status.to_string(),
             cost: None,
@@ -288,6 +315,9 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             country: cell.country,
             piece_pos: cell.piece_pos,
             neighbours: cell.neighbours.clone(),
+            number: cell.number,
+            terrain: cell.terrain.name(),
+            uplink: cell.uplink,
             tokens: h
                 .tokens
                 .iter()
@@ -339,6 +369,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
                         )
                     })
                     .collect(),
+                cards: Vec::new(),
             }
         })
         .collect();
@@ -392,6 +423,10 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
         seats,
         globals,
         piles: Vec::new(),
+        choice: g.pending.as_ref().map(|p| ChoiceView {
+            seat: p.ask.seat,
+            prompt: p.ask.prompt.clone(),
+        }),
     }
 }
 
@@ -412,9 +447,7 @@ pub(crate) fn finish(view: &mut View, g: &GameState) {
             .filter(|id| !shown(id))
             .map(|id| CardView {
                 id: id.clone(),
-                name: content
-                    .card_index(id)
-                    .map_or_else(|| id.clone(), |i| content.cards[i].name.clone()),
+                name: content.name_of(id).unwrap_or(id).to_string(),
                 text: String::new(),
                 status: "used".to_string(),
                 cost: None,

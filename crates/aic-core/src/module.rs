@@ -14,7 +14,7 @@ use crate::content::{Amount, Content};
 use crate::event::Event;
 use crate::map::Map;
 use crate::rng::Stream;
-use crate::state::{GameState, Outcome};
+use crate::state::{Ask, GameState, Opt, Outcome, Pick};
 use crate::view::ViewOut;
 
 /// A module: an id, a one-line summary and its variants. Registered in
@@ -22,6 +22,9 @@ use crate::view::ViewOut;
 pub struct ModuleDef {
     pub id: &'static str,
     pub summary: &'static str,
+    /// Modules whose parameters this one reads (through [`World::int`]);
+    /// a config without them is rejected.
+    pub requires: &'static [&'static str],
     pub variants: &'static [VariantDef],
 }
 
@@ -63,43 +66,79 @@ pub struct PhaseSpec {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhaseKind {
-    /// Resolved by the module as soon as it is reached; no player input.
+    /// Resolved by the module as soon as it is reached; no player input
+    /// except the choices it asks ([`Cx::choose`]).
     Auto,
     /// Simultaneous player phase: every seat may act, in any order, until
-    /// every seat has passed. A seat's actions must not change what another
-    /// seat may do or what its actions do.
+    /// every seat has passed.
     Decision,
 }
+
+/// Why resolution stopped early.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Halt {
+    /// The action is not legal. The engine restores the state from before it.
+    Illegal(String),
+    /// A choice is needed ([`Cx::choose`] recorded the question).
+    Ask,
+}
+
+impl From<String> for Halt {
+    fn from(e: String) -> Self {
+        Halt::Illegal(e)
+    }
+}
+
+impl From<&str> for Halt {
+    fn from(e: &str) -> Self {
+        Halt::Illegal(e.to_string())
+    }
+}
+
+pub type Res<T = ()> = Result<T, Halt>;
 
 /// Behaviour of a built module. Phase arguments are indices into the
 /// variant's `phases`. Every method is deterministic: randomness only via
 /// [`Cx::rng`], and only from purposes the variant declared.
+///
+/// `run`, `act` and `after` may stop for a choice (`Cx::choose` returning
+/// `Err(Halt::Ask)`, passed on with `?`). They are then run again from the
+/// start, from the state before them, with the answers so far, so they must
+/// depend only on the state and the answers.
 pub trait Module: Send + Sync + Debug {
     /// Once, when the game is created, before round 1.
     fn setup(&self, _g: &mut GameState, _cx: &mut Cx) {}
     /// At the start of every round, before its first phase.
     fn round_start(&self, _g: &mut GameState, _cx: &mut Cx) {}
     /// Resolve an `Auto` phase.
-    fn run(&self, _phase: usize, _g: &mut GameState, _cx: &mut Cx) {}
+    fn run(&self, _phase: usize, _g: &mut GameState, _cx: &mut Cx) -> Res {
+        Ok(())
+    }
+    /// A `Decision` phase begins (every seat is un-passed). The module may
+    /// prepare it, and pass seats that have nothing to decide.
+    fn begin(&self, _phase: usize, _g: &mut GameState, _cx: &mut Cx) {}
     /// Append `seat`'s legal actions (other than `Pass`, which the engine
-    /// adds) in a `Decision` phase.
+    /// adds if `can_pass` allows) in a `Decision` phase.
     fn legal(&self, _phase: usize, _g: &GameState, _w: &World, _seat: u8, _out: &mut Vec<Action>) {}
+    /// Whether `seat` may pass now (default: always).
+    fn can_pass(&self, _phase: usize, _g: &GameState, _seat: u8) -> bool {
+        true
+    }
     /// Whether a non-pass action in this decision phase is this module's to
     /// handle. Several modules can share a decision phase (`"a.x+b.y"` in the
     /// round); the engine routes each action to the module that owns it.
     fn owns(&self, _phase: usize, _action: &Action) -> bool {
         false
     }
-    /// Validate and apply a non-pass action this module owns. Must leave
-    /// the state untouched when it returns an error.
-    fn act(
-        &self,
-        _phase: usize,
-        _g: &mut GameState,
-        _cx: &mut Cx,
-        action: &Action,
-    ) -> Result<(), String> {
-        Err(format!("this phase takes no action like {action:?}"))
+    /// Validate and apply a non-pass action this module owns. On
+    /// `Halt::Illegal` the engine restores the state from before it.
+    fn act(&self, _phase: usize, _g: &mut GameState, _cx: &mut Cx, action: &Action) -> Res {
+        Err(Halt::Illegal(format!("this phase takes no action like {action:?}")))
+    }
+    /// After every action and every automatic phase: standing checks
+    /// (thresholds, the end of the game).
+    fn after(&self, _g: &mut GameState, _cx: &mut Cx) -> Res {
+        Ok(())
     }
     /// Add derived values, card groups or piles to the generic view (see
     /// `view.rs`). Tokens, resources, `vars` and exhausted cards already
@@ -112,22 +151,131 @@ pub trait Module: Send + Sync + Debug {
 pub struct World<'a> {
     pub map: &'a Map,
     pub content: &'a Content,
+    /// Every module's resolved parameters, keyed `"<module>.<param>"`.
+    pub params: &'a BTreeMap<String, ParamValue>,
+}
+
+impl World<'_> {
+    /// An integer parameter of any configured module, `"<module>.<param>"`.
+    /// Panics if absent: a module may read only parameters of modules it
+    /// `requires`, which the config is checked for.
+    pub fn int(&self, key: &str) -> i64 {
+        match self.params.get(key) {
+            Some(ParamValue::Int(v)) => *v,
+            Some(ParamValue::List(v)) => v[0],
+            None => panic!("parameter {key} is not configured"),
+        }
+    }
+
+    pub fn list(&self, key: &str) -> &[i64] {
+        match self.params.get(key) {
+            Some(ParamValue::List(v)) => v,
+            Some(ParamValue::Int(v)) => std::slice::from_ref(v),
+            None => panic!("parameter {key} is not configured"),
+        }
+    }
+
+    /// A content number: a literal, or a parameter of the `cards` module.
+    pub fn amount(&self, a: &Amount) -> i64 {
+        match a {
+            Amount::Lit(v) => *v,
+            Amount::Param { param } => self.int(&format!("cards.{param}")),
+        }
+    }
+
+    /// Whether a module is in the config.
+    pub fn has_module(&self, id: &str) -> bool {
+        let prefix = format!("{id}.");
+        self.params.keys().any(|k| k.starts_with(&prefix))
+    }
+}
+
+/// The answers given so far while resolving one phase or action, and the
+/// question it stopped on.
+#[derive(Debug, Default)]
+pub struct Choices {
+    pub(crate) made: Vec<Pick>,
+    pub(crate) used: usize,
+    pub(crate) asked: Option<Ask>,
+}
+
+impl Choices {
+    pub(crate) fn new(made: Vec<Pick>) -> Self {
+        Choices {
+            made,
+            used: 0,
+            asked: None,
+        }
+    }
+
+    /// Replaying answers already given: their events were logged then.
+    fn replaying(&self) -> bool {
+        self.used < self.made.len()
+    }
 }
 
 /// What a module gets while it resolves: the world, its own id (for
-/// namespacing counters and vars), its RNG purposes and the event log.
+/// namespacing counters and vars), its RNG purposes, the event log and the
+/// choices of the current resolution.
 pub struct Cx<'a> {
     pub world: World<'a>,
     pub module: &'static str,
     pub(crate) purposes: &'static [&'static str],
     pub(crate) events: Option<&'a mut Vec<Event>>,
+    pub(crate) choices: &'a mut Choices,
 }
 
 impl<'a> Cx<'a> {
     pub fn emit(&mut self, e: impl FnOnce() -> Event) {
+        if self.choices.replaying() {
+            return;
+        }
         if let Some(log) = self.events.as_deref_mut() {
             log.push(e());
         }
+    }
+
+    /// A log line, optionally about a hex.
+    pub fn note(&mut self, hex: Option<usize>, text: impl FnOnce() -> String) {
+        let at = hex.map(|h| self.world.map.hexes[h].hex);
+        self.emit(|| Event::Note { text: text(), hex: at });
+    }
+
+    /// Asks `seat` to choose one of `options` (players choose). `None` if
+    /// there are no options; a single option is taken without asking.
+    /// Otherwise returns the answer if it was given, else stops resolution
+    /// with `Halt::Ask` (pass it on with `?`).
+    pub fn choose(&mut self, seat: usize, prompt: &str, options: Vec<Opt>) -> Res<Option<usize>> {
+        match options.len() {
+            0 => return Ok(None),
+            1 => return Ok(Some(0)),
+            _ => {}
+        }
+        let ch = &mut *self.choices;
+        if ch.used < ch.made.len() {
+            let p = &ch.made[ch.used];
+            let i = options
+                .iter()
+                .position(|o| o.option == p.option && o.target == p.target)
+                .ok_or_else(|| {
+                    Halt::Illegal(format!("{:?} is not an option of {prompt:?}", p.option))
+                })?;
+            ch.used += 1;
+            return Ok(Some(i));
+        }
+        let ask = Ask {
+            seat: seat as u8,
+            prompt: prompt.to_string(),
+            options,
+        };
+        if let Some(log) = self.events.as_deref_mut() {
+            log.push(Event::Asked {
+                seat: seat as u8,
+                prompt: prompt.to_string(),
+            });
+        }
+        ch.asked = Some(ask);
+        Err(Halt::Ask)
     }
 
     /// Adds `delta` tokens (negative removes, never below zero). Returns the
@@ -190,6 +338,12 @@ impl<'a> Cx<'a> {
             .or_insert(0) += n;
     }
 
+    /// Adds to a counter by its full key (shared rules code counting for
+    /// the module that owns the rule).
+    pub fn tally(&mut self, g: &mut GameState, key: &str, n: i64) {
+        *g.stats.counters.entry(key.to_string()).or_insert(0) += n;
+    }
+
     /// This module's track `"<module>.<name>"`.
     pub fn var(&self, g: &GameState, name: &str) -> i64 {
         g.var(&format!("{}.{name}", self.module))
@@ -197,12 +351,76 @@ impl<'a> Cx<'a> {
 
     pub fn set_var(&mut self, g: &mut GameState, name: &str, v: i64) {
         let key = format!("{}.{name}", self.module);
-        let old = g.vars.insert(key.clone(), v).unwrap_or(0);
+        self.set_key(g, key, v);
+    }
+
+    /// Sets any module's track by its full key (shared rules code acting
+    /// for another module, such as opposition gained from a card).
+    pub fn set_key(&mut self, g: &mut GameState, key: String, v: i64) {
+        let old = if v == 0 {
+            g.vars.remove(&key).unwrap_or(0)
+        } else {
+            g.vars.insert(key.clone(), v).unwrap_or(0)
+        };
+        if old == v {
+            return;
+        }
         self.emit(|| Event::VarChanged {
             key,
             delta: v - old,
             total: v,
         });
+    }
+
+    pub fn add_key(&mut self, g: &mut GameState, key: String, delta: i64) {
+        let v = g.var(&key) + delta;
+        self.set_key(g, key, v);
+    }
+
+    /// Moves card `card` from the pile `from` to the top (`top`) or bottom
+    /// of `to`. `""` is the box (outside the game). Errors if it isn't there.
+    pub fn move_card(
+        &mut self,
+        g: &mut GameState,
+        card: &str,
+        from: &str,
+        to: &str,
+        top: bool,
+    ) -> Result<(), String> {
+        if !from.is_empty() {
+            let pile = g.piles.get_mut(from).ok_or_else(|| format!("{card} is not in {from}"))?;
+            let i = pile
+                .iter()
+                .position(|c| c == card)
+                .ok_or_else(|| format!("{card} is not in {from}"))?;
+            pile.remove(i);
+            if pile.is_empty() {
+                g.piles.remove(from);
+            }
+        }
+        if !to.is_empty() {
+            let pile = g.piles.entry(to.to_string()).or_default();
+            if top {
+                pile.insert(0, card.to_string());
+            } else {
+                pile.push(card.to_string());
+            }
+        }
+        self.emit(|| Event::CardMoved {
+            card: card.to_string(),
+            from: from.to_string(),
+            to: to.to_string(),
+        });
+        Ok(())
+    }
+
+    /// Replaces a pile's order (a shuffle). No event: the order is hidden.
+    pub fn set_pile(&mut self, g: &mut GameState, key: &str, cards: Vec<String>) {
+        if cards.is_empty() {
+            g.piles.remove(key);
+        } else {
+            g.piles.insert(key.to_string(), cards);
+        }
     }
 
     /// Marks a card used (face down) for `seat`. Refreshing is the owning
@@ -280,14 +498,6 @@ impl Build<'_> {
             Some(ParamValue::List(v)) => Ok(v.clone()),
             Some(ParamValue::Int(v)) => Ok(vec![*v]),
             None => Err(format!("{}.{name}: missing", self.module)),
-        }
-    }
-
-    /// Resolves a content number against this module's parameters.
-    pub fn amount(&self, a: &Amount) -> Result<i64, String> {
-        match a {
-            Amount::Lit(v) => Ok(*v),
-            Amount::Param { param } => self.int(param),
         }
     }
 }

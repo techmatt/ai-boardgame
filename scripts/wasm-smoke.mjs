@@ -17,11 +17,13 @@ let state = m.new_game(cfg, '18446744073709551615');
 const started = m.start(cfg, '18446744073709551615');
 const sameStart = started.state === state && JSON.parse(started.events).length > 0;
 const taken = [];
-for (;;) {
+// The golden policy: action k is legal action (k * 7919) % count (see golden_game).
+for (let k = 0; ; k++) {
   const legal = JSON.parse(m.legal_actions(state));
   if (legal.length === 0) break;
-  state = m.apply(state, JSON.stringify(legal[0])).state;
-  taken.push(legal[0]);
+  const a = legal[(k * 7919) % legal.length];
+  state = m.apply(state, JSON.stringify(a)).state;
+  taken.push(a);
 }
 const actions = taken.length;
 const s = JSON.parse(state);
@@ -39,7 +41,7 @@ console.log(`view ${viewOk ? 'ok' : 'BAD'}, record ${recordOk ? 'ok' : 'BAD'} ($
 
 // Must equal GOLDEN_FINGERPRINT in crates/aic-core/src/tests.rs (same config,
 // seed and policy), proving native and wasm builds play the same game.
-const GOLDEN = 'dd7d9b197e69f946';
+const GOLDEN = '4140c11858dbf6fd';
 let h = 0xcbf29ce484222325n;
 for (const b of new TextEncoder().encode(state)) {
   h = ((h ^ BigInt(b)) * 0x100000001b3n) & 0xffffffffffffffffn;

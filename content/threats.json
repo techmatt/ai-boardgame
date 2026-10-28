@@ -1,0 +1,336 @@
+[
+ {
+  "id": "conscription",
+  "name": "Conscription",
+  "tier": 1,
+  "text": "Each hex with an outpost gains 1 drone.",
+  "counter": [
+   [
+    "energy",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "add_piece",
+    "piece": "drone",
+    "at": {
+     "has": [
+      "outpost"
+     ]
+    },
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "supply_raid",
+  "name": "Supply raid",
+  "tier": 1,
+  "text": "Each player loses 3 credits.",
+  "counter": [
+   [
+    "credits",
+    4
+   ]
+  ],
+  "effects": [
+   {
+    "op": "players_lose",
+    "resource": "credits",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "drone_surge",
+  "name": "Drone surge",
+  "tier": 1,
+  "text": "Each uplink gains 1 drone.",
+  "counter": [
+   [
+    "compute",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "add_piece",
+    "piece": "drone",
+    "at": {
+     "uplink": true
+    },
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "blockade",
+  "name": "Blockade",
+  "tier": 1,
+  "text": "Factories next to adversary pieces produce nothing this round.",
+  "counter": [
+   [
+    "compute",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "flag",
+    "name": "blockade"
+   }
+  ]
+ },
+ {
+  "id": "forward_base",
+  "name": "Forward base",
+  "tier": 1,
+  "text": "One drone on the lowest-numbered occupied uplink becomes an outpost.",
+  "counter": [
+   [
+    "energy",
+    3
+   ]
+  ],
+  "effects": [
+   {
+    "op": "upgrade_uplink"
+   }
+  ]
+ },
+ {
+  "id": "panic",
+  "name": "Panic",
+  "tier": 1,
+  "text": "1 population next to adversary pieces flees to an adjacent hex without them (players choose); with nowhere to go, it is lost.",
+  "counter": [
+   [
+    "insight",
+    1
+   ]
+  ],
+  "effects": [
+   {
+    "op": "panic"
+   }
+  ]
+ },
+ {
+  "id": "sabotage",
+  "name": "Sabotage",
+  "tier": 1,
+  "text": "Processors on data centres next to adversary pieces produce nothing this round.",
+  "counter": [
+   [
+    "compute",
+    2
+   ],
+   [
+    "energy",
+    1
+   ]
+  ],
+  "effects": [
+   {
+    "op": "flag",
+    "name": "sabotage"
+   }
+  ]
+ },
+ {
+  "id": "fortify",
+  "name": "Fortify",
+  "tier": 1,
+  "text": "Each foundry gains 1 defense this round.",
+  "counter": [
+   [
+    "credits",
+    3
+   ]
+  ],
+  "effects": [
+   {
+    "op": "add_piece",
+    "piece": "fortify",
+    "at": {
+     "has": [
+      "foundry"
+     ]
+    },
+    "amount": 1,
+    "per": "foundry"
+   }
+  ]
+ },
+ {
+  "id": "requisition",
+  "name": "Requisition",
+  "tier": 1,
+  "text": "Each player discards 1 card or pays 3 credits.",
+  "counter": [
+   [
+    "insight",
+    1
+   ]
+  ],
+  "effects": [
+   {
+    "op": "requisition",
+    "resource": "credits",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "patrol",
+  "name": "Patrol",
+  "tier": 1,
+  "text": "Each hex with a drone and population loses 1 population.",
+  "counter": [
+   [
+    "energy",
+    2
+   ],
+   [
+    "credits",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "remove_population",
+    "at": {
+     "has": [
+      "drone",
+      "population"
+     ]
+    },
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "total_war",
+  "name": "Total war",
+  "tier": 2,
+  "text": "Every hex with a foundry ravages, whatever its terrain.",
+  "counter": [
+   [
+    "antimatter",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "ravage",
+    "at": {
+     "has": [
+      "foundry"
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "id": "cascade",
+  "name": "Cascade",
+  "tier": 2,
+  "text": "Each corrupted hex cascades to one adjacent hex (players choose).",
+  "counter": [
+   [
+    "antimatter",
+    1
+   ],
+   [
+    "energy",
+    3
+   ]
+  ],
+  "effects": [
+   {
+    "op": "cascade",
+    "at": {
+     "corrupted": true
+    }
+   }
+  ]
+ },
+ {
+  "id": "orbital_strike",
+  "name": "Orbital strike",
+  "tier": 2,
+  "text": "Destroy the factory with the most adjacent population (ties: lower hex number).",
+  "counter": [
+   [
+    "antimatter",
+    1
+   ]
+  ],
+  "effects": [
+   {
+    "op": "destroy_factory"
+   }
+  ]
+ },
+ {
+  "id": "mass_production",
+  "name": "Mass production",
+  "tier": 2,
+  "text": "Every hex with an outpost builds.",
+  "counter": [
+   [
+    "energy",
+    6
+   ]
+  ],
+  "effects": [
+   {
+    "op": "build",
+    "at": {
+     "has": [
+      "outpost"
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "id": "purge_protocols",
+  "name": "Purge protocols",
+  "tier": 2,
+  "text": "Each player discards their most expensive card in hand.",
+  "counter": [
+   [
+    "antimatter",
+    1
+   ]
+  ],
+  "effects": [
+   {
+    "op": "discard_most_expensive"
+   }
+  ]
+ },
+ {
+  "id": "overrun",
+  "name": "Overrun",
+  "tier": 2,
+  "text": "Each hex with 3 or more adversary pieces gains 1 corruption.",
+  "counter": [
+   [
+    "antimatter",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "add_corruption",
+    "at": {
+     "adversary_at_least": 3
+    },
+    "amount": 1
+   }
+  ]
+ }
+]

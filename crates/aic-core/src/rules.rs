@@ -11,10 +11,10 @@ use crate::content::{content, Content};
 use crate::event::Event;
 use crate::hash::fnv1a64;
 use crate::map::Map;
-use crate::module::{Build, Cx, Module, ParamKind, PhaseKind, VariantDef, World};
+use crate::module::{Build, Choices, Cx, Halt, Module, ModuleDef, ParamKind, PhaseKind, Res, VariantDef, World};
 use crate::modules;
 use crate::rng::Stream;
-use crate::state::{GameState, HexState, Outcome, Seat, Stats};
+use crate::state::{GameState, HexState, Outcome, Pending, Pick, Seat, Stats, Trigger};
 use crate::view::{self, View, ViewOut};
 
 /// Hard stop for configs whose round never ends the game.
@@ -32,6 +32,8 @@ pub struct Rules {
     pub round: Vec<PhaseRef>,
     content: &'static Content,
     modules: Vec<Instance>,
+    /// Every module's resolved parameters, `"<module>.<param>"`.
+    params: BTreeMap<String, ParamValue>,
 }
 
 /// One phase of the round: one module's phase, or several modules'
@@ -78,10 +80,10 @@ impl Rules {
             return Err(format!("countries must be 1-5, got {}", config.countries));
         }
         let map = Map::build(content, config.countries)?;
-        let world = World { map: &map, content };
 
         let mut resolved = config.clone();
         let mut instances = Vec::new();
+        let mut to_build = Vec::new();
         let mut purposes = BTreeSet::new();
         let mut card_owner: BTreeMap<usize, &'static str> = BTreeMap::new();
         for mc in resolved.modules.iter_mut() {
@@ -93,7 +95,7 @@ impl Rules {
                     known.join(", ")
                 )
             })?;
-            if instances.iter().any(|i: &Instance| i.id == def.id) {
+            if to_build.iter().any(|(d, ..): &(&ModuleDef, _, _, _)| d.id == def.id) {
                 return Err(format!("module {:?} appears twice", def.id));
             }
             let variant = def
@@ -127,6 +129,31 @@ impl Rules {
             }
             let specs = param_specs(variant, &cards, content);
             resolve_params(def.id, &specs, mc)?;
+            to_build.push((def, variant, cards, specs));
+        }
+        let mut params = BTreeMap::new();
+        for mc in &resolved.modules {
+            for (k, v) in &mc.params {
+                params.insert(format!("{}.{k}", mc.module), v.clone());
+            }
+        }
+        let ids: Vec<&str> = to_build.iter().map(|(d, ..)| d.id).collect();
+        for (def, ..) in &to_build {
+            for r in def.requires {
+                if !ids.contains(r) {
+                    return Err(format!(
+                        "module {} needs module {r}, which is not in the config",
+                        def.id
+                    ));
+                }
+            }
+        }
+        let world = World {
+            map: &map,
+            content,
+            params: &params,
+        };
+        for ((def, variant, cards, specs), mc) in to_build.into_iter().zip(&resolved.modules) {
             let b = Build {
                 module: def.id,
                 params: &mc.params,
@@ -198,6 +225,7 @@ impl Rules {
             round,
             content,
             modules: instances,
+            params,
         })
     }
 
@@ -205,15 +233,22 @@ impl Rules {
         World {
             map: &self.map,
             content: self.content,
+            params: &self.params,
         }
     }
 
-    fn cx<'a>(&'a self, i: &Instance, events: Option<&'a mut Vec<Event>>) -> Cx<'a> {
+    fn cx<'a>(
+        &'a self,
+        i: &Instance,
+        events: Option<&'a mut Vec<Event>>,
+        choices: &'a mut Choices,
+    ) -> Cx<'a> {
         Cx {
             world: self.world(),
             module: i.id,
             purposes: i.variant.rng,
             events,
+            choices,
         }
     }
 
@@ -264,13 +299,16 @@ impl Rules {
             seats: vec![seat; n],
             hexes: vec![HexState::default(); self.map.hexes.len()],
             vars: BTreeMap::new(),
+            piles: BTreeMap::new(),
+            pending: None,
             rng,
             stats: Stats::default(),
             outcome: None,
         };
+        let mut ch = Choices::default();
         for i in &self.modules {
             i.module
-                .setup(&mut g, &mut self.cx(i, events.as_deref_mut()));
+                .setup(&mut g, &mut self.cx(i, events.as_deref_mut(), &mut ch));
         }
         self.enter(&mut g, events);
         g
@@ -302,7 +340,28 @@ impl Rules {
                 return Err(format!("RNG stream {p:?} has the wrong stream id"));
             }
         }
+        if let Some(p) = &g.pending {
+            let snap = &p.snapshot;
+            let kind = self.round.get(g.phase).map(|r| r.kind);
+            let trigger_fits = match p.trigger {
+                crate::state::Trigger::Phase => kind == Some(PhaseKind::Auto),
+                crate::state::Trigger::Action { .. } => kind == Some(PhaseKind::Decision),
+            };
+            if snap.pending.is_some()
+                || snap.config != self.config
+                || snap.seats.len() != g.seats.len()
+                || snap.hexes.len() != g.hexes.len()
+                || snap.phase != g.phase
+                || snap.rng.keys().ne(g.rng.keys())
+                || p.ask.seat as usize >= g.seats.len()
+                || p.ask.options.len() < 2
+                || !trigger_fits
+            {
+                return Err("state has a malformed pending choice".into());
+            }
+        }
         if !g.is_over()
+            && g.pending.is_none()
             && self
                 .round
                 .get(g.phase)
@@ -352,6 +411,16 @@ impl Rules {
     pub fn legal_actions_into(&self, g: &GameState, out: &mut Vec<Action>) {
         out.clear();
         let Some(p) = self.phase(g) else { return };
+        if let Some(pend) = &g.pending {
+            for o in &pend.ask.options {
+                out.push(Action::Choose {
+                    seat: pend.ask.seat,
+                    option: o.option.clone(),
+                    target: o.target,
+                });
+            }
+            return;
+        }
         debug_assert_eq!(p.kind, PhaseKind::Decision);
         let w = self.world();
         for (s, seat) in g.seats.iter().enumerate() {
@@ -363,8 +432,16 @@ impl Rules {
                     .module
                     .legal(part.phase, g, &w, s as u8, out);
             }
-            out.push(Action::Pass { seat: s as u8 });
+            if self.can_pass(p, g, s as u8) {
+                out.push(Action::Pass { seat: s as u8 });
+            }
         }
+    }
+
+    fn can_pass(&self, p: &PhaseRef, g: &GameState, seat: u8) -> bool {
+        p.parts
+            .iter()
+            .all(|part| self.modules[part.module].module.can_pass(part.phase, g, seat))
     }
 
     /// Applies an action in place. On error the state is unchanged. Pass
@@ -380,31 +457,139 @@ impl Rules {
         if seat >= g.seats.len() {
             return Err(format!("no seat {seat}"));
         }
+        if let Some(pend) = &g.pending {
+            let Action::Choose { option, target, .. } = a else {
+                return Err(format!("waiting for a choice: {}", pend.ask.prompt));
+            };
+            if seat != pend.ask.seat as usize
+                || !pend
+                    .ask
+                    .options
+                    .iter()
+                    .any(|o| &o.option == option && &o.target == target)
+            {
+                return Err(format!("not an option of {:?}: {a:?}", pend.ask.prompt));
+            }
+            let Pending {
+                trigger,
+                mut made,
+                snapshot,
+                ..
+            } = *g.pending.take().unwrap();
+            made.push(Pick {
+                option: option.clone(),
+                target: *target,
+            });
+            *g = snapshot.clone();
+            return self.resolve(g, snapshot, trigger, made, events);
+        }
+        if matches!(a, Action::Choose { .. }) {
+            return Err("there is no choice to make".into());
+        }
         if g.seats[seat].passed {
             return Err(format!("seat {seat} has passed this phase"));
         }
-        match a {
-            Action::Pass { .. } => {
-                g.seats[seat].passed = true;
-                if let Some(log) = events.as_deref_mut() {
-                    log.push(Event::Passed { seat: seat as u8 });
-                }
+        if let Action::Pass { .. } = a {
+            if !self.can_pass(p, g, seat as u8) {
+                return Err(format!("seat {seat} can't pass yet"));
             }
-            _ => {
+            g.seats[seat].passed = true;
+            if let Some(log) = events.as_deref_mut() {
+                log.push(Event::Passed { seat: seat as u8 });
+            }
+            g.stats.actions += 1;
+            if g.seats.iter().all(|s| s.passed) {
+                g.phase += 1;
+                self.enter(g, events);
+            }
+            return Ok(());
+        }
+        let snapshot = g.clone();
+        let trigger = Trigger::Action { action: a.clone() };
+        self.resolve(g, snapshot, trigger, Vec::new(), events)
+    }
+
+    /// Resolves a phase or an action (then every module's `after`) on `g`,
+    /// which equals `snapshot`, replaying the answers in `made`. Stops at
+    /// the next unanswered choice, or goes on to the next decision.
+    fn resolve(
+        &self,
+        g: &mut GameState,
+        snapshot: GameState,
+        trigger: Trigger,
+        made: Vec<Pick>,
+        mut events: Option<&mut Vec<Event>>,
+    ) -> Result<(), String> {
+        let mut ch = Choices::new(made);
+        let r = self.run_trigger(g, &trigger, &mut ch, events.as_deref_mut());
+        let answered = ch.made.len() as u32;
+        let is_action = matches!(trigger, Trigger::Action { .. });
+        match r {
+            Ok(()) => {
+                g.stats.actions += answered + is_action as u32;
+                if !is_action || g.seats.iter().all(|s| s.passed) {
+                    g.phase += 1;
+                    self.enter(g, events);
+                }
+                Ok(())
+            }
+            Err(Halt::Ask) => {
+                g.stats.actions += answered + is_action as u32;
+                g.pending = Some(Box::new(Pending {
+                    trigger,
+                    made: ch.made,
+                    ask: ch.asked.expect("a halted choice records its question"),
+                    snapshot,
+                }));
+                Ok(())
+            }
+            Err(Halt::Illegal(e)) => {
+                if !is_action || answered > 0 {
+                    panic!("resolution failed on replay: {e}");
+                }
+                *g = snapshot;
+                Err(e)
+            }
+        }
+    }
+
+    /// One phase or action, then every module's `after`.
+    fn run_trigger(
+        &self,
+        g: &mut GameState,
+        trigger: &Trigger,
+        ch: &mut Choices,
+        mut events: Option<&mut Vec<Event>>,
+    ) -> Res {
+        let p = &self.round[g.phase];
+        match trigger {
+            Trigger::Phase => {
+                let part = p.parts[0];
+                let inst = &self.modules[part.module];
+                inst.module
+                    .run(part.phase, g, &mut self.cx(inst, events.as_deref_mut(), ch))?;
+            }
+            Trigger::Action { action } => {
                 let part = p
                     .parts
                     .iter()
-                    .find(|q| self.modules[q.module].module.owns(q.phase, a))
-                    .ok_or_else(|| format!("no module in phase {} takes {a:?}", p.name))?;
+                    .find(|q| self.modules[q.module].module.owns(q.phase, action))
+                    .ok_or_else(|| format!("no module in phase {} takes {action:?}", p.name))?;
                 let inst = &self.modules[part.module];
-                inst.module
-                    .act(part.phase, g, &mut self.cx(inst, events.as_deref_mut()), a)?;
+                inst.module.act(
+                    part.phase,
+                    g,
+                    &mut self.cx(inst, events.as_deref_mut(), ch),
+                    action,
+                )?;
             }
         }
-        g.stats.actions += 1;
-        if g.seats.iter().all(|s| s.passed) {
-            g.phase += 1;
-            self.enter(g, events);
+        for i in &self.modules {
+            if g.is_over() {
+                break;
+            }
+            i.module
+                .after(g, &mut self.cx(i, events.as_deref_mut(), ch))?;
         }
         Ok(())
     }
@@ -419,7 +604,7 @@ impl Rules {
 
     /// Runs phases from `g.phase` until a decision phase is entered or the
     /// game ends, starting new rounds as needed.
-    fn enter(&self, g: &mut GameState, mut events: Option<&mut Vec<Event>>) {
+    pub(crate) fn enter(&self, g: &mut GameState, mut events: Option<&mut Vec<Event>>) {
         loop {
             if g.is_over() {
                 return;
@@ -453,9 +638,10 @@ impl Rules {
                 if let Some(log) = events.as_deref_mut() {
                     log.push(Event::RoundStarted { round });
                 }
+                let mut ch = Choices::default();
                 for i in &self.modules {
                     i.module
-                        .round_start(g, &mut self.cx(i, events.as_deref_mut()));
+                        .round_start(g, &mut self.cx(i, events.as_deref_mut(), &mut ch));
                 }
                 if g.is_over() {
                     return;
@@ -469,15 +655,41 @@ impl Rules {
             }
             match p.kind {
                 PhaseKind::Auto => {
-                    let part = p.parts[0];
-                    let inst = &self.modules[part.module];
-                    inst.module
-                        .run(part.phase, g, &mut self.cx(inst, events.as_deref_mut()));
-                    g.phase += 1;
+                    let mut ch = Choices::default();
+                    let snapshot = g.clone();
+                    match self.run_trigger(g, &Trigger::Phase, &mut ch, events.as_deref_mut()) {
+                        Ok(()) => g.phase += 1,
+                        Err(Halt::Ask) => {
+                            g.pending = Some(Box::new(Pending {
+                                trigger: Trigger::Phase,
+                                made: Vec::new(),
+                                ask: ch.asked.expect("a halted choice records its question"),
+                                snapshot,
+                            }));
+                            return;
+                        }
+                        Err(Halt::Illegal(e)) => panic!("phase {} failed: {e}", p.name),
+                    }
                 }
                 PhaseKind::Decision => {
                     for s in g.seats.iter_mut() {
                         s.passed = false;
+                    }
+                    let mut ch = Choices::default();
+                    for part in &p.parts {
+                        let inst = &self.modules[part.module];
+                        inst.module.begin(
+                            part.phase,
+                            g,
+                            &mut self.cx(inst, events.as_deref_mut(), &mut ch),
+                        );
+                    }
+                    if g.is_over() {
+                        return;
+                    }
+                    if g.seats.iter().all(|s| s.passed) {
+                        g.phase += 1;
+                        continue;
                     }
                     return;
                 }

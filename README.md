@@ -6,8 +6,9 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 
 - [docs/principles.md](docs/principles.md): design pillars, difficulty targets, lenses,
   measures.
-- [docs/rules.md](docs/rules.md): what the code implements. It is currently a
-  **placeholder loop**, not the game.
+- [docs/rules.md](docs/rules.md): what the code implements: ruleset **v0**, Militarist
+  against Builder and Protector, 1–4 countries, with every default and deviation.
+- [docs/ruleset-v0.md](docs/ruleset-v0.md): the v0 design draft as handed over.
 - [docs/architecture.md](docs/architecture.md): modules, configs and tunables, the
   invariants, and how to add a module, variant or card.
 - [CLAUDE.md](CLAUDE.md): the working contract for executors.
@@ -17,16 +18,17 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | Path | What it is |
 |---|---|
 | `crates/aic-core` | The rules engine. No I/O, no clock, seeded per-purpose RNG streams in the state, serde state, exact replay. `Rules::new(config)` then `new_game` / `legal_actions_into` / `apply_mut`, plus the convenient free functions `new_game`, `legal_actions`, `apply`. |
-| `crates/aic-core/src/modules/` | One file per module (`income`, `spread`, `actions`, `victory`), with the registry in `mod.rs`. |
+| `crates/aic-core/src/modules/` | One file per rules area (`board`, `adversary`, `threats`, `opposition`, `economy`, `ai`, `cards`), shared code (`common`, `effects`), the registry in `mod.rs`. |
 | `crates/aic-sim` | Native CLI: seeded random-agent games over a seed range, one config or two side by side, with every game replay-checked. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
-| `content/` | Data embedded at compile time: `map.json` (country piece, layouts for 1–5 countries) and `cards.json` (cards built from effect primitives). |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` and `clean_land.json` differ only in the income variant and one spread tunable. |
+| `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, all built from code primitives. |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 (2 countries, difficulty 0); `shared_row.json` differs only in the threat variant. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. |
 | `scripts/wasm-smoke.mjs` | Plays one game through the wasm package in Node. |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
-Core source map: `rules.rs` (config compilation, round/phase loop, apply), `module.rs`
-(the module framework: `ModuleDef`, `VariantDef`, `Module`, `Cx`), `config.rs`,
+Core source map: `rules.rs` (config compilation, round/phase loop, apply, choice
+replay), `module.rs` (the module framework: `ModuleDef`, `VariantDef`, `Module`, `Cx`,
+`World`), `config.rs`,
 `content.rs`, `map.rs` + `hex.rs` (axial hexes), `state.rs`, `action.rs`, `event.rs`,
 `rng.rs`, `driver.rs` (`play`/`replay` with an `Agent`, `GameRecord`), `view.rs` (the
 generic view clients draw), `record.rs` (`SavedGame`, the game record format), `tests.rs`.
@@ -52,7 +54,7 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 
 ```sh
 cargo build --workspace
-cargo test --workspace                             # ~25 s incl. build; the tests ~14 s (debug)
+cargo test --workspace                             # ~40 s incl. build; the core tests ~10 s (debug)
 cargo build --release -p aic-sim                   # ~12 s
 wasm-pack build crates/aic-wasm --target web       # ~20 s cold, ~9 s warm -> crates/aic-wasm/pkg (git-ignored)
 node scripts/wasm-smoke.mjs                        # needs the wasm build; checks native = wasm
@@ -61,10 +63,13 @@ node scripts/wasm-smoke.mjs                        # needs the wasm build; check
 `Cargo.lock` started as a copy of corelight-engine's lock, so dependency versions match a
 known-good wasm build.
 
-**Rules changes:** the `golden_game` test pins the final state of one fixed game. If a
-rules change is intended, bump `RULES_REVISION` in `crates/aic-core/src/lib.rs` and
-update the fingerprint in both `tests.rs` and `scripts/wasm-smoke.mjs`. The revision is
-recorded with every sim result, so old and new results are never mixed up.
+**Rules changes:** the `golden_game` test pins the final state of one fixed game
+(baseline, seed `u64::MAX`, action *k* = legal action `(k × 7919) mod count`; "always the
+first action" can now pay and withdraw a threat counter forever). If a rules change is
+intended, bump `RULES_REVISION` in `crates/aic-core/src/lib.rs` and update the
+fingerprint in both `tests.rs` and `scripts/wasm-smoke.mjs`. The fingerprint covers the
+whole final state, config `name` included. The revision is recorded with every sim
+result, so old and new results are never mixed up.
 
 Git Bash on this machine mangles backslashes inside heredocs, even with a quoted
 delimiter. Write scripts with the editor, not with `cat <<'EOF'`.
@@ -75,17 +80,16 @@ Always run the sim in release.
 
 ```sh
 S=target/release/aic-sim
-$S compare configs/baseline.json configs/clean_land.json --games 2000
-$S run configs/baseline.json --games 500 --set spread.variant=cluster --set spread.cap=4
-$S compare configs/baseline.json configs/baseline.json --set-b victory.overrun=14   # one tunable
-$S compare configs/baseline.json configs/baseline.json --set-b spread=off           # remove a module
-$S run configs/baseline.json --set income.variant=clean_land --set income.base=1 --set income.per_clean=4
+$S run configs/baseline.json --games 2000                          # v0, 2 countries, difficulty 0
+for n in 1 2 3 4; do $S run configs/baseline.json --games 500 --set countries=$n; done
+$S compare configs/baseline.json configs/shared_row.json --games 2000  # threat variants
+$S run configs/baseline.json --set opposition.variant=income --set opposition.income_credits=2
+$S compare configs/baseline.json configs/baseline.json --set-b adversary.difficulty=4
 $S run configs/baseline.json --games 1 --trace     # first game as JSON lines
 $S run configs/baseline.json --json                # machine-readable summary
 $S show configs/baseline.json                      # resolved config, hash, every tunable
 $S modules                                         # registry: modules, variants, params, phases
 $S run configs/baseline.json --games 2000 --save out/games              # first 20 losses as records
-$S compare configs/baseline.json configs/clean_land.json --save out/cmp --save-when timeout --save-seed 17
 $S replay out/games/*.json                         # check records natively (also browser bug reports)
 ```
 
@@ -120,8 +124,10 @@ the resolved config, and must equal the final state. The exit code is 1 on any
 mismatch, and 2 on a bad config or bad arguments (including a seed range that
 overflows `u64`).
 
-Measured on this machine: about 0.03–0.05 ms per game, replay included. 2 × 100,000
-games take 7–10 s, depending on what else the machine is doing.
+Measured on this machine (v0, 2 countries): about 1.4 ms per game, replay included
+(every action and automatic phase clones the state for choice replay); 2,000 games take
+about 3 s. Random-agent v0 games end in 2–6 rounds, almost all on the corruption pool:
+the draft numbers are not tuned. (The placeholder loop ran at 0.03–0.05 ms per game.)
 
 **Game records** (`aic-game-record/1`, `aic_core::SavedGame`) are JSON: the resolved
 config, the seed and the action list (one action per line), plus a `note` saying why the
@@ -133,12 +139,12 @@ replay <record.json>...` prints each record's seed, outcome and warnings (a diff
 rules revision, content or config hash, or final fingerprint), and exits 1 if any record
 fails to load or replay or has a warning. Browser bug reports are checked the same way.
 
-Measured: saving the default 20 per config doesn't change the run time noticeably (2 ×
-100,000 games: 9.3 s with `--save`, 9.8 s without). A record is about 3.6 KB. Saving
-every game is slow, and Windows file writes are the bottleneck: 200,000 records take
-82 s and 880 MB. `replay` of 300 records takes 0.17 s. A shell glob over more than a few
+Measured (v0, 2 countries): a record is about 9 KB (about 90 actions); saving 300
+records with their games takes 0.8 s, and `replay` of 300 records 1.2 s. Saving every
+game of a big run is slow: Windows file writes are the bottleneck (placeholder-era
+figure: 200,000 records took 82 s). A shell glob over more than a few
 hundred records hits Windows' command-line length limit ("Argument list too long"), so
 replay big sets in batches.
 
-The random agent picks uniformly among all seats' legal actions, passes included. Treat
-it as a floor, not as a model of a weak team.
+The random agent picks uniformly among all seats' legal actions, passes and choice
+answers included. Treat it as a floor, not as a model of a weak team.

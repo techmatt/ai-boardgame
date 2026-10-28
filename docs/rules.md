@@ -1,84 +1,379 @@
 # Rules as implemented
 
-What the code currently implements, and nothing else. **Keep this current with every
-rules change.** Design intent lives in [principles.md](principles.md); how the engine is
-put together lives in [architecture.md](architecture.md).
+What the code implements: ruleset **v0**, Militarist against Builder and Protector, 1–4
+countries. **Keep this current with every rules change.** Design intent lives in
+[principles.md](principles.md); how the engine is put together lives in
+[architecture.md](architecture.md).
 
-> Everything below the board section is a **placeholder loop** that exists to exercise
-> the engine. None of it is a rule of AI Complete.
+Numbers in `code` are config tunables (`<module>.<param>`); the values given are those
+in [`configs/baseline.json`](../configs/baseline.json). Card, threat, adversary-card and
+AI-board numbers are content data in [`content/`](../content/). Where the v0 ruleset left
+a gap or was ambiguous, the choice made is marked **Default**; where the implementation
+departs from the ruleset text, **Deviation**. Both are collected in the
+[last section](#defaults-and-deviations).
 
-## Board
+## Terms
 
-- Each country is one **4×4 rhombus piece** of 16 hexes, and is exactly one megacorp
-  (one seat). A game has 1–5 countries.
-- Pieces are placed around a shared centre by a fixed layout per country count
-  ([`content/map.json`](../content/map.json)). The 3-, 4- and 5-country layouts are taken
-  from the reference images; the 1- and 2-country layouts are the first one and two
-  pieces of the 3-country layout (a stand-in until real ones are drawn).
-- Each piece has a strip of **3 card slots** for per-country cards. Nothing uses them yet.
-- Hexes use axial coordinates `[q, r]` (pointy-top; `q` east, `r` south-east). `[0, 0]`
-  is the centre hex of the reference grid.
+- **Adjacent**: a neighbouring hex on the board, across country borders too.
+- **Next to X**: holding X, or adjacent to a hex holding X. (**Default**: the ruleset uses
+  "next to" for explore sources, factories and threat conditions; reading it as "on or
+  adjacent" keeps a factory on a populated hex working and lets an outpost's own hex
+  explore.)
+- **Players choose**: the decision is an `Action::Choose` in `legal_actions`, made by the
+  one team agent. Team choices in the adversary phase and in opposition rewards are asked
+  of seat 0; a choice inside a player's own card or ability is asked of that player.
+- **Hex number**: each piece's hexes are printed 1–16 (row by row along the piece); ties
+  go to the lower number.
 
-## Round structure
+## 1. Board and setup
 
-A round is a sequence of phases set by the config. In the placeholder configs:
+### Country pieces (module `board`, variant `pieces`)
 
-1. `income.collect`
-2. `actions.play` — the only player phase
-3. `spread.advance`
-4. `victory.check`
+A game has 1–4 countries and as many players (seats). Country *i* is always printed piece
+*i* ([`content/map.json`](../content/map.json), `countries`), placed by the layout for that
+country count. **Default:** the four pieces below; each has 4 hexes of each terrain, two
+Frontier uplinks on the board's outer edge in every layout it appears in (never touching
+another country), its factories next to population, and a slightly different
+arrangement. Letters are Urban, Industrial, Network, Frontier, rows of hex numbers 1–4,
+5–8, 9–12, 13–16.
 
-**Player phases are simultaneous.** Any seat may act, in any order, until every seat has
-passed. One seat's actions never change what another seat may do. Hands and boards are
-open. Several modules' player phases can be played as one phase (`a.play+b.play` in the
-config); none of the placeholder configs do this.
+| # | Name | Terrain rows | Uplinks | Outpost | Population | Factories | Data centres |
+|---|---|---|---|---|---|---|---|
+| 0 | Coastal Republic | NFFI UUIF NUIF UINN | 3, 12 | 3 | 5 6 7 10 13 14 | 4, 11 | 1, 15 |
+| 1 | Northern Union | IFNF UIUF NUIF UNIN | 2, 8 | 8 | 5 6 7 10 13 15 | 1, 11 | 3, 14 |
+| 2 | Highland Federation | NUIN FUIU FIUN FINF | 5, 9 | 9 | 2 6 7 8 10 11 | 3, 14 | 4, 12 |
+| 3 | Delta States | UNFI FUIN FIUF NUIN | 3, 9 | 9 | 1 6 7 10 11 14 | 4, 15 | 2, 16 |
 
-## Placeholder modules
+Country 2's piece sits differently in the 3- and 4-country layouts; only hexes 5 and 9 are
+on the outer edge in both, so its uplinks are adjacent. The 5-country layout was removed:
+v0 has four pieces.
 
-Numbers in `code` are parameters set by the config; the placeholder configs are in
-[`configs/`](../configs/).
+### Starting pieces
 
-### Setup
+Each country starts with `start_population` (1) population on each printed population
+hex (all 4 Urban hexes and 2 Industrial ones: 6), `start_factories` (1) factory on each
+printed factory hex, `start_data_centres` (1) data centre on each printed data centre
+hex, `start_drones` (1) drone on each uplink, and `start_outposts` (1) outpost on the
+printed outpost uplink. The starting population total is recorded
+(`board.start_population`) for the loss condition.
 
-- **spread** places `start` blight on each country, one at a time, by its variant's
-  placement rule (below).
+The **corruption pool** holds `pool_per_country` (2) per country + `pool_base` (2).
 
-### income (variants)
+### Players (module `ai`, variant `boards`)
 
-- **flat:** every country gains `amount` credits.
-- **clean_land:** every country gains `base` credits, plus 1 per `per_clean` blight-free
-  hexes in it (rounded down).
+Seat *s* plays AI board `boards[s]` (`[0, 1]`: Builder, Protector; the list repeats for
+more seats, so 3 and 4 players repeat AIs). Each starts with `start_credits` (12) credits
+and no other resources, and `start_processors` (1) processor on the lowest-numbered data
+centre of country *s* (its starting country, which nothing else refers to), plus its AI's
+unique cards in hand. **Default:** every card is unique, so a repeated AI's second seat
+has no unique cards.
 
-### actions — `open_cards`
+### Opening
 
-Every seat may play each configured card once per round, paying its cost in credits.
-Targets are always hexes in the player's own country that hold blight.
+Before round 1: reveal the first adversary card into the explore slot, explore, and slide
+(so it builds in round 1 and ravages in round 2). Round 1 then starts with threats.
 
-| Card | Cost | Effect |
+## 2. The adversary (module `adversary`, variant `militarist`)
+
+### Pieces
+
+| Piece | Health | Ravage damage |
 |---|---|---|
-| Scrub | `scrub_cost` | Remove up to `scrub_amount` blight from a hex. |
-| Invest | `invest_cost` | Gain `invest_gain` credits. |
-| Purge | 4 | Remove up to 3 blight from a hex. |
+| Drone | `drone_health` 1 | `drone_damage` 1 |
+| Outpost | `outpost_health` 2 | `outpost_damage` 2 |
+| Foundry | `foundry_health` 3 | `foundry_damage` 3 |
 
-Used cards refresh at the start of each round. Credits carry over between rounds.
+### The deck (the clock)
 
-### spread (variants)
+The printed adversary deck ([`content/adversary.json`](../content/adversary.json)) has
+4 stage-I cards (one terrain each), 4 stage-II cards (one terrain each, with Escalation)
+and 6 stage-III cards (each pair of terrains). **Default:** a game deals `stage_cards`
+(3, 4, 3) of them at random per stage, so a game's deck is 10 unique cards: stage I on
+top, then II, then III, each stage shuffled on its own. Players **lose** if a card must be
+revealed and the deck is empty.
 
-In round N every country gets the Nth entry of `per_country` (counting from 1) as new
-blight; after the last entry, the last entry repeats.
+### The pipeline
 
-- **random:** each blight goes to a uniformly random hex of the country.
-- **cluster:** each blight goes to the country's most-blighted hex that still holds fewer
-  than `cap` (ties: lowest piece position). If the country has no blight, a random hex.
-  If every blighted hex is full: the first clean neighbour in the country, checking E,
-  NE, NW, W, SW, SE, of the full hex with the lowest piece position; else the clean
-  hex with the lowest piece position. "Piece position" counts along the piece's first
-  axis, then its second. If the country is completely full, the blight is
-  not placed.
+Three face-up slots: explore → build → ravage. In the adversary phase of each round:
 
-### victory — `survive`
+1. **Ravage** (`adversary.ravage`) with the ravage-slot card;
+2. **Build** (`adversary.build`) with the build-slot card;
+3. **Explore** (`adversary.explore`): reveal the top card into the explore slot and
+   explore; a stage-II card then escalates;
+4. **Slide** (`adversary.slide`): the ravage card is discarded, build moves to ravage,
+   explore to build.
 
-Checked once per round: the team **loses** as soon as any country holds `overrun` or more
-blight; otherwise it **wins** at the end of round `rounds`.
+Each step applies in every country to every hex of the card's terrain(s); the hexes are
+fixed when the step starts.
 
-A round with no ending at all stops after 1000 rounds as a loss (`round_limit`).
+- **Explore:** each such hex that is an uplink, or is next to an outpost or foundry, gains
+  `explore_drones` (1) drone. (Firewall Node stops it on hexes with its owner's
+  processor.)
+- **Build:** each such hex holding any adversary piece gains `build_pieces` (1) foundry
+  if it has more outposts than foundries, otherwise `build_pieces` outposts.
+- **Ravage:** each such hex holding adversary pieces takes damage equal to their total
+  ravage damage, minus defense: each defense token prevents `defense_value` (1), or its
+  owner's Bulwark value. The damage destroys players' pieces one at a time: population
+  (`population_health` 2), factories and data centres (`building_health` 3).
+  **Default:** players choose each next piece among those that the remaining damage can
+  destroy (needs its full health); damage left that can destroy nothing is lost. A
+  choice with one option is taken without asking.
+  If the damage (after defense) is `corruption_at` (2) or more, add
+  `corruption_per_ravage` (1) corruption from the pool to the hex. If the hex already had
+  corruption, it **cascades**: add `cascade` (1) to an adjacent hex of the players'
+  choice (**Default:** any adjacent hex, any country; a cascade does not cascade again).
+
+**Corruption** stays until removed. Factories and data centres on a corrupted hex produce
+nothing. Players **lose** when the pool is empty (**Default:** "runs out" read as
+"reaches 0").
+
+### Militarist innate rules
+
+- **Momentum:** when a ravage destroys population in a hex, add `momentum_drones` (1)
+  drone to an adjacent hex in the same country, of the players' choice. **Default:** once
+  per ravaged hex, however many population it lost.
+- **Escalation:** when a stage-II card is revealed (after its explore), each country's
+  uplink with the most drones gains `escalation_outposts` (1) outpost; ties go to the
+  lower hex number.
+
+### Difficulty (`difficulty`, 0–4; each level includes the ones below)
+
+| Level | Adds | Tunable |
+|---|---|---|
+| 0 | Base rules | |
+| 1 | Every threat's first counter requirement is higher | `counter_bonus` 1 |
+| 2 | Stage-I cards removed from the deck: stage II arrives sooner | `stage1_removed` 1 |
+| 3 | Ravage deals more damage in hexes with a foundry | `foundry_bonus` 1 |
+| 4 | Tier-2 threats start sooner; the corruption pool is smaller per country | `tier2_early` 1 (rounds), `pool_reduction` 1 |
+
+Level 4's "a round sooner" is implemented as: tier-2 threats are dealt once any of the
+top `tier2_early` deck cards is stage II or later (the stage boundary is public: the
+stages are stacked).
+
+## 3. Opposition and the end of the game (module `opposition`)
+
+**Opposition** is a shared track (`opposition.points`). It is gained by destroying an
+outpost (`outpost` 1) or a foundry (`foundry` 2) (drones give none; Opposition Network
+adds +1 for its owner), and by cards.
+
+Every `per_player` (4) × players opposition fills one level, up to `max_level` (3).
+Reaching a level triggers a one-time reward, by variant:
+
+| Variant | Reward per level |
+|---|---|
+| `pushback` (default) | In each country, remove `pushback_drones` (1) drone (players choose which hex) |
+| `income` | Every player gains `income_credits` (2) credit income for the rest of the game |
+| `free_purchases` | The next `free_purchases` (2) card purchases are free. **Default:** a purchase is keeping a drafted card |
+| `counter_threat` | Counter one active threat (players choose) |
+
+**Winning:** players win immediately when the adversary's presence is under the bar for
+the current level: level 0, no adversary pieces; level 1, no outposts or foundries;
+level 2, no foundries; level `max_level`, at once.
+
+**Losing:** total population falls below `loss_population_percent` (50) % of the start;
+the corruption pool is empty; or the adversary deck is empty when a card must be revealed.
+
+**Default:** win and loss are checked whenever an action or automatic phase finishes
+resolving (including after the answer that completes it), losses first; not in the
+middle of a ravage or a card's resolution. (The ruleset says win is immediate and lists the check in
+upkeep; checking everything immediately is the simplest reading and can only end a game
+sooner.)
+
+## 4. Resources and the round
+
+### Resources
+
+Each player has credits, compute, energy, antimatter and insight.
+
+| Resource | Comes from | Spent on |
+|---|---|---|
+| Credits | Credit income (AI track, buildings, level rewards) in upkeep; each working factory pays `factory_credits` (1) to every player with a processor in its country | Keeping drafted cards; card costs; counters |
+| Compute | `processor_compute` (1) per processor on a working data centre, in upkeep; buildings | Drawing (`draw_cost` 3 → 1 card); abilities; counters |
+| Energy | Energy income (AI track, buildings); growth | Abilities; counters |
+| Antimatter | Late track values; Scavenge; Antimatter Refinery | Tier-2 cards; counters |
+| Insight | At the start of each round, set to the AI track's insight plus buildings (unspent insight is lost) | Card plays; giving |
+
+- A **factory works** if its hex is uncorrupted and next to population (and not
+  blockaded); each factory on a hex counts.
+- A **data centre works** if its hex is uncorrupted (and not sabotaged). A processor
+  produces compute only on a hex with a working data centre.
+- **Giving insight:** a player may give 1 insight to another; the receiver gains
+  `give_insight` (1).
+
+### Damage and defense
+
+- **Player damage** in a hex is first reduced by Fortify there (1 per Fortify token).
+  The dealer then destroys adversary pieces one at a time, choosing each among those the
+  remaining damage can destroy (full health needed); damage left over is lost. Destroyed
+  pieces leave the board and score opposition.
+- **Defense** tokens belong to a player (`defense:<seat>`). Each prevents 1 ravage damage
+  in its hex (the Protector's prevent 2). Defense and Fortify reduce every damage instance
+  in the hex that round and are removed at the end of the round.
+
+### The round
+
+| # | Phase (config `round`) | What happens |
+|---|---|---|
+| | *(round start)* | Insight is set; abilities refresh; round markers clear |
+| 1 | `threats.deal` | Deal `per_country` (1) threat face up onto each country (tier 1 until stage II has begun, then tier 2) |
+| 2 | `cards.tier` | Players who have unlocked tier 2 choose the tier they are dealt from |
+| 3 | `cards.deal` | Each player is dealt `deal` (4) cards from their tier |
+| 4 | `cards.draft` | Take one card, pass the rest to the next seat until the hands are gone: to seat *s*+1 in odd rounds, *s*−1 in even rounds (as in Terraforming Mars). No passing |
+| 5 | `cards.keep` | Keep any drafted cards at `keep_cost` (3) credits each; the rest are discarded when the action phase begins |
+| 6 | `ai.growth` | Each player picks one growth option (mandatory) |
+| 7 | `cards.play+threats.counter+economy.give` | Actions, simultaneous: play cards, use abilities, draw, pay or withdraw counter payments, give insight. Each seat acts until it passes |
+| 8 | `threats.execute` | Partial payments are refunded; uncountered threats execute in order and are discarded |
+| 9–12 | `adversary.ravage`, `.build`, `.explore`, `.slide` | The pipeline |
+| 13 | `economy.upkeep` | Income and production; building upkeep |
+| 14 | `board.cleanup` | Remove defense and Fortify tokens and the round's country flags |
+
+**Simultaneous actions** may now depend on each other (pooled counters, gifts, a shared
+board): any seat acts in any order, as at a table where the team talks it through.
+
+## 5. AI boards (module `ai`; content [`content/ais.json`](../content/ais.json))
+
+Each AI board has two tracks covered by processors except the first value. Placing a
+processor takes it from the left end of either track (players choose), uncovering the
+next value; the current value is the highest uncovered one. A processor goes on any hex
+within 1 of one of your processors, or on any data centre in a country where you already
+have one. A track's last value may also give antimatter income; a marked value unlocks
+tier 2 for good once uncovered.
+
+**Builder** (6 building slots; innate *Economies of scale*: your buildings cost 2 less).
+Insight 2 2 3 3 4 4; credit income +1 +2 +3 +4 (tier 2) +5 +6 (+1 antimatter). Growth:
+place 1 processor and gain 3 credits; gain 8 credits; gain 2 energy and your next
+building this round costs 4 less. Unique cards: Turnkey Factory, Venture Capital,
+Modular Expansion.
+
+**Protector** (3 slots; innate *Bulwark*: your defense tokens each prevent 2). Insight
+1 2 2 3 3 4; energy income +1 +1 (tier 2) +2 +2 +3 +3 (+1 antimatter). Growth: place 1
+processor and gain 1 energy; place 2 defense in any one country and gain 2 credits; gain
+3 energy. Unique cards: Point Defense, Strike Team, Shelter Order.
+
+## 6. Threats (module `threats`; content [`content/threats.json`](../content/threats.json))
+
+- Variant **`countries`** (default): each threat sits on one country and acts there;
+  only players with a processor in that country may pay toward it, and "each player"
+  in its text means each player with a processor there.
+- Variant **`shared_row`**: threats sit in one row, act in every country, and anyone may
+  pay. **Default:** the row is still dealt `per_country` threats per country, so with
+  more countries there are more threats and each acts everywhere.
+
+**Countering (Default):** a threat is countered only when fully paid. Payments are
+pooled across players (`Pay` 1 or as much as is useful at a time, `Withdraw` takes back
+everything you put on it in one resource). The moment it is fully paid it is discarded
+and the payments are spent. Anything still on a threat when the action phase ends is
+refunded. Threat decks reshuffle their discards when they run out.
+
+| Threat | Tier | If not countered | Counter |
+|---|---|---|---|
+| Conscription | 1 | Each hex with an outpost gains 1 drone | 2 energy |
+| Supply raid | 1 | Each player loses 3 credits (down to 0) | 4 credits |
+| Drone surge | 1 | Each uplink gains 1 drone | 2 compute |
+| Blockade | 1 | Factories next to adversary pieces produce nothing this round | 2 compute |
+| Forward base | 1 | One drone on the lowest-numbered uplink holding a drone becomes an outpost | 3 energy |
+| Panic | 1 | One population next to adversary pieces flees to an adjacent hex in its country without them (players choose which and where); with nowhere to go, it is lost. **Default:** "in its country", from the ruleset's "in each country" | 1 insight |
+| Sabotage | 1 | Processors on data centres next to adversary pieces produce nothing this round | 2 compute + 1 energy |
+| Fortify | 1 | Each foundry gives its hex 1 Fortify this round | 3 credits |
+| Requisition | 1 | Each player discards 1 card or pays 3 credits (their choice; with neither possible, they pay what credits they have) | 1 insight |
+| Patrol | 1 | Each hex with a drone and population loses 1 population | 2 energy + 2 credits |
+| Total war | 2 | Every hex with a foundry ravages | 2 antimatter |
+| Cascade | 2 | Each corrupted hex cascades to one adjacent hex (players choose) | 1 antimatter + 3 energy |
+| Orbital strike | 2 | Destroy one factory on the hex with the most population on adjacent hexes (ties: lower number) | 1 antimatter |
+| Mass production | 2 | Every hex with an outpost builds | 6 energy |
+| Purge protocols | 2 | Each player discards their most expensive card in hand (ties: they choose) | 1 antimatter |
+| Overrun | 2 | Each hex with 3 or more adversary pieces gains 1 corruption (no cascade) | 2 antimatter |
+
+Population lost to Patrol or Panic is protected by Shelter Order and Civic Shelter like
+any population loss.
+
+## 7. Player cards (module `cards`, variant `draft`; content [`content/cards.json`](../content/cards.json))
+
+- **Decks:** a tier-1 and a tier-2 deck of the cards listed in the config (one copy of
+  each; a hard constraint the tests check). Discards reshuffle into a deck when it runs
+  out. An AI's unique cards go back to the box when played (programs) or discarded.
+- **Playing** a card costs its insight, its credits (buildings minus your discounts:
+  Economies of scale, Assembly Cluster, a growth's next-building discount) and any
+  antimatter. A tier-2 card needs your AI to have unlocked tier 2 and the listed tags.
+  **Default:** tags are counted on your buildings (a program leaves no tags); the
+  ruleset gives tier-2 cards no tags, so they have none.
+- **Programs** resolve and are discarded. A program (or ability) is only offered when
+  each of its targeted effects has a target.
+- **Buildings** go into your building row. **Default:** playing a building into a full
+  row discards one of your existing slot-taking buildings (your choice).
+- **Abilities** ("once a round") are used with `Use` and refresh at the start of a round.
+- **Drawing:** pay `draw_cost` (3) compute to draw the top card of the tier-1 deck, or of
+  the tier-2 deck once unlocked.
+
+Effects needing choices ask the playing player: hexes, countries, players, threats,
+amounts ("up to N" offers 0..N), or "stop".
+
+Card details beyond the ruleset text:
+
+- **Strike Team:** "within 1 of your processor" is hex distance ≤ 1, any country.
+- **Precision Strike, Orbital Lance, Purge Protocol:** any hex holding adversary pieces.
+- **Watchtower Net, Point Defense:** a country where you have a processor.
+- **Sweep, Swarm Override, Shore Up, Shelter Order:** any country.
+- **Emergency Fab:** "empty" means no population, factory, data centre or adversary
+  pieces. **Turnkey Factory:** any Industrial hex next to population, even one with a
+  factory.
+- **Evacuate:** up to 3 moves, one population at a time, anywhere within the country of
+  the first one moved; stop at any time. **Shore Up / Point Defense / growth defense:**
+  choose the country, then a hex for each token.
+- **Recon Sweep:** the top 2 adversary cards are shown face up until revealed.
+- **Jam Signals:** the chosen threat needs 1 less of each resource (not below 0) this
+  round; if that leaves it fully paid (or needing nothing), it is countered at once. **Counter-intelligence:** partial payments on it are refunded.
+- **Rebuild / Reconstruction:** return corruption to the pool one hex at a time
+  (Reconstruction: up to 3, all in the first hex's country).
+- **Overclock Rig:** its upkeep (1 energy) is paid automatically in upkeep if you can;
+  if not, its effects are off next round. **Antimatter Refinery:** converts automatically
+  when you have the energy.
+- **Civic Shelter:** automatic, the first time population would be lost that round in a
+  country where its owner has a processor.
+- **Logistics AI (Deviation):** gain 2 credits when a threat you paid toward is countered
+  by payment, not on every payment: with withdrawals allowed, a per-payment trigger
+  would pay out without limit.
+- **Modular Expansion (Deviation):** it takes no building slot itself, so it is a net
+  +1 slot; taking a slot would make it do nothing.
+
+## Defaults and deviations
+
+**Defaults** (gaps in the ruleset, filled with the simplest reading that matches its intent):
+
+1. Country pieces, hex numbering and the 4-country limit (§1).
+2. One player per country; seat *s* starts in country *s*; the first processor goes on the
+   lowest-numbered data centre there; `ai.boards` repeats for more seats, and a repeated
+   AI has no unique cards (one copy each).
+3. "Next to" = on or adjacent; "adjacent" = neighbouring, across borders unless "in the
+   same country" is stated.
+4. Ravage loss order: chosen piece by piece among pieces the remaining damage can
+   destroy; leftover damage is lost. The same for player damage. Defense and Fortify
+   reduce each damage instance that round.
+5. Cascades do not chain and may cross borders. Momentum once per ravaged hex.
+6. The corruption pool "runs out" when it reaches 0.
+7. Win and loss are checked when an action or automatic phase finishes resolving, losses
+   first. Reaching the top level wins without its reward.
+8. The adversary deck deals 3/4/3 of 4/4/6 printed cards; Escalation triggers on reveal.
+9. Difficulty 4's "a round sooner" looks `tier2_early` cards ahead in the deck.
+10. Pooled counters: countered only when fully paid; withdrawals until the action phase
+    ends; partial payments refunded then.
+11. A building into a full row discards one of your slot-taking buildings (your choice).
+12. Insight is set at the start of each round; income arrives in upkeep.
+13. Tags are counted on your buildings; tier-2 cards have no tags.
+14. "Next K purchases" are keeps of drafted cards.
+15. Unique AI cards return to the box when used up.
+16. Requisition with neither a card nor 3 credits: pay what credits you have.
+17. Team choices are asked of seat 0.
+18. Building upkeep is automatic: Overclock Rig's energy is paid whenever you can, and
+    Antimatter Refinery converts whenever you can (no choice is asked).
+19. The draft passes alternate direction by round (Terraforming Mars).
+20. The shared threat row is dealt `per_country` threats per country.
+21. Panic's population flees within its own country.
+22. A giving card (Power Share) is not offered without another player; Grant and
+    Venture Capital are (their own gain still applies).
+
+**Deviations** (the implementation departs from the ruleset text):
+
+1. Logistics AI triggers on a countered threat you paid toward, not on every payment.
+2. Modular Expansion takes no slot.
+3. The 5-country layout is gone (v0 has four country pieces).

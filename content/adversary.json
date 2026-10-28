@@ -1,0 +1,124 @@
+[
+ {
+  "id": "s1_urban",
+  "name": "I: Urban",
+  "stage": 1,
+  "terrains": [
+   "urban"
+  ]
+ },
+ {
+  "id": "s1_industrial",
+  "name": "I: Industrial",
+  "stage": 1,
+  "terrains": [
+   "industrial"
+  ]
+ },
+ {
+  "id": "s1_network",
+  "name": "I: Network",
+  "stage": 1,
+  "terrains": [
+   "network"
+  ]
+ },
+ {
+  "id": "s1_frontier",
+  "name": "I: Frontier",
+  "stage": 1,
+  "terrains": [
+   "frontier"
+  ]
+ },
+ {
+  "id": "s2_urban",
+  "name": "II: Urban + escalation",
+  "stage": 2,
+  "terrains": [
+   "urban"
+  ],
+  "escalation": true
+ },
+ {
+  "id": "s2_industrial",
+  "name": "II: Industrial + escalation",
+  "stage": 2,
+  "terrains": [
+   "industrial"
+  ],
+  "escalation": true
+ },
+ {
+  "id": "s2_network",
+  "name": "II: Network + escalation",
+  "stage": 2,
+  "terrains": [
+   "network"
+  ],
+  "escalation": true
+ },
+ {
+  "id": "s2_frontier",
+  "name": "II: Frontier + escalation",
+  "stage": 2,
+  "terrains": [
+   "frontier"
+  ],
+  "escalation": true
+ },
+ {
+  "id": "s3_urban_industrial",
+  "name": "III: Urban + Industrial",
+  "stage": 3,
+  "terrains": [
+   "urban",
+   "industrial"
+  ]
+ },
+ {
+  "id": "s3_urban_network",
+  "name": "III: Urban + Network",
+  "stage": 3,
+  "terrains": [
+   "urban",
+   "network"
+  ]
+ },
+ {
+  "id": "s3_urban_frontier",
+  "name": "III: Urban + Frontier",
+  "stage": 3,
+  "terrains": [
+   "urban",
+   "frontier"
+  ]
+ },
+ {
+  "id": "s3_industrial_network",
+  "name": "III: Industrial + Network",
+  "stage": 3,
+  "terrains": [
+   "industrial",
+   "network"
+  ]
+ },
+ {
+  "id": "s3_industrial_frontier",
+  "name": "III: Industrial + Frontier",
+  "stage": 3,
+  "terrains": [
+   "industrial",
+   "frontier"
+  ]
+ },
+ {
+  "id": "s3_network_frontier",
+  "name": "III: Network + Frontier",
+  "stage": 3,
+  "terrains": [
+   "network",
+   "frontier"
+  ]
+ }
+]

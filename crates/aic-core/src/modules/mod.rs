@@ -1,45 +1,36 @@
-//! Every module the engine knows. To add one: write `modules/<id>.rs` with a
-//! `pub static DEF: ModuleDef`, add it to [`REGISTRY`], and document it in
-//! `docs/rules.md` and `docs/architecture.md`.
+//! Every module the engine knows: the v0 ruleset, one module per rules
+//! area. To add one: write `modules/<id>.rs` with a `pub static DEF:
+//! ModuleDef`, add it to [`REGISTRY`], and document it in `docs/rules.md`
+//! and `docs/architecture.md`.
 //!
-//! The current modules are placeholders that exercise the framework; none
-//! of them is a real rule of AI Complete.
+//! The rules areas lean on each other (a card's damage destroys adversary
+//! pieces and scores opposition), so modules call each other's public
+//! functions and read each other's parameters; each declares the modules it
+//! needs in `ModuleDef::requires`. `common` and `effects` are shared code,
+//! not modules.
 
 use crate::module::ModuleDef;
 
-pub mod actions;
-pub mod income;
-pub mod spread;
-pub mod victory;
+pub mod adversary;
+pub mod ai;
+pub mod board;
+pub mod cards;
+pub mod common;
+pub mod economy;
+pub mod effects;
+pub mod opposition;
+pub mod threats;
 
 pub static REGISTRY: &[&ModuleDef] = &[
-    &income::DEF,
-    &spread::DEF,
-    &actions::DEF,
-    &victory::DEF,
-    #[cfg(test)]
-    &actions::TEST_TWIN,
+    &board::DEF,
+    &adversary::DEF,
+    &threats::DEF,
+    &opposition::DEF,
+    &economy::DEF,
+    &ai::DEF,
+    &cards::DEF,
 ];
-
-/// Resource every placeholder module trades in.
-pub const CREDITS: &str = "credits";
-/// The placeholder adversary's token.
-pub const BLIGHT: &str = "blight";
 
 pub fn find(id: &str) -> Option<&'static ModuleDef> {
     REGISTRY.iter().copied().find(|m| m.id == id)
-}
-
-/// Total `kind` tokens on a country's hexes.
-pub(crate) fn country_tokens(
-    g: &crate::GameState,
-    w: &crate::module::World,
-    country: usize,
-    kind: &str,
-) -> i64 {
-    w.map.countries[country]
-        .hexes
-        .iter()
-        .map(|&h| g.tokens(h, kind))
-        .sum()
 }

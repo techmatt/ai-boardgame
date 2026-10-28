@@ -40,16 +40,18 @@ rules themselves are in [rules.md](rules.md).
   game, and `scripts/wasm-smoke.mjs` checks that the wasm build reaches the same
   fingerprint.
 - **Printable state**: everything the rules read is something a physical copy could
-  hold: tokens on hexes, resources on seat boards, exhausted cards, card slots, a round
-  and phase marker, numbered tracks (`vars`). No hidden bookkeeping. If a module needs
-  more than that, the design needs a look first. `rng` (the dice) and `stats` (sim
-  observation, never read by rules) are the only parts that are not game components.
+  hold: tokens on hexes, resources on seat boards, exhausted cards, ordered card piles
+  (decks, discards, hands, slots, building rows), a round and phase marker, numbered
+  tracks and markers (`vars`). No hidden bookkeeping. If a module needs more than that,
+  the design needs a look first. `rng` (the dice) and `stats` (sim observation, never
+  read by rules) are not game components; `pending` (an open choice, below) is the step
+  the table is in the middle of.
 
 ## API
 
 ```rust
 let rules = Rules::new(&config)?;            // validate + compile once per config
-let mut g = rules.new_game(seed);            // setup, then advance to the first decision
+let mut g = rules.new_game(seed);            // setup, then advance to the first decision or choice
 rules.legal_actions_into(&g, &mut buf);      // hot path: reuse a buffer
 rules.apply_mut(&mut g, &action, None)?;     // hot path: in place, no event log
 let (next, events) = rules.apply(&g, &action)?;  // copy + event log
@@ -72,20 +74,27 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
 
 ## Config
 
-A config is JSON (examples in [`configs/`](../configs/)):
+A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the v0 game
+(2 countries, difficulty 0); [`configs/shared_row.json`](../configs/shared_row.json)
+differs only in the threat variant. Abridged:
 
 ```json
 {
   "name": "baseline",
-  "countries": 3,
+  "countries": 2,
   "modules": [
-    { "module": "income", "variant": "flat", "params": { "amount": 3 } },
-    { "module": "actions", "variant": "open_cards", "cards": ["scrub", "invest", "purge"],
-      "params": { "scrub_cost": 2, "scrub_amount": 1, "invest_cost": 2, "invest_gain": 3 } },
-    { "module": "spread", "variant": "random", "params": { "start": 2, "per_country": [1, 2, 2, 3] } },
-    { "module": "victory", "variant": "survive", "params": { "rounds": 8, "overrun": 13 } }
+    { "module": "board", "variant": "pieces", "params": { "start_population": 1, ... } },
+    { "module": "adversary", "variant": "militarist", "params": { "difficulty": 0, "stage_cards": [3, 4, 3], ... } },
+    { "module": "threats", "variant": "countries", "params": { "per_country": 1 } },
+    { "module": "opposition", "variant": "pushback", "params": { "per_player": 4, ... } },
+    { "module": "economy", "variant": "standard", "params": { ... } },
+    { "module": "ai", "variant": "boards", "params": { "boards": [0, 1], "start_credits": 12, ... } },
+    { "module": "cards", "variant": "draft", "params": { "deal": 4, ... }, "cards": ["fab_line", ...] }
   ],
-  "round": ["income.collect", "actions.play", "spread.advance", "victory.check"]
+  "round": ["threats.deal", "cards.tier", "cards.deal", "cards.draft", "cards.keep", "ai.growth",
+            "cards.play+threats.counter+economy.give", "threats.execute",
+            "adversary.ravage", "adversary.build", "adversary.explore", "adversary.slide",
+            "economy.upkeep", "board.cleanup"]
 }
 ```
 
@@ -98,12 +107,12 @@ A config is JSON (examples in [`configs/`](../configs/)):
   schedule or a table (for schedules, the last entry repeats, via `module::scheduled`).
   A single integer is accepted for a list and normalized to a one-item list.
 - **cards**: content ids, for variants that play cards (`uses_cards`). A card belongs
-  to at most one module.
+  to at most one module. In v0 the `cards` module lists every player card, AI uniques
+  included; leaving a card out removes it from the game.
 - **round**: the phase sequence, as `"<module>.<phase>"`:
   - a phase may appear more than once, or not at all;
   - `"a.play+b.build"` combines several modules' **decision** phases into one
-    simultaneous phase, so a new player-facing module can add actions to the existing
-    player turn without adding a second all-pass round trip;
+    simultaneous phase (v0's action phase combines cards, threat counters and giving);
   - if `round` is empty, it defaults to every module's phases in module order.
 - **Config hash**: `Rules::config_hash` is a 64-bit FNV-1a hash of the *resolved*
   config's JSON (round filled in, lists normalized, `name` excluded). Every
@@ -113,29 +122,37 @@ A config is JSON (examples in [`configs/`](../configs/)):
   schedule but hash differently.
 - **Overrides**, for sweeps (`Config::apply_override`, the sim's `--set`):
   - `countries=4`;
-  - `spread.per_country=1,2,3` (`3` or `1,2,3`);
-  - `income.base=` unsets a parameter;
-  - `income.variant=clean_land` switches variant and drops the parameters the new
-    variant doesn't take, so only its new ones need setting;
-  - `spread=off` removes a module and its phases (the "effect of removing the module"
-    measure).
+  - `adversary.stage_cards=3,4,3` (`3` or `1,2,3`);
+  - `adversary.difficulty=` unsets a parameter;
+  - `opposition.variant=income` switches variant and drops the parameters the new
+    variant doesn't take, so only its new ones need setting
+    (`--set opposition.income_credits=2`);
+  - `<module>=off` removes a module and its phases. In v0 every module is needed by
+    another (`ModuleDef::requires`), so this is rejected with the reason.
 - **`aic-sim show <config>`** prints the resolved config, its hash and every tunable
   (card-derived ones included), with its range.
 
 ## Modules
 
-A **module** is one mechanic (for example income, the adversary's spread, or the end
-condition). A **variant** is one way of doing that mechanic. The difference matters for
-tuning:
+A **module** is one rules area (the adversary, threats, cards...). A **variant** is one
+way of doing it. The difference matters for tuning:
 
 | Change | Kind |
 |---|---|
 | A number inside a mechanic | **parameter**: config only, sweepable |
 | Another way of doing the mechanic | **variant**: code, selected by config |
 | A new mechanic | **module**: code, added to the config |
-| A card made of existing effect primitives | **content**: data only (`content/cards.json`) |
-| A new effect primitive or target rule | code (`content.rs`, plus the module that runs it) |
+| A card, threat, adversary card, AI board or country piece made of existing primitives | **content**: data only (`content/`) |
+| A new effect primitive or selector | code (`content.rs`, plus the module that runs it) |
 | A new kind of player action | code (`Action`); a structural change |
+
+The v0 modules are `board`, `adversary`, `threats`, `opposition`, `economy`, `ai` and
+`cards` (`crates/aic-core/src/modules/`); `common.rs` (board queries, piece names) and
+`effects.rs` (the player effect primitives) are shared code. Rules areas lean on each
+other, so modules call each other's public functions (a card's damage calls
+`adversary::damage`, which scores `opposition::for_kill`) and read each other's
+parameters through `World::int("<module>.<param>")`. A module lists the modules it reads
+in `ModuleDef::requires`; a config missing one is rejected.
 
 Each variant is a `VariantDef` (in `module.rs`), holding:
 
@@ -144,7 +161,7 @@ Each variant is a `VariantDef` (in `module.rs`), holding:
   to the round;
 - `rng`: the RNG purposes it draws from;
 - `uses_cards`: whether it plays content cards. If it does, every `{"param": ...}` in a
-  selected card becomes a required integer parameter of this module (0–1000);
+  selected card's cost becomes a required integer parameter of this module (0–1000);
 - `build`: turns validated params into a `Box<dyn Module>` with typed fields.
 
 A `Module` implements whichever of these hooks it needs:
@@ -153,48 +170,69 @@ A `Module` implements whichever of these hooks it needs:
 |---|---|
 | `setup` | Once, at `new_game`, before round 1. |
 | `round_start` | Start of every round, before its first phase. |
-| `run(phase)` | An `Auto` phase is reached. |
+| `run(phase)` | An `Auto` phase is reached. May ask choices. |
+| `begin(phase)` | A `Decision` phase is entered (seats un-passed). May pass seats with nothing to decide. |
 | `legal(phase, seat)` | A `Decision` phase: append the seat's non-pass actions. |
+| `can_pass(phase, seat)` | Whether the engine offers `Pass` (default yes; draft picks and growth say no, and the module passes the seat itself). |
 | `owns(phase, action)` | Whether a non-pass action is this module's (routing in combined phases). |
-| `act(phase, action)` | Validate and apply an owned action. On error, leave the state untouched. |
+| `act(phase, action)` | Validate and apply an owned action. May ask choices. On `Halt::Illegal` the engine restores the state. |
+| `after` | When an action or automatic phase finishes resolving (after the answer that completes it): standing checks (opposition levels, win and loss). May ask choices. |
 
 Modules change the state through `Cx`, which keeps the event log and counters
 consistent:
 
 - `add_tokens`, `add_resource`;
-- `exhaust`, `refresh` (cards; the owning module refreshes its own cards, the
-  placeholder in `round_start`);
-- `set_var` (emits `VarChanged`);
-- `adversary_ops`, `count`;
+- `move_card` (between piles, or to and from the box), `set_pile` (a shuffle);
+- `exhaust`, `refresh` (cards; the owning module refreshes its own cards);
+- `set_var` (this module's track), `set_key` / `add_key` (any track by full key);
+- `choose` (players choose, below), `note` (a log line);
+- `adversary_ops`, `count` (this module's counter), `tally` (any counter by full key);
 - `rng(purpose)`;
 - `end`.
 
-Counter and var names are namespaced `"<module>.<name>"` automatically.
+### Choices ("players choose")
+
+Every point where the rules say players choose (a ravage's loss order, a cascade target,
+the Momentum drone, a Panic destination, a card's target hex) is a choice in
+`legal_actions`, made by the team agent like any other action:
+
+- A module calls `cx.choose(seat, prompt, options)?` in the middle of resolving. With no
+  options it gets `None`; with one, that option without asking. Otherwise, the first time
+  through, the call stops resolution with `Halt::Ask`.
+- The engine then stores `GameState::pending`: the question, the answers so far, what
+  was being resolved (the phase, or the action) and a snapshot of the state before it.
+  The state shown is the partly resolved one. `legal_actions` is only the options, as
+  `Action::Choose { seat, option, target }` (a hex target makes it a hex pick in the
+  viewer); passing is not allowed.
+- An answer restores the snapshot and resolves the phase or action again from the start,
+  replaying the answers so far. So resolution code is written straight through, never
+  stores where it stopped, and must depend only on the state and the answers. Events
+  for the replayed part are not logged twice.
+- Answers are ordinary actions in the action log, so replay and records need nothing
+  extra.
+
+Counter and var names are namespaced `"<module>.<name>"`.
 
 ### The round
 
 The engine starts a round (round counter, then the `round_start` hooks), then walks
 `config.round`. It resolves each `Auto` phase immediately and stops at each `Decision`
-phase until every seat has passed. The game ends when a module calls `Cx::end`, or as a
-`round_limit` loss after 1000 rounds.
+phase until every seat has passed, and at every open choice. The game ends when a
+module calls `Cx::end`, or as a `round_limit` loss after 1000 rounds.
 
 **Decision phases are simultaneous.** Any seat may act in any order until all seats
 pass. One team agent drives every seat, and `legal_actions` lists all seats' actions
 together (seat by seat; within a seat, module by module in the order the round entry
-lists them, then the pass).
-
-A module's actions **must not create dependencies between seats**: one seat's action
-never changes what another seat may do or what its action does. Placeholder cards
-achieve this by targeting only the player's own country. The
-`simultaneous_actions_commute` test checks it for every variant (whole-state equality
-after x;y and y;x). A future help mechanic has to keep it, for example by having the
-helper spend only their own resources.
+lists them, then the pass if allowed). In v0, seats' actions may depend on each other
+(pooled threat counters, giving insight, the shared board): the placeholder-era rule
+that simultaneous actions commute was dropped, since the ruleset has players help each
+other. Order matters the way it does at a table where the team talks it through.
 
 ### Adding a variant
 
 1. In the module's file, add a `VariantDef` to its `DEF.variants`, with a build function
    and a `Module` impl. Shared behaviour can be one struct with an option, as
-   `spread::Spread` does.
+   `threats::Threats` (`shared`) and `opposition::Opposition` (`reward`) do.
 2. Add its parameters to a config in `configs/` and run
    `aic-sim compare configs/old.json configs/new.json`, or sweep it in place with
    `--set-b <module>.variant=<name> --set-b <module>.<new param>=...`.
@@ -207,34 +245,49 @@ helper spend only their own resources.
 2. Add `pub mod <id>;` and `&<id>::DEF` to `REGISTRY` in `modules/mod.rs`.
 3. Add it to configs: a module entry, plus its phases in `round` (its own entries, or
    `+`-combined with an existing decision phase).
-4. If it needs player input, reuse `Play`/`Pass` if it can (with `owns` claiming its
-   actions). Add an `Action` variant only if it can't.
-5. Make sure random games still replay and that simultaneous actions still commute
-   (extend `variant_matrix`), and document it in `docs/rules.md`.
+4. If it needs player input, reuse an `Action` if one fits (with `owns` claiming it)
+   and `cx.choose` for choices inside its resolution. Add an `Action` variant only if
+   neither fits.
+5. Make sure random games still replay (extend `variant_matrix` in `tests.rs`), and
+   document it in `docs/rules.md`.
 6. The viewer shows its tokens, resources, `vars` tracks and exhausted cards without
-   any work. Add a `view` hook only for derived values or card status (see
+   any work. Add a `view` hook for derived values, card groups and piles (see
    [The generic view](#the-generic-view)).
 
 ### Adding content
 
-Add a card to `content/cards.json` using existing `op`s (`gain`, `remove_tokens`,
-`place_tokens`) and target rules (`own_hex`). Write a number as `{"param": "name"}` to
-make it tunable from config. A literal is fixed until someone edits the content. Then
-list the card id in a module's `cards`. Actions and exhausted cards refer to cards by
-id, so reordering `cards.json` does not break action logs.
+Content is data in `content/`, composed from code primitives:
+
+- **Player cards** (`cards.json`): `effects` ([`Effect`]: on play, or when built),
+  `passives` ([`Passive`]: standing effects), an `ability` (once a round), `upkeep`,
+  `tags`, `needs`, a `tier` (0 for an AI's unique card). List the id in the `cards`
+  module's config `cards`. A cost written as `{"param": "name"}` becomes a tunable.
+- **Threats** (`threats.json`): `counter` costs and `effects` ([`ThreatOp`], with hex
+  `Selector`s).
+- **Adversary cards** (`adversary.json`): stage, terrains, escalation.
+- **AI boards** (`ais.json`): slots, innate passives, two tracks, growth options (lists of
+  `Effect`), unique cards.
+- **Country pieces** (`map.json`, `countries`): terrain rows, uplinks, setup hexes.
+
+Ids are unique across all content, and actions refer to content by id, so reordering a
+file does not break action logs. `Content::check` validates references, tags and
+resources when the content loads.
 
 ## Map
 
-`content/map.json` defines the piece (4×4 rhombus, 3 card slots) and one layout per
-country count. A placed piece covers `anchor + i·axes[0] + j·axes[1]` for `i, j` in
-`0..4`:
+`content/map.json` defines the piece shape (4×4 rhombus, 3 card slots), one layout per
+country count (1–4), and the four printed country pieces. A placed piece covers
+`anchor + i·axes[0] + j·axes[1]` for `i, j` in `0..4`:
 
 - `Map::build` derives hexes in country-then-piece order, so `state.hexes[i]` is
-  `map.hexes[i]`. It also derives neighbours (in `Dir::ALL` order) and each country's
-  hex list.
+  `map.hexes[i]`. It also derives neighbours (in `Dir::ALL` order), each country's hex
+  list, and each hex's printed number (`i·4 + j + 1`), terrain and uplink flag from the
+  country's piece (country *c* uses piece *c*).
 - Geometry is not in the state. UIs get it from `board(config)` in wasm.
-- The `layouts_match_the_reference_images` test pins the 3/4/5 layouts to the hex sets
-  read off the reference images.
+- The `layouts_match_the_reference_images` test pins the 3/4 layouts to the hex sets
+  read off the reference images; `country_pieces_follow_the_ruleset` checks the piece
+  constraints (terrain counts, uplinks on the outer edge, factories next to population)
+  in every layout.
 
 ## The generic view
 
@@ -244,11 +297,12 @@ web viewer draws only these:
 
 | Part | Holds | Filled by the engine |
 |---|---|---|
-| `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `tokens` (`{kind, count}`) | every token stack on every hex |
-| `countries[c]` | `colour`, `hexes`, `slots` (card strip), `values` | `tokens.<kind>` totals over the country |
+| `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `number`, `terrain`, `uplink`, `tokens` (`{kind, count}`) | every token stack on every hex |
+| `countries[c]` | `colour`, `hexes`, `slots` (card strip), `values`, `cards` (card groups, such as its threat) | `tokens.<kind>` totals over the country |
 | `seats[s]` | `passed`, `values`, `cards` (card groups) | `resource.<name>` per resource; exhausted cards no module shows, as group `engine.exhausted` |
 | `globals` | `values` of the whole game | every `vars` track, by its key |
-| `piles` | `{key, label, owner, count, visible}` | none yet: no module has piles |
+| `piles` | `{key, label, owner, count, visible}` | none: modules add them |
+| `choice` | `{seat, prompt}` of the open choice | when `pending` is set |
 | `round`, `phase`, `round_order`, `outcome` | where the game is | always |
 
 A **value** is `{key, label, value, max?, source, doc?}`. `max` is a limit to measure
@@ -267,16 +321,21 @@ derive:
   `"<module>.<key>"`. A global with a `vars` key replaces that track's generic entry.
 - `out.cards(seat, key, label, cards)`: a card group with each card's status. Cards it
   shows are no longer listed again under `engine.exhausted`.
-- `out.pile(key, label, owner, count, visible)`: an ordered pile, for the first module
-  that has one.
+- `out.country_cards(country, key, label, cards)`: a card group on a country.
+- `out.pile(key, label, owner, count, visible)`: an ordered pile.
 
-The placeholders show what this looks like:
+In v0:
 
-- `victory` adds round *n*/`rounds`, and blight / `overrun` per country.
-- `spread` adds this round's `per_country` (and `cap` for `cluster`).
-- `income` adds each country's income if collected now.
-- `actions` adds each seat's open cards as ready, used, unaffordable or no target,
-  with costs.
+- `adversary` adds the pipeline as piles (`deck` with any peeked cards, `explore`,
+  `build`, `ravage`, `discard`) and the corruption pool, stage and difficulty.
+- `threats` adds each country's threat (`threats.on`, status = counter progress such as
+  `1/2 energy`), or the shared row pile, and the tier dealt next.
+- `opposition` adds the track toward the next level, the level with its win condition,
+  and population against the loss threshold.
+- `ai` adds each seat's board, both tracks (current value; the doc lists what is under
+  processors), tier-2 unlock and processor count.
+- `economy` adds each seat's income per resource; `cards` adds hand, buildings
+  (`n/slots`), draft hand and drafted cards with statuses, tags, and the decks.
 
 The view is display data:
 
@@ -287,9 +346,9 @@ The view is display data:
 Two tests check it: `the_view_shows_every_hex_seat_country_and_module_value`, and
 `the_view_shows_state_no_module_describes` (unknown tokens, resources, vars, cards).
 
-**What the client assumes.** It draws hexes from `[q, r]`, tints them by country
-colour, and draws every token kind as a counter (blight has a set colour, other kinds
-get a hashed one). It offers actions as `legal_actions` lists them, grouped per seat:
+**What the client assumes.** It draws hexes from `[q, r]` by terrain, with the
+country colour, and draws token kinds it knows with their own glyph and any other kind
+as a counter. It offers actions as `legal_actions` lists them, grouped per seat:
 
 - Actions that differ only in a `target` hex become one button that arms a hex pick.
 - Every other action is its own button, labelled from its fields.
@@ -312,10 +371,11 @@ differ.
 - **Counters** in `GameState::stats`, deterministic and replayed:
   - `adversary_ops[r-1]`: adversary operations in round `r`, a proxy for table time;
   - `setup_ops`: adversary operations during setup;
-  - `actions`: player actions applied;
-  - `counters["<module>.<name>"]`: anything a module counts. The placeholders count
-    plays per card (pick/play rates), blight removed and placed (setup included), and
-    credits earned.
+  - `actions`: player actions applied, answered choices included;
+  - `counters["<module>.<name>"]`: anything a module counts. v0 counts cards kept,
+    played and used (per card), growth picks, threats dealt, countered and executed,
+    adversary pieces destroyed, population and buildings lost, corruption added,
+    processors placed, insight given and credit income.
 - **Outcome**: `won`, the `round` the game ended, a stable `reason` code for aggregation,
   and a human `detail`.
 - **Decisions** (`driver::play` → `GameRecord`): each applied action is one decision.
@@ -329,16 +389,15 @@ know the counter names in advance.
 
 ## Known gaps
 
-Left out on purpose until a real module needs them:
+Left out on purpose until something needs them:
 
-- **No ordered card piles.** There are no decks, discard piles or adversary queues in
-  the state, and nothing writes `Seat::slots` yet. The first module that draws cards
-  should add module-namespaced piles plus `Cx` helpers (`draw`, `shuffle(purpose)`,
-  `set_slot`) that emit events.
 - **`Event` is a closed enum**, and there are no interception hooks between modules
-  (such as "before blight is placed"). Modules interact only through shared state in
-  round order.
+  (such as "before a population is lost"); modules call each other's functions instead
+  (Civic Shelter is checked inside `adversary::lose_population`).
 - **Timed-out games** (the action cap) still count toward the round statistics.
   They're visible as `ended: timeout`.
-- **Old saved states**: `GameState` has no schema version (only `Stats` is
-  `#[serde(default)]`), so a state saved by an older engine may fail to load.
+- **Old saved states**: `GameState` has no schema version (only `Stats`, `piles` and
+  `pending` default), so a state saved by an older engine may fail to load. Records
+  (config + seed + actions) are the durable format.
+- **Snapshots cost**: every action and automatic phase clones the state first (the
+  snapshot a choice replays from). Fine at v0 speeds; a hot spot if sims need more.

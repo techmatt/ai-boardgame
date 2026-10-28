@@ -64,11 +64,25 @@ export interface CardView { id: string; name: string; text?: string; status: str
 export interface CardGroup { key: string; label: string; source: string; cards: CardView[] }
 export interface PileView { key: string; label: string; source: string; owner: number | null; count: number; visible: CardView[] }
 export interface Token { kind: string; count: number }
-export interface HexView { index: number; hex: Hex; country: number; piece_pos: [number, number]; neighbours: number[]; tokens: Token[] }
-export interface CountryView { index: number; seat: number; colour: string; hexes: number[]; slots: (CardView | null)[]; values: Value[] }
+export interface HexView {
+  index: number;
+  hex: Hex;
+  country: number;
+  piece_pos: [number, number];
+  neighbours: number[];
+  /** The printed hex number (1-16 on its piece). */
+  number: number;
+  /** `urban`, `industrial`, `network` or `frontier`. */
+  terrain: string;
+  /** A printed uplink, where the adversary enters. */
+  uplink: boolean;
+  tokens: Token[];
+}
+export interface CountryView { index: number; seat: number; colour: string; hexes: number[]; slots: (CardView | null)[]; values: Value[]; cards: CardGroup[] }
 export interface SeatView { index: number; country: number; passed: boolean; values: Value[]; cards: CardGroup[] }
 export interface PhaseInfo { name: string; kind: 'auto' | 'decision' }
 export interface PhaseView { index: number; name: string; kind: 'auto' | 'decision'; waiting: number[] }
+export interface ChoiceView { seat: number; prompt: string }
 export interface View {
   round: number;
   phase: PhaseView | null;
@@ -79,6 +93,8 @@ export interface View {
   seats: SeatView[];
   globals: Value[];
   piles: PileView[];
+  /** The open choice, if the rules are waiting for one. */
+  choice: ChoiceView | null;
 }
 
 // --- records (crates/aic-core/src/record.rs) ---
@@ -100,8 +116,18 @@ export interface GameRecord {
   config_error?: string;
 }
 
-export interface CardDef { id: string; name: string; text: string }
-export interface Content { cards: CardDef[] }
+export interface CardDef { id: string; name: string; text: string; cost?: unknown }
+export interface ThreatDef { id: string; name: string; tier: number; text: string; counter: [string, number][] }
+export interface AdversaryDef { id: string; name: string; stage: number; terrains: string[]; escalation?: boolean }
+export interface AiBoardDef {
+  id: string;
+  name: string;
+  text: string;
+  slots: number;
+  innate: { name: string; text: string };
+  growth: { name: string }[];
+}
+export interface Content { cards: CardDef[]; threats: ThreatDef[]; adversary: AdversaryDef[]; ais: AiBoardDef[] }
 
 /** A state as the engine produced it, plus a parsed copy for display. */
 export interface Snapshot { json: string; state: GameState }
@@ -165,3 +191,16 @@ export function checkRecord(text: string): { ok: boolean; warnings?: string[]; e
 }
 
 export const cardName = (id: string) => content.cards.find((c) => c.id === id)?.name ?? id;
+export const threatName = (id: string) => content.threats?.find((t) => t.id === id)?.name ?? id;
+
+/** A config parameter of a module, if the config has that module. */
+export function param(config: Config, module: string, name: string): number | number[] | undefined {
+  return config.modules.find((m) => m.module === module)?.params[name];
+}
+
+/** The AI board a seat plays (the `ai` module's `boards` list), if there is one. */
+export function aiBoard(config: Config, seat: number): AiBoardDef | undefined {
+  const boards = param(config, 'ai', 'boards');
+  if (!Array.isArray(boards) || !boards.length) return undefined;
+  return content.ais?.[boards[seat % boards.length]];
+}
