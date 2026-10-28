@@ -227,7 +227,12 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
     const cx = cp.reduce((s, p) => s + p[0], 0) / cp.length;
     const cy = cp.reduce((s, p) => s + p[1], 0) / cp.length;
     const g = el('g', { class: 'country-label', 'data-country': c.index });
-    g.append(el('text', { x: f(cx), y: f(cy), fill: strong(c.colour) }, `C${c.index}`));
+    // The piece's printed name, a word per line, centred on the piece.
+    const words = (c.name || `C${c.index}`).split(/\s+/);
+    words.forEach((w, i) => {
+      const dy = (i - (words.length - 1) / 2) * 0.62;
+      g.append(el('text', { x: f(cx), y: f(cy + dy), fill: strong(c.colour) }, w));
+    });
     labelLayer.append(g);
   }
 

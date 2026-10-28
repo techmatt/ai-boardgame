@@ -52,9 +52,18 @@ npm run e2e -- <record.json>    # browser check, dev server must be running (see
 - **Around the board:** the opposition bar (points to the next level, the level's win
   condition, adversary pieces left) and the loss conditions; the adversary pipeline
   (deck → explore → build → ravage → discard, with what each slot does this round);
-  the countries strip with each country's threat and its counter progress (or the
-  shared threat row). Raw `vars` that no module shows are folded under *Bookkeeping*
-  below the piles.
+  the countries strip with each country's name, its threat and its counter progress
+  (or the shared threat row). Country names (the printed pieces', from the view's
+  `countries[].name`) also label the board and the hover text.
+- **Seat panels:** the AI board's name (hover it for its text, innate rule, slots and
+  unique cards), resources with income, then the board's two tracks with every printed
+  step: solid steps are uncovered, dashed ones still under processors, the boxed one
+  is the value in effect, and green **T2** / pink **+n AM** marks are the tier-2 unlock
+  and antimatter income. Hover a step for its details. This is drawn from the generic
+  `seats[].board` shape, not from AI-specific keys.
+- **Globals** hold only game-wide tracks: modules keep per-seat and per-card
+  bookkeeping out of them (`ViewOut::bookkeeping`). A `vars` track no module labels is
+  folded under *Unlabelled tracks* below the piles; in v0 there are none.
 - **Undo** (Ctrl+Z) drops the last action. Every state is a replay of config + seed +
   actions, so undo never has to reverse anything.
 - **Timeline:** ⏮ ◀ ▶ ⏭, the slider, ← → Home End, and Space to auto-play. Clicking an
@@ -89,7 +98,8 @@ rules revision) and the saved outcome and final fingerprint. The engine writes i
 over the DevTools protocol, with no extra packages. Point it at the dev server with
 `AIC_URL` (default `http://localhost:5173/`), and at a browser with `AIC_BROWSER` if it
 isn't at the usual path. It checks the board drawing (terrain fills, borders,
-uplinks), the pipeline, opposition bar and threats, then plays a game to the end by
+uplinks), the pipeline, opposition bar and threats, country names, each seat's AI board
+with two tracks, and that no bookkeeping var is among the globals, then plays a game to the end by
 clicking any action button (and a highlighted hex for hex choices), then checks the
 following:
 

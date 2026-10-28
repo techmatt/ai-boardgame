@@ -78,8 +78,36 @@ export interface HexView {
   uplink: boolean;
   tokens: Token[];
 }
-export interface CountryView { index: number; seat: number; colour: string; hexes: number[]; slots: (CardView | null)[]; values: Value[]; cards: CardGroup[] }
-export interface SeatView { index: number; country: number; passed: boolean; values: Value[]; cards: CardGroup[] }
+export interface CountryView {
+  index: number;
+  /** The printed country piece's name (content/map.json). */
+  name: string;
+  seat: number;
+  colour: string;
+  hexes: number[];
+  slots: (CardView | null)[];
+  values: Value[];
+  cards: CardGroup[];
+}
+/** Something printed on a track step; known keys: `tier2`, `antimatter`. */
+export interface TrackMark { key: string; label: string; doc?: string }
+export interface TrackStep { value: number; marks?: TrackMark[] }
+/** A printed track: the leftmost `uncovered` steps show, `current` is in effect. */
+export interface TrackView { label: string; resource?: string; steps: TrackStep[]; uncovered: number; current: number }
+/** A player board, whatever module shows it. */
+export interface BoardView {
+  key: string;
+  source: string;
+  id: string;
+  name: string;
+  text?: string;
+  innate?: { name: string; text?: string };
+  tracks: TrackView[];
+  slots?: number;
+  /** Cards belonging to the board, `status` saying where each is now. */
+  cards: CardView[];
+}
+export interface SeatView { index: number; country: number; passed: boolean; values: Value[]; cards: CardGroup[]; board: BoardView | null }
 export interface PhaseInfo { name: string; kind: 'auto' | 'decision' }
 export interface PhaseView { index: number; name: string; kind: 'auto' | 'decision'; waiting: number[] }
 export interface ChoiceView { seat: number; prompt: string }

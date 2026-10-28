@@ -83,8 +83,7 @@ export function statusHtml(v: View): string {
     const danger = deck.value <= 1 ? ' danger' : '';
     loss.push(`<span class="value${danger}" data-value="${deck.key}" data-scope="global"><span class="label">adversary deck</span> <b>${deck.value}</b><small> left (lose if empty)</small></span>`);
   }
-  // Raw `vars` (source "engine": `ai.track.0.1`, `threats.paid.<id>.<c>.<r>`) are module
-  // bookkeeping the panels already show through module values: see `varsHtml`.
+  // Unlabelled `vars` (source "engine") are folded under the piles: see `varsHtml`.
   const other = g.filter((x) => !DRAWN_GLOBALS.has(x.key) && x.source !== 'engine').map((x) => valueChip(x, 'global'));
   if (loss.length || other.length) {
     parts.push(`<div class="losses">${loss.length ? `<span class="what">Lose if</span>${loss.join('')}` : ''}${other.length ? `<span class="sep"></span>${other.join('')}` : ''}</div>`);
@@ -173,7 +172,7 @@ function threatCard(c: CardView, where: string): string {
 export function countriesHtml(v: View, config: Config): string {
   const boxes = v.countries.map((c) => {
     const seat = v.seats.find((s) => s.country === c.index);
-    const ai = seat ? aiBoard(config, seat.index)?.name : undefined;
+    const ai = seat ? seat.board?.name ?? aiBoard(config, seat.index)?.name : undefined;
     const tok = (k: string) => findValue(c.values, `tokens.${k}`)?.value ?? 0;
     const counts = `<span class="counts" title="population · adversary pieces in this country">pop ${tok('population')} · ▲${tok('drone')} ■${tok('outpost')} ⬣${tok('foundry')}${tok('corruption') ? ` · corruption ${tok('corruption')}` : ''}</span>`;
     const flags = c.values.filter((x) => !x.key.startsWith('tokens.')).map((x) => valueChip(x, `country:${c.index}`)).join('');
@@ -181,7 +180,7 @@ export function countriesHtml(v: View, config: Config): string {
       ? g.cards.map((x) => threatCard(x, `country:${c.index}:${g.key}`)).join('')
       : `<div class="row"><span class="what">${esc(g.label)}</span>${g.cards.map((x) => cardChip(x, `country:${c.index}:${g.key}`)).join('')}</div>`).join('');
     return `<div class="country" data-country="${c.index}" style="--tint:${strong(c.colour)};--soft:${c.colour}">
-      <div class="chead"><b>C${c.index}</b>${seat ? ` seat ${seat.index}${ai ? ` · ${esc(ai)}` : ''}` : ''} ${counts}${flags}</div>
+      <div class="chead"><b title="country ${c.index}">${esc(countryName(v, c.index))}</b>${seat ? ` seat ${seat.index}${ai ? ` · ${esc(ai)}` : ''}` : ''} ${counts}${flags}</div>
       ${groups || '<div class="none">no threat</div>'}</div>`;
   });
   const row = pile(v, 'threats.row');
@@ -203,9 +202,9 @@ export function legendHtml(): string {
 // ---------- seat panels ----------
 
 const SEAT_DRAWN = (k: string) =>
-  k.startsWith('resource.') || k.startsWith('economy.income.') || ['ai.board', 'ai.track0', 'ai.track1', 'ai.tier2', 'ai.processors', 'cards.slots'].includes(k);
+  k.startsWith('resource.') || k.startsWith('economy.income.') || ['ai.tier2', 'ai.processors', 'cards.slots'].includes(k);
 
-/** The seat's resources with income, its AI board and tracks, then other values. */
+/** The seat's resources with income, its board's tracks, then other values. */
 export function seatValuesHtml(v: View, seatIndex: number): string {
   const s = v.seats[seatIndex];
   const scope = `seat:${seatIndex}`;
@@ -225,13 +224,6 @@ export function seatValuesHtml(v: View, seatIndex: number): string {
   }).join('');
 
   const ai: string[] = [];
-  for (const t of ['ai.track0', 'ai.track1']) {
-    const x = findValue(s.values, t);
-    if (!x) continue;
-    const under = /under processors:\s*(.*)$/.exec(x.doc ?? '')?.[1] ?? '';
-    const next = under && under !== 'none' ? under.split(',').map((u) => `<i>${esc(u.trim())}</i>`).join('') : '<i>—</i>';
-    ai.push(`<span class="track" data-value="${t}" data-scope="${scope}"><span class="label">${esc(x.label.replace(' track', ''))}</span> <b>${x.value}</b><span class="under" title="values still under processors">${next}</span></span>`);
-  }
   const t2 = findValue(s.values, 'ai.tier2');
   if (t2) ai.push(`<span class="value t2 ${t2.value ? 'on' : 'off'}" data-value="ai.tier2" data-scope="${scope}">tier 2 ${t2.value ? 'unlocked' : 'locked'}</span>`);
   const pr = findValue(s.values, 'ai.processors');
@@ -243,8 +235,50 @@ export function seatValuesHtml(v: View, seatIndex: number): string {
     ai.push(`<span class="value" data-value="cards.slots" data-scope="${scope}"><span class="label">slots</span> <b>${used}<small>/${slots.value}</small></b></span>`);
   }
   const other = s.values.filter((x) => !SEAT_DRAWN(x.key)).map((x) => valueChip(x, scope)).join('');
-  return `<div class="resources">${resHtml}</div><div class="values ai">${ai.join('')}${other}</div>`;
+  return `<div class="resources">${resHtml}</div>${boardHtml(v, seatIndex)}<div class="values ai">${ai.join('')}${other}</div>`;
 }
+
+/**
+ * The seat's player board (`SeatView.board`): one row per track, every printed step
+ * left to right. Uncovered steps are solid, covered ones dashed, the step in effect
+ * is boxed; marks (`tier2`, `antimatter`, any other) sit under the step's value.
+ */
+export function boardHtml(v: View, seatIndex: number): string {
+  const b = v.seats[seatIndex].board;
+  if (!b) return '';
+  const tracks = b.tracks.map((t, ti) => {
+    const steps = t.steps.map((st, i) => {
+      const cls = ['step', i < t.uncovered ? 'open' : 'covered', i === t.current ? 'current' : ''].filter(Boolean).join(' ');
+      const marks = (st.marks ?? []).map((m) => `<span class="mark m-${esc(m.key)}" title="${esc(m.doc ?? m.key)}">${esc(m.label)}</span>`).join('');
+      return `<span class="${cls}" data-track="${seatIndex}:${ti}:${i}"><b>${st.value}</b>${marks}</span>`;
+    }).join('');
+    return `<div class="track-row"><span class="label" title="${esc(t.label)}">${esc(t.resource || t.label)}</span>${steps}</div>`;
+  }).join('');
+  return `<div class="board" data-board="${seatIndex}">${tracks}</div>`;
+}
+
+/** Hover text for a track step drawn by `boardHtml` (`data-track="seat:track:step"`). */
+export function trackStepDetails(v: View, ref: string): string | null {
+  const [s, t, i] = ref.split(':').map(Number);
+  const b = v.seats[s]?.board;
+  const tr = b?.tracks[t];
+  const st = tr?.steps[i];
+  if (!b || !tr || !st) return null;
+  const state = i === tr.current ? 'in effect' : i < tr.uncovered ? 'uncovered' : 'still covered';
+  const marks = (st.marks ?? []).map((m) => `<br>${esc(m.label)}: ${esc(m.doc ?? m.key)}`).join('');
+  return `<b>${esc(tr.label)}</b>, step ${i + 1} of ${tr.steps.length}: <b>${st.value}</b> (${state})${marks}<br>${tr.uncovered} uncovered · <code>${esc(b.key)}</code> · from ${esc(b.source)}`;
+}
+
+/** Hover text for a seat's board name. */
+export function boardDetails(v: View, seatIndex: number): string | null {
+  const b = v.seats[seatIndex]?.board;
+  if (!b) return null;
+  const cards = b.cards.map((c) => `${esc(c.name)} <small>(${esc(c.status)})</small>`).join('<br>');
+  return `<b>${esc(b.name)}</b> <code>${esc(b.id)}</code>${b.text ? `<br>${esc(b.text)}` : ''}${b.innate ? `<hr><b>${esc(b.innate.name)}</b>${b.innate.text ? `: ${esc(b.innate.text)}` : ''}` : ''}${b.slots !== undefined ? `<br>${b.slots} slots printed` : ''}${cards ? `<hr>board cards:<br>${cards}` : ''}<br><small><code>${esc(b.key)}</code> · from ${esc(b.source)}</small>`;
+}
+
+/** "Coastal Republic", or `C<i>` if the view has no name. */
+export const countryName = (v: View, i: number) => v.countries[i]?.name || `C${i}`;
 
 const GROUP_LABEL: Record<string, string> = {
   'cards.hand': 'hand',
@@ -264,11 +298,16 @@ export function seatCardsHtml(v: View, seatIndex: number): string {
   }).join('');
 }
 
-/** Raw `vars` tracks no module shows itself, folded away under the piles. */
+/**
+ * Game-wide `vars` tracks that no module labels (source "engine"), folded away under
+ * the piles. Modules keep their per-seat and per-card bookkeeping out of the globals
+ * (`ViewOut::bookkeeping` in view.rs), so in v0 this is normally empty; a new module's
+ * unlabelled track shows here.
+ */
 export function varsHtml(v: View, open: boolean): string {
   const raw = v.globals.filter((x) => x.source === 'engine' && !DRAWN_GLOBALS.has(x.key));
   if (!raw.length) return '';
-  return `<details id="vars"${open ? ' open' : ''}><summary>Bookkeeping (${raw.length} raw vars)</summary><div class="values">${raw.map((x) => valueChip(x, 'global', x.label, false)).join('')}</div></details>`;
+  return `<details id="vars"${open ? ' open' : ''}><summary>Unlabelled tracks (${raw.length} raw vars)</summary><div class="values">${raw.map((x) => valueChip(x, 'global', x.label, false)).join('')}</div></details>`;
 }
 
 // ---------- other piles ----------

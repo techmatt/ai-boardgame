@@ -6,10 +6,19 @@
 //!
 //! The weights are agent parameters, not rules: they live in [`Weights`]
 //! and an experiment can override any of them (`greedy:w.pool=20`).
+//!
+//! **Horizon mode** (`w.horizon` > 0; the `engine` agent's default): income
+//! and buildings are valued by what they will pay over the rounds the game
+//! is expected to last ([`Eval::rounds_left`]: the adversary deck's clock,
+//! cut short by how soon the team is on course to win and by the danger it
+//! is in), not by a flat weight; a card in hand is valued by whether it can
+//! be paid for before the game ends; and resources lose their value as the
+//! end nears (nothing is left to buy).
 
 use std::collections::BTreeMap;
 
-use aic_core::modules::{adversary, ai, board, cards, opposition, threats};
+use aic_core::content::{Passive, RESOURCES};
+use aic_core::modules::{adversary, ai, board, cards, economy, opposition, threats};
 use aic_core::{GameState, Rules};
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +76,35 @@ pub struct Weights {
     pub forecast: f64,
     /// Share of the next round's ravage (the build-slot card) counted now.
     pub forecast_next: f64,
+    /// Horizon mode, when above 0: each unit of income (AI tracks,
+    /// buildings, rewards) is worth `horizon` × the resource's own weight ×
+    /// the rounds left, replacing `income`. 0 = the flat weights above.
+    pub horizon: f64,
+    /// Horizon mode: opposition points the team is assumed to gain per round
+    /// before it has a record of its own (round 1), for the win estimate.
+    pub opp_rate: f64,
+    /// Horizon mode: rounds a win needs after the opposition bar is reached
+    /// (clearing the last foundries).
+    pub win_lag: f64,
+    /// Horizon mode: chance of losing per round per unit of danger (an
+    /// unpaid threat per country, a pool or population at its edge); the
+    /// rounds left are the expected survival over the clock.
+    pub risk: f64,
+    /// Horizon mode: per round left, a building that pays no income (an
+    /// ability, a discount, protection), on top of `built`.
+    pub ability: f64,
+    /// Horizon mode: resources keep their full value only while at least
+    /// this many rounds are left, then fall toward 0 (nothing left to buy).
+    pub spend_horizon: f64,
+    /// Horizon mode: a tier-2 card in hand before tier 2 is unlocked counts
+    /// this share of its value.
+    pub locked: f64,
+    /// Horizon mode: production (working factories' credits, processors'
+    /// compute) counts this share of income over the rounds left.
+    pub production: f64,
+    /// Horizon mode, when above 0: cards in hand wait their turn for
+    /// insight (each needs the insight of the cards before it too).
+    pub insight_wait: f64,
 }
 
 impl Default for Weights {
@@ -105,11 +143,37 @@ impl Default for Weights {
             defense: 0.5,
             forecast: 0.9,
             forecast_next: 0.3,
+            horizon: 0.0,
+            opp_rate: 2.0,
+            win_lag: 1.0,
+            risk: 0.1,
+            ability: 0.5,
+            spend_horizon: 2.0,
+            locked: 0.5,
+            // 008 sweep (d4, 96 seeds): 1 won 65.6%, 0 won 72.9% (greedy 68.8%).
+            production: 0.0,
+            // 008: on, it cut the engine to 4% wins at d4 (96 games): spending
+            // insight on one card lowered every other card's chance, so
+            // playing anything looked costly. Off until it is modelled per round.
+            insight_wait: 0.0,
         }
     }
 }
 
 impl Weights {
+    /// The `engine` agent's defaults: horizon mode, with hand and building
+    /// weights that no longer stand in for the future (008 sweep).
+    pub fn engine() -> Weights {
+        Weights {
+            horizon: 1.0,
+            hand: 1.0,
+            hand_cost: 0.2,
+            built: 1.0,
+            built_cost: 0.0,
+            ..Weights::default()
+        }
+    }
+
     /// Sets one weight by name; false if there is no such weight.
     pub fn set(&mut self, name: &str, v: f64) -> bool {
         let mut map = match serde_json::to_value(&*self) {
@@ -204,7 +268,6 @@ impl Eval {
                 -w.win
             };
         }
-        let world = rules.world();
         let mut v = 0.0;
         let (mut drones, mut outposts, mut foundries, mut pop, mut corruption) =
             (0i64, 0i64, 0i64, 0i64, 0i64);
@@ -260,30 +323,12 @@ impl Eval {
             + w.data_centre * dcs as f64
             + w.processor * processors as f64;
         v += w.defense * defense as f64;
-        for s in 0..self.seats {
-            let res = |k: &str| g.resource(s, k) as f64;
-            v += w.credits * res("credits")
-                + w.compute * res("compute")
-                + w.energy * res("energy")
-                + w.antimatter * res("antimatter")
-                + w.insight * res("insight");
-            for (r, n) in ai::track_income(&world, g, s) {
-                let unit = match r.as_str() {
-                    "antimatter" => 3.0,
-                    "insight" => 1.5,
-                    _ => 1.0,
-                };
-                v += w.income * unit * n as f64;
-            }
-            for id in g.pile(&format!("cards.hand.{s}")) {
-                v += w.hand + w.hand_cost * self.cost(id);
-            }
-            for id in g.pile(&format!("cards.drafted.{s}")) {
-                v += w.drafted * (w.hand + w.hand_cost * self.cost(id));
-            }
-            for id in g.pile(&format!("cards.built.{s}")) {
-                v += w.built + w.built_cost * self.cost(id);
-            }
+        // Added in place, term by term, so the flat agents' values (and so
+        // their games) are bit-for-bit what they were before horizon mode.
+        if w.horizon > 0.0 {
+            self.horizon_value(rules, g, &mut v);
+        } else {
+            self.flat_value(rules, g, &mut v);
         }
         // The coming ravages are public (the ravage and build slots): what
         // they would cost if the table stayed as it is.
@@ -297,6 +342,16 @@ impl Eval {
                 }
             }
         }
+        for share in self.unpaid_threats(rules, g) {
+            v -= w.threat * share;
+        }
+        v
+    }
+
+    /// Each active threat's share still unpaid.
+    fn unpaid_threats(&self, rules: &Rules, g: &GameState) -> Vec<f64> {
+        let world = rules.world();
+        let mut out = Vec::new();
         for (t, _) in threats::active(g) {
             let req: i64 = threats::requirement(&world, g, &t)
                 .iter()
@@ -312,9 +367,179 @@ impl Eval {
                 .take_while(|(k, _)| k.starts_with(&prefix))
                 .map(|(_, &n)| n)
                 .sum();
-            v -= w.threat * (1.0 - (paid as f64 / req as f64).min(1.0));
+            out.push(1.0 - (paid as f64 / req as f64).min(1.0));
         }
-        v
+        out
+    }
+
+    /// The rounds of income still to come, as the table reads: the adversary
+    /// deck's clock (a card is revealed each round; an empty deck at a
+    /// reveal loses), cut short by when the team is on course to win
+    /// (opposition still needed at its rate so far, plus `win_lag`), then
+    /// the expected rounds survived at a per-round loss chance of `risk` per
+    /// unit of danger (unpaid threats per country, the pool or population at
+    /// its edge).
+    pub fn rounds_left(&self, rules: &Rules, g: &GameState) -> f64 {
+        let w = &self.w;
+        let clock = g.pile(adversary::DECK).len() as f64;
+        let points = g.var(opposition::POINTS) as f64;
+        let bar = (self.per_level * (self.max_level - 1).max(1)) as f64;
+        // Points held may include this round's, so this round counts as played.
+        let rate = if g.round > 1 {
+            (points / g.round as f64).max(w.opp_rate * 0.25)
+        } else {
+            w.opp_rate
+        }
+        .max(0.1);
+        let to_win = ((bar - points).max(0.0) / rate).ceil() + w.win_lag;
+        let rounds = clock.min(to_win).max(0.0);
+        let world = rules.world();
+        let countries = world.map.countries.len().max(1) as f64;
+        let mut danger = self.unpaid_threats(rules, g).iter().sum::<f64>() / countries;
+        if g.var(adversary::POOL) <= 4 {
+            danger += 0.5;
+        }
+        let start = g.var(board::START_POPULATION);
+        let safe = (start * self.loss_percent + 99) / 100;
+        let pop: i64 = g.hexes.iter().map(|h| h.tokens.get("population").copied().unwrap_or(0)).sum();
+        if pop - safe <= 2 {
+            danger += 0.5;
+        }
+        let p = (1.0 - w.risk * danger).clamp(0.0, 1.0);
+        // Sum of p^k for k = 1..=rounds, with a fractional last round.
+        let mut total = 0.0;
+        let mut surv = 1.0;
+        let mut k = 0.0;
+        while k < rounds {
+            surv *= p;
+            total += surv * (rounds - k).min(1.0);
+            k += 1.0;
+        }
+        total
+    }
+
+    /// Per-seat resources, income, hands and buildings, by flat weights.
+    fn flat_value(&self, rules: &Rules, g: &GameState, v: &mut f64) {
+        let w = &self.w;
+        let world = rules.world();
+        for s in 0..self.seats {
+            let res = |k: &str| g.resource(s, k) as f64;
+            *v += w.credits * res("credits")
+                + w.compute * res("compute")
+                + w.energy * res("energy")
+                + w.antimatter * res("antimatter")
+                + w.insight * res("insight");
+            for (r, n) in ai::track_income(&world, g, s) {
+                let unit = match r.as_str() {
+                    "antimatter" => 3.0,
+                    "insight" => 1.5,
+                    _ => 1.0,
+                };
+                *v += w.income * unit * n as f64;
+            }
+            for id in g.pile(&format!("cards.hand.{s}")) {
+                *v += w.hand + w.hand_cost * self.cost(id);
+            }
+            for id in g.pile(&format!("cards.drafted.{s}")) {
+                *v += w.drafted * (w.hand + w.hand_cost * self.cost(id));
+            }
+            for id in g.pile(&format!("cards.built.{s}")) {
+                *v += w.built + w.built_cost * self.cost(id);
+            }
+        }
+    }
+
+    /// Per-seat resources, income, hands and buildings in horizon mode.
+    fn horizon_value(&self, rules: &Rules, g: &GameState, out: &mut f64) {
+        let w = &self.w;
+        let world = rules.world();
+        let left = self.rounds_left(rules, g);
+        // Factories' credits and processors' compute, if upkeep came now.
+        let prod = economy::production(&world, g);
+        // Resources fade once fewer than `spend_horizon` rounds are left.
+        let fade = if w.spend_horizon > 0.0 {
+            ((left + 1.0) / w.spend_horizon).min(1.0)
+        } else {
+            1.0
+        };
+        let unit = [w.credits, w.compute, w.energy, w.antimatter, w.insight];
+        let mut v = 0.0;
+        for s in 0..self.seats {
+            let res = |k: &str| g.resource(s, k);
+            // Insight is reset each round, so what is held now only counts this round.
+            for (i, r) in RESOURCES.iter().enumerate() {
+                v += fade * unit[i] * res(r) as f64;
+            }
+            // Income (tracks, buildings with income passives, rewards) over
+            // the rounds left, less building upkeep; production counts
+            // `production` of that.
+            let mut income = economy::income(&world, g, s);
+            for id in g.pile(&cards::built(s)) {
+                for (r, n) in &cards::def(&world, id).upkeep {
+                    if let Some(i) = RESOURCES.iter().position(|x| x == r) {
+                        income[i] -= n;
+                    }
+                }
+            }
+            for (i, n) in income.iter().enumerate() {
+                v += w.horizon * left * unit[i] * *n as f64;
+            }
+            let (pc, pm) = prod.get(s).copied().unwrap_or((0, 0));
+            v += w.horizon * w.production * left * (unit[0] * pc as f64 + unit[1] * pm as f64);
+            for id in g.pile(&cards::built(s)) {
+                let d = cards::def(&world, id);
+                let pays = d.passives.iter().any(|p| {
+                    matches!(
+                        p,
+                        Passive::Income { .. } | Passive::IncomePerTag { .. } | Passive::IncomeIfTags { .. }
+                    )
+                });
+                v += w.built + w.built_cost * self.cost(id);
+                if !pays {
+                    v += w.ability * left;
+                }
+            }
+            // A card in hand is worth its value times the chance of paying
+            // for it before the game ends, from what the seat has and earns
+            // (factory credits included). Insight is spent one card at a
+            // time: each card waits for the insight the cards before it in
+            // hand take.
+            let tier2 = ai::tier2(&world, g, s);
+            let earn_credits = income[0] + pc;
+            let mut insight_queue = 0i64;
+            let mut play = |id: &str| -> f64 {
+                let d = cards::def(&world, id);
+                let mut p = 1.0;
+                let insight = world.amount(&d.insight);
+                insight_queue += insight;
+                let insight_need = if w.insight_wait > 0.0 { insight_queue } else { 0 };
+                for (have, need, earn) in [
+                    (res("credits"), cards::play_cost(&world, g, s, d), earn_credits),
+                    (res("antimatter"), world.amount(&d.antimatter), income[3]),
+                    (res("insight"), insight_need, income[4]),
+                ] {
+                    let short = need - have;
+                    if short > 0 {
+                        if earn <= 0 {
+                            return 0.0;
+                        }
+                        let rounds = (short as f64 / earn as f64).ceil();
+                        p = f64::min(p, (1.0 - rounds / (left + 1.0)).max(0.0));
+                    }
+                }
+                if d.tier == 2 && !tier2 {
+                    p *= w.locked;
+                }
+                p * (w.hand + w.hand_cost * self.cost(id))
+            };
+            for id in g.pile(&cards::hand(s)) {
+                v += play(id);
+            }
+            for id in g.pile(&format!("cards.drafted.{s}")) {
+                v += w.drafted * play(id);
+            }
+        }
+        *out += v;
     }
 
     /// What a ravage with adversary card `id` would cost now, in heuristic

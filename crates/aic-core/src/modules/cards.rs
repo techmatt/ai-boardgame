@@ -722,7 +722,13 @@ impl Module for Cards {
             if t > 0 {
                 out.seat(s, "draft_tier", "drafting tier", t, None, "the tier you are dealt from this round");
             }
+            if g.var(&civic_used(s)) > 0 {
+                out.seat(s, "civic_used", "civic shelter used", 1, None, "your Civic Shelter has saved a population this round");
+            }
         }
+        // Per-seat markers: shown above as seat values, card status
+        // (`unpowered`) or the draft piles (`picked`).
+        out.bookkeeping(&["cards.tier.", "cards.picked.", "cards.next_discount.", "cards.civic_used.", "cards.unpowered."]);
         for tier in [1u8, 2] {
             out.pile(&format!("deck.{tier}"), &format!("Tier-{tier} deck"), None, g.pile(&deck(tier)).len(), Vec::new());
             let d = g.pile(&discard_pile(tier));

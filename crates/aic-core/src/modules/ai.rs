@@ -8,10 +8,10 @@ use crate::module::{
     World,
 };
 use crate::state::GameState;
-use crate::view::ViewOut;
+use crate::view::{BoardView, CardView, InnateView, TrackMark, TrackStep, TrackView, ViewOut};
 
 use super::common::*;
-use super::effects;
+use super::{cards, effects};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "ai",
@@ -214,40 +214,86 @@ impl Module for Ai {
     }
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
+        // The track positions are shown on the board below.
+        out.bookkeeping(&["ai.track."]);
         for s in 0..g.seats.len() {
             let b = board(w, s);
-            out.seat(s, "board", b.name.as_str(), board_index(w, s) as i64, None, &b.text);
-            for t in 0..2 {
-                let (tr, p) = track_value(w, g, s, t);
-                let rest: Vec<String> = tr.values[p + 1..]
-                    .iter()
-                    .map(|v| {
-                        let mut x = format!("{}", v.value);
-                        if v.tier2 {
-                            x.push_str("+T2");
-                        }
-                        if v.antimatter > 0 {
-                            x.push_str(&format!("+{}am", v.antimatter));
-                        }
-                        x
-                    })
-                    .collect();
-                let doc = format!(
-                    "{} track: {} uncovered of {}; under processors: {}",
-                    tr.resource,
-                    p + 1,
-                    tr.values.len(),
-                    if rest.is_empty() { "none".to_string() } else { rest.join(", ") }
-                );
-                out.seat(
-                    s,
-                    &format!("track{t}"),
-                    &format!("{} track", tr.resource),
-                    tr.values[p].value,
-                    None,
-                    &doc,
-                );
-            }
+            let tracks = (0..b.tracks.len().min(2))
+                .map(|t| {
+                    let (tr, p) = track_value(w, g, s, t);
+                    TrackView {
+                        label: format!("{} track", tr.resource),
+                        resource: tr.resource.clone(),
+                        steps: tr
+                            .values
+                            .iter()
+                            .map(|v| {
+                                let mut marks = Vec::new();
+                                if v.tier2 {
+                                    marks.push(TrackMark {
+                                        key: "tier2".into(),
+                                        label: "T2".into(),
+                                        doc: "uncovering this unlocks tier 2".into(),
+                                    });
+                                }
+                                if v.antimatter > 0 {
+                                    marks.push(TrackMark {
+                                        key: "antimatter".into(),
+                                        label: format!("+{} AM", v.antimatter),
+                                        doc: format!("{} antimatter income while this is the current value", v.antimatter),
+                                    });
+                                }
+                                TrackStep { value: v.value, marks }
+                            })
+                            .collect(),
+                        uncovered: p + 1,
+                        current: p,
+                    }
+                })
+                .collect();
+            let (hand, built) = (cards::hand(s), cards::built(s));
+            let unique = b
+                .cards
+                .iter()
+                .map(|id| {
+                    let status = if g.pile(&hand).contains(id) {
+                        "in hand"
+                    } else if g.pile(&built).contains(id) {
+                        "built"
+                    } else {
+                        "gone"
+                    };
+                    let (name, text) = match w.content.card_index(id) {
+                        Some(i) => (w.content.cards[i].name.clone(), w.content.cards[i].text.clone()),
+                        None => (id.clone(), String::new()),
+                    };
+                    CardView {
+                        id: id.clone(),
+                        name,
+                        text,
+                        status: status.into(),
+                        cost: None,
+                    }
+                })
+                .collect();
+            out.board(
+                s,
+                "board",
+                BoardView {
+                    key: String::new(),
+                    source: String::new(),
+                    id: b.id.clone(),
+                    name: b.name.clone(),
+                    text: b.text.clone(),
+                    innate: Some(InnateView {
+                        name: b.innate.name.clone(),
+                        text: b.innate.text.clone(),
+                    }),
+                    tracks,
+                    slots: Some(b.slots),
+                    cards: unique,
+                },
+            );
             out.seat(
                 s,
                 "tier2",
@@ -266,9 +312,4 @@ impl Module for Ai {
             );
         }
     }
-}
-
-fn board_index(w: &World, seat: usize) -> usize {
-    let list = w.list("ai.boards");
-    list[seat % list.len()] as usize
 }

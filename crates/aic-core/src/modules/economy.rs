@@ -118,6 +118,17 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; 5] {
     out
 }
 
+/// Production per seat if upkeep came now: (credits from working factories,
+/// compute from processors on working data centres).
+pub fn production(w: &World, g: &GameState) -> Vec<(i64, i64)> {
+    Economy {
+        factory_credits: w.int("economy.factory_credits"),
+        processor_compute: w.int("economy.processor_compute"),
+        give_insight: 0,
+    }
+    .production(w, g)
+}
+
 impl Economy {
     /// Production per seat: (credits from factories, compute from processors).
     fn production(&self, w: &World, g: &GameState) -> Vec<(i64, i64)> {
@@ -231,6 +242,7 @@ impl Module for Economy {
                 out.seat(s, &format!("income.{r}"), &format!("+{r}"), n, None, doc);
             }
         }
+        out.bookkeeping(&[BONUS_INSIGHT]);
         if g.var(BONUS_INSIGHT) > 0 {
             out.global("bonus_insight", "insight next round", g.var(BONUS_INSIGHT), None, "every player gains this next round");
         }

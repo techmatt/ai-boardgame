@@ -1,5 +1,10 @@
 # First ruleset (v0): the design draft
 
+> **Frozen snapshot. Not the current rules.** This is the v0 design draft exactly as
+> it was handed over, and it is never updated: not for defaults the engine chose, not
+> for deviations, not for later rules changes. **[docs/rules.md](rules.md) is what the
+> code implements.** Read this file only to check rules.md against the original draft.
+
 The ruleset as handed over for implementation (queue item 004), kept verbatim so the
 defaults and deviations in [rules.md](rules.md) can be checked against it. It is a
 draft to mark up; **rules.md, not this file, says what the code does.**

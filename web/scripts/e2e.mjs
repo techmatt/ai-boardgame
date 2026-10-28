@@ -137,6 +137,29 @@ try {
   check(panels.pipeline >= 4 && panels.opposition, `adversary pipeline (${panels.pipeline} boxes) and opposition bar drawn`);
   check(panels.threats > 0, `${panels.threats} threats shown with their countries`);
 
+  // Country names, the AI boards' tracks, and no per-seat bookkeeping among the globals.
+  const named = await js(`(() => {
+    const v = window.aic.view;
+    const label = [...document.querySelectorAll('#board .country-label')].map((g) => g.textContent).join('|');
+    const strip = [...document.querySelectorAll('#countries .chead > b')].map((b) => b.textContent);
+    const boards = v.seats.map((s) => s.board ? s.board.tracks.map((t) => t.steps.length) : null);
+    const rows = [...document.querySelectorAll('.seat .board')].map((b) => ({
+      rows: b.querySelectorAll('.track-row').length, steps: b.querySelectorAll('.step').length,
+      open: b.querySelectorAll('.step.open').length, current: b.querySelectorAll('.step.current').length,
+      t2: b.querySelectorAll('.mark.m-tier2').length }));
+    const keys = v.globals.map((x) => x.key);
+    return { names: v.countries.map((c) => c.name), label, strip, boards, rows, keys,
+             raw: document.querySelectorAll('#vars .value').length };
+  })()`);
+  check(named.names.every((n) => n && named.label.includes(n.split(' ')[0]) && named.strip.includes(n)),
+    `countries named on the board and strip (${named.names.join(', ')})`);
+  check(named.boards.every((b) => b && b.length === 2) && named.rows.length === named.boards.length
+    && named.rows.every((r) => r.rows === 2 && r.current === 2 && r.open >= 2 && r.steps > r.open && r.t2 > 0),
+    `each seat's AI board drawn with 2 tracks (${named.rows.map((r) => `${r.open}/${r.steps} uncovered`).join(', ')})`);
+  const bookkeeping = /^(ai\.track\.|threats\.paid\.|threats\.jam\.|cards\.(tier|picked|next_discount|civic_used|unpowered)\.|adversary\.killed_foundry\.|board\.(blockade|sabotage|shelter)\.)/;
+  check(!named.keys.some((k) => bookkeeping.test(k)) && named.raw === 0,
+    `no bookkeeping vars among the globals (${named.keys.length} globals)`);
+
   // Hover a hex and a token: the details card shows.
   const hover = async (sel) => {
     const pt = await js(`(() => { const r = document.querySelector('${sel}')?.getBoundingClientRect(); return r && [r.x + r.width / 2, r.y + r.height / 2]; })()`);
@@ -149,6 +172,8 @@ try {
   check((await hover('#board .token .hit')).includes('×'), 'hovering a token shows its details');
   check((await hover('.value')).length > 0, 'hovering a value shows its details');
   check((await hover('#pipeline .slot-box.build')).length > 0, 'hovering an adversary slot shows its pile');
+  check((await hover('.seat .board .step')).includes('step'), 'hovering a track step shows its details');
+  check((await hover('.seat .board-name')).length > 0, 'hovering a board name shows the board');
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
   await shot('play-start-1366');
 

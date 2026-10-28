@@ -186,7 +186,7 @@ code { font: 0.92em ui-monospace, Consolas, monospace; }
 .token .in-glyph { fill: #fff; font-weight: bold; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .token .count { fill: #111; font-weight: 800; stroke: #fff; stroke-width: 0.045px; paint-order: stroke; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .token:hover .glyph { stroke: #000; stroke-width: 0.04; }
-.country-label text { font-size: 0.9px; font-weight: 900; opacity: 0.22; text-anchor: middle; dominant-baseline: middle; }
+.country-label text { font-size: 0.55px; font-weight: 900; opacity: 0.25; text-anchor: middle; dominant-baseline: middle; }
 
 /* ---------- side: values, seats, actions ---------- */
 
@@ -218,10 +218,18 @@ code { font: 0.92em ui-monospace, Consolas, monospace; }
 .res.r-energy { border-color: #e68a2e; }
 .res.r-insight { border-color: #9c6ade; }
 .res.r-antimatter { border-color: #d63c8f; }
-.track { border: 1px solid var(--line); border-radius: 3px; padding: 0 0.35em; background: #fff; white-space: nowrap; }
-.track .label { color: var(--muted); }
-.track .under { margin-left: 0.3em; }
-.track .under i { font-style: normal; font-size: 0.78em; color: #888; border: 1px dashed #ccc; border-radius: 50%; padding: 0 0.25em; margin-left: 0.1em; }
+.seat .board-name { cursor: help; }
+.board { display: flex; flex-direction: column; gap: 0.15em; margin-bottom: 0.25em; }
+.track-row { display: flex; align-items: stretch; gap: 0.15em; flex-wrap: wrap; }
+.track-row .label { color: var(--muted); font-size: 0.9em; min-width: 5em; align-self: center; }
+.step { display: inline-flex; flex-direction: column; align-items: center; min-width: 1.6em; padding: 0 0.2em; border-radius: 3px; line-height: 1.1; font-size: 0.9em; }
+.step.open { border: 1px solid var(--line); background: #fff; }
+.step.covered { border: 1px dashed #ccc; color: #999; background: #f6f6f6; }
+.step.current { border: 2px solid var(--accent); }
+.step .mark { font-size: 0.7em; font-weight: 700; border-radius: 2px; padding: 0 0.15em; }
+.step .m-tier2 { color: #fff; background: var(--good); }
+.step .m-antimatter { color: #fff; background: #d63c8f; }
+.step.covered .mark { opacity: 0.6; }
 .value.t2.on { border-color: var(--good); color: var(--good); font-weight: 600; }
 .value.t2.off { color: var(--muted); }
 .row { display: flex; flex-wrap: wrap; gap: 0.25em; align-items: center; margin-top: 0.3em; }

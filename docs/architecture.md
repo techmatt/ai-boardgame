@@ -314,9 +314,9 @@ web viewer draws only these:
 | Part | Holds | Filled by the engine |
 |---|---|---|
 | `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `number`, `terrain`, `uplink`, `tokens` (`{kind, count}`) | every token stack on every hex |
-| `countries[c]` | `colour`, `hexes`, `slots` (card strip), `values`, `cards` (card groups, such as its threat) | `tokens.<kind>` totals over the country |
-| `seats[s]` | `passed`, `values`, `cards` (card groups) | `resource.<name>` per resource; exhausted cards no module shows, as group `engine.exhausted` |
-| `globals` | `values` of the whole game | every `vars` track, by its key |
+| `countries[c]` | `name` (the printed piece's, `content/map.json`), `colour`, `hexes`, `slots` (card strip), `values`, `cards` (card groups, such as its threat) | `name`; `tokens.<kind>` totals over the country |
+| `seats[s]` | `passed`, `values`, `cards` (card groups), `board` (a player board, or `null`) | `resource.<name>` per resource; exhausted cards no module shows, as group `engine.exhausted` |
+| `globals` | `values` of the whole game | every `vars` track no module declares bookkeeping, by its key |
 | `piles` | `{key, label, owner, count, visible}` | none: modules add them |
 | `choice` | `{seat, prompt}` of the open choice | when `pending` is set |
 | `round`, `phase`, `round_order`, `outcome` | where the game is | always |
@@ -326,6 +326,14 @@ against (a threshold or a round count); the viewer marks a value at 75% of its `
 more. `source` is `"engine"` or the module id. A **card** is `{id, name, text?, status,
 cost?}`. `status` is a short word the module chooses; the viewer styles `ready`,
 `used`, `unaffordable` and `no target`, and shows any other word as text.
+
+A **board** is a printed player sheet, in a shape that doesn't name any game's boards:
+`{key, source, id, name, text?, innate? {name, text?}, tracks, slots?, cards}`. A
+**track** is `{label, resource?, steps, uncovered, current}`: `steps` are every printed
+step left to right, each `{value, marks?}`; the leftmost `uncovered` steps show and the
+step at `current` is in effect. A **mark** `{key, label, doc?}` is something extra
+printed on a step; the viewer styles keys `tier2` and `antimatter` and shows any other
+label as-is. `cards` are the board's own cards, `status` saying where each is now.
 
 **How a module exposes its state.** Most of it needs nothing. Tokens it places,
 resources it gives and `vars` it sets all appear by default, labelled by their keys. A
@@ -339,19 +347,41 @@ derive:
   shows are no longer listed again under `engine.exhausted`.
 - `out.country_cards(country, key, label, cards)`: a card group on a country.
 - `out.pile(key, label, owner, count, visible)`: an ordered pile.
+- `out.board(seat, key, board)`: the seat's player board (above).
+- `out.bookkeeping(&[keys])`: declares `vars` that are the module's bookkeeping, not
+  tracks of the whole game: per-seat, per-country or per-card markers. A key ending in
+  `.` is a prefix (`"threats.paid."`), any other an exact key. Their generic `globals`
+  entries are dropped (a value the module adds itself under such a key stays), and the
+  module shows what a player needs of them where it belongs: a seat value, a country
+  value, a card's text or status, a board track. A `vars` key nobody declares still
+  shows as a global, so a new module's track is never hidden by accident.
 
 In v0:
 
 - `adversary` adds the pipeline as piles (`deck` with any peeked cards, `explore`,
-  `build`, `ravage`, `discard`) and the corruption pool, stage and difficulty.
+  `build`, `ravage`, `discard`) and the corruption pool, stage and difficulty. Its
+  bookkeeping: `adversary.peek` (shown as the peeked cards, and a global while >0) and
+  `adversary.killed_foundry.<seat>` (seat value `adversary.killed_foundry` while set).
 - `threats` adds each country's threat (`threats.on`, status = counter progress such as
-  `1/2 energy`), or the shared row pile, and the tier dealt next.
+  `1/2 energy`; the text adds who paid what and any Jam Signals), or the shared row
+  pile, and the tier dealt next. Bookkeeping: `threats.paid.*`, `threats.jam.*`.
 - `opposition` adds the track toward the next level, the level with its win condition,
   and population against the loss threshold.
-- `ai` adds each seat's board, both tracks (current value; the doc lists what is under
-  processors), tier-2 unlock and processor count.
-- `economy` adds each seat's income per resource; `cards` adds hand, buildings
-  (`n/slots`), draft hand and drafted cards with statuses, tags, and the decks.
+- `ai` adds each seat's board (`ai.board`: name, text, innate rule, both tracks with
+  every step, tier-2 and antimatter marks, printed slots, the AI's unique cards and
+  where they are), tier-2 unlock and processor count. Bookkeeping: `ai.track.*` (the
+  tracks' `uncovered`).
+- `board` shows its per-country flags (blockade, sabotage, shelter) as country values;
+  bookkeeping `board.<flag>.*`.
+- `economy` adds each seat's income per resource and the next round's bonus insight
+  (bookkeeping `economy.bonus_insight`, shown as its own global while >0); `cards`
+  adds hand, buildings (`n/slots`), draft hand and drafted cards with statuses, tags,
+  next-building discount, drafting tier, Civic Shelter used, and the decks.
+  Bookkeeping: `cards.tier.*`, `cards.picked.*`, `cards.next_discount.*`,
+  `cards.civic_used.*`, `cards.unpowered.*` (a building's `unpowered` status).
+
+So in v0 the globals hold only game-wide tracks (opposition points and level, the
+corruption pool, adversary stage, starting population and what modules derive).
 
 The view is display data:
 
@@ -359,8 +389,8 @@ The view is display data:
 - It is not in the state, the fingerprint or a replay.
 - A hook must not draw from the RNG; it gets `&GameState`, so it can't.
 
-Two tests check it: `the_view_shows_every_hex_seat_country_and_module_value`, and
-`the_view_shows_state_no_module_describes` (unknown tokens, resources, vars, cards).
+Two tests check it (`tests.rs`): `the_view_shows_terrain_threats_pipeline_tracks_and_choices`
+and `the_view_names_countries_shows_boards_and_keeps_bookkeeping_out_of_globals`.
 
 **What the client assumes.** It draws hexes from `[q, r]` by terrain, with the
 country colour, and draws token kinds it knows with their own glyph and any other kind

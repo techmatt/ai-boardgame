@@ -132,6 +132,103 @@ fn experiment_writes_report_and_records() {
     );
 }
 
+const VARIANT_SPEC: &str = r#"{
+  "name": "test-variants",
+  "configs": ["configs/baseline.json"],
+  "variants": [
+    {"name": "base"},
+    {"name": "threats_off", "set": ["threats.variant=off"]}
+  ],
+  "difficulties": [0],
+  "agents": ["random", "greedy"],
+  "games": 3,
+  "closeness": {"every": 0},
+  "records": 0
+}"#;
+
+/// Two agents and two variants, one switching a module off: the
+/// comparison sections appear, with their machine-readable twins.
+#[test]
+fn experiment_reports_comparisons() {
+    let root = fresh_dir("aic-sim-experiment-variants");
+    let spec = root.join("spec.json");
+    std::fs::write(&spec, VARIANT_SPEC).unwrap();
+    let out = root.join("out");
+    let res = sim()
+        .arg("experiment")
+        .arg(&spec)
+        .arg("--out")
+        .arg(&out)
+        .output()
+        .expect("runs aic-sim");
+    assert!(
+        res.status.success(),
+        "experiment failed: {}",
+        String::from_utf8_lossy(&res.stderr)
+    );
+    let report = std::fs::read_to_string(out.join("report.md")).unwrap();
+    for section in [
+        "## Strategy health",
+        "## Head to head against greedy",
+        "## Variants against the base",
+        "## Removing a module",
+        "Strategy health at difficulty 0",
+        // greedy wins most here, so it is the top agent itself.
+        "Top agent (greedy",
+        "What a module is worth",
+        "| threats (threats_off) |",
+    ] {
+        assert!(report.contains(section), "report lacks {section}\n{report}");
+    }
+    let results: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap()).unwrap();
+    // random against greedy, in each of the two variants.
+    let h2h = results["head_to_head"].as_array().unwrap();
+    assert_eq!(h2h.len(), 2);
+    for h in h2h {
+        assert_eq!(h["agent"], "random");
+        assert_eq!(h["greedy"], "greedy");
+        assert_eq!(h["paired"]["games"], 3);
+    }
+    assert_eq!(results["variants"].as_array().unwrap().len(), 2);
+    let removals = results["removals"].as_array().unwrap();
+    assert_eq!(removals.len(), 2);
+    assert_eq!(removals[0]["modules"][0], "threats");
+    assert_eq!(results["top_agent"]["agent"], "greedy");
+    for c in results["cells"].as_array().unwrap() {
+        assert!(c["buildings_played_per_game"].as_f64().unwrap() >= 0.0);
+        assert!(c["tier2_played_per_game"].is_number());
+    }
+}
+
+/// One agent and one variant: no comparison sections.
+#[test]
+fn experiment_omits_comparisons_that_do_not_apply() {
+    let root = fresh_dir("aic-sim-experiment-single");
+    let spec = root.join("spec.json");
+    let body = VARIANT_SPEC
+        .replace(
+            r#"{"name": "threats_off", "set": ["threats.variant=off"]}"#,
+            r#"{"name": "threats_on", "set": []}"#,
+        )
+        .replace(r#""random", "greedy""#, r#""random""#);
+    std::fs::write(&spec, body).unwrap();
+    let out = root.join("out");
+    let res = sim()
+        .arg("experiment")
+        .arg(&spec)
+        .arg("--out")
+        .arg(&out)
+        .output()
+        .expect("runs aic-sim");
+    assert!(res.status.success(), "{}", String::from_utf8_lossy(&res.stderr));
+    let report = std::fs::read_to_string(out.join("report.md")).unwrap();
+    assert!(report.contains("## Strategy health"));
+    assert!(report.contains("## Variants against the base"));
+    assert!(!report.contains("## Head to head against greedy"));
+    assert!(!report.contains("## Removing a module"));
+}
+
 #[test]
 fn experiment_rejects_bad_specs() {
     let root = fresh_dir("aic-sim-experiment-bad");

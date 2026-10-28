@@ -10,6 +10,7 @@ use std::fmt::Write as _;
 use aic_core::{content_hash, SavedGame};
 use serde::Serialize;
 
+use crate::agents::AgentSpec;
 use crate::experiment::{Cell, GameResult, Spec};
 
 #[derive(Debug, Clone, Serialize)]
@@ -71,6 +72,16 @@ pub struct CellSummary {
     /// the same buildings, 1 = never a shared building).
     pub build_distance: f64,
     pub build_distance_wins: Option<f64>,
+    /// Strategy health (see [`plays`]): cards, buildings (any tier, AI
+    /// uniques too) and tier-2 cards played per game, buildings standing at
+    /// the end per game, and the share of wins with 2 or more buildings
+    /// played (standing at the end).
+    pub cards_played_per_game: f64,
+    pub buildings_played_per_game: f64,
+    pub tier2_played_per_game: f64,
+    pub buildings_standing_per_game: f64,
+    pub wins_2plus_buildings_played: Option<f64>,
+    pub wins_2plus_buildings_standing: Option<f64>,
     pub ms_per_game: f64,
     pub ms_per_decision: f64,
     /// The agent's own thinking per game and per decision, without probes.
@@ -139,6 +150,294 @@ fn buildings(sig: &str) -> BTreeSet<String> {
                 .map(move |x| format!("{ai}:{x}"))
         })
         .collect()
+}
+
+/// Buildings standing at the end, over every seat (copies counted).
+fn standing(sig: &str) -> usize {
+    sig.split('|')
+        .filter_map(|seat| seat.split_once(':'))
+        .map(|(_, b)| b.split('+').filter(|x| !x.is_empty()).count())
+        .sum()
+}
+
+/// One game's plays: [cards, buildings (any tier, AI uniques too), tier-2
+/// cards], from the per-card counts and the content's tier and kind.
+pub fn plays(g: &GameResult) -> [u32; 3] {
+    let content = aic_core::content();
+    let mut out = [0u32; 3];
+    for (id, n) in &g.cards {
+        if n[3] == 0 {
+            continue;
+        }
+        out[0] += n[3];
+        if let Some(d) = content.cards.iter().find(|d| d.id == *id) {
+            if d.is_building() {
+                out[1] += n[3];
+            }
+            if d.tier == 2 {
+                out[2] += n[3];
+            }
+        }
+    }
+    out
+}
+
+/// Two cells compared on the same seeds: `a` against `b`.
+#[derive(Debug, Clone, Serialize)]
+pub struct Paired {
+    pub games: usize,
+    pub a_win_rate: f64,
+    pub b_win_rate: f64,
+    pub both: usize,
+    pub only_a: usize,
+    pub only_b: usize,
+    pub neither: usize,
+    /// `a`'s win rate minus `b`'s, with the standard error of the mean
+    /// per-seed difference.
+    pub diff: f64,
+    pub diff_se: f64,
+    /// Exact two-sided sign test on the discordant seeds (won by one only).
+    pub sign_p: f64,
+    pub a_rounds: f64,
+    pub b_rounds: f64,
+}
+
+/// Exact two-sided binomial (p = 1/2) test of `x` against `y` successes.
+fn sign_test(x: usize, y: usize) -> f64 {
+    let n = x + y;
+    if n == 0 {
+        return 1.0;
+    }
+    let (mut ln_c, mut tail) = (0.0f64, 0.0f64);
+    for i in 0..=x.min(y) {
+        if i > 0 {
+            ln_c += ((n - i + 1) as f64).ln() - (i as f64).ln();
+        }
+        tail += (ln_c - n as f64 * std::f64::consts::LN_2).exp();
+    }
+    (2.0 * tail).min(1.0)
+}
+
+fn paired(games: &[GameResult], a: usize, b: usize) -> Paired {
+    let bs: BTreeMap<u64, &GameResult> = games
+        .iter()
+        .filter(|g| g.cell == b)
+        .map(|g| (g.seed, g))
+        .collect();
+    let (mut n, mut both, mut oa, mut ob, mut neither) = (0usize, 0, 0, 0, 0);
+    let (mut ra, mut rb) = (0.0, 0.0);
+    for ga in games.iter().filter(|g| g.cell == a) {
+        let Some(gb) = bs.get(&ga.seed) else { continue };
+        n += 1;
+        ra += ga.rounds as f64;
+        rb += gb.rounds as f64;
+        match (ga.won, gb.won) {
+            (true, true) => both += 1,
+            (true, false) => oa += 1,
+            (false, true) => ob += 1,
+            (false, false) => neither += 1,
+        }
+    }
+    let nf = n.max(1) as f64;
+    let diff = (oa as f64 - ob as f64) / nf;
+    let se = if n > 1 {
+        let var = ((oa + ob) as f64 - nf * diff * diff) / (nf - 1.0);
+        (var.max(0.0) / nf).sqrt()
+    } else {
+        0.0
+    };
+    Paired {
+        games: n,
+        a_win_rate: (both + oa) as f64 / nf,
+        b_win_rate: (both + ob) as f64 / nf,
+        both,
+        only_a: oa,
+        only_b: ob,
+        neither,
+        diff,
+        diff_se: se,
+        sign_p: sign_test(oa, ob),
+        a_rounds: ra / nf,
+        b_rounds: rb / nf,
+    }
+}
+
+/// The agents in spec order, by label (first cell of each).
+fn agent_order(cells: &[Cell]) -> Vec<&AgentSpec> {
+    let mut out: Vec<&AgentSpec> = Vec::new();
+    for c in cells {
+        if !out.iter().any(|a| a.label() == c.agent.label()) {
+            out.push(&c.agent);
+        }
+    }
+    out
+}
+
+/// The greedy agent the others are compared with: the one labelled exactly
+/// `greedy`, else the first of kind greedy.
+fn greedy_reference(cells: &[Cell]) -> Option<String> {
+    let agents = agent_order(cells);
+    agents
+        .iter()
+        .find(|a| a.label() == "greedy")
+        .or_else(|| agents.iter().find(|a| a.kind == "greedy"))
+        .map(|a| a.label())
+}
+
+fn find_cell(cells: &[Cell], config: &str, variant: &str, d: i64, agent: &str) -> Option<usize> {
+    cells.iter().position(|c| {
+        c.config_path == config
+            && c.variant == variant
+            && c.difficulty == d
+            && c.agent.label() == agent
+    })
+}
+
+/// The top agent: highest win rate at the highest difficulty on the base
+/// variant (mean over configs), ties to the later agent in the list.
+fn top_agent(cells: &[Cell], sums: &[CellSummary]) -> Option<(String, i64)> {
+    let hi = cells.iter().map(|c| c.difficulty).max()?;
+    // On the base variant (the first), as the strategy-health line reads it.
+    let base = &cells.first()?.variant;
+    let mut best: Option<(String, f64)> = None;
+    for a in agent_order(cells) {
+        let l = a.label();
+        let Some(p) = mean(
+            sums.iter()
+                .filter(|s| s.difficulty == hi && s.agent == l && s.variant == *base)
+                .map(|s| s.win_rate),
+        ) else {
+            continue;
+        };
+        match &best {
+            Some((_, b)) if p < *b => {}
+            _ => best = Some((l, p)),
+        }
+    }
+    best.map(|(l, _)| (l, hi))
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HeadToHead {
+    pub config: String,
+    pub variant: String,
+    pub difficulty: i64,
+    pub agent: String,
+    pub greedy: String,
+    /// `a` = the agent, `b` = greedy.
+    pub paired: Paired,
+    pub verdict: String,
+}
+
+fn verdict(p: &Paired) -> String {
+    if p.sign_p < 0.05 && p.diff > 0.0 {
+        "beats greedy".into()
+    } else if p.sign_p < 0.05 && p.diff < 0.0 {
+        "worse than greedy".into()
+    } else if p.diff > 0.0 {
+        "no better than greedy (ahead, not significant)".into()
+    } else if p.diff < 0.0 {
+        "no better than greedy (behind, not significant)".into()
+    } else {
+        "no better than greedy (level)".into()
+    }
+}
+
+/// Every other agent against greedy on the same seeds, per cell.
+pub fn head_to_head(cells: &[Cell], games: &[GameResult]) -> Vec<HeadToHead> {
+    let Some(gl) = greedy_reference(cells) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (i, c) in cells.iter().enumerate() {
+        let l = c.agent.label();
+        if l == gl {
+            continue;
+        }
+        let Some(j) = find_cell(cells, &c.config_path, &c.variant, c.difficulty, &gl) else {
+            continue;
+        };
+        let p = paired(games, i, j);
+        out.push(HeadToHead {
+            config: c.config_path.clone(),
+            variant: c.variant.clone(),
+            difficulty: c.difficulty,
+            agent: l,
+            greedy: gl.clone(),
+            verdict: verdict(&p),
+            paired: p,
+        });
+    }
+    out
+}
+
+/// Modules a variant switches off: set entries `<module>.variant=off` or
+/// anything else ending `=off`.
+fn switched_off(set: &[String]) -> Vec<String> {
+    // Only a pure removal: a variant that also changes other numbers is not
+    // a measure of what the module is worth.
+    if set.is_empty() || !set.iter().all(|s| s.ends_with("=off")) {
+        return Vec::new();
+    }
+    set.iter()
+        .filter_map(|s| s.strip_suffix("=off"))
+        .map(|k| k.strip_suffix(".variant").unwrap_or(k).to_string())
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VariantDiff {
+    pub config: String,
+    pub base: String,
+    pub variant: String,
+    /// Modules the variant switches off (empty if none).
+    pub off: Vec<String>,
+    pub difficulty: i64,
+    pub agent: String,
+    /// `a` = the variant, `b` = the base. For a variant that switches a
+    /// module off, `-diff` is what the module is worth.
+    pub paired: Paired,
+}
+
+/// Every variant after the first against the first (the base), per config,
+/// difficulty and agent, on the same seeds.
+pub fn variant_diffs(spec: &Spec, cells: &[Cell], games: &[GameResult]) -> Vec<VariantDiff> {
+    let Some(base) = spec.variants.first() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for v in spec.variants.iter().skip(1) {
+        for (i, c) in cells.iter().enumerate().filter(|(_, c)| c.variant == v.name) {
+            let l = c.agent.label();
+            let Some(j) = find_cell(cells, &c.config_path, &base.name, c.difficulty, &l) else {
+                continue;
+            };
+            out.push(VariantDiff {
+                config: c.config_path.clone(),
+                base: base.name.clone(),
+                variant: v.name.clone(),
+                off: switched_off(&v.set),
+                difficulty: c.difficulty,
+                agent: l,
+                paired: paired(games, i, j),
+            });
+        }
+    }
+    out
+}
+
+/// `+4.2 ±3.1` (percentage points).
+fn pts(x: f64, se: f64) -> String {
+    // `+ 0.0` turns a negated zero into a plain one.
+    format!("{:+.1} ±{:.1}", 100.0 * x + 0.0, 100.0 * se)
+}
+
+fn p_value(p: f64) -> String {
+    if p < 0.001 {
+        "<0.001".into()
+    } else {
+        format!("{p:.3}")
+    }
 }
 
 fn jaccard_mean(sigs: &[&str]) -> Option<f64> {
@@ -295,6 +594,21 @@ pub fn summarize(cells: &[Cell], games: &[GameResult]) -> Vec<CellSummary> {
                 distinct_builds_wins: win_sigs.iter().collect::<BTreeSet<_>>().len(),
                 build_distance: jaccard_mean(&sigs).unwrap_or(0.0),
                 build_distance_wins: jaccard_mean(&win_sigs),
+                cards_played_per_game: gs.iter().map(|g| plays(g)[0] as f64).sum::<f64>() / n,
+                buildings_played_per_game: gs.iter().map(|g| plays(g)[1] as f64).sum::<f64>()
+                    / n,
+                tier2_played_per_game: gs.iter().map(|g| plays(g)[2] as f64).sum::<f64>() / n,
+                buildings_standing_per_game: gs
+                    .iter()
+                    .map(|g| standing(&g.build) as f64)
+                    .sum::<f64>()
+                    / n,
+                wins_2plus_buildings_played: mean(
+                    won.iter().map(|g| (plays(g)[1] >= 2) as u8 as f64),
+                ),
+                wins_2plus_buildings_standing: mean(
+                    won.iter().map(|g| (standing(&g.build) >= 2) as u8 as f64),
+                ),
                 ms_per_game: ms / n,
                 ms_per_decision: ms / decisions.max(1) as f64,
                 agent_ms_per_game: gs.iter().map(|g| g.agent_ms).sum::<f64>() / n,
@@ -613,16 +927,17 @@ fn q(s: &str) -> String {
 
 pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
     let mut s = String::from(
-        "config,variant,difficulty,agent,seed,won,reason,rounds,decisions,options,forced,probed,close,gap_mean,deck_left,pool_left,pool_start,population_slack,blockers,level,points,adversary_ops,adversary_ops_max,setup_ops,gives,pays,withdraws,threats_dealt,threats_countered,build,winprob,ms,replay_ok\n",
+        "config,variant,difficulty,agent,seed,won,reason,rounds,decisions,options,forced,probed,close,gap_mean,deck_left,pool_left,pool_start,population_slack,blockers,level,points,adversary_ops,adversary_ops_max,setup_ops,gives,pays,withdraws,threats_dealt,threats_countered,cards_played,buildings_played,tier2_played,buildings_standing,build,winprob,ms,replay_ok\n",
     );
     for g in games {
         let c = &cells[g.cell];
         let ops: u32 = g.adversary_ops.iter().sum();
         let wp: Vec<String> = g.winprob.iter().map(|p| format!("{p:.3}")).collect();
         let cnt = |k: &str| g.counters.get(k).copied().unwrap_or(0);
+        let pl = plays(g);
         let _ = writeln!(
             s,
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.1},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.1},{}",
             q(&c.config_path),
             q(&c.variant),
             c.difficulty,
@@ -652,6 +967,10 @@ pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
             g.withdraws,
             cnt("threats.dealt"),
             cnt("threats.countered"),
+            pl[0],
+            pl[1],
+            pl[2],
+            standing(&g.build),
             q(&g.build),
             wp.join(";"),
             g.ms,
@@ -706,6 +1025,27 @@ pub struct Run<'a> {
 }
 
 pub fn results_json(run: &Run) -> String {
+    let vds = variant_diffs(run.spec, run.cells, run.games);
+    // What a module is worth: the base's win rate minus the variant's that
+    // switches it off, on the same seeds.
+    let removals: Vec<serde_json::Value> = vds
+        .iter()
+        .filter(|v| !v.off.is_empty())
+        .map(|v| {
+            serde_json::json!({
+                "config": v.config,
+                "variant": v.variant,
+                "modules": v.off,
+                "difficulty": v.difficulty,
+                "agent": v.agent,
+                "base_win_rate": v.paired.b_win_rate,
+                "off_win_rate": v.paired.a_win_rate,
+                "worth": -v.paired.diff,
+                "worth_se": v.paired.diff_se,
+                "sign_p": v.paired.sign_p,
+            })
+        })
+        .collect();
     let v = serde_json::json!({
         "format": "aic-experiment/1",
         "spec": run.spec,
@@ -716,6 +1056,10 @@ pub fn results_json(run: &Run) -> String {
         "content_hash": content_hash(),
         "cells": run.sums,
         "groups": run.groups,
+        "top_agent": top_agent(run.cells, run.sums).map(|(a, d)| serde_json::json!({"agent": a, "difficulty": d})),
+        "head_to_head": head_to_head(run.cells, run.games),
+        "variants": vds,
+        "removals": removals,
         "cards": run.cards,
         "records": run.records,
     });
@@ -877,6 +1221,104 @@ pub fn markdown(run: &Run) -> String {
         );
     }
 
+    let cfg = |c: &str| {
+        if multi_c {
+            format!("{c} ")
+        } else {
+            String::new()
+        }
+    };
+    let var = |v: &str| {
+        if multi_v {
+            format!("{v} ")
+        } else {
+            String::new()
+        }
+    };
+    let h2h = head_to_head(run.cells, run.games);
+    if let Some(first) = h2h.first() {
+        let _ = writeln!(w, "## Head to head against greedy\n");
+        let _ = writeln!(w, "Each agent and `{}` play the same seeds in every cell. Won by both / only the agent / only greedy / neither. Difference: the agent's win rate minus greedy's, ± the standard error of the per-seed difference; p: exact two-sided sign test on the seeds only one of them won. Beats greedy: ahead with p < 0.05.\n", first.greedy);
+        let _ = writeln!(w, "| cell | games | agent win % | greedy win % | both / only agent / only greedy / neither | difference (pts) | p | verdict |");
+        let _ = writeln!(w, "|---|---|---|---|---|---|---|---|");
+        for h in &h2h {
+            let p = &h.paired;
+            let _ = writeln!(
+                w,
+                "| {}{}d{} {} | {} | {:.1} | {:.1} | {} / {} / {} / {} | {} | {} | {} |",
+                cfg(&h.config),
+                var(&h.variant),
+                h.difficulty,
+                h.agent,
+                p.games,
+                100.0 * p.a_win_rate,
+                100.0 * p.b_win_rate,
+                p.both,
+                p.only_a,
+                p.only_b,
+                p.neither,
+                pts(p.diff, p.diff_se),
+                p_value(p.sign_p),
+                h.verdict
+            );
+        }
+        let _ = writeln!(w);
+    }
+    let vds = variant_diffs(spec, run.cells, run.games);
+    if let Some(first) = vds.first() {
+        let _ = writeln!(w, "## Variants against the base\n");
+        let _ = writeln!(w, "The first variant, `{}`, is the base. Both play the same seeds, so the difference (variant minus base, percentage points) carries the standard error of the per-seed difference; p: exact two-sided sign test on the seeds only one of them won.\n", first.base);
+        let _ = writeln!(
+            w,
+            "| variant | difficulty | agent | win % base → variant | difference (pts) | p | rounds base → variant |"
+        );
+        let _ = writeln!(w, "|---|---|---|---|---|---|---|");
+        for v in &vds {
+            let p = &v.paired;
+            let _ = writeln!(
+                w,
+                "| {}{} | {} | {} | {:.1} → {:.1} | {} | {} | {:.2} → {:.2} |",
+                cfg(&v.config),
+                v.variant,
+                v.difficulty,
+                v.agent,
+                100.0 * p.b_win_rate,
+                100.0 * p.a_win_rate,
+                pts(p.diff, p.diff_se),
+                p_value(p.sign_p),
+                p.b_rounds,
+                p.a_rounds
+            );
+        }
+        let _ = writeln!(w);
+    }
+    if vds.iter().any(|v| !v.off.is_empty()) {
+        let _ = writeln!(w, "## Removing a module\n");
+        let _ = writeln!(w, "What a module is worth: the base's win rate minus the win rate with the module switched off, on the same seeds, ± the standard error of the per-seed difference. Positive: the module helps the players; negative: it holds them back.\n");
+        let _ = writeln!(
+            w,
+            "| module (variant) | difficulty | agent | base win % | off win % | worth (pts) | p |"
+        );
+        let _ = writeln!(w, "|---|---|---|---|---|---|---|");
+        for v in vds.iter().filter(|v| !v.off.is_empty()) {
+            let p = &v.paired;
+            let _ = writeln!(
+                w,
+                "| {}{} ({}) | {} | {} | {:.1} | {:.1} | {} | {} |",
+                cfg(&v.config),
+                v.off.join(" + "),
+                v.variant,
+                v.difficulty,
+                v.agent,
+                100.0 * p.b_win_rate,
+                100.0 * p.a_win_rate,
+                pts(-p.diff, p.diff_se),
+                p_value(p.sign_p)
+            );
+        }
+        let _ = writeln!(w);
+    }
+
     let _ = writeln!(w, "## Game length, margin and end\n");
     let _ = writeln!(w, "| cell | rounds (sd, min..max) | ended by | win margin: deck left / pool left | loss distance: pieces over bar / level | pool left | population slack |");
     let _ = writeln!(w, "|---|---|---|---|---|---|---|");
@@ -1011,7 +1453,74 @@ pub fn markdown(run: &Run) -> String {
         );
     }
 
-    let _ = writeln!(w, "\n## Pick and play rates per card\n");
+    let _ = writeln!(w, "\n## Strategy health\n");
+    let _ = writeln!(w, "Per game, over the whole team: buildings played (any tier, AI unique buildings too), tier-2 cards played (buildings and programs), all cards played; then the share of wins with 2 or more buildings played, and in brackets with 2 or more buildings standing at the end.\n");
+    let order = agent_order(run.cells);
+    let mut gkeys: Vec<(String, String)> = Vec::new();
+    for c in run.cells {
+        let k = (c.config_path.clone(), c.variant.clone());
+        if !gkeys.contains(&k) {
+            gkeys.push(k);
+        }
+    }
+    let wins2 = |s: &CellSummary| match (s.wins_2plus_buildings_played, s.wins_2plus_buildings_standing) {
+        (Some(a), Some(b)) => format!("{} ({})", pct(a), pct(b)),
+        _ => "–".into(),
+    };
+    for &d in &spec.difficulties {
+        let cell_of = |a: &str, k: &(String, String)| {
+            sums.iter()
+                .find(|s| s.difficulty == d && s.agent == a && s.config == k.0 && s.variant == k.1)
+        };
+        if gkeys.len() == 1 {
+            let _ = writeln!(w, "| difficulty {d} | buildings played/game | tier 2 played/game | cards played/game | wins with 2+ buildings played (standing) |");
+            let _ = writeln!(w, "|---|---|---|---|---|");
+            for a in &order {
+                let l = a.label();
+                if let Some(s) = cell_of(&l, &gkeys[0]) {
+                    let _ = writeln!(
+                        w,
+                        "| {l} | {:.2} | {:.2} | {:.1} | {} |",
+                        s.buildings_played_per_game,
+                        s.tier2_played_per_game,
+                        s.cards_played_per_game,
+                        wins2(s)
+                    );
+                }
+            }
+        } else {
+            let mut head = format!("| difficulty {d}: buildings / tier 2 / cards per game, wins with 2+ buildings |");
+            let mut sep = String::from("|---|");
+            for (c, v) in &gkeys {
+                let _ = write!(head, " {}{} |", cfg(c), v);
+                sep.push_str("---|");
+            }
+            let _ = writeln!(w, "{head}\n{sep}");
+            for a in &order {
+                let l = a.label();
+                let mut row = format!("| {l} |");
+                for k in &gkeys {
+                    match cell_of(&l, k) {
+                        Some(s) => {
+                            let _ = write!(
+                                row,
+                                " {:.2} / {:.2} / {:.1}, {} |",
+                                s.buildings_played_per_game,
+                                s.tier2_played_per_game,
+                                s.cards_played_per_game,
+                                wins2(s)
+                            );
+                        }
+                        None => row.push_str(" |"),
+                    }
+                }
+                let _ = writeln!(w, "{row}");
+            }
+        }
+        let _ = writeln!(w);
+    }
+
+    let _ = writeln!(w, "## Pick and play rates per card\n");
     let _ = writeln!(w, "Over all cells of each agent. Offered: in a draft packet (each round's deal). Every dealt card is drafted by someone (packets pass until empty), so pick is the mean pick position, 1 = a seat's first pick of the round (lower = wanted sooner). Keep: kept (bought) per offer. Play: played per card gained (kept or drawn; unique AI cards start in hand, so their plays are per game). Per difficulty in `cards.csv`.\n");
     let labels: Vec<&String> = run.cards.keys().collect();
     let mut order: Vec<&String> = labels.clone();
@@ -1116,6 +1625,14 @@ fn findings(run: &Run) -> Vec<String> {
     let lo = *ds.iter().next().unwrap_or(&0);
     let hi = *ds.iter().last().unwrap_or(&0);
     let top_tier = sums.iter().map(|s| s.tier).max().unwrap_or(0);
+    // "The strongest agent" below: the top agent by win rate (the ladder's
+    // top tier is not always the strongest: 008's engine sits above greedy
+    // and two agents share its tier), else the top tier.
+    let top_label = top_agent(run.cells, sums).map(|(l, _)| l);
+    let strongest = |s: &CellSummary| match &top_label {
+        Some(l) => s.agent == *l,
+        None => s.tier == top_tier,
+    };
     let any_win = sums.iter().any(|s| s.wins > 0);
     if !any_win {
         f.push(format!(
@@ -1193,7 +1710,7 @@ fn findings(run: &Run) -> Vec<String> {
             gap_r(hi)
         ));
     }
-    let tops: Vec<&CellSummary> = sums.iter().filter(|s| s.tier == top_tier).collect();
+    let tops: Vec<&CellSummary> = sums.iter().filter(|s| strongest(s)).collect();
     if let (Some(lo_s), Some(hi_s)) = (
         tops.iter().find(|s| s.difficulty == lo),
         tops.iter().find(|s| s.difficulty == hi),
@@ -1219,7 +1736,7 @@ fn findings(run: &Run) -> Vec<String> {
         .max()
         .unwrap_or(0);
     f.push(format!("Adversary operations: {ops:.1} per round on average across cells, at most {ops_max} in one round (target: low)."));
-    let probed: Vec<&CellSummary> = sums.iter().filter(|s| s.tier == top_tier).collect();
+    let probed: Vec<&CellSummary> = sums.iter().filter(|s| strongest(s)).collect();
     if run.spec.closeness.every > 0 {
         let close = mean(probed.iter().map(|s| s.close_share)).unwrap_or(0.0);
         let forced = mean(probed.iter().map(|s| s.forced_share)).unwrap_or(0.0);
@@ -1233,7 +1750,7 @@ fn findings(run: &Run) -> Vec<String> {
     if let Some(top) = run
         .cards
         .iter()
-        .find(|(l, _)| sums.iter().any(|s| s.agent == **l && s.tier == top_tier))
+        .find(|(l, _)| sums.iter().any(|s| s.agent == **l && strongest(s)))
     {
         // Every dealt card is drafted by someone, so keeping is the choice.
         let rate = |n: &[u32; 6]| {
@@ -1292,13 +1809,13 @@ fn findings(run: &Run) -> Vec<String> {
     }
     let gives = mean(
         sums.iter()
-            .filter(|s| s.tier == top_tier)
+            .filter(|s| strongest(s))
             .map(|s| s.gives_per_game),
     )
     .unwrap_or(0.0);
     let countered = mean(
         sums.iter()
-            .filter(|s| s.tier == top_tier)
+            .filter(|s| strongest(s))
             .map(|s| s.countered_share),
     )
     .unwrap_or(0.0);
@@ -1306,5 +1823,206 @@ fn findings(run: &Run) -> Vec<String> {
         "Help and counters (strongest agent): {gives:.2} gifts per game; {} of threats countered.",
         pct(countered)
     ));
+    f.extend(comparison_findings(run));
     f
+}
+
+/// Findings for strategy health, the head-to-head against greedy, the
+/// variants and the removals.
+fn comparison_findings(run: &Run) -> Vec<String> {
+    let mut f = Vec::new();
+    let sums = run.sums;
+    let order = agent_order(run.cells);
+    let base = run.spec.variants.first().map_or("", |v| v.name.as_str());
+    let multi_c = run.spec.configs.len() > 1;
+    let multi_v = run.spec.variants.len() > 1;
+    let where_ = |c: &str| match (multi_c, multi_v) {
+        (true, true) => format!(" ({c}, {base})"),
+        (true, false) => format!(" ({c})"),
+        (false, true) => format!(" ({base})"),
+        _ => String::new(),
+    };
+    // Strategy health: the top agent of each difficulty (base variant).
+    for c in &run.spec.configs {
+        for &d in &run.spec.difficulties {
+            let mut top: Option<&CellSummary> = None;
+            for a in &order {
+                let l = a.label();
+                if let Some(s) = sums
+                    .iter()
+                    .find(|s| s.config == *c && s.variant == base && s.difficulty == d && s.agent == l)
+                {
+                    // Ties go to the later agent.
+                    match top {
+                        Some(t) if t.win_rate > s.win_rate => {}
+                        _ => top = Some(s),
+                    }
+                }
+            }
+            let Some(s) = top else { continue };
+            f.push(format!(
+                "Strategy health at difficulty {d}{}: the top agent there ({}, {:.0}% wins) plays {:.2} buildings and {:.2} tier-2 cards per game (of {:.1} cards); {} of its wins had 2+ buildings played ({} with 2+ standing at the end). {}; {}.",
+                where_(c),
+                s.agent,
+                100.0 * s.win_rate,
+                s.buildings_played_per_game,
+                s.tier2_played_per_game,
+                s.cards_played_per_game,
+                s.wins_2plus_buildings_played.map_or("–".into(), pct),
+                s.wins_2plus_buildings_standing.map_or("–".into(), pct),
+                if s.buildings_played_per_game >= 2.0 {
+                    "It builds (healthy: 2+ buildings per game)"
+                } else {
+                    "**It hardly builds** (under 2 buildings per game)"
+                },
+                if s.tier2_played_per_game >= 0.5 {
+                    "it plays tier 2"
+                } else {
+                    "**it hardly plays tier 2** (under 0.5 per game)"
+                }
+            ));
+        }
+    }
+    // Head to head: the top agent against greedy at the top difficulty.
+    let h2h = head_to_head(run.cells, run.games);
+    if let (Some((top, hi)), Some(first)) = (top_agent(run.cells, sums), h2h.first()) {
+        let gl = &first.greedy;
+        let line = |h: &HeadToHead| {
+            let p = &h.paired;
+            format!(
+                "{} {:.0}% vs greedy {:.0}% over {} seeds (only {} {}, only greedy {}), {} pts, sign test p {}: {}",
+                h.agent,
+                100.0 * p.a_win_rate,
+                100.0 * p.b_win_rate,
+                p.games,
+                h.agent,
+                p.only_a,
+                p.only_b,
+                pts(p.diff, p.diff_se),
+                p_value(p.sign_p),
+                h.verdict
+            )
+        };
+        let at_top = |a: &str| -> Vec<&HeadToHead> {
+            h2h.iter()
+                .filter(|h| h.agent == a && h.difficulty == hi && h.variant == base)
+                .collect()
+        };
+        if top == *gl {
+            // Greedy is the top agent: report the best of the rest.
+            let rest: Vec<&HeadToHead> = h2h
+                .iter()
+                .filter(|h| h.difficulty == hi && h.variant == base)
+                .collect();
+            let best = rest.iter().copied().fold(None::<&HeadToHead>, |b, h| match b {
+                Some(b) if h.paired.diff < b.paired.diff => Some(b),
+                _ => Some(h),
+            });
+            let mut s = format!(
+                "Top agent ({top}: highest win rate at difficulty {hi}, ties to the later agent) is greedy itself"
+            );
+            if let Some(b) = best {
+                let _ = write!(s, "; the closest other agent at difficulty {hi}{}: {}", where_(&b.config), line(b));
+            }
+            f.push(format!("{s}."));
+        } else {
+            for h in at_top(&top) {
+                f.push(format!(
+                    "Top agent ({top}: highest win rate at difficulty {hi}, ties to the later agent) vs greedy at difficulty {hi}{}: {}.",
+                    where_(&h.config),
+                    line(h)
+                ));
+            }
+        }
+    }
+    // Variants: each against the base for the top agent at each difficulty.
+    let vds = variant_diffs(run.spec, run.cells, run.games);
+    if !vds.is_empty() {
+        let who = top_agent(run.cells, sums).map(|(a, _)| a);
+        for c in &run.spec.configs {
+            for &d in &run.spec.difficulties {
+                let Some(a) = &who else { continue };
+                let parts: Vec<String> = vds
+                    .iter()
+                    .filter(|v| v.config == *c && v.difficulty == d && v.agent == *a)
+                    .map(|v| {
+                        let p = &v.paired;
+                        let s = format!("{} {}", v.variant, pts(p.diff, p.diff_se));
+                        if p.sign_p < 0.05 {
+                            format!("**{s}**")
+                        } else {
+                            s
+                        }
+                    })
+                    .collect();
+                if parts.is_empty() {
+                    continue;
+                }
+                f.push(format!(
+                    "Variants against the base ({base}) at difficulty {d}{}, {a}, win rate difference in pts (bold: sign test p < 0.05): {}.",
+                    if multi_c { format!(" ({c})") } else { String::new() },
+                    parts.join("; ")
+                ));
+            }
+        }
+        let offs: Vec<&VariantDiff> = vds.iter().filter(|v| !v.off.is_empty()).collect();
+        if !offs.is_empty() {
+            for c in &run.spec.configs {
+                for &d in &run.spec.difficulties {
+                    let Some(a) = &who else { continue };
+                    let parts: Vec<String> = offs
+                        .iter()
+                        .filter(|v| v.config == *c && v.difficulty == d && v.agent == *a)
+                        .map(|v| {
+                            let p = &v.paired;
+                            let s = format!("{} {}", v.off.join(" + "), pts(-p.diff, p.diff_se));
+                            if p.sign_p < 0.05 {
+                                format!("**{s}**")
+                            } else {
+                                s
+                            }
+                        })
+                        .collect();
+                    if parts.is_empty() {
+                        continue;
+                    }
+                    f.push(format!(
+                        "What a module is worth (base win rate minus with it off) at difficulty {d}{}, {a}: {} pts.",
+                        if multi_c { format!(" ({c})") } else { String::new() },
+                        parts.join("; ")
+                    ));
+                }
+            }
+        }
+    }
+    f
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sign_test_is_exact() {
+        assert_eq!(sign_test(0, 0), 1.0);
+        assert!((sign_test(0, 3) - 0.25).abs() < 1e-12);
+        assert!((sign_test(6, 0) - 2.0 / 64.0).abs() < 1e-12);
+        // 10 of 12 discordant one way: 2 * (1 + 12 + 66) / 4096.
+        assert!((sign_test(2, 10) - 158.0 / 4096.0).abs() < 1e-12);
+        assert_eq!(sign_test(5, 5), 1.0);
+        assert!(sign_test(400, 600) < 1e-9);
+    }
+
+    #[test]
+    fn modules_switched_off() {
+        let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            switched_off(&set(&["opposition.variant=off", "threats=off"])),
+            vec!["opposition", "threats"]
+        );
+        // Not a pure removal: other numbers change too.
+        assert!(switched_off(&set(&["opposition.variant=off", "x.y=2"])).is_empty());
+        assert!(switched_off(&set(&["threats.variant=shared_row"])).is_empty());
+        assert_eq!(standing("builder:a+b|protector:"), 2);
+    }
 }

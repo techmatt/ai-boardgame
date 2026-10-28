@@ -45,6 +45,17 @@ The dev server rebuilds the wasm and reloads when `crates/` or `content/` change
 record from `aic-sim --save` with *Open record…* or by dropping the file on the page.
 Details, and the browser check (`npm run e2e`), are in [web/README.md](web/README.md).
 
+- A fresh worktree has no `web/node_modules`: run `npm install` first.
+- `npm run build` (release wasm, typecheck, vite) took 92 s cold; `wasm-pack build
+  crates/aic-wasm --target web` plus `node scripts/wasm-smoke.mjs` about 21 s; `npm run
+  e2e` against a running dev server about 15 s.
+- On a fixed port: `npx vite --port $PORT --strictPort` from `web/`, then
+  `AIC_URL=http://localhost:$PORT/ npm run e2e`.
+- The view (008) names each country (`countries[].name`), shows each seat's AI board as a
+  `board` (name, innate rule, tracks with every step, slots, unique cards), and keeps
+  module bookkeeping vars (threat payments, discounts, flags, ...) out of the globals:
+  each module declares them and shows what players need where it belongs.
+
 ## Toolchain
 
 - Rust stable (built with 1.98.1), target `wasm32-unknown-unknown`
@@ -55,7 +66,7 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 
 ```sh
 cargo build --workspace
-cargo test --workspace                             # ~65 s incl. build (debug): core ~10 s, agents ~10 s, experiment ~25 s
+cargo test --workspace                             # ~4 min (debug, idle machine, 008): core ~22 s, sim unit tests ~150 s (whole agent games in debug), experiment ~64 s; twice that or more with other runs on every core
 cargo build --release -p aic-sim                   # ~12 s
 wasm-pack build crates/aic-wasm --target web       # ~20 s cold, ~9 s warm -> crates/aic-wasm/pkg (git-ignored)
 node scripts/wasm-smoke.mjs                        # needs the wasm build; checks native = wasm
@@ -190,6 +201,15 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
 | `greedy` | One action at a time: each scored by the heuristic after it, its own choices resolved best-first. A pass scores the table as it is (else stalling beats stopping). | `samples` 1 (guesses averaged), `depth` 1 (actions looked ahead), `choices` 2 |
 | `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all), `choices` 2 (levels of an action's own choices resolved before scoring it; with 1, placing a processor, which asks a track and then a hex, looks worthless and beam stops growing its engine) |
 | `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `choices` 2, `candidates` 3, `rollouts` 4, `horizon` 2 |
+| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and production (working factories' credits, processors' compute) `w.production` of that; the rounds left are the adversary deck's clock, cut short by when the team is on course to win (opposition still needed at its rate so far, `w.opp_rate`, `w.win_lag`) and discounted by danger (`w.risk` per unpaid threat per country, pool ≤ 4, population near the loss line); a building without income earns `w.ability` per round left; a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.locked` for tier 2 not yet unlocked; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `locked` 0.5, `opp_rate` 2, `win_lag` 1, `production` 0, `insight_wait` 0 |
+
+Any agent can use horizon mode (`greedy:w.horizon=1,...`); `engine` only changes the
+defaults. Agent sweeps with strategy health (win %, buildings and tier-2 cards played per
+game, the top buildings) go through `scripts/tune/engine_sweep.py`; it logs to
+`out/tune/engine.jsonl`, and `AIC_SIM` points it at another binary (an absolute Windows
+path; build one with `CARGO_TARGET_DIR=target/alt` to sweep while editing). Measured: 48
+games at difficulty 4 on 12 threads take about 45 s for greedy and `engine`, 2 min with
+`samples=3`, 4 min for `engine:width=4`, and longer with rollouts.
 
 Spec syntax: `kind[:key=value,...]`, for example `beam:width=12`,
 `rollout:rollouts=8,horizon=3`, `greedy:w.pool=20`. `aic-sim run ... --agent SPEC` plays
@@ -217,7 +237,11 @@ target/release/aic-sim run configs/baseline.json --games 1 --seed 3 --agent gree
     | python scripts/tune/trace_summary.py
 ```
 
-The 007 run's log, change log and proposals: `experiments/tuning-007.md`.
+The 007 run's log, change log and proposals: `experiments/tuning-007.md`. The 008
+engine agent, its sweep and the building-engine verdict: `experiments/engine-008.md`;
+rerun `experiments/engine-agent-008.json` (~28 min alone on 12 threads, 2,400 games:
+greedy-search agents take 6–16 s a game each with every core busy) to judge a payback
+lever.
 
 An experiment is configs × variants × difficulties × agents over a seed range, played
 on every core (one game at a time per worker, results sorted, so nothing depends on the
@@ -267,6 +291,21 @@ nothing extra):
   max) and at setup.
 - **Help and counters**: gifts, payments and withdrawals per game; threats countered of
   those dealt.
+- **Strategy health** (008), per cell × agent: buildings played per game (any card of
+  kind `building`, AI uniques included), tier-2 cards played per game, cards played per
+  game, and the share of wins with 2 or more buildings played (and standing at the
+  end). A findings line per difficulty says whether the top agent plays buildings and
+  tier 2. *Top agent*: the highest win rate at the spec's highest difficulty (ties to
+  the later agent).
+- **Head to head against greedy** (008): every agent against plain `greedy` (or the
+  first greedy-kind agent) on the same seeds, per cell: won by both / only the agent /
+  only greedy / neither, the win-rate difference ± the standard error of the per-seed
+  difference, an exact two-sided sign test on the seeds only one of them won, and a
+  verdict (*beats greedy* only when ahead with p < 0.05).
+- **Variants against the base** and **removing a module** (008), when a spec has
+  several variants: each variant's win rate against the first (the base), paired on
+  seeds; for variants that switch a module off (`<module>=off`,
+  `<module>.variant=off`), the base minus the off-variant: what the module is worth.
 - **Luck share**: a two-way split of outcome variance over seeds × agents within each
   config/variant/difficulty: the seed's share (luck), the agent's (skill), the rest
   (interaction and the agents' own randomness). Raw sums-of-squares shares, no

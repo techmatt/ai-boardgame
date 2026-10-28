@@ -1,0 +1,27 @@
+{
+  "name": "engine-agent-008",
+  "note": "008: does a building engine beat no-building play? The engine agent (horizon valuation: income and buildings worth what they pay over the rounds left; weights from the 008 sweep) against greedy on the same seeds at the tuned baseline, difficulties 0 and 4. Also 007's building greedy, and the engine agent forbidden to build (w.built=-100) as a control that differs only in building. Strategy health for every agent.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "random",
+    "greedy",
+    "greedy:w.built_cost=1.2,w.hand=1,w.hand_cost=0.2",
+    "engine:w.built=-100",
+    "engine"
+  ],
+  "games": 240,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

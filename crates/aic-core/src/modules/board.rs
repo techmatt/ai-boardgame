@@ -126,6 +126,9 @@ impl Module for Board {
     }
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
+        // Per-country flags: shown on their country below.
+        let flags: Vec<String> = FLAGS.iter().map(|f| format!("board.{f}.")).collect();
+        out.bookkeeping(&flags.iter().map(String::as_str).collect::<Vec<_>>());
         for c in 0..w.map.countries.len() {
             for f in FLAGS {
                 if flagged(g, f, c) {

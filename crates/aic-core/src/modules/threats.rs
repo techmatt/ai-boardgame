@@ -421,6 +421,8 @@ impl Module for Threats {
     }
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
+        // Payments and jams belong to a threat card: shown in its text.
+        out.bookkeeping(&["threats.paid.", "threats.jam."]);
         let show = |t: &str| {
             let d = def(w, t);
             let req = requirement(w, g, t);
@@ -428,10 +430,27 @@ impl Module for Threats {
                 .iter()
                 .map(|(r, n)| format!("{}/{n} {r}", paid(g, t, r)))
                 .collect();
+            // Who paid what so far (returned if they withdraw), and Jam Signals.
+            let mut extra = String::new();
+            let payers: Vec<String> = (0..g.seats.len())
+                .flat_map(|s| {
+                    req.iter().filter_map(move |(r, _)| {
+                        let n = g.var(&paid_key(t, s, r));
+                        (n > 0).then(|| format!("seat {s} {n} {r}"))
+                    })
+                })
+                .collect();
+            if !payers.is_empty() {
+                extra.push_str(&format!(" Paid: {}.", payers.join(", ")));
+            }
+            let jam = g.var(&jam_key(t));
+            if jam > 0 {
+                extra.push_str(&format!(" Jammed: needs {jam} less of each."));
+            }
             CardView {
                 id: t.to_string(),
                 name: d.name.clone(),
-                text: format!("{} Counter: {}.", d.text, progress.join(", ")),
+                text: format!("{} Counter: {}.{extra}", d.text, progress.join(", ")),
                 status: progress.join(", "),
                 cost: None,
             }

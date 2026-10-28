@@ -6,7 +6,10 @@
 //! and every module may add to them through [`Module::view`]. The engine
 //! fills in the generic parts itself, so a new module's tokens, resources
 //! and tracks show up without any view code; a module adds a `view` hook
-//! only to show something derived (a threshold, a projection, card status).
+//! only to show something derived (a threshold, a projection, card status),
+//! a player board ([`ViewOut::board`]), or to keep its per-seat and
+//! per-card bookkeeping `vars` out of the game-wide globals
+//! ([`ViewOut::bookkeeping`]).
 //!
 //! The view is display data only: nothing here is read back by the rules,
 //! and it is not part of the state, its hash or its replay.
@@ -31,8 +34,8 @@ pub struct View {
     pub hexes: Vec<HexView>,
     pub countries: Vec<CountryView>,
     pub seats: Vec<SeatView>,
-    /// Values that belong to the whole game: every `vars` track, plus what
-    /// modules add.
+    /// Values that belong to the whole game: every `vars` track that no
+    /// module declares bookkeeping, plus what modules add.
     pub globals: Vec<Value>,
     /// Ordered card piles (decks, discards, queues) modules show.
     pub piles: Vec<PileView>,
@@ -91,6 +94,9 @@ pub struct Token {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CountryView {
     pub index: u8,
+    /// The printed country piece's name (`content/map.json` `countries`;
+    /// country `c` is piece `c`).
+    pub name: String,
     /// The seat that plays this country (one seat per country).
     pub seat: u8,
     /// Display colour from `content/map.json`.
@@ -116,6 +122,72 @@ pub struct SeatView {
     /// Card groups modules show for this seat. Exhausted cards that no
     /// module shows land in a generic `engine.exhausted` group.
     pub cards: Vec<CardGroup>,
+    /// The player board this seat plays, if a module shows one.
+    pub board: Option<BoardView>,
+}
+
+/// A player board: a printed sheet with a name, rules text, tracks and
+/// slots. Which board and what its tracks mean is the module's business;
+/// the shape is the same for any board.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BoardView {
+    /// `"<module>.<key>"`.
+    pub key: String,
+    pub source: String,
+    /// Content id of the board.
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// A standing rule printed on the board, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub innate: Option<InnateView>,
+    pub tracks: Vec<TrackView>,
+    /// Slots printed on the board (what they hold is the module's), if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slots: Option<i64>,
+    /// Cards that belong to this board, with where they are now.
+    pub cards: Vec<CardView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct InnateView {
+    pub name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub text: String,
+}
+
+/// A printed track: a row of steps, the leftmost `uncovered` of them
+/// showing, the rest still covered by pieces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TrackView {
+    pub label: String,
+    /// What the track's value is an amount of (a resource), if anything.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub resource: String,
+    pub steps: Vec<TrackStep>,
+    /// How many steps, from the left, are uncovered.
+    pub uncovered: usize,
+    /// Index of the step in effect.
+    pub current: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TrackStep {
+    pub value: i64,
+    /// Extra things printed on the step. Clients may style known keys.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<TrackMark>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TrackMark {
+    /// A short stable word chosen by the module (`"tier2"`, `"antimatter"`).
+    pub key: String,
+    /// What to print (`"T2"`, `"+1 AM"`).
+    pub label: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub doc: String,
 }
 
 /// One number worth showing, with where it came from.
@@ -243,6 +315,31 @@ impl ViewOut<'_> {
         self.view.seats[seat].cards.push(group);
     }
 
+    /// The player board seat `seat` plays. `board.key` is namespaced and
+    /// `board.source` set here.
+    pub fn board(&mut self, seat: usize, key: &str, mut board: BoardView) {
+        board.key = format!("{}.{key}", self.module);
+        board.source = self.module.to_string();
+        self.view.seats[seat].board = Some(board);
+    }
+
+    /// Declares `vars` keys that are the module's bookkeeping rather than
+    /// tracks of the whole game: per-seat or per-card markers, flags
+    /// already shown elsewhere. A prefix ending in `.` covers every key
+    /// under it; any other entry is one exact key. Their generic `globals`
+    /// entries are dropped; the module shows what a player needs of them
+    /// where it belongs (a seat value, a card's text). A value the module
+    /// itself adds under such a key stays.
+    pub fn bookkeeping(&mut self, keys: &[&str]) {
+        let claimed = |k: &str| {
+            keys.iter()
+                .any(|p| if p.ends_with('.') { k.starts_with(p) } else { k == *p })
+        };
+        self.view
+            .globals
+            .retain(|v| v.source != "engine" || !claimed(&v.key));
+    }
+
     pub fn pile(
         &mut self,
         key: &str,
@@ -350,6 +447,11 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             }
             CountryView {
                 index: c as u8,
+                name: content
+                    .map
+                    .countries
+                    .get(c)
+                    .map_or_else(|| format!("C{c}"), |p| p.name.clone()),
                 seat: c as u8,
                 colour: geo.colour.clone(),
                 hexes: geo.hexes.clone(),
@@ -387,6 +489,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
                 .map(|(k, &n)| engine(format!("resource.{k}"), k, n, "on this seat's board"))
                 .collect(),
             cards: Vec::new(),
+            board: None,
         })
         .collect();
     let globals = g

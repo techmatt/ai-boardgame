@@ -793,7 +793,7 @@ fn the_view_shows_terrain_threats_pipeline_tracks_and_choices() {
             assert!(global("opposition.points").is_some_and(|x| x.max.is_some()));
             assert!(global("adversary.pool").is_some());
             for s in &v.seats {
-                assert!(s.values.iter().any(|x| x.key == "ai.track0"));
+                assert!(s.board.as_ref().is_some_and(|b| b.tracks.len() == 2));
                 assert!(s.cards.iter().any(|c| c.key == "cards.hand"));
                 assert!(s.cards.iter().any(|c| c.key == "cards.built"));
             }
@@ -810,6 +810,74 @@ fn the_view_shows_terrain_threats_pipeline_tracks_and_choices() {
         }
         let _ = saw_choice;
     }
+}
+
+#[test]
+fn the_view_names_countries_shows_boards_and_keeps_bookkeeping_out_of_globals() {
+    // Per-seat, per-country and per-card `vars`: never game-wide globals.
+    const BOOKKEEPING: &[&str] = &[
+        "ai.track.",
+        "adversary.killed_foundry.",
+        "adversary.peek",
+        "board.blockade.",
+        "board.sabotage.",
+        "board.shelter.",
+        "cards.tier.",
+        "cards.picked.",
+        "cards.next_discount.",
+        "cards.civic_used.",
+        "cards.unpowered.",
+        "economy.bonus_insight",
+        "threats.paid.",
+        "threats.jam.",
+    ];
+    let names: Vec<&str> = crate::content().map.countries.iter().map(|c| c.name.as_str()).collect();
+    let mut saw_paid = false;
+    let mut saw_track_var = false;
+    for config in variant_matrix() {
+        let rules = Rules::new(&config).unwrap();
+        let mut g = rules.new_game(5);
+        for step in 0..600 {
+            if g.is_over() {
+                break;
+            }
+            let v = rules.view(&g);
+            for (c, cv) in v.countries.iter().enumerate() {
+                assert_eq!(cv.name, names[c]);
+            }
+            for s in &v.seats {
+                let b = s.board.as_ref().expect("every seat shows its AI board");
+                assert_eq!(b.key, "ai.board");
+                assert!(!b.name.is_empty() && !b.id.is_empty());
+                assert_eq!(b.tracks.len(), 2);
+                for t in &b.tracks {
+                    assert!(!t.steps.is_empty() && !t.resource.is_empty());
+                    assert!((1..=t.steps.len()).contains(&t.uncovered));
+                    assert_eq!(t.current, t.uncovered - 1);
+                }
+                assert!(b.tracks.iter().flat_map(|t| &t.steps).any(|x| x.marks.iter().any(|m| m.key == "tier2")));
+                assert!(!s.values.iter().any(|x| x.key.starts_with("ai.track") || x.key == "ai.board"));
+            }
+            for x in &v.globals {
+                let claimed = BOOKKEEPING
+                    .iter()
+                    .any(|p| if p.ends_with('.') { x.key.starts_with(p) } else { x.key == *p });
+                assert!(!claimed || x.source != "engine", "bookkeeping {} in globals", x.key);
+                assert!(!x.key.contains(".paid.") && !x.key.starts_with("ai.track."), "{}", x.key);
+            }
+            saw_paid |= g.vars.keys().any(|k| k.starts_with("threats.paid."));
+            saw_track_var |= g.vars.keys().any(|k| k.starts_with("ai.track."));
+            for k in ["opposition.points", "opposition.level", "adversary.pool"] {
+                assert!(v.globals.iter().any(|x| x.key == k), "{k}");
+            }
+            let legal = rules.legal_actions(&g);
+            let a = legal[step * 7919 % legal.len()].clone();
+            rules.apply_mut(&mut g, &a, None).unwrap();
+        }
+    }
+    // The games really did hold the bookkeeping the view hides.
+    assert!(saw_track_var);
+    let _ = saw_paid;
 }
 
 #[test]

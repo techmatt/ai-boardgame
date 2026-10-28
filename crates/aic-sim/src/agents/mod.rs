@@ -26,6 +26,16 @@
 //!   fresh guesses of the hidden cards); the best mean wins. It looks across
 //!   rounds where the beam stops at the round's end.
 //!
+//! - `engine`: the heuristic's horizon mode ([`eval::Weights::engine`]):
+//!   income and buildings are worth what they pay over the rounds the deck
+//!   clock and the threat state leave, so an investment is scored by its
+//!   payback to the expected end of the game, and a card in hand by whether
+//!   it can be paid for in time. Played one action at a time (`width` 0,
+//!   as greedy), or as a beam over the round (`width` > 0) with optional
+//!   rollouts across rounds (`candidates` > 0); in the 008 sweep the beam
+//!   and rollouts did worse. Built (008) to find out whether a building
+//!   engine can beat greedy's no-building play.
+//!
 //! An agent is named by a spec, `kind[:key=value,...]`: `greedy`,
 //! `beam:width=4`, `rollout:rollouts=8,horizon=3`, and `w.<weight>=V` to
 //! change a heuristic weight (see [`eval::Weights`]).
@@ -137,6 +147,31 @@ pub const LADDER: &[(&str, &[Param])] = &[
             ),
         ],
     ),
+    (
+        "engine",
+        &[
+            (
+                "width",
+                0.0,
+                "beam width over the round (0 = no beam: one action at a time, as greedy; the 008 sweep's best)",
+            ),
+            ("depth", 120.0, "most beam steps"),
+            ("branch", 0.0, "children kept per sequence (0 = all)"),
+            ("choices", 2.0, "levels of an action's own choices resolved before scoring"),
+            ("samples", 1.0, "width 0: guesses of the hidden cards averaged per decision"),
+            (
+                "candidates",
+                0.0,
+                "end-of-round positions rolled out (0 = plain beam)",
+            ),
+            ("rollouts", 2.0, "greedy playouts per candidate"),
+            (
+                "horizon",
+                1.0,
+                "rounds each playout looks past the current one",
+            ),
+        ],
+    ),
 ];
 
 impl AgentSpec {
@@ -221,7 +256,11 @@ impl AgentSpec {
     }
 
     fn weights(&self) -> eval::Weights {
-        let mut w = eval::Weights::default();
+        let mut w = if self.kind == "engine" {
+            eval::Weights::engine()
+        } else {
+            eval::Weights::default()
+        };
         for (k, v) in &self.weights {
             w.set(k, *v);
         }
@@ -263,6 +302,26 @@ impl AgentSpec {
                     horizon: self.p("horizon"),
                 }),
             )),
+            "engine" if self.p("width") == 0 => Box::new(Greedy::new(
+                ev,
+                rng,
+                self.p("samples").max(1),
+                1,
+                self.p("choices"),
+            )),
+            "engine" => Box::new(Beam::new(
+                ev,
+                rng,
+                self.p("width").max(1),
+                self.p("depth").max(1),
+                self.p("branch"),
+                self.p("choices"),
+                (self.p("candidates") > 0).then(|| search::RolloutCfg {
+                    candidates: self.p("candidates"),
+                    rollouts: self.p("rollouts").max(1),
+                    horizon: self.p("horizon"),
+                }),
+            )),
             k => unreachable!("agent kind {k} is checked in parse"),
         }
     }
@@ -294,6 +353,9 @@ mod tests {
             "greedy",
             "beam:width=2",
             "rollout:width=2,candidates=2,rollouts=1,horizon=1",
+            // The engine's beam is beam's code with another heuristic; a
+            // whole debug game of it costs minutes.
+            "engine",
         ] {
             let spec = AgentSpec::parse(spec).unwrap();
             let seed = 3;
@@ -311,7 +373,7 @@ mod tests {
     fn decisions_ignore_hidden_information() {
         let r = rules(0);
         let mut legal = Vec::new();
-        for spec in ["greedy", "beam:width=2"] {
+        for spec in ["greedy", "beam:width=2", "engine", "engine:width=2"] {
             let spec = AgentSpec::parse(spec).unwrap();
             for seed in 0..3 {
                 // Some way into the game, so piles have moved.

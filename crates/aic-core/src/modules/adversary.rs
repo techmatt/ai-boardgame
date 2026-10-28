@@ -441,8 +441,21 @@ impl Module for Adversary {
             None,
             "players lose if a card must be revealed and the deck is empty",
         );
+        out.bookkeeping(&["adversary.killed_foundry.", PEEK]);
         if peek > 0 {
             out.global("peek", "cards shown", g.var(PEEK), None, "Recon Sweep: the top cards of the deck are shown");
+        }
+        for s in 0..g.seats.len() {
+            if g.var(&killed_foundry(s)) > 0 {
+                out.seat(
+                    s,
+                    "killed_foundry",
+                    "destroyed a foundry",
+                    1,
+                    None,
+                    "you destroyed a foundry this round (for cards that ask)",
+                );
+            }
         }
     }
 }

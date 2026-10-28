@@ -2,7 +2,7 @@
 
 007: opposition rewards, threat placement and the off-variants at the tuned baseline.
 
-3072 games (32 cells × 96 seeds, 200000..=200095) on 12 threads in 654.0 s. Engine 0.1.0, rules r3, content 5a1580ea226de951.
+3072 games (32 cells × 96 seeds, 200000..=200095) on 12 threads in 1111.9 s. Engine 0.1.0, rules r3, content 5a1580ea226de951.
 
 - Configs: configs/baseline.json
 - Variants: pushback; income (opposition.variant=income opposition.income_credits=2); free_purchases (opposition.variant=free_purchases opposition.free_purchases=2); counter_threat (opposition.variant=counter_threat); opposition_off (opposition.variant=off); shared_row (threats.variant=shared_row); threats_off (threats.variant=off); cards_off (cards.variant=off)
@@ -53,6 +53,13 @@
 - Cards (greedy, offered at least 10 times): kept under 10% of the time: none; over 90%: assembly_cluster, civic_shelter, contract_bid, data_mining, emergency_fab, evacuate, fab_line, firewall_node, fork_process, grant, grid_battery, jam_signals, liquidate_reserves, logistics_ai, microgrid, opposition_network, overclock_rig, power_share, precision_strike, rally, rebuild, recon_sweep, recruitment_hub, scavenge, server_farm, shore_up, solar_field, sweep, trade_office, watchtower_net.
 - Luck share of survival (seed's share of the variance): 31% on average across groups (target: most variance from decisions).
 - Help and counters (strongest agent): 0.00 gifts per game; 22% of threats countered.
+- Strategy health at difficulty 0 (pushback): the top agent there (greedy, 94% wins) plays 1.82 buildings and 2.03 tier-2 cards per game (of 20.0 cards); 81% of its wins had 2+ buildings played (81% with 2+ standing at the end). **It hardly builds** (under 2 buildings per game); it plays tier 2.
+- Strategy health at difficulty 4 (pushback): the top agent there (greedy, 66% wins) plays 1.76 buildings and 1.56 tier-2 cards per game (of 16.9 cards); 78% of its wins had 2+ buildings played (78% with 2+ standing at the end). **It hardly builds** (under 2 buildings per game); it plays tier 2.
+- Top agent (greedy: highest win rate at difficulty 4, ties to the later agent) is greedy itself; the closest other agent at difficulty 4 (pushback): random 0% vs greedy 66% over 96 seeds (only random 0, only greedy 63), -65.6 ±4.9 pts, sign test p <0.001: worse than greedy.
+- Variants against the base (pushback) at difficulty 0, greedy, win rate difference in pts (bold: sign test p < 0.05): income -1.0 ±1.0; free_purchases -2.1 ±1.5; counter_threat -1.0 ±1.0; opposition_off -2.1 ±1.5; **shared_row -18.8 ±4.5**; threats_off +5.2 ±2.7; **cards_off -93.8 ±2.5**.
+- Variants against the base (pushback) at difficulty 4, greedy, win rate difference in pts (bold: sign test p < 0.05): income -2.1 ±3.0; free_purchases -2.1 ±3.0; counter_threat +3.1 ±3.1; opposition_off -2.1 ±2.6; **shared_row -43.8 ±5.5**; **threats_off +32.3 ±5.0**; **cards_off -65.6 ±4.9**.
+- What a module is worth (base win rate minus with it off) at difficulty 0, greedy: opposition +2.1 ±1.5; threats -5.2 ±2.7; **cards +93.8 ±2.5** pts.
+- What a module is worth (base win rate minus with it off) at difficulty 4, greedy: opposition +2.1 ±2.6; **threats -32.3 ±5.0**; **cards +65.6 ±4.9** pts.
 
 ## Win rate by skill tier × difficulty
 
@@ -121,6 +128,83 @@ Win % ± standard error, then mean survival (rounds reached; a win counts its ro
 | cards_off difficulty 4 | random | greedy | skill gap |
 |---|---|---|---|
 | win % (survival) | 0.0 ±0.0 (5.49) | 0.0 ±0.0 (6.03) | +0.0 pts (+0.54 survival) |
+
+## Head to head against greedy
+
+Each agent and `greedy` play the same seeds in every cell. Won by both / only the agent / only greedy / neither. Difference: the agent's win rate minus greedy's, ± the standard error of the per-seed difference; p: exact two-sided sign test on the seeds only one of them won. Beats greedy: ahead with p < 0.05.
+
+| cell | games | agent win % | greedy win % | both / only agent / only greedy / neither | difference (pts) | p | verdict |
+|---|---|---|---|---|---|---|---|
+| pushback d0 random | 96 | 1.0 | 93.8 | 1 / 0 / 89 / 6 | -92.7 ±2.7 | <0.001 | worse than greedy |
+| pushback d4 random | 96 | 0.0 | 65.6 | 0 / 0 / 63 / 33 | -65.6 ±4.9 | <0.001 | worse than greedy |
+| income d0 random | 96 | 1.0 | 92.7 | 1 / 0 / 88 / 7 | -91.7 ±2.8 | <0.001 | worse than greedy |
+| income d4 random | 96 | 0.0 | 63.5 | 0 / 0 / 61 / 35 | -63.5 ±4.9 | <0.001 | worse than greedy |
+| free_purchases d0 random | 96 | 1.0 | 91.7 | 1 / 0 / 87 / 8 | -90.6 ±3.0 | <0.001 | worse than greedy |
+| free_purchases d4 random | 96 | 0.0 | 63.5 | 0 / 0 / 61 / 35 | -63.5 ±4.9 | <0.001 | worse than greedy |
+| counter_threat d0 random | 96 | 1.0 | 92.7 | 1 / 0 / 88 / 7 | -91.7 ±2.8 | <0.001 | worse than greedy |
+| counter_threat d4 random | 96 | 0.0 | 68.8 | 0 / 0 / 66 / 30 | -68.8 ±4.8 | <0.001 | worse than greedy |
+| opposition_off d0 random | 96 | 1.0 | 91.7 | 1 / 0 / 87 / 8 | -90.6 ±3.0 | <0.001 | worse than greedy |
+| opposition_off d4 random | 96 | 0.0 | 63.5 | 0 / 0 / 61 / 35 | -63.5 ±4.9 | <0.001 | worse than greedy |
+| shared_row d0 random | 96 | 0.0 | 75.0 | 0 / 0 / 72 / 24 | -75.0 ±4.4 | <0.001 | worse than greedy |
+| shared_row d4 random | 96 | 0.0 | 21.9 | 0 / 0 / 21 / 75 | -21.9 ±4.2 | <0.001 | worse than greedy |
+| threats_off d0 random | 96 | 1.0 | 99.0 | 1 / 0 / 94 / 1 | -97.9 ±1.5 | <0.001 | worse than greedy |
+| threats_off d4 random | 96 | 1.0 | 97.9 | 1 / 0 / 93 / 2 | -96.9 ±1.8 | <0.001 | worse than greedy |
+| cards_off d0 random | 96 | 0.0 | 0.0 | 0 / 0 / 0 / 96 | +0.0 ±0.0 | 1.000 | no better than greedy (level) |
+| cards_off d4 random | 96 | 0.0 | 0.0 | 0 / 0 / 0 / 96 | +0.0 ±0.0 | 1.000 | no better than greedy (level) |
+
+## Variants against the base
+
+The first variant, `pushback`, is the base. Both play the same seeds, so the difference (variant minus base, percentage points) carries the standard error of the per-seed difference; p: exact two-sided sign test on the seeds only one of them won.
+
+| variant | difficulty | agent | win % base → variant | difference (pts) | p | rounds base → variant |
+|---|---|---|---|---|---|---|
+| income | 0 | random | 1.0 → 1.0 | +0.0 ±0.0 | 1.000 | 6.36 → 6.36 |
+| income | 0 | greedy | 93.8 → 92.7 | -1.0 ±1.0 | 1.000 | 7.74 → 7.74 |
+| income | 4 | random | 0.0 → 0.0 | +0.0 ±0.0 | 1.000 | 5.59 → 5.59 |
+| income | 4 | greedy | 65.6 → 63.5 | -2.1 ±3.0 | 0.727 | 6.94 → 6.95 |
+| free_purchases | 0 | random | 1.0 → 1.0 | +0.0 ±0.0 | 1.000 | 6.36 → 6.36 |
+| free_purchases | 0 | greedy | 93.8 → 91.7 | -2.1 ±1.5 | 0.500 | 7.74 → 7.74 |
+| free_purchases | 4 | random | 0.0 → 0.0 | +0.0 ±0.0 | 1.000 | 5.59 → 5.59 |
+| free_purchases | 4 | greedy | 65.6 → 63.5 | -2.1 ±3.0 | 0.727 | 6.94 → 6.98 |
+| counter_threat | 0 | random | 1.0 → 1.0 | +0.0 ±0.0 | 1.000 | 6.36 → 6.36 |
+| counter_threat | 0 | greedy | 93.8 → 92.7 | -1.0 ±1.0 | 1.000 | 7.74 → 7.68 |
+| counter_threat | 4 | random | 0.0 → 0.0 | +0.0 ±0.0 | 1.000 | 5.59 → 5.59 |
+| counter_threat | 4 | greedy | 65.6 → 68.8 | +3.1 ±3.1 | 0.508 | 6.94 → 7.06 |
+| opposition_off | 0 | random | 1.0 → 1.0 | +0.0 ±0.0 | 1.000 | 6.36 → 6.36 |
+| opposition_off | 0 | greedy | 93.8 → 91.7 | -2.1 ±1.5 | 0.500 | 7.74 → 7.74 |
+| opposition_off | 4 | random | 0.0 → 0.0 | +0.0 ±0.0 | 1.000 | 5.59 → 5.59 |
+| opposition_off | 4 | greedy | 65.6 → 63.5 | -2.1 ±2.6 | 0.688 | 6.94 → 6.97 |
+| shared_row | 0 | random | 1.0 → 0.0 | -1.0 ±1.0 | 1.000 | 6.36 → 6.04 |
+| shared_row | 0 | greedy | 93.8 → 75.0 | -18.8 ±4.5 | <0.001 | 7.74 → 7.56 |
+| shared_row | 4 | random | 0.0 → 0.0 | +0.0 ±0.0 | 1.000 | 5.59 → 5.09 |
+| shared_row | 4 | greedy | 65.6 → 21.9 | -43.8 ±5.5 | <0.001 | 6.94 → 6.11 |
+| threats_off | 0 | random | 1.0 → 1.0 | +0.0 ±1.5 | 1.000 | 6.36 → 7.17 |
+| threats_off | 0 | greedy | 93.8 → 99.0 | +5.2 ±2.7 | 0.125 | 7.74 → 7.72 |
+| threats_off | 4 | random | 0.0 → 1.0 | +1.0 ±1.0 | 1.000 | 5.59 → 6.44 |
+| threats_off | 4 | greedy | 65.6 → 97.9 | +32.3 ±5.0 | <0.001 | 6.94 → 7.40 |
+| cards_off | 0 | random | 1.0 → 0.0 | -1.0 ±1.0 | 1.000 | 6.36 → 6.27 |
+| cards_off | 0 | greedy | 93.8 → 0.0 | -93.8 ±2.5 | <0.001 | 7.74 → 6.96 |
+| cards_off | 4 | random | 0.0 → 0.0 | +0.0 ±0.0 | 1.000 | 5.59 → 5.49 |
+| cards_off | 4 | greedy | 65.6 → 0.0 | -65.6 ±4.9 | <0.001 | 6.94 → 6.03 |
+
+## Removing a module
+
+What a module is worth: the base's win rate minus the win rate with the module switched off, on the same seeds, ± the standard error of the per-seed difference. Positive: the module helps the players; negative: it holds them back.
+
+| module (variant) | difficulty | agent | base win % | off win % | worth (pts) | p |
+|---|---|---|---|---|---|---|
+| opposition (opposition_off) | 0 | random | 1.0 | 1.0 | +0.0 ±0.0 | 1.000 |
+| opposition (opposition_off) | 0 | greedy | 93.8 | 91.7 | +2.1 ±1.5 | 0.500 |
+| opposition (opposition_off) | 4 | random | 0.0 | 0.0 | +0.0 ±0.0 | 1.000 |
+| opposition (opposition_off) | 4 | greedy | 65.6 | 63.5 | +2.1 ±2.6 | 0.688 |
+| threats (threats_off) | 0 | random | 1.0 | 1.0 | +0.0 ±1.5 | 1.000 |
+| threats (threats_off) | 0 | greedy | 93.8 | 99.0 | -5.2 ±2.7 | 0.125 |
+| threats (threats_off) | 4 | random | 0.0 | 1.0 | -1.0 ±1.0 | 1.000 |
+| threats (threats_off) | 4 | greedy | 65.6 | 97.9 | -32.3 ±5.0 | <0.001 |
+| cards (cards_off) | 0 | random | 1.0 | 0.0 | +1.0 ±1.0 | 1.000 |
+| cards (cards_off) | 0 | greedy | 93.8 | 0.0 | +93.8 ±2.5 | <0.001 |
+| cards (cards_off) | 4 | random | 0.0 | 0.0 | +0.0 ±0.0 | 1.000 |
+| cards (cards_off) | 4 | greedy | 65.6 | 0.0 | +65.6 ±4.9 | <0.001 |
 
 ## Game length, margin and end
 
@@ -258,6 +342,20 @@ Distinct end-of-game builds (each seat's AI and buildings) and the mean Jaccard 
 | cards_off d4 random | 7 of 96 | 0.27 | 0 of 0 | – |
 | cards_off d4 greedy | 1 of 96 | 0.00 | 0 of 0 | – |
 
+## Strategy health
+
+Per game, over the whole team: buildings played (any tier, AI unique buildings too), tier-2 cards played (buildings and programs), all cards played; then the share of wins with 2 or more buildings played, and in brackets with 2 or more buildings standing at the end.
+
+| difficulty 0: buildings / tier 2 / cards per game, wins with 2+ buildings | pushback | income | free_purchases | counter_threat | opposition_off | shared_row | threats_off | cards_off |
+|---|---|---|---|---|---|---|---|---|
+| random | 7.90 / 0.06 / 19.2, 0% (0%) | 7.88 / 0.06 / 19.2, 0% (0%) | 7.88 / 0.06 / 19.2, 0% (0%) | 7.90 / 0.06 / 19.2, 0% (0%) | 7.88 / 0.06 / 19.2, 0% (0%) | 7.48 / 0.01 / 18.3, – | 9.81 / 0.14 / 23.0, 100% (100%) | 2.84 / 0.00 / 5.7, – |
+| greedy | 1.82 / 2.03 / 20.0, 81% (81%) | 1.85 / 2.05 / 20.5, 84% (84%) | 1.82 / 2.04 / 20.3, 82% (82%) | 1.82 / 2.04 / 20.1, 81% (81%) | 1.81 / 2.04 / 20.3, 80% (80%) | 1.92 / 1.83 / 19.5, 90% (90%) | 1.98 / 2.24 / 19.8, 98% (98%) | 1.00 / 0.00 / 3.0, – |
+
+| difficulty 4: buildings / tier 2 / cards per game, wins with 2+ buildings | pushback | income | free_purchases | counter_threat | opposition_off | shared_row | threats_off | cards_off |
+|---|---|---|---|---|---|---|---|---|
+| random | 7.26 / 0.02 / 17.6, – | 7.26 / 0.02 / 17.6, – | 7.26 / 0.02 / 17.6, – | 7.26 / 0.02 / 17.6, – | 7.26 / 0.02 / 17.6, – | 6.08 / 0.02 / 15.1, – | 8.81 / 0.05 / 20.6, 100% (100%) | 2.52 / 0.00 / 5.3, – |
+| greedy | 1.76 / 1.56 / 16.9, 78% (78%) | 1.77 / 1.49 / 17.2, 79% (79%) | 1.76 / 1.52 / 17.2, 77% (77%) | 1.76 / 1.57 / 17.3, 74% (74%) | 1.76 / 1.52 / 17.1, 77% (77%) | 1.76 / 0.88 / 13.9, 86% (86%) | 1.94 / 1.92 / 18.4, 94% (94%) | 1.00 / 0.00 / 3.0, – |
+
 ## Pick and play rates per card
 
 Over all cells of each agent. Offered: in a draft packet (each round's deal). Every dealt card is drafted by someone (packets pass until empty), so pick is the mean pick position, 1 = a seat's first pick of the round (lower = wanted sooner). Keep: kept (bought) per offer. Play: played per card gained (kept or drawn; unique AI cards start in hand, so their plays are per game). Per difficulty in `cards.csv`.
@@ -317,38 +415,38 @@ Per game on one thread (12 threads ran at once, so a lone run is somewhat faster
 
 | cell | agent ms/game | agent ms/decision | probes ms/game | total ms/game |
 |---|---|---|---|---|
-| pushback d0 random | 0.0 | 0.000 | 0.0 | 19.9 |
-| pushback d0 greedy | 7554.1 | 34.830 | 0.0 | 7590.0 |
-| pushback d4 random | 0.0 | 0.000 | 0.0 | 16.2 |
-| pushback d4 greedy | 6602.6 | 33.813 | 0.0 | 6634.6 |
-| income d0 random | 0.0 | 0.000 | 0.0 | 18.9 |
-| income d0 greedy | 6667.1 | 30.868 | 0.0 | 6698.3 |
-| income d4 random | 0.0 | 0.000 | 0.0 | 15.7 |
-| income d4 greedy | 5265.2 | 27.115 | 0.0 | 5291.5 |
-| free_purchases d0 random | 0.0 | 0.000 | 0.0 | 19.2 |
-| free_purchases d0 greedy | 6245.3 | 28.996 | 0.0 | 6274.4 |
-| free_purchases d4 random | 0.0 | 0.000 | 0.0 | 15.5 |
-| free_purchases d4 greedy | 5140.8 | 26.408 | 0.0 | 5166.0 |
-| counter_threat d0 random | 0.0 | 0.000 | 0.0 | 18.5 |
-| counter_threat d0 greedy | 5898.1 | 27.517 | 0.0 | 5926.3 |
-| counter_threat d4 random | 0.0 | 0.000 | 0.0 | 15.9 |
-| counter_threat d4 greedy | 5072.1 | 25.750 | 0.0 | 5097.6 |
-| opposition_off d0 random | 0.0 | 0.000 | 0.0 | 19.0 |
-| opposition_off d0 greedy | 5776.8 | 26.819 | 0.0 | 5804.4 |
-| opposition_off d4 random | 0.0 | 0.000 | 0.0 | 15.6 |
-| opposition_off d4 greedy | 4803.4 | 24.748 | 0.0 | 4828.0 |
-| shared_row d0 random | 0.0 | 0.000 | 0.0 | 18.4 |
-| shared_row d0 greedy | 5806.5 | 26.343 | 0.0 | 5834.5 |
-| shared_row d4 random | 0.0 | 0.000 | 0.0 | 14.8 |
-| shared_row d4 greedy | 4128.2 | 22.754 | 0.0 | 4150.2 |
-| threats_off d0 random | 0.0 | 0.000 | 0.0 | 19.4 |
-| threats_off d0 greedy | 4375.9 | 21.770 | 0.0 | 4398.2 |
-| threats_off d4 random | 0.0 | 0.000 | 0.0 | 16.7 |
-| threats_off d4 greedy | 3992.6 | 20.636 | 0.0 | 4013.7 |
-| cards_off d0 random | 0.0 | 0.000 | 0.0 | 9.6 |
-| cards_off d0 greedy | 1930.8 | 23.325 | 0.0 | 1942.2 |
-| cards_off d4 random | 0.0 | 0.000 | 0.0 | 8.4 |
-| cards_off d4 greedy | 1277.7 | 19.265 | 0.0 | 1286.6 |
+| pushback d0 random | 0.0 | 0.000 | 0.0 | 38.0 |
+| pushback d0 greedy | 14000.1 | 64.551 | 0.0 | 14061.5 |
+| pushback d4 random | 0.0 | 0.000 | 0.0 | 33.8 |
+| pushback d4 greedy | 10794.5 | 55.279 | 0.0 | 10843.7 |
+| income d0 random | 0.0 | 0.000 | 0.0 | 39.5 |
+| income d0 greedy | 12690.9 | 58.757 | 0.0 | 12752.2 |
+| income d4 random | 0.0 | 0.000 | 0.0 | 33.7 |
+| income d4 greedy | 10159.4 | 52.320 | 0.0 | 10210.4 |
+| free_purchases d0 random | 0.0 | 0.000 | 0.0 | 36.3 |
+| free_purchases d0 greedy | 11762.4 | 54.611 | 0.0 | 11815.6 |
+| free_purchases d4 random | 0.0 | 0.000 | 0.0 | 31.7 |
+| free_purchases d4 greedy | 9643.4 | 49.538 | 0.0 | 9691.8 |
+| counter_threat d0 random | 0.0 | 0.000 | 0.0 | 39.3 |
+| counter_threat d0 greedy | 11131.6 | 51.933 | 0.0 | 11176.4 |
+| counter_threat d4 random | 0.0 | 0.000 | 0.0 | 34.0 |
+| counter_threat d4 greedy | 9555.2 | 48.509 | 0.0 | 9607.8 |
+| opposition_off d0 random | 0.0 | 0.000 | 0.0 | 40.3 |
+| opposition_off d0 greedy | 6378.8 | 29.614 | 0.0 | 6408.6 |
+| opposition_off d4 random | 0.0 | 0.000 | 0.0 | 35.6 |
+| opposition_off d4 greedy | 4974.3 | 25.628 | 0.0 | 4998.5 |
+| shared_row d0 random | 0.5 | 0.003 | 0.0 | 35.9 |
+| shared_row d0 greedy | 5866.9 | 26.617 | 0.0 | 5895.8 |
+| shared_row d4 random | 0.0 | 0.000 | 0.0 | 33.1 |
+| shared_row d4 greedy | 4852.9 | 26.748 | 0.0 | 4878.1 |
+| threats_off d0 random | 0.0 | 0.000 | 0.0 | 38.2 |
+| threats_off d0 greedy | 9524.9 | 47.385 | 0.0 | 9578.0 |
+| threats_off d4 random | 0.0 | 0.000 | 0.0 | 34.8 |
+| threats_off d4 greedy | 8627.0 | 44.589 | 0.0 | 8674.1 |
+| cards_off d0 random | 0.0 | 0.000 | 0.0 | 18.9 |
+| cards_off d0 greedy | 4075.5 | 49.232 | 0.0 | 4100.4 |
+| cards_off d4 random | 0.0 | 0.000 | 0.0 | 17.6 |
+| cards_off d4 greedy | 2681.8 | 40.436 | 0.0 | 2699.8 |
 
 ## Saved records
 

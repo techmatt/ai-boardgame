@@ -11,7 +11,10 @@ import {
   actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, strong, tokenColour, tokenName,
   type LabelContext,
 } from './format';
-import { cardChip, countriesHtml, legendHtml, pilesHtml, pipelineHtml, seatCardsHtml, seatValuesHtml, statusHtml, varsHtml } from './panels';
+import {
+  boardDetails, cardChip, countriesHtml, countryName, legendHtml, pilesHtml, pipelineHtml, seatCardsHtml, seatValuesHtml,
+  statusHtml, trackStepDetails, varsHtml,
+} from './panels';
 import { Timeline, parseSeed, randomSeed, readRecord } from './session';
 import './style.css';
 
@@ -173,7 +176,7 @@ const shortPhase = (name: string) => name.split('+').map((x) => x.split('.').pop
 function renderPrompt(targets: number) {
   const v = shown;
   const seatName = (s: number) => {
-    const ai = aiBoard(tl.frame.snap.state.config, s)?.name;
+    const ai = v.seats[s]?.board?.name ?? aiBoard(tl.frame.snap.state.config, s)?.name;
     return `Seat ${s}${ai ? ` (${escapeHtml(ai)})` : ''}`;
   };
   ui.prompt.className = '';
@@ -230,13 +233,15 @@ function renderSeats() {
     box.dataset.seat = String(seat.index);
     box.style.setProperty('--tint', strong(country?.colour ?? '#cccccc'));
     const status = v.outcome ? '' : choosing ? 'deciding' : mine.length ? 'to act' : seat.passed ? 'passed' : waiting ? 'waiting' : '';
-    const ai = aiBoard(config, seat.index);
+    // The board the engine shows for this seat; content's board by config as a fallback.
+    const fallback = aiBoard(config, seat.index);
+    const ai = seat.board ?? (fallback && { name: fallback.name, text: fallback.text, innate: fallback.innate });
     const slots = country?.slots.length
       ? `<div class="row"><span class="what">card strip</span>${country.slots.map((s, i) => (s ? cardChip(s, `slot:${seat.country}:${i}`) : '<span class="slot">—</span>')).join('')}</div>`
       : '';
     box.innerHTML = `
-      <h3><span class="swatch"></span>Seat ${seat.index}${ai ? ` · <span data-value="ai.board" data-scope="seat:${seat.index}">${escapeHtml(ai.name)}</span>` : ''} <small>C${seat.country}</small><span class="status">${status}</span></h3>
-      ${ai ? `<div class="innate" title="${escapeHtml(ai.text)}"><b>${escapeHtml(ai.innate.name)}:</b> ${escapeHtml(ai.innate.text)}</div>` : ''}
+      <h3><span class="swatch"></span>Seat ${seat.index}${ai ? ` · <span class="board-name" data-board-seat="${seat.index}">${escapeHtml(ai.name)}</span>` : ''} <small title="country ${seat.country}">${escapeHtml(countryName(v, seat.country))}</small><span class="status">${status}</span></h3>
+      ${ai?.innate ? `<div class="innate" title="${escapeHtml(ai.text ?? '')}"><b>${escapeHtml(ai.innate.name)}:</b> ${escapeHtml(ai.innate.text ?? '')}</div>` : ''}
       ${seatValuesHtml(v, seat.index)}
       ${seatCardsHtml(v, seat.index)}
       ${slots}`;
@@ -372,13 +377,13 @@ function details(t: HTMLElement | SVGElement): string | null {
   if (d.token !== undefined && d.hex) {
     const h = shown.hexes.find((x) => hexKey(x.hex) === d.hex);
     const tok = h?.tokens.find((x) => x.kind === d.token);
-    return `<b>${escapeHtml(tokenName(d.token))}</b> × ${tok?.count ?? 0}<br><code>${escapeHtml(d.token)}</code> on C${h?.country} #${h?.number} (${escapeHtml(h?.terrain ?? '')}, hex ${d.hex})`;
+    return `<b>${escapeHtml(tokenName(d.token))}</b> × ${tok?.count ?? 0}<br><code>${escapeHtml(d.token)}</code> on ${escapeHtml(countryName(shown, h?.country ?? -1))} #${h?.number} (${escapeHtml(h?.terrain ?? '')}, hex ${d.hex})`;
   }
   if (d.hex && d.index !== undefined) {
     const h = shown.hexes[Number(d.index)];
     const toks = h.tokens.map((x) => `<span class="dot" style="background:${tokenColour(x.kind)}"></span>${escapeHtml(tokenName(x.kind))} × ${x.count}`).join('<br>') || 'no tokens';
     const here = legal.filter((a) => isHex(a.target) && hexKey(a.target) === d.hex).map((a) => escapeHtml(actionLabel(a, true, true, labels())));
-    return `<b>C${h.country} #${h.number}</b> · ${escapeHtml(h.terrain)}${h.uplink ? ' · <b>uplink</b> (the adversary enters here)' : ''}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
+    return `<b>${escapeHtml(countryName(shown, h.country))} #${h.number}</b> · ${escapeHtml(h.terrain)}${h.uplink ? ' · <b>uplink</b> (the adversary enters here)' : ''}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
   }
   if (d.pile) {
     const p = shown.piles.find((x) => x.key === d.pile);
@@ -407,6 +412,8 @@ function details(t: HTMLElement | SVGElement): string | null {
     if (!c) return null;
     return `<b>${escapeHtml(c.name)}</b> <code>${escapeHtml(c.id)}</code>${c.cost !== undefined ? ` · cost ${c.cost}` : ''}<br>${escapeHtml(c.status)}${c.text ? `<br>${escapeHtml(c.text)}` : ''}<br><small>${escapeHtml(d.where ?? '')}</small>`;
   }
+  if (d.track) return trackStepDetails(shown, d.track);
+  if (d.boardSeat !== undefined) return boardDetails(shown, Number(d.boardSeat));
   if (d.action) return `<code>${escapeHtml(d.action)}</code>`;
   return null;
 }
@@ -417,7 +424,7 @@ function highlight(hexes: string[]) {
 }
 
 document.addEventListener('mousemove', (e) => {
-  const target = (e.target as Element).closest?.('[data-token],[data-hex][data-index],[data-value],[data-card],[data-pile],[data-action]') as HTMLElement | null;
+  const target = (e.target as Element).closest?.('[data-token],[data-hex][data-index],[data-value],[data-card],[data-pile],[data-track],[data-board-seat],[data-action]') as HTMLElement | null;
   const html = target ? details(target) : null;
   const hl = (e.target as Element).closest?.('[data-hexes]') as HTMLElement | null;
   highlight(hl?.dataset.hexes ? hl.dataset.hexes.split(' ').filter(Boolean) : []);
