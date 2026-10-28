@@ -1,0 +1,10 @@
+{
+  "name": "smoke",
+  "note": "A quick check of the harness: every agent kind, both ends of the difficulty range, a few seeds.",
+  "configs": ["configs/baseline.json"],
+  "difficulties": [0, 4],
+  "agents": ["random", "greedy", "beam"],
+  "games": 6,
+  "winprob": {"games": 2, "rollouts": 4, "agent": "greedy"},
+  "records": 2
+}

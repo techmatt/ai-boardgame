@@ -19,7 +19,8 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 |---|---|
 | `crates/aic-core` | The rules engine. No I/O, no clock, seeded per-purpose RNG streams in the state, serde state, exact replay. `Rules::new(config)` then `new_game` / `legal_actions_into` / `apply_mut`, plus the convenient free functions `new_game`, `legal_actions`, `apply`. |
 | `crates/aic-core/src/modules/` | One file per rules area (`board`, `adversary`, `threats`, `opposition`, `economy`, `ai`, `cards`), shared code (`common`, `effects`), the registry in `mod.rs`. |
-| `crates/aic-sim` | Native CLI: seeded random-agent games over a seed range, one config or two side by side, with every game replay-checked. |
+| `crates/aic-sim` | Native CLI: seeded games over a seed range, one config or two side by side, with every game replay-checked; the agent skill ladder (`agents/`) and the experiment harness (`experiment.rs`, `report.rs`). |
+| `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports with their records. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, all built from code primitives. |
 | `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 (2 countries, difficulty 0); `shared_row.json` differs only in the threat variant; `clusters.json` and `assets.json` only in the adversary (the two spread variants, rules.md §2a). Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §2b): `--set threats.variant=off`, `opposition.variant=off`, `cards.variant=off`. |
@@ -54,7 +55,7 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 
 ```sh
 cargo build --workspace
-cargo test --workspace                             # ~40 s incl. build; the core tests ~10 s (debug)
+cargo test --workspace                             # ~65 s incl. build (debug): core ~10 s, agents ~10 s, experiment ~25 s
 cargo build --release -p aic-sim                   # ~12 s
 wasm-pack build crates/aic-wasm --target web       # ~20 s cold, ~9 s warm -> crates/aic-wasm/pkg (git-ignored)
 node scripts/wasm-smoke.mjs                        # needs the wasm build; checks native = wasm
@@ -102,6 +103,7 @@ $S replay out/games/*.json                         # check records natively (als
 | `--games N` / `--seed S` | `200` / `0` | Seeds `S` to `S+N-1`, one game per seed per config (any `u64`, up to `u64::MAX`). |
 | `--set K=V` | | Override for every config. Repeatable. `countries=N`; `<module>.<param>=V` with `V` as `3` or `1,2,3`, or empty to unset; `<module>.variant=NAME` (keeps the parameters the new variant shares, drops the rest); `<module>=off` (removes the module and its phases). |
 | `--set-a K=V` / `--set-b K=V` | | Override for config A or config B only. |
+| `--agent SPEC` | `random` | The team agent (see [Agents](#agents)), e.g. `greedy`, `beam:width=4`. Shown in the table header and in `--json`. |
 | `--max-actions N` | `100000` | Per-game action cap. A capped game ends as `timeout`. |
 | `--threads N` | all cores | Results don't depend on it: agents are seeded per game. |
 | `--json` | off | Print the summary as JSON: every field below, plus the diff, agent, `max_actions` and rules revision. |
@@ -155,3 +157,127 @@ replay big sets in batches.
 
 The random agent picks uniformly among all seats' legal actions, passes and choice
 answers included. Treat it as a floor, not as a model of a weak team.
+
+## Agents
+
+The skill ladder (`crates/aic-sim/src/agents/`). One team agent drives every seat, with
+hands and drafts open, and answers the "players choose" questions too. Agents play
+through the public API only (`legal_actions_into`, `apply_mut`, reading the state).
+
+- **No peeking.** Before any search an agent replaces what the printed game hides with
+  a guess from its own RNG (`agents/determinize.rs`): the player-card and threat decks
+  are shuffled (contents are public, order is not); each hidden adversary-deck position
+  gets an unseen printed card of its stage (stages are stacked and public; the top
+  cards stay put under Recon Sweep); every RNG stream is reseeded. The guess depends only
+  on the public table and the agent's RNG; a test changes only hidden information and
+  checks that decisions stay the same.
+- **Own randomness.** Each agent's RNG is the game seed on a stream named after the agent
+  kind, apart from every engine stream. Games replay from seed + actions, and results
+  don't depend on `--threads`.
+- **Heuristic** (`agents/eval.rs`): win/loss, the corruption pool, population slack,
+  adversary pieces and the opposition track, the players' engine (factories, data
+  centres, processors, track income, resources, cards in hand and built), unpaid threats,
+  and a forecast of the coming ravages (the ravage- and build-slot cards are public).
+  Every weight is a parameter: `w.<name>=V` in an agent spec.
+
+| Spec | What it does | Budget parameters (defaults) |
+|---|---|---|
+| `random` | Uniform over legal actions. | none |
+| `greedy` | One action at a time: each scored by the heuristic after it, its own choices resolved best-first. A pass scores the table as it is (else stalling beats stopping). | `samples` 1 (guesses averaged), `depth` 1 (actions looked ahead), `choices` 2 |
+| `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all) |
+| `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `candidates` 3, `rollouts` 4, `horizon` 2 |
+
+Spec syntax: `kind[:key=value,...]`, for example `beam:width=12`,
+`rollout:rollouts=8,horizon=3`, `greedy:w.pool=20`. `aic-sim run ... --agent SPEC` plays
+any of them; an experiment lists several.
+
+## Experiments
+
+```sh
+S=target/release/aic-sim
+$S experiment experiments/ladder-v0.json                    # -> out/experiments/ladder-v0/
+$S experiment experiments/smoke.json --out out/smoke        # a quick check (6 seeds)
+$S experiment experiments/ladder-v0.json --games 20 --seed 1000 --threads 6
+```
+
+An experiment is configs × variants × difficulties × agents over a seed range, played
+on every core (one game at a time per worker, results sorted, so nothing depends on the
+thread count; every game is replay-checked). The spec (`experiments/*.json`):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `name`, `note` | | Report title and a line on what it is for. |
+| `configs` | | Config files. |
+| `variants` | `[{"name": "base", "set": []}]` | Named override sets in `--set` syntax, each applied to every config. |
+| `difficulties` | `[0]` | `adversary.difficulty` levels. |
+| `agents` | | Agent specs, weakest first. |
+| `games`, `first_seed` | `first_seed` 0 | Seeds per cell. `--games`/`--seed` override. |
+| `max_actions` | `5000` | Per-game cap (`timeout`). |
+| `winprob` | `{"games": 0, "rollouts": 8, "agent": "greedy"}` | Win probability by round: for the first `games` seeds of each cell, `rollouts` playouts by `agent` from a guess of the table at the start of each round. |
+| `closeness` | `{"every": 1, "gap": 2.0}` | Probe every n-th real choice (0 = off): 1-ply greedy scores of every option; close when the best two are within `gap` heuristic points (about credits). |
+| `records` | `4` | Records saved per category. |
+
+The output directory (`--out`, default `out/experiments/<name>/`) holds `report.md` (the
+cycle report: findings, then the tables), `results.json` (`aic-experiment/1`: the
+spec, every cell's and group's measures, the card table, the records), `games.csv` (one
+row per game) and `cards.csv` (per agent, difficulty and card), and `records/`.
+
+**Measures** (all read from the public state or the actions, so the engine records
+nothing extra):
+
+- **Win rate** by agent × difficulty (± standard error), and the **skill gap**: the top
+  tier's win rate minus the bottom tier's (each tier by its best agent, so a budget sweep
+  of one kind is one rung), also on **survival**: the round a loss came in; a win counts
+  its rounds plus the adversary cards left plus 2, so any win ranks above any loss.
+  Survival is the ladder's signal while few games are won. *Ordered* means no tier does
+  worse than the one below it.
+- **Decision closeness**: forced decisions (one legal action), and of the real choices
+  the share whose best two options are within `gap`.
+- **Pick and play rates** per card: offered (in a draft packet), mean pick position
+  (every dealt card is drafted by someone, so how early it goes is the signal), kept per
+  offer, played per card gained (kept or drawn; per game for unique AI cards, which
+  start in hand).
+- **Build variety**: distinct end-of-game builds (each seat's AI and buildings) and the
+  mean Jaccard distance between two games' building sets, over all games and over wins.
+- **Win probability by round** from the playouts; checkpoints that are uncertain
+  (0.1 < p < 0.9); early lock-in (the result was decided, p ≤ 0.05 or ≥ 0.95 to the end,
+  by round 2).
+- **Margin**: on a win, adversary cards left (rounds to spare) and pool left; on a loss,
+  the adversary pieces over the current opposition level's bar.
+- **Game length**, ends by reason and round; **adversary operations** per round (mean,
+  max) and at setup.
+- **Help and counters**: gifts, payments and withdrawals per game; threats countered of
+  those dealt.
+- **Luck share**: a two-way split of outcome variance over seeds × agents within each
+  config/variant/difficulty: the seed's share (luck), the agent's (skill), the rest
+  (interaction and the agents' own randomness). Raw sums-of-squares shares, no
+  degrees-of-freedom correction. On win/loss and on survival.
+
+**Timing** (v0 baseline, 2 countries, release build, this 12-thread machine; games last
+3–5 rounds, about 85–120 decisions). One game on one thread:
+
+| Agent | ms/game | ms/decision |
+|---|---|---|
+| `random` | 1.4 | 0.02 |
+| `greedy` | ~900 | ~7.5 |
+| `beam` | ~1,100 | ~10 |
+| `rollout` | ~2,500 | ~21 |
+
+With all 12 threads busy each game takes 1.5–3× as long (shared cores), so an
+experiment's throughput is about 4–5 greedy or 3–4 beam games a second. Probes add to
+that: win probability costs `rollouts` playouts per round of each probed game (8
+greedy playouts ≈ 8 × 0.5 s per round, the bulk of a probed game's time); closeness
+costs about as much as a greedy decision per probed decision. Measured:
+`experiments/ladder-v0.json` (600 games: 2 difficulties × random, greedy, beam × 100
+seeds, 10 probed seeds per cell) took **3.7–4.3 minutes** (two runs); `experiments/smoke.json` (36
+games) 30 s. The per-cell split (agent, probes, total) is in each report's *Timing*
+table and in `games.csv`. Longer games will cost proportionally more: a tuned 8–10
+round game roughly doubles every figure.
+
+**Saved records** (open in the viewer, or `aic-sim replay`), up to `records` each, with
+the reason in the record's `note`: *close losses* at the top difficulty (fewest pieces
+over the bar, then the longest games); *early lock-ins* (decided by round 2 in games of
+3+ rounds, from the win-probability playouts); *surprising wins* (by the weakest agent,
+after the playouts gave them ≤ 0.25, or below the top agent at the top difficulty).
+Files are named `<category>-c<cell>-<config>-<variant>-d<difficulty>-<agent>-seed<S>.json`;
+a rerun into the same directory replaces them.

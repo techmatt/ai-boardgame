@@ -1,0 +1,21 @@
+{
+  "name": "tune-agents",
+  "note": "Agent weight and budget sweep at difficulty 0: survival is the signal while nothing wins. The w.hand/w.hand_cost/w.drafted entries are the earlier defaults (2, 0.3, 0.6); this sweep is how the current ones were picked.",
+  "configs": ["configs/baseline.json"],
+  "difficulties": [0],
+  "agents": [
+    "random",
+    "greedy",
+    "greedy:w.hand=2,w.hand_cost=0.3,w.drafted=0.6",
+    "greedy:w.pool=20,w.forecast=1.2",
+    "greedy:w.drone=4,w.outpost=8,w.foundry=12",
+    "greedy:depth=2",
+    "beam",
+    "beam:width=12",
+    "beam:w.hand=2,w.hand_cost=0.3,w.drafted=0.6",
+    "rollout"
+  ],
+  "games": 24,
+  "closeness": {"every": 0},
+  "records": 0
+}

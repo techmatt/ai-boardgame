@@ -1,0 +1,460 @@
+//! The searching agents: greedy, beam and rollout. See `mod.rs` for what
+//! each does; everything here simulates on determinized copies of the
+//! state, never on the state the agent was handed.
+
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
+
+use aic_core::{Action, Agent, GameState, Rules};
+use rand_chacha::ChaCha8Rng;
+
+use super::determinize::determinize;
+use super::eval::Eval;
+
+/// Hidden piles: compared by size only when checking a plan against the table.
+const HIDDEN: [&str; 5] = [
+    "cards.deck.1",
+    "cards.deck.2",
+    "threats.deck.1",
+    "threats.deck.2",
+    "adversary.deck",
+];
+
+/// `g` after `a`, or `None` if the rules refuse it (a guess of the hidden
+/// cards can, rarely, make a replayed choice impossible).
+fn step(rules: &Rules, g: &GameState, a: &Action) -> Option<GameState> {
+    let mut c = g.clone();
+    rules.apply_mut(&mut c, a, None).ok()?;
+    Some(c)
+}
+
+/// The value of `g`, with any choice it is waiting on answered best-first
+/// up to `choices` levels deep: an action's own choices are part of it.
+fn settled(
+    rules: &Rules,
+    ev: &Eval,
+    g: &GameState,
+    choices: usize,
+    legal: &mut Vec<Action>,
+) -> f64 {
+    if g.is_over() || g.pending.is_none() || choices == 0 {
+        return ev.value(rules, g);
+    }
+    rules.legal_actions_into(g, legal);
+    let opts = std::mem::take(legal);
+    let best = opts
+        .iter()
+        .filter_map(|a| step(rules, g, a))
+        .map(|c| settled(rules, ev, &c, choices - 1, legal))
+        .fold(f64::NEG_INFINITY, f64::max);
+    if best.is_finite() {
+        best
+    } else {
+        ev.value(rules, g)
+    }
+}
+
+/// Best value reachable from `g` in `depth` more actions (0 = `g` itself).
+fn lookahead(rules: &Rules, ev: &Eval, g: &GameState, depth: usize, choices: usize) -> f64 {
+    let mut legal = Vec::new();
+    if depth == 0 || g.is_over() {
+        return settled(rules, ev, g, choices, &mut legal);
+    }
+    rules.legal_actions_into(g, &mut legal);
+    let best = legal
+        .iter()
+        .filter_map(|a| step(rules, g, a))
+        .map(|c| lookahead(rules, ev, &c, depth - 1, choices))
+        .fold(f64::NEG_INFINITY, f64::max);
+    if best.is_finite() {
+        best
+    } else {
+        settled(rules, ev, g, choices, &mut legal)
+    }
+}
+
+/// Scores every legal action of `state` by greedy look-ahead, averaged over
+/// `samples` determinizations (0 = use `state` as it is: it is already a guess).
+#[allow(clippy::too_many_arguments)]
+pub fn greedy_scores(
+    rules: &Rules,
+    ev: &Eval,
+    rng: &mut ChaCha8Rng,
+    state: &GameState,
+    legal: &[Action],
+    samples: usize,
+    depth: usize,
+    choices: usize,
+) -> Vec<f64> {
+    let mut scores = vec![0.0; legal.len()];
+    let n = samples.max(1);
+    for _ in 0..n {
+        let det;
+        let base = if samples == 0 {
+            state
+        } else {
+            let mut d = state.clone();
+            determinize(rules, &mut d, rng);
+            det = d;
+            &det
+        };
+        // A pass is scored as the table it leaves, not what follows it: the
+        // last pass hands the round on to threats and the adversary, and
+        // scoring that would make stalling (pay, withdraw, pay...) look
+        // better than stopping.
+        let stay = settled(rules, ev, base, choices, &mut Vec::new());
+        for (i, a) in legal.iter().enumerate() {
+            scores[i] += match a {
+                Action::Pass { .. } => stay,
+                _ => match step(rules, base, a) {
+                    Some(c) => lookahead(rules, ev, &c, depth - 1, choices),
+                    None => f64::NEG_INFINITY,
+                },
+            };
+        }
+    }
+    scores.iter_mut().for_each(|s| *s /= n as f64);
+    scores
+}
+
+/// The best-scoring action; ties go to a pass (doing nothing is never worse
+/// than a move that changes nothing), then to the first.
+pub fn pick(legal: &[Action], scores: &[f64]) -> usize {
+    let best = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let close = |i: usize| scores[i] >= best - 1e-9;
+    (0..legal.len())
+        .find(|&i| close(i) && matches!(legal[i], Action::Pass { .. }))
+        .or_else(|| (0..legal.len()).find(|&i| close(i)))
+        .unwrap_or(0)
+}
+
+pub struct Greedy {
+    ev: Eval,
+    rng: ChaCha8Rng,
+    samples: usize,
+    depth: usize,
+    choices: usize,
+    /// This phase's own moves (round, phase, actions): a move that undoes
+    /// one of them is not offered, so a look-ahead cannot cycle.
+    history: (u32, usize, Vec<Action>),
+}
+
+impl Greedy {
+    pub fn new(ev: Eval, rng: ChaCha8Rng, samples: usize, depth: usize, choices: usize) -> Self {
+        Greedy {
+            ev,
+            rng,
+            samples,
+            depth,
+            choices,
+            history: (0, 0, Vec::new()),
+        }
+    }
+}
+
+impl Agent for Greedy {
+    fn choose(&mut self, rules: &Rules, state: &GameState, legal: &[Action]) -> usize {
+        if legal.len() == 1 {
+            return 0;
+        }
+        if (self.history.0, self.history.1) != (state.round, state.phase) {
+            self.history = (state.round, state.phase, Vec::new());
+        }
+        let mut s = greedy_scores(
+            rules,
+            &self.ev,
+            &mut self.rng,
+            state,
+            legal,
+            self.samples,
+            self.depth,
+            self.choices,
+        );
+        for (i, a) in legal.iter().enumerate() {
+            if undoes(&self.history.2, a) {
+                s[i] = f64::NEG_INFINITY;
+            }
+        }
+        let i = pick(legal, &s);
+        self.history.2.push(legal[i].clone());
+        i
+    }
+}
+
+pub struct RolloutCfg {
+    pub candidates: usize,
+    pub rollouts: usize,
+    pub horizon: usize,
+}
+
+/// One planned action and the table it expects to be played on.
+struct Planned {
+    before: GameState,
+    action: Action,
+}
+
+pub struct Beam {
+    ev: Eval,
+    rng: ChaCha8Rng,
+    width: usize,
+    depth: usize,
+    branch: usize,
+    rollout: Option<RolloutCfg>,
+    /// The rest of the current plan, next action last.
+    plan: Vec<Planned>,
+}
+
+/// A sequence in the beam.
+struct Node {
+    g: GameState,
+    seq: Vec<Action>,
+    /// Order-free hash of `seq`: sequences that are reorderings of each
+    /// other (seats acting in a different order) almost always reach the
+    /// same table, so only the best of them is kept.
+    key: u64,
+}
+
+fn action_hash(a: &Action) -> u64 {
+    let mut h = DefaultHasher::new();
+    a.hash(&mut h);
+    h.finish()
+}
+
+/// A hundredth of a point per move (passes and answers aside): of two plans
+/// reaching equal tables, the one with fewer moves wins, so a move that
+/// changes nothing (an insight gift for nothing) is not made.
+fn moves_cost(seq: &[Action]) -> f64 {
+    0.01 * seq
+        .iter()
+        .filter(|a| !matches!(a, Action::Pass { .. } | Action::Choose { .. }))
+        .count() as f64
+}
+
+/// Moves that only undo an earlier move of the same sequence.
+fn undoes(seq: &[Action], a: &Action) -> bool {
+    match a {
+        Action::Give { seat, to } => seq.iter().any(|b| matches!(b, Action::Give { seat: s, to: t } if s == to && t == seat)),
+        Action::Withdraw { seat, threat, resource } => seq.iter().any(|b| {
+            matches!(b, Action::Pay { seat: s, threat: t, resource: r, .. } if s == seat && t == threat && r == resource)
+        }),
+        Action::Pay { seat, threat, resource, .. } => seq.iter().any(|b| {
+            matches!(b, Action::Withdraw { seat: s, threat: t, resource: r } if s == seat && t == threat && r == resource)
+        }),
+        _ => false,
+    }
+}
+
+/// The table as players see it: everything but the hidden piles' contents
+/// and order (their sizes count), the dice and the simulator's stats.
+fn same_table(a: &GameState, b: &GameState) -> bool {
+    if a.round != b.round
+        || a.phase != b.phase
+        || a.hexes != b.hexes
+        || a.vars != b.vars
+        || a.seats != b.seats
+    {
+        return false;
+    }
+    if a.pending.as_ref().map(|p| &p.ask) != b.pending.as_ref().map(|p| &p.ask)
+        || a.outcome != b.outcome
+    {
+        return false;
+    }
+    let keys: std::collections::BTreeSet<&String> = a.piles.keys().chain(b.piles.keys()).collect();
+    keys.into_iter().all(|k| {
+        if HIDDEN.contains(&k.as_str()) {
+            a.pile(k).len() == b.pile(k).len()
+        } else {
+            a.pile(k) == b.pile(k)
+        }
+    })
+}
+
+impl Beam {
+    pub fn new(
+        ev: Eval,
+        rng: ChaCha8Rng,
+        width: usize,
+        depth: usize,
+        branch: usize,
+        rollout: Option<RolloutCfg>,
+    ) -> Self {
+        Beam {
+            ev,
+            rng,
+            width,
+            depth,
+            branch,
+            rollout,
+            plan: Vec::new(),
+        }
+    }
+
+    /// Searches the rest of the round from a guess of `state`. Returns the
+    /// guess and the finished sequences (reaching the next round or the
+    /// end of the game), best first, with their end states and values.
+    fn search(&mut self, rules: &Rules, state: &GameState) -> (GameState, Vec<(f64, Node)>) {
+        let mut start = state.clone();
+        determinize(rules, &mut start, &mut self.rng);
+        let round = start.round;
+        let mut beam = vec![Node {
+            g: start.clone(),
+            seq: Vec::new(),
+            key: 0,
+        }];
+        let mut finished: Vec<(f64, Node)> = Vec::new();
+        let mut legal = Vec::new();
+        let mut scratch = Vec::new();
+        for _ in 0..self.depth {
+            let mut children: Vec<(f64, Node)> = Vec::new();
+            for node in &beam {
+                rules.legal_actions_into(&node.g, &mut legal);
+                let mut kids: Vec<(f64, Node)> = Vec::new();
+                for a in &legal {
+                    if undoes(&node.seq, a) {
+                        continue;
+                    }
+                    let Some(c) = step(rules, &node.g, a) else {
+                        continue;
+                    };
+                    // The choices an action asks for are scored best-first,
+                    // so an action is not judged by its first open question.
+                    let mut seq = node.seq.clone();
+                    seq.push(a.clone());
+                    let v = settled(rules, &self.ev, &c, 1, &mut scratch) - moves_cost(&seq);
+                    let key = node.key.wrapping_add(action_hash(a));
+                    kids.push((v, Node { g: c, seq, key }));
+                }
+                if self.branch > 0 && kids.len() > self.branch {
+                    kids.sort_by(|x, y| y.0.total_cmp(&x.0));
+                    kids.truncate(self.branch);
+                }
+                for (v, kid) in kids {
+                    if kid.g.is_over() || kid.g.round > round {
+                        let v = self.ev.value(rules, &kid.g) - moves_cost(&kid.seq);
+                        finished.push((v, kid));
+                    } else {
+                        children.push((v, kid));
+                    }
+                }
+            }
+            if children.is_empty() {
+                break;
+            }
+            // Stable sort: ties keep legal-action order, so play is deterministic.
+            children.sort_by(|x, y| y.0.total_cmp(&x.0));
+            let mut seen = HashSet::new();
+            beam = children
+                .into_iter()
+                .filter(|(_, n)| seen.insert(n.key))
+                .take(self.width)
+                .map(|(_, n)| n)
+                .collect();
+        }
+        if finished.is_empty() {
+            // The round did not end within `depth` steps: plan what was searched.
+            finished = beam
+                .into_iter()
+                .map(|n| (self.ev.value(rules, &n.g) - moves_cost(&n.seq), n))
+                .collect();
+        }
+        finished.sort_by(|x, y| y.0.total_cmp(&x.0));
+        let mut seen = HashSet::new();
+        finished.retain(|(_, n)| seen.insert(n.key));
+        (start, finished)
+    }
+
+    /// Mean value of greedy playouts from `g` for `horizon` rounds past its own.
+    fn playouts(&mut self, rules: &Rules, g: &GameState, cfg: &RolloutCfg) -> f64 {
+        let mut total = 0.0;
+        let mut legal = Vec::new();
+        for _ in 0..cfg.rollouts {
+            let mut s = g.clone();
+            determinize(rules, &mut s, &mut self.rng);
+            let stop = s.round + cfg.horizon as u32;
+            let mut guard = 0;
+            while !s.is_over() && s.round < stop && guard < 2000 {
+                rules.legal_actions_into(&s, &mut legal);
+                if legal.is_empty() {
+                    break;
+                }
+                let i = if legal.len() == 1 {
+                    0
+                } else {
+                    let sc = greedy_scores(rules, &self.ev, &mut self.rng, &s, &legal, 0, 1, 1);
+                    pick(&legal, &sc)
+                };
+                if rules.apply_mut(&mut s, &legal[i], None).is_err() {
+                    break;
+                }
+                guard += 1;
+            }
+            total += self.ev.value(rules, &s);
+        }
+        total / cfg.rollouts as f64
+    }
+
+    fn replan(&mut self, rules: &Rules, state: &GameState) {
+        let (start, mut finished) = self.search(rules, state);
+        let mut best = 0;
+        if let Some(cfg) = self.rollout.take() {
+            let mut top = f64::NEG_INFINITY;
+            for (i, (value, node)) in finished.iter().enumerate().take(cfg.candidates) {
+                let v = if node.g.is_over() {
+                    *value
+                } else {
+                    self.playouts(rules, &node.g, &cfg)
+                };
+                if v > top {
+                    top = v;
+                    best = i;
+                }
+            }
+            self.rollout = Some(cfg);
+        }
+        let seq = match finished.get_mut(best) {
+            Some((_, n)) => std::mem::take(&mut n.seq),
+            None => Vec::new(),
+        };
+        // Replay the sequence on the guess to record the table each action
+        // expects; a different table later means the guess was wrong.
+        let mut g = start;
+        let mut plan = Vec::with_capacity(seq.len());
+        for a in seq {
+            let before = g.clone();
+            if rules.apply_mut(&mut g, &a, None).is_err() {
+                break;
+            }
+            plan.push(Planned { before, action: a });
+        }
+        plan.reverse();
+        self.plan = plan;
+    }
+}
+
+impl Agent for Beam {
+    fn choose(&mut self, rules: &Rules, state: &GameState, legal: &[Action]) -> usize {
+        for attempt in 0..2 {
+            if let Some(p) = self.plan.last() {
+                if same_table(&p.before, state) {
+                    if let Some(i) = legal.iter().position(|a| *a == p.action) {
+                        self.plan.pop();
+                        return i;
+                    }
+                }
+            }
+            if attempt == 0 {
+                if legal.len() == 1 {
+                    self.plan.clear();
+                    return 0;
+                }
+                self.replan(rules, state);
+            }
+        }
+        // The fresh plan should start here; if it cannot, fall back to greedy.
+        self.plan.clear();
+        let s = greedy_scores(rules, &self.ev, &mut self.rng, state, legal, 1, 1, 1);
+        pick(legal, &s)
+    }
+}

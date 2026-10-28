@@ -7,7 +7,10 @@ rules themselves are in [rules.md](rules.md).
 
 - **`aic-core`**: the rules. Pure and deterministic; no rules live anywhere else.
 - **`aic-sim`**: native CLI. Plays seeded games, compares configs, replay-checks
-  everything. Agents live here, not in the core.
+  everything. Agents live here, not in the core: the skill ladder (`agents/`, playing
+  through the public API on determinized copies, never peeking at hidden cards) and
+  the experiment harness (`experiment.rs`, `report.rs`) that measures play at graded
+  skill. See the root README, *Agents* and *Experiments*.
 - **`aic-wasm`**: wasm-bindgen adapter, JSON strings in and out. No rules.
 - **`web/`**: the browser viewer (Vite + TypeScript) on `aic-wasm`. It draws the
   [generic view](#the-generic-view) and offers only `legal_actions`; see

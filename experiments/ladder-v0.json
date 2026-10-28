@@ -1,0 +1,11 @@
+{
+  "name": "ladder-v0",
+  "note": "First skill-ladder cycle on ruleset v0: baseline at difficulties 0 and 4, random, greedy and beam agents.",
+  "configs": ["configs/baseline.json"],
+  "difficulties": [0, 4],
+  "agents": ["random", "greedy", "beam"],
+  "games": 100,
+  "winprob": {"games": 10, "rollouts": 8, "agent": "greedy"},
+  "closeness": {"every": 1, "gap": 2.0},
+  "records": 4
+}

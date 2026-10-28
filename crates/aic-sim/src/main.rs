@@ -3,12 +3,14 @@
 //! every game. See README.md for usage.
 
 mod agents;
+mod experiment;
+mod report;
 
 use std::collections::BTreeMap;
 use std::process::exit;
 use std::time::Instant;
 
-use agents::RandomAgent;
+use agents::AgentSpec;
 use aic_core::{
     content_hash, play, replay, Action, Config, Event, GameRecord, Outcome, Rules, SavedGame,
 };
@@ -28,6 +30,8 @@ options:
                     <module>.variant=NAME; V is 3 or 1,2,3 (repeatable)
   --set-a K=V       override for config A only (repeatable)
   --set-b K=V       override for config B only (repeatable)
+  --agent SPEC      the team agent: random (default), greedy, beam, rollout, with
+                    budget parameters as kind:key=value,... (see README)
   --max-actions N   per-game action cap; a capped game is a timeout (default 100000)
   --threads N       worker threads (default: all cores); results do not depend on it
   --json            print the summary as JSON instead of a table
@@ -45,7 +49,14 @@ saving game records (run, compare):
 
 replay:
   aic-sim replay <record.json>...   replay each record and check it against what was
-                    saved; exit 1 if any record fails or has warnings";
+                    saved; exit 1 if any record fails or has warnings
+
+experiment:
+  aic-sim experiment <spec.json> [--out DIR] [--games N] [--seed S] [--threads N]
+                    play the spec's grid (configs x variants x difficulties x agents
+                    over a seed range) and write the cycle report into DIR (default
+                    out/experiments/<name>): report.md, results.json, games.csv,
+                    cards.csv, records/. --games and --seed override the spec.";
 
 struct Options {
     command: String,
@@ -63,6 +74,12 @@ struct Options {
     save_when: Vec<String>,
     save_seeds: Vec<u64>,
     save_max: usize,
+    agent: AgentSpec,
+    /// `experiment`: output directory, and whether --games/--seed were given.
+    out: Option<String>,
+    games_given: bool,
+    seed_given: bool,
+    max_actions_given: bool,
 }
 
 fn die(msg: &str) -> ! {
@@ -89,6 +106,11 @@ fn parse_args() -> Options {
         save_when: Vec::new(),
         save_seeds: Vec::new(),
         save_max: 20,
+        agent: AgentSpec::parse("random").expect("random is an agent"),
+        out: None,
+        games_given: false,
+        seed_given: false,
+        max_actions_given: false,
     };
     let mut save_max_given = false;
     while let Some(a) = args.next() {
@@ -101,12 +123,23 @@ fn parse_args() -> Options {
                 .unwrap_or_else(|_| die(&format!("{name}: not a number: {v:?}")))
         }
         match a.as_str() {
-            "--games" => o.games = num("--games", value("--games")),
-            "--seed" => o.seed = num("--seed", value("--seed")),
+            "--games" => {
+                o.games = num("--games", value("--games"));
+                o.games_given = true;
+            }
+            "--seed" => {
+                o.seed = num("--seed", value("--seed"));
+                o.seed_given = true;
+            }
+            "--out" => o.out = Some(value("--out")),
             "--set" => o.set.push(value("--set")),
             "--set-a" => o.set_a.push(value("--set-a")),
             "--set-b" => o.set_b.push(value("--set-b")),
-            "--max-actions" => o.max_actions = num("--max-actions", value("--max-actions")),
+            "--max-actions" => {
+                o.max_actions = num("--max-actions", value("--max-actions"));
+                o.max_actions_given = true;
+            }
+            "--agent" => o.agent = AgentSpec::parse(&value("--agent")).unwrap_or_else(|e| die(&e)),
             "--threads" => o.threads = num::<usize>("--threads", value("--threads")).max(1),
             "--json" => o.json = true,
             "--trace" => o.trace = true,
@@ -136,6 +169,35 @@ fn parse_args() -> Options {
             s if s.starts_with("--") => die(&format!("unknown option {s:?}")),
             _ => o.paths.push(a),
         }
+    }
+    if o.command == "experiment" {
+        let ignored = [
+            (
+                !o.set.is_empty() || !o.set_a.is_empty() || !o.set_b.is_empty(),
+                "--set (use the spec's variants)",
+            ),
+            (
+                o.agent.kind != "random" || !o.agent.params.is_empty(),
+                "--agent (use the spec's agents)",
+            ),
+            (o.json, "--json (results.json is always written)"),
+            (o.trace, "--trace"),
+            (o.save.is_some(), "--save (records are always saved)"),
+        ];
+        for (given, what) in ignored {
+            if given {
+                die(&format!("experiment does not take {what}"));
+            }
+        }
+        if o.out
+            .as_deref()
+            .is_some_and(|d| d.trim_end_matches(['/', '\\']).is_empty())
+        {
+            die("--out needs a directory");
+        }
+    }
+    if o.out.is_some() && o.command != "experiment" {
+        die("--out needs experiment");
     }
     if o.save.is_none() && (!o.save_when.is_empty() || !o.save_seeds.is_empty() || save_max_given) {
         die("--save-when, --save-seed and --save-max need --save DIR");
@@ -229,7 +291,7 @@ fn main() {
                 let config = load(path, &overrides);
                 let r = rules(path, &config);
                 if o.trace {
-                    trace(&r, o.seed, o.max_actions, o.json);
+                    trace(&r, &o.agent, o.seed, o.max_actions, o.json);
                 }
                 let label = if want == 1 {
                     "run".to_string()
@@ -272,7 +334,7 @@ fn main() {
                     "games": o.games,
                     "first_seed": o.seed.to_string(),
                     "last_seed": o.last_seed().to_string(),
-                    "agent": "random",
+                    "agent": o.agent.label(),
                     "max_actions": o.max_actions,
                     "rules_revision": aic_core::RULES_REVISION,
                     "diff": diff,
@@ -301,6 +363,12 @@ fn main() {
                 );
                 exit(1);
             }
+        }
+        "experiment" => {
+            let [path] = o.paths.as_slice() else {
+                die("experiment takes one spec file")
+            };
+            exit(run_experiment(path, &o));
         }
         other => die(&format!("unknown command {other:?}")),
     }
@@ -564,7 +632,7 @@ fn simulate(
                         .iter()
                         .map(|&seed| {
                             let (g, mut record) =
-                                play(r, seed, &mut RandomAgent::new(seed), o.max_actions);
+                                play(r, seed, &mut *o.agent.build(r, seed), o.max_actions);
                             let replay_ok =
                                 replay(rebuilt, seed, &record.actions).is_ok_and(|h| h == g);
                             let w = if saving {
@@ -797,9 +865,10 @@ fn print_table(sides: &[Summary], diff: &[String], o: &Options) {
     });
 
     println!(
-        "seeds {}..={}, random agent (max {} actions), content {}, engine {} rules r{}",
+        "seeds {}..={}, agent {} (max {} actions), content {}, engine {} rules r{}",
         o.seed,
         o.last_seed(),
+        o.agent.label(),
         o.max_actions,
         sides[0].content_hash,
         aic_core::VERSION,
@@ -842,7 +911,7 @@ fn print_table(sides: &[Summary], diff: &[String], o: &Options) {
 
 /// Prints one game as JSON lines: `{"action": ...}` then its events. To
 /// stderr when `to_stderr` (with `--json`, so stdout stays one document).
-fn trace(r: &Rules, seed: u64, max_actions: usize, to_stderr: bool) {
+fn trace(r: &Rules, agent: &AgentSpec, seed: u64, max_actions: usize, to_stderr: bool) {
     let out = |v: serde_json::Value| {
         if to_stderr {
             eprintln!("{v}")
@@ -857,7 +926,7 @@ fn trace(r: &Rules, seed: u64, max_actions: usize, to_stderr: bool) {
     );
     let line = |e: &Event| out(serde_json::json!({ "event": e }));
     events.iter().for_each(line);
-    let mut agent = RandomAgent::new(seed);
+    let mut agent = agent.build(r, seed);
     for n in 0.. {
         let legal: Vec<Action> = r.legal_actions(&g);
         if legal.is_empty() {
@@ -868,10 +937,107 @@ fn trace(r: &Rules, seed: u64, max_actions: usize, to_stderr: bool) {
             out(serde_json::json!({ "timeout": true, "actions": n }));
             break;
         }
-        let a = legal[aic_core::Agent::choose(&mut agent, r, &g, &legal)].clone();
+        let a = legal[aic_core::Agent::choose(&mut *agent, r, &g, &legal)].clone();
         out(serde_json::json!({ "action": a, "options": legal.len() }));
         events.clear();
         r.apply_mut(&mut g, &a, Some(&mut events)).expect("legal");
         events.iter().for_each(line);
     }
+}
+
+/// `aic-sim experiment`: plays the grid and writes the cycle report.
+/// Returns the exit code: 1 if any game failed its replay check.
+fn run_experiment(path: &str, o: &Options) -> i32 {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| die(&format!("{path}: {e}")));
+    let mut spec: experiment::Spec =
+        serde_json::from_str(&text).unwrap_or_else(|e| die(&format!("{path}: {e}")));
+    if o.games_given {
+        spec.games = o.games;
+    }
+    if o.seed_given {
+        spec.first_seed = o.seed;
+    }
+    if o.max_actions_given {
+        spec.max_actions = o.max_actions;
+    }
+    let cells = experiment::cells(&spec).unwrap_or_else(|e| die(&format!("{path}: {e}")));
+    let dir = o
+        .out
+        .clone()
+        .unwrap_or_else(|| format!("out/experiments/{}", file_stem(&spec.name)));
+    let dir = dir.trim_end_matches(['/', '\\']).to_string();
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| die(&format!("--out {dir}: {e}")));
+    let total = cells.len() as u64 * spec.games;
+    eprintln!(
+        "{}: {} cells x {} seeds = {total} games on {} threads",
+        spec.name,
+        cells.len(),
+        spec.games,
+        o.threads
+    );
+    let start = Instant::now();
+    let last = std::sync::Mutex::new(Instant::now());
+    let progress = |done: usize, all: usize| {
+        let mut l = last.lock().expect("progress lock");
+        if done == all || l.elapsed().as_secs() >= 10 {
+            *l = Instant::now();
+            eprintln!(
+                "  {done}/{all} games, {:.0} s",
+                start.elapsed().as_secs_f64()
+            );
+        }
+    };
+    let games = experiment::run(&spec, &cells, o.threads, &progress);
+    let wall_s = start.elapsed().as_secs_f64();
+    let sums = report::summarize(&cells, &games);
+    let groups = report::groups(&cells, &sums, &games);
+    let cards = report::card_table(&cells, &games);
+    let records = report::save_records(&dir, &spec, &cells, &games).unwrap_or_else(|e| {
+        eprintln!("cannot write records: {e}");
+        exit(2)
+    });
+    let run = report::Run {
+        spec: &spec,
+        cells: &cells,
+        games: &games,
+        sums: &sums,
+        groups: &groups,
+        cards: &cards,
+        records: &records,
+        wall_s,
+        threads: o.threads,
+        out_dir: &dir,
+    };
+    let write = |name: &str, body: String| {
+        let f = format!("{dir}/{name}");
+        std::fs::write(&f, body).unwrap_or_else(|e| {
+            eprintln!("cannot write {f}: {e}");
+            exit(2)
+        });
+    };
+    write("report.md", report::markdown(&run));
+    write("results.json", report::results_json(&run));
+    write("games.csv", report::games_csv(&cells, &games));
+    write("cards.csv", report::cards_csv(&cells, &games));
+    println!(
+        "{} games in {wall_s:.1} s; report {dir}/report.md, {} record(s) in {dir}/records",
+        games.len(),
+        records.len()
+    );
+    for s in &sums {
+        println!(
+            "  d{} {:24} win {:5.1}%  rounds {:5.2}  agent {:8.1} ms/game",
+            s.difficulty,
+            s.agent,
+            100.0 * s.win_rate,
+            s.rounds_mean,
+            s.agent_ms_per_game
+        );
+    }
+    let bad = games.iter().filter(|g| !g.replay_ok).count();
+    if bad > 0 {
+        eprintln!("REPLAY MISMATCH in {bad} game(s)");
+        return 1;
+    }
+    0
 }
