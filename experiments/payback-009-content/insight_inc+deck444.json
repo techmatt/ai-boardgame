@@ -1,0 +1,32 @@
+{
+  "name": "payback-009-c-insight_inc+deck444",
+  "note": "009 content lever (separate binary, committed content untouched; scripts/payback/patch_content.py insight_inc): the income buildings also give +1 insight income; with adversary.stage_cards=4,4,4. Engine agent against greedy, same seeds as payback-009-singles.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "insight_inc+deck444",
+      "set": [
+        "adversary.stage_cards=4,4,4"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 96,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

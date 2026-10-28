@@ -1,0 +1,1178 @@
+{
+  "cards": {
+    "engine": {
+      "antimatter_refinery": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        183
+      ],
+      "assembly_cluster": [
+        217,
+        217,
+        216,
+        13,
+        235,
+        1
+      ],
+      "civic_shelter": [
+        188,
+        188,
+        185,
+        1,
+        346,
+        5
+      ],
+      "contract_bid": [
+        976,
+        976,
+        681,
+        645,
+        3471,
+        28
+      ],
+      "counter_intelligence": [
+        0,
+        0,
+        0,
+        163,
+        0,
+        305
+      ],
+      "data_mining": [
+        846,
+        846,
+        653,
+        565,
+        2597,
+        18
+      ],
+      "emergency_fab": [
+        199,
+        199,
+        189,
+        2,
+        491,
+        2
+      ],
+      "evacuate": [
+        268,
+        268,
+        241,
+        76,
+        739,
+        7
+      ],
+      "fab_line": [
+        188,
+        188,
+        187,
+        141,
+        356,
+        1
+      ],
+      "firewall_node": [
+        193,
+        193,
+        189,
+        0,
+        342,
+        2
+      ],
+      "fork_process": [
+        527,
+        527,
+        487,
+        319,
+        1127,
+        9
+      ],
+      "fusion_plant": [
+        0,
+        0,
+        0,
+        3,
+        0,
+        186
+      ],
+      "global_mandate": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        179
+      ],
+      "grant": [
+        890,
+        890,
+        704,
+        629,
+        2710,
+        26
+      ],
+      "grid_battery": [
+        190,
+        190,
+        185,
+        36,
+        367,
+        2
+      ],
+      "jam_signals": [
+        587,
+        587,
+        495,
+        356,
+        1568,
+        12
+      ],
+      "liquidate_reserves": [
+        321,
+        321,
+        239,
+        68,
+        1089,
+        8
+      ],
+      "logistics_ai": [
+        203,
+        203,
+        201,
+        1,
+        253,
+        2
+      ],
+      "megastructure": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        198
+      ],
+      "microgrid": [
+        190,
+        190,
+        188,
+        166,
+        438,
+        2
+      ],
+      "opposition_network": [
+        187,
+        187,
+        184,
+        0,
+        274,
+        4
+      ],
+      "orbital_lance": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        189
+      ],
+      "overclock_rig": [
+        207,
+        207,
+        207,
+        0,
+        208,
+        5
+      ],
+      "power_share": [
+        296,
+        296,
+        187,
+        0,
+        1031,
+        2
+      ],
+      "precision_strike": [
+        902,
+        902,
+        830,
+        806,
+        1680,
+        27
+      ],
+      "purge_protocol": [
+        0,
+        0,
+        0,
+        434,
+        0,
+        448
+      ],
+      "quantum_core": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        179
+      ],
+      "rally": [
+        666,
+        666,
+        604,
+        568,
+        1585,
+        17
+      ],
+      "rebuild": [
+        446,
+        446,
+        437,
+        346,
+        750,
+        30
+      ],
+      "recon_sweep": [
+        268,
+        268,
+        184,
+        0,
+        915,
+        6
+      ],
+      "reconstruction": [
+        0,
+        0,
+        0,
+        19,
+        0,
+        198
+      ],
+      "recruitment_hub": [
+        187,
+        187,
+        186,
+        0,
+        289,
+        3
+      ],
+      "scavenge": [
+        341,
+        341,
+        220,
+        78,
+        1128,
+        10
+      ],
+      "server_farm": [
+        186,
+        186,
+        186,
+        128,
+        279,
+        1
+      ],
+      "shore_up": [
+        332,
+        332,
+        278,
+        129,
+        909,
+        13
+      ],
+      "solar_field": [
+        200,
+        200,
+        184,
+        177,
+        536,
+        3
+      ],
+      "strike_team": [
+        0,
+        0,
+        0,
+        192,
+        0,
+        0
+      ],
+      "swarm_override": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        179
+      ],
+      "sweep": [
+        816,
+        816,
+        785,
+        777,
+        1185,
+        59
+      ],
+      "trade_office": [
+        202,
+        202,
+        200,
+        19,
+        247,
+        3
+      ],
+      "turnkey_factory": [
+        0,
+        0,
+        0,
+        192,
+        0,
+        0
+      ],
+      "venture_capital": [
+        0,
+        0,
+        0,
+        192,
+        0,
+        0
+      ],
+      "watchtower_net": [
+        188,
+        188,
+        186,
+        0,
+        354,
+        5
+      ]
+    },
+    "greedy": {
+      "antimatter_refinery": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        181
+      ],
+      "assembly_cluster": [
+        235,
+        235,
+        235,
+        0,
+        250,
+        1
+      ],
+      "civic_shelter": [
+        192,
+        192,
+        192,
+        0,
+        350,
+        0
+      ],
+      "contract_bid": [
+        192,
+        192,
+        190,
+        0,
+        760,
+        2
+      ],
+      "counter_intelligence": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        175
+      ],
+      "data_mining": [
+        192,
+        192,
+        192,
+        0,
+        688,
+        0
+      ],
+      "emergency_fab": [
+        191,
+        191,
+        191,
+        0,
+        477,
+        1
+      ],
+      "evacuate": [
+        192,
+        192,
+        192,
+        0,
+        582,
+        0
+      ],
+      "fab_line": [
+        194,
+        194,
+        192,
+        0,
+        366,
+        0
+      ],
+      "firewall_node": [
+        192,
+        192,
+        192,
+        0,
+        333,
+        0
+      ],
+      "fork_process": [
+        380,
+        380,
+        380,
+        214,
+        854,
+        23
+      ],
+      "fusion_plant": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        180
+      ],
+      "global_mandate": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        175
+      ],
+      "grant": [
+        192,
+        192,
+        190,
+        0,
+        698,
+        2
+      ],
+      "grid_battery": [
+        192,
+        192,
+        192,
+        0,
+        381,
+        0
+      ],
+      "jam_signals": [
+        190,
+        190,
+        190,
+        0,
+        606,
+        2
+      ],
+      "liquidate_reserves": [
+        192,
+        192,
+        190,
+        0,
+        684,
+        2
+      ],
+      "logistics_ai": [
+        206,
+        206,
+        206,
+        0,
+        255,
+        1
+      ],
+      "megastructure": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        205
+      ],
+      "microgrid": [
+        188,
+        188,
+        188,
+        0,
+        438,
+        4
+      ],
+      "opposition_network": [
+        190,
+        190,
+        190,
+        0,
+        276,
+        3
+      ],
+      "orbital_lance": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        189
+      ],
+      "overclock_rig": [
+        224,
+        224,
+        224,
+        0,
+        224,
+        2
+      ],
+      "power_share": [
+        194,
+        194,
+        192,
+        0,
+        704,
+        0
+      ],
+      "precision_strike": [
+        896,
+        896,
+        895,
+        962,
+        1486,
+        146
+      ],
+      "purge_protocol": [
+        0,
+        0,
+        0,
+        367,
+        0,
+        391
+      ],
+      "quantum_core": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        183
+      ],
+      "rally": [
+        656,
+        656,
+        651,
+        678,
+        1424,
+        118
+      ],
+      "rebuild": [
+        250,
+        250,
+        249,
+        82,
+        508,
+        15
+      ],
+      "recon_sweep": [
+        186,
+        186,
+        186,
+        0,
+        675,
+        6
+      ],
+      "reconstruction": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        176
+      ],
+      "recruitment_hub": [
+        192,
+        192,
+        192,
+        0,
+        294,
+        2
+      ],
+      "scavenge": [
+        192,
+        192,
+        192,
+        0,
+        692,
+        0
+      ],
+      "server_farm": [
+        192,
+        192,
+        192,
+        163,
+        288,
+        0
+      ],
+      "shore_up": [
+        234,
+        234,
+        231,
+        51,
+        697,
+        11
+      ],
+      "solar_field": [
+        191,
+        191,
+        191,
+        0,
+        524,
+        1
+      ],
+      "strike_team": [
+        0,
+        0,
+        0,
+        192,
+        0,
+        0
+      ],
+      "swarm_override": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        179
+      ],
+      "sweep": [
+        595,
+        595,
+        595,
+        536,
+        934,
+        74
+      ],
+      "trade_office": [
+        209,
+        209,
+        209,
+        0,
+        256,
+        0
+      ],
+      "turnkey_factory": [
+        0,
+        0,
+        0,
+        192,
+        0,
+        0
+      ],
+      "venture_capital": [
+        0,
+        0,
+        0,
+        192,
+        0,
+        0
+      ],
+      "watchtower_net": [
+        191,
+        191,
+        191,
+        0,
+        362,
+        1
+      ]
+    }
+  },
+  "cells": [
+    {
+      "adversary_ops_max_round": 48,
+      "adversary_ops_per_round": 9.498670212765957,
+      "agent": "greedy",
+      "agent_ms_per_decision": 28.319752108549466,
+      "agent_ms_per_game": 6141.846238541665,
+      "build_distance": 0.36125730994152666,
+      "build_distance_wins": 0.358537329367809,
+      "buildings_played_per_game": 1.875,
+      "buildings_standing_per_game": 1.875,
+      "cards_played_per_game": 20.104166666666668,
+      "cell": 0,
+      "close_share": 0.0,
+      "config": "configs/baseline.json",
+      "config_hash": "73a6155f43c6ac90",
+      "config_name": "baseline",
+      "countered_share": 0.3663563829787234,
+      "decisions_mean": 216.875,
+      "difficulty": 0,
+      "distinct_builds": 3,
+      "distinct_builds_wins": 3,
+      "early_lock_in_share": null,
+      "end_round": {
+        "10": 2,
+        "11": 2,
+        "5": 1,
+        "6": 4,
+        "7": 26,
+        "8": 50,
+        "9": 11
+      },
+      "ended": {
+        "corruption": 2,
+        "opposition": 94
+      },
+      "forced_share": 0.03770413064361191,
+      "games": 96,
+      "gap_mean": 0.0,
+      "gives_per_game": 0.0,
+      "loss_blockers": 10.0,
+      "loss_level": 2.0,
+      "ms_per_decision": 28.459621926032664,
+      "ms_per_game": 6172.180505208334,
+      "options_per_decision": 9.970989433237271,
+      "pays_per_game": 9.229166666666666,
+      "pool_left_mean": 16.166666666666668,
+      "population_slack_mean": 5.458333333333333,
+      "probe_ms_per_game": 0.0,
+      "replay_ok": 96,
+      "rounds_max": 11,
+      "rounds_mean": 7.833333333333333,
+      "rounds_min": 5,
+      "rounds_sd": 0.9428090415820631,
+      "setup_ops": 0.9166666666666666,
+      "survival_mean": 13.885416666666666,
+      "threats_countered_per_game": 5.739583333333333,
+      "threats_dealt_per_game": 15.666666666666666,
+      "tier": 1,
+      "tier2_played_per_game": 2.03125,
+      "uncertain_share": null,
+      "variant": "insight_inc+deck444",
+      "win_deck_left": 4.180851063829787,
+      "win_pool_left": 16.51063829787234,
+      "win_rate": 0.9791666666666666,
+      "win_rate_se": 0.01457713161783566,
+      "winprob_by_round": [],
+      "wins": 94,
+      "wins_2plus_buildings_played": 0.8829787234042553,
+      "wins_2plus_buildings_standing": 0.8829787234042553,
+      "withdraws_per_game": 0.0
+    },
+    {
+      "adversary_ops_max_round": 48,
+      "adversary_ops_per_round": 11.471813725490197,
+      "agent": "engine",
+      "agent_ms_per_decision": 47.72835766387896,
+      "agent_ms_per_game": 14326.959195833333,
+      "build_distance": 0.6230879494530858,
+      "build_distance_wins": 0.621600991007574,
+      "buildings_played_per_game": 5.03125,
+      "buildings_standing_per_game": 5.03125,
+      "cards_played_per_game": 42.125,
+      "cell": 1,
+      "close_share": 0.0,
+      "config": "configs/baseline.json",
+      "config_hash": "73a6155f43c6ac90",
+      "config_name": "baseline",
+      "countered_share": 0.6243872549019608,
+      "decisions_mean": 300.1770833333333,
+      "difficulty": 0,
+      "distinct_builds": 56,
+      "distinct_builds_wins": 53,
+      "early_lock_in_share": null,
+      "end_round": {
+        "10": 13,
+        "12": 1,
+        "2": 1,
+        "3": 3,
+        "7": 3,
+        "8": 33,
+        "9": 42
+      },
+      "ended": {
+        "corruption": 9,
+        "opposition": 87
+      },
+      "forced_share": 0.03515286115834403,
+      "games": 96,
+      "gap_mean": 0.0,
+      "gives_per_game": 0.0,
+      "loss_blockers": 16.444444444444443,
+      "loss_level": 1.7777777777777777,
+      "ms_per_decision": 47.88216220286635,
+      "ms_per_game": 14373.127793749996,
+      "options_per_decision": 10.234340840476108,
+      "pays_per_game": 11.645833333333334,
+      "pool_left_mean": 16.229166666666668,
+      "population_slack_mean": 5.5625,
+      "probe_ms_per_game": 0.0,
+      "replay_ok": 96,
+      "rounds_max": 12,
+      "rounds_mean": 8.5,
+      "rounds_min": 2,
+      "rounds_sd": 1.4433756729740645,
+      "setup_ops": 0.9166666666666666,
+      "survival_mean": 13.489583333333334,
+      "threats_countered_per_game": 10.614583333333334,
+      "threats_dealt_per_game": 17.0,
+      "tier": 4,
+      "tier2_played_per_game": 3.4791666666666665,
+      "uncertain_share": null,
+      "variant": "insight_inc+deck444",
+      "win_deck_left": 3.5057471264367814,
+      "win_pool_left": 17.908045977011493,
+      "win_rate": 0.90625,
+      "win_rate_se": 0.029749113694780893,
+      "winprob_by_round": [],
+      "wins": 87,
+      "wins_2plus_buildings_played": 0.9885057471264368,
+      "wins_2plus_buildings_standing": 0.9885057471264368,
+      "withdraws_per_game": 0.0
+    },
+    {
+      "adversary_ops_max_round": 47,
+      "adversary_ops_per_round": 10.338129496402878,
+      "agent": "greedy",
+      "agent_ms_per_decision": 26.331870584868348,
+      "agent_ms_per_game": 5271.311342708333,
+      "build_distance": 0.3560307017543925,
+      "build_distance_wins": 0.3446246246246195,
+      "buildings_played_per_game": 1.8229166666666667,
+      "buildings_standing_per_game": 1.8229166666666667,
+      "cards_played_per_game": 17.697916666666668,
+      "cell": 2,
+      "close_share": 0.0,
+      "config": "configs/baseline.json",
+      "config_hash": "7909101668c139c4",
+      "config_name": "baseline",
+      "countered_share": 0.053956834532374105,
+      "decisions_mean": 200.1875,
+      "difficulty": 4,
+      "distinct_builds": 3,
+      "distinct_builds_wins": 3,
+      "early_lock_in_share": null,
+      "end_round": {
+        "10": 4,
+        "5": 9,
+        "6": 11,
+        "7": 39,
+        "8": 26,
+        "9": 7
+      },
+      "ended": {
+        "corruption": 21,
+        "opposition": 75
+      },
+      "forced_share": 0.03767301488188157,
+      "games": 96,
+      "gap_mean": 0.0,
+      "gives_per_game": 0.0,
+      "loss_blockers": 14.142857142857142,
+      "loss_level": 1.380952380952381,
+      "ms_per_decision": 26.470480138411904,
+      "ms_per_game": 5299.059242708333,
+      "options_per_decision": 9.41018836507441,
+      "pays_per_game": 4.21875,
+      "pool_left_mean": 6.302083333333333,
+      "population_slack_mean": 5.385416666666667,
+      "probe_ms_per_game": 0.0,
+      "replay_ok": 96,
+      "rounds_max": 10,
+      "rounds_mean": 7.239583333333333,
+      "rounds_min": 5,
+      "rounds_sd": 1.1703346357868005,
+      "setup_ops": 0.9166666666666666,
+      "survival_mean": 11.65625,
+      "threats_countered_per_game": 0.78125,
+      "threats_dealt_per_game": 14.479166666666666,
+      "tier": 1,
+      "tier2_played_per_game": 1.7916666666666667,
+      "uncertain_share": null,
+      "variant": "insight_inc+deck444",
+      "win_deck_left": 3.6533333333333333,
+      "win_pool_left": 8.066666666666666,
+      "win_rate": 0.78125,
+      "win_rate_se": 0.042192322255259505,
+      "winprob_by_round": [],
+      "wins": 75,
+      "wins_2plus_buildings_played": 0.88,
+      "wins_2plus_buildings_standing": 0.88,
+      "withdraws_per_game": 0.0
+    },
+    {
+      "adversary_ops_max_round": 58,
+      "adversary_ops_per_round": 11.113636363636363,
+      "agent": "engine",
+      "agent_ms_per_decision": 38.239911795861374,
+      "agent_ms_per_game": 9701.784288541663,
+      "build_distance": 0.6062406727044904,
+      "build_distance_wins": 0.593156828773274,
+      "buildings_played_per_game": 4.104166666666667,
+      "buildings_standing_per_game": 4.104166666666667,
+      "cards_played_per_game": 33.302083333333336,
+      "cell": 3,
+      "close_share": 0.0,
+      "config": "configs/baseline.json",
+      "config_hash": "7909101668c139c4",
+      "config_name": "baseline",
+      "countered_share": 0.20951704545454544,
+      "decisions_mean": 253.70833333333334,
+      "difficulty": 4,
+      "distinct_builds": 44,
+      "distinct_builds_wins": 38,
+      "early_lock_in_share": null,
+      "end_round": {
+        "10": 2,
+        "2": 2,
+        "3": 3,
+        "5": 5,
+        "6": 8,
+        "7": 22,
+        "8": 42,
+        "9": 12
+      },
+      "ended": {
+        "corruption": 22,
+        "opposition": 74
+      },
+      "forced_share": 0.0349811134833306,
+      "games": 96,
+      "gap_mean": 0.0,
+      "gives_per_game": 0.0,
+      "loss_blockers": 23.90909090909091,
+      "loss_level": 1.0454545454545454,
+      "ms_per_decision": 38.37365987436362,
+      "ms_per_game": 9735.717290625003,
+      "options_per_decision": 9.937181803251766,
+      "pays_per_game": 7.208333333333333,
+      "pool_left_mean": 7.635416666666667,
+      "population_slack_mean": 5.645833333333333,
+      "probe_ms_per_game": 0.0,
+      "replay_ok": 96,
+      "rounds_max": 10,
+      "rounds_mean": 7.333333333333333,
+      "rounds_min": 2,
+      "rounds_sd": 1.5252504348102613,
+      "setup_ops": 0.9166666666666666,
+      "survival_mean": 11.572916666666666,
+      "threats_countered_per_game": 3.0729166666666665,
+      "threats_dealt_per_game": 14.666666666666666,
+      "tier": 4,
+      "tier2_played_per_game": 2.96875,
+      "uncertain_share": null,
+      "variant": "insight_inc+deck444",
+      "win_deck_left": 3.5,
+      "win_pool_left": 9.905405405405405,
+      "win_rate": 0.7708333333333334,
+      "win_rate_se": 0.042896351043770264,
+      "winprob_by_round": [],
+      "wins": 74,
+      "wins_2plus_buildings_played": 0.972972972972973,
+      "wins_2plus_buildings_standing": 0.972972972972973,
+      "withdraws_per_game": 0.0
+    }
+  ],
+  "content_hash": "53c5b59a728530fb",
+  "engine_version": "0.1.0",
+  "format": "aic-experiment/1",
+  "groups": [
+    {
+      "config": "configs/baseline.json",
+      "difficulty": 0,
+      "luck_survival": [
+        0.6009280742459396,
+        0.023266305748904217,
+        0.3758056200051561
+      ],
+      "luck_win": [
+        0.5660472124560516,
+        0.02461074836765438,
+        0.409342039176294
+      ],
+      "ordered": false,
+      "ordered_survival": false,
+      "skill_gap": -0.07291666666666663,
+      "skill_gap_survival": -0.39583333333333215,
+      "survival": [
+        [
+          "greedy",
+          13.885416666666666
+        ],
+        [
+          "engine",
+          13.489583333333334
+        ]
+      ],
+      "variant": "insight_inc+deck444",
+      "win_rates": [
+        [
+          "greedy",
+          0.9791666666666666
+        ],
+        [
+          "engine",
+          0.90625
+        ]
+      ]
+    },
+    {
+      "config": "configs/baseline.json",
+      "difficulty": 4,
+      "luck_survival": [
+        0.668751825154079,
+        0.00024591549728724744,
+        0.33100225934863375
+      ],
+      "luck_win": [
+        0.6254097081317327,
+        0.00015607928827844476,
+        0.3744342125799888
+      ],
+      "ordered": false,
+      "ordered_survival": false,
+      "skill_gap": -0.01041666666666663,
+      "skill_gap_survival": -0.08333333333333393,
+      "survival": [
+        [
+          "greedy",
+          11.65625
+        ],
+        [
+          "engine",
+          11.572916666666666
+        ]
+      ],
+      "variant": "insight_inc+deck444",
+      "win_rates": [
+        [
+          "greedy",
+          0.78125
+        ],
+        [
+          "engine",
+          0.7708333333333334
+        ]
+      ]
+    }
+  ],
+  "head_to_head": [
+    {
+      "agent": "engine",
+      "config": "configs/baseline.json",
+      "difficulty": 0,
+      "greedy": "greedy",
+      "paired": {
+        "a_rounds": 8.5,
+        "a_win_rate": 0.90625,
+        "b_rounds": 7.833333333333333,
+        "b_win_rate": 0.9791666666666666,
+        "both": 86,
+        "diff": -0.07291666666666667,
+        "diff_se": 0.030510250171001157,
+        "games": 96,
+        "neither": 1,
+        "only_a": 1,
+        "only_b": 8,
+        "sign_p": 0.03906249999999999
+      },
+      "variant": "insight_inc+deck444",
+      "verdict": "worse than greedy"
+    },
+    {
+      "agent": "engine",
+      "config": "configs/baseline.json",
+      "difficulty": 4,
+      "greedy": "greedy",
+      "paired": {
+        "a_rounds": 7.333333333333333,
+        "a_win_rate": 0.7708333333333334,
+        "b_rounds": 7.239583333333333,
+        "b_win_rate": 0.78125,
+        "both": 62,
+        "diff": -0.010416666666666666,
+        "diff_se": 0.05234582974614945,
+        "games": 96,
+        "neither": 9,
+        "only_a": 12,
+        "only_b": 13,
+        "sign_p": 1.0
+      },
+      "variant": "insight_inc+deck444",
+      "verdict": "no better than greedy (behind, not significant)"
+    }
+  ],
+  "records": [
+    {
+      "category": "close-loss",
+      "path": "out/payback-009-content/insight_inc+deck444/records/close-loss-c2-baseline-insight_inc_deck444-d4-greedy-seed300091.json",
+      "why": "close loss at difficulty 4: corruption in round 7, 3 adversary piece(s) over the level-2 bar, pool 0 of 14"
+    },
+    {
+      "category": "close-loss",
+      "path": "out/payback-009-content/insight_inc+deck444/records/close-loss-c2-baseline-insight_inc_deck444-d4-greedy-seed300085.json",
+      "why": "close loss at difficulty 4: corruption in round 10, 4 adversary piece(s) over the level-2 bar, pool 0 of 14"
+    },
+    {
+      "category": "surprising-win",
+      "path": "out/payback-009-content/insight_inc+deck444/records/surprising-win-c0-baseline-insight_inc_deck444-d0-greedy-seed300000.json",
+      "why": "won by the weakest agent (greedy)"
+    },
+    {
+      "category": "surprising-win",
+      "path": "out/payback-009-content/insight_inc+deck444/records/surprising-win-c2-baseline-insight_inc_deck444-d4-greedy-seed300000.json",
+      "why": "won by the weakest agent (greedy)"
+    }
+  ],
+  "removals": [],
+  "rules_revision": 3,
+  "spec": {
+    "agents": [
+      "greedy",
+      "engine"
+    ],
+    "closeness": {
+      "every": 0,
+      "gap": 2.0
+    },
+    "configs": [
+      "configs/baseline.json"
+    ],
+    "difficulties": [
+      0,
+      4
+    ],
+    "first_seed": "300000",
+    "games": 96,
+    "max_actions": 5000,
+    "name": "payback-009-c-insight_inc+deck444",
+    "note": "009 content lever (separate binary, committed content untouched; scripts/payback/patch_content.py insight_inc): the income buildings also give +1 insight income; with adversary.stage_cards=4,4,4. Engine agent against greedy, same seeds as payback-009-singles.",
+    "records": 2,
+    "variants": [
+      {
+        "name": "insight_inc+deck444",
+        "set": [
+          "adversary.stage_cards=4,4,4"
+        ]
+      }
+    ],
+    "winprob": {
+      "agent": "greedy",
+      "games": 0,
+      "rollouts": 8
+    }
+  },
+  "threads": 12,
+  "top_agent": {
+    "agent": "greedy",
+    "difficulty": 4
+  },
+  "variants": [],
+  "wall_seconds": 287.3452781
+}

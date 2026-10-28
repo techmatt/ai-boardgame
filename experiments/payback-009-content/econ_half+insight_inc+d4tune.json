@@ -1,0 +1,27 @@
+{
+  "name": "payback-009-c-econ_half+insight_inc+d4tune",
+  "note": "009 content lever (separate binary: scripts/payback/patch_content.py econ_half+insight_inc): can difficulty 4 get its bite back by config? adversary.pool_reduction (d4+, 007 set 4) at 5 and 6. Engine agent against greedy, same seeds as payback-009-singles.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {"name": "pr5", "set": ["adversary.pool_reduction=5"]},
+    {"name": "pr6", "set": ["adversary.pool_reduction=6"]}
+  ],
+  "difficulties": [
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 96,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 0
+}

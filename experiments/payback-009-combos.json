@@ -1,0 +1,29 @@
+{
+  "name": "payback-009-combos",
+  "note": "009 engine-payback sweep, config-only combinations of the single levers that helped the engine most (keep cost 0, factory credits 4, a longer deck). Engine agent against greedy, same seeds as payback-009-singles.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {"name": "keep0+fc4", "set": ["cards.keep_cost=0", "economy.factory_credits=4"]},
+    {"name": "keep0+deck444", "set": ["cards.keep_cost=0", "adversary.stage_cards=4,4,4"]},
+    {"name": "keep0+fc4+deck444", "set": ["cards.keep_cost=0", "economy.factory_credits=4", "adversary.stage_cards=4,4,4"]}
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 96,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

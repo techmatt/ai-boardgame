@@ -243,6 +243,29 @@ rerun `experiments/engine-agent-008.json` (~28 min alone on 12 threads, 2,400 ga
 greedy-search agents take 6–16 s a game each with every core busy) to judge a payback
 lever.
 
+**Payback sweep (009)**, write-up `experiments/payback-009.md`. Config levers are
+plain specs: `experiments/payback-009-singles.json` (13 variants × d0, d4 × greedy,
+engine × 96 seeds = 4,992 games, **46 min** alone on 12 threads) and
+`experiments/payback-009-combos.json`. Levers that config can't reach (card costs and
+income, tier-2 costs, the AI tracks) run as **content patches** built into separate
+binaries from a copy of the repo under `out/`. Committed content is never touched:
+
+```sh
+python scripts/payback/patch_content.py --list                      # the patches
+bash scripts/payback/build_patches.sh insight_inc econ_half+insight_inc   # -> out/patch-bin/<patch>.exe, ~1 min each
+bash scripts/payback/run_content.sh insight_inc insight_inc:insight_inc+keep0  # <binary>:<spec> in experiments/payback-009-content/
+python scripts/payback/summarize.py out/payback-009-singles out/payback-009-content/*/ --picks 20
+target/release/aic-sim run configs/baseline.json --games 1 --seed 300041 --agent engine --trace 2>&1 \
+    | python scripts/payback/resources.py                           # unspent resources by round
+```
+
+One content experiment (384 games) takes about 5 minutes alone. Records from a patched
+binary carry its content hash, so they replay only on a binary built from the same
+patch (main's `aic-sim replay` fails on them, typically "unaffordable"). Running two or three experiments at once
+gives the same total throughput (about 1.3 games/s for greedy + engine), and even
+`tail` on a log can take 30+ s under that load. A background waiter killed at its time
+limit can leave a `bash.exe.stackdump` in the repo root: delete it.
+
 An experiment is configs × variants × difficulties × agents over a seed range, played
 on every core (one game at a time per worker, results sorted, so nothing depends on the
 thread count; every game is replay-checked). The spec (`experiments/*.json`):
@@ -346,6 +369,10 @@ threads busy, so per-game times are under load):
   without them it is about 12 minutes.
 - `experiments/tune-after-search.json` (greedy, beam, rollout × d0, d4 × 24): 8 minutes.
 - `experiments/variants-modules.json` (3,072 games, no probes): 11 minutes.
+- `experiments/payback-009-singles.json` (4,992 greedy + engine games): 46 minutes;
+  `payback-009-combos.json` (1,152): about 20 minutes alone. A content-patch spec (384
+  games) takes 5–6 minutes alone. The engine agent takes 7–25 s a game under load,
+  about twice greedy.
 - `scripts/tune/sweep.py`: one `--set` point of 64 greedy games takes about 45–60 s.
 
 **Background runs:** the tool runner stops a background command after 10 minutes unless

@@ -1,0 +1,30 @@
+{
+  "name": "payback-009-c-econ_noinsight",
+  "note": "009 content lever (separate binary, committed content untouched; scripts/payback/patch_content.py econ_noinsight): economy buildings cost no insight. Engine agent against greedy, same seeds as payback-009-singles.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "econ_noinsight",
+      "set": []
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 96,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

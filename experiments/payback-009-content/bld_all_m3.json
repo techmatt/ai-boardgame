@@ -1,0 +1,30 @@
+{
+  "name": "payback-009-c-bld_all_m3",
+  "note": "009 content lever (separate binary, committed content untouched; scripts/payback/patch_content.py bld_all_m3): every building costs 3 less. Engine agent against greedy, same seeds as payback-009-singles.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "bld_all_m3",
+      "set": []
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 96,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

@@ -1,0 +1,30 @@
+{
+  "name": "payback-009-c-econ_half+insight_inc",
+  "note": "009 content lever (separate binary, committed content untouched; scripts/payback/patch_content.py econ_half+insight_inc): econ_half+insight_inc. Engine agent against greedy, same seeds as payback-009-singles.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "econ_half+insight_inc",
+      "set": []
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 96,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

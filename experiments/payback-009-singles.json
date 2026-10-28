@@ -1,0 +1,39 @@
+{
+  "name": "payback-009-singles",
+  "note": "009 engine-payback sweep, one lever at a time (config overrides only; baseline untouched). The engine agent (008) against greedy on the same seeds at difficulties 0 and 4. Does any config lever make building pay?",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {"name": "base", "set": []},
+    {"name": "keep0", "set": ["cards.keep_cost=0"]},
+    {"name": "keep2", "set": ["cards.keep_cost=2"]},
+    {"name": "keep3", "set": ["cards.keep_cost=3"]},
+    {"name": "deck443", "set": ["adversary.stage_cards=4,4,3"]},
+    {"name": "deck444", "set": ["adversary.stage_cards=4,4,4"]},
+    {"name": "deck446", "set": ["adversary.stage_cards=4,4,6"]},
+    {"name": "calm", "set": ["adversary.momentum_drones=0", "adversary.escalation_outposts=0"]},
+    {"name": "fc4", "set": ["economy.factory_credits=4"]},
+    {"name": "fc5", "set": ["economy.factory_credits=5"]},
+    {"name": "pc2", "set": ["economy.processor_compute=2"]},
+    {"name": "draw2", "set": ["cards.draw_cost=2"]},
+    {"name": "credits18", "set": ["ai.start_credits=18"]}
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 96,
+  "first_seed": 300000,
+  "winprob": {
+    "games": 0
+  },
+  "closeness": {
+    "every": 0
+  },
+  "records": 2
+}

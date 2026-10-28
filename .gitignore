@@ -1,3 +1,4 @@
 /target
 /crates/aic-wasm/pkg
 /out
+__pycache__/
