@@ -14,6 +14,9 @@
 //!   other position gets a card of its stage drawn from the printed cards of
 //!   that stage not seen face up, current, in the discard or the peek: the
 //!   game may deal a subset of each stage, so which ones is hidden too;
+//! - the adversary project deck (017): its size and the stage of each
+//!   position are public (cheap on top); each stage's block is shuffled.
+//!   (The baseline deals every project, so which ones were dealt is known.)
 //! - every RNG stream is reseeded, so later reshuffles are guesses too.
 //!
 //! A pending choice's snapshot gets the same guess, so answering it replays
@@ -53,6 +56,7 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
         }
     }
     resample_adversary_deck(rules, g, rng);
+    shuffle_project_stages(rules, g, rng);
     let seeds: Vec<(String, u64)> = g.rng.keys().map(|k| (k.clone(), rng.next_u64())).collect();
     for (purpose, seed) in &seeds {
         g.rng
@@ -64,9 +68,15 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
         // hidden piles are the same as the state's: give them the same
         // guess. A step may draw before it asks: then the snapshot's pile is the drawn
         // cards (now public) on top of the state's, and gets them on top of
-        // the same guess, so replaying draws them again. Any other
-        // difference gets its own guess.
-        for key in SHUFFLED.iter().copied().chain([adversary::DECK]) {
+        // the same guess, so replaying draws them again. A pile the step
+        // drew to the bottom and reshuffled keeps its (drawn) order.
+        // Set when the step drew a pile to the bottom and reshuffled it.
+        let mut drawn_out = false;
+        for key in SHUFFLED
+            .iter()
+            .copied()
+            .chain([adversary::DECK, adversary::PROJECT_DECK])
+        {
             let (was, now) = (snap.pile(key), original.pile(key));
             if was == now {
                 match g.piles.get(key) {
@@ -83,15 +93,52 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
                 snap.piles.insert(key.to_string(), pile);
             } else if key == adversary::DECK {
                 resample_adversary_deck(rules, snap, rng);
-            } else if let Some(pile) = snap.piles.get_mut(key) {
-                pile.sort_unstable();
-                pile.shuffle(rng);
+            } else if key == adversary::PROJECT_DECK {
+                shuffle_project_stages(rules, snap, rng);
+            } else {
+                // The step drew the snapshot's whole pile (public now) and
+                // reshuffled (017: a tip reshuffles the moment its deck
+                // empties): the snapshot keeps its order, so the replay
+                // draws the same cards.
+                drawn_out = true;
             }
         }
-        for (purpose, seed) in &seeds {
-            snap.rng
-                .insert(purpose.clone(), aic_core::rng::Stream::new(*seed, purpose));
+        // After such a reshuffle the step may draw again from the new
+        // order, so the snapshot keeps its true RNG streams and the replay
+        // reshuffles as the table did. This shows the agent that one
+        // reshuffled order (rare: a step that empties a deck and draws
+        // again); every other case gets the guessed streams.
+        if !drawn_out {
+            for (purpose, seed) in &seeds {
+                snap.rng
+                    .insert(purpose.clone(), aic_core::rng::Stream::new(*seed, purpose));
+            }
         }
+    }
+}
+
+/// Shuffles the project deck within each stage's block (the stages are
+/// stacked, cheap on top, so each position's stage is public).
+fn shuffle_project_stages(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
+    let w = rules.world();
+    let Some(deck) = g.piles.get_mut(adversary::PROJECT_DECK) else {
+        return;
+    };
+    let stage = |id: &str| {
+        w.content
+            .project_index(id)
+            .map_or(0, |i| w.content.projects[i].stage)
+    };
+    let mut start = 0;
+    while start < deck.len() {
+        let s = stage(&deck[start]);
+        let end = (start..deck.len())
+            .find(|&i| stage(&deck[i]) != s)
+            .unwrap_or(deck.len());
+        let block = &mut deck[start..end];
+        block.sort_unstable();
+        block.shuffle(rng);
+        start = end;
     }
 }
 
@@ -162,7 +209,17 @@ mod tests {
                         );
                         continue;
                     }
-                    if !SHUFFLED.contains(&k.as_str()) {
+                    if k == adversary::PROJECT_DECK {
+                        // Same stage at every position, same contents.
+                        let w = r.world();
+                        let st = |id: &String| {
+                            w.content.projects[w.content.project_index(id).unwrap()].stage
+                        };
+                        assert_eq!(
+                            a.iter().map(st).collect::<Vec<_>>(),
+                            b.iter().map(st).collect::<Vec<_>>()
+                        );
+                    } else if !SHUFFLED.contains(&k.as_str()) {
                         assert_eq!(&a, &b, "{k}");
                     }
                     a.sort();
@@ -240,6 +297,25 @@ mod tests {
     fn pending_choices_replay_on_the_guess_more_seeds() {
         for name in ["baseline", "shared_row"] {
             pending_choices_replay(&config_rules(name, 0), 8..40);
+        }
+    }
+
+    /// 3 countries at d0 and d4 (017: the Discord deck reshuffles mid-step
+    /// often, and each Discord tip's troop advance asks).
+    #[test]
+    #[ignore = "slow lane: the pending-choice guess check at 3 countries"]
+    fn pending_choices_replay_on_the_guess_three_countries() {
+        for d in [0, 4] {
+            let text = std::fs::read_to_string(format!(
+                "{}/../../configs/baseline.json",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap();
+            let mut c = aic_core::Config::from_json(&text).unwrap();
+            c.apply_override(&format!("adversary.difficulty={d}"))
+                .unwrap();
+            c.apply_override("countries=3").unwrap();
+            pending_choices_replay(&Rules::new(&c).unwrap(), 0..30);
         }
     }
 

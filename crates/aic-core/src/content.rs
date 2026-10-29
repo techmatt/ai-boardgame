@@ -22,15 +22,17 @@ const THREATS_JSON: &str = include_str!("../../../content/threats.json");
 const ADVERSARY_JSON: &str = include_str!("../../../content/adversary.json");
 const AIS_JSON: &str = include_str!("../../../content/ais.json");
 const ALIGNMENT_JSON: &str = include_str!("../../../content/alignment.json");
+const PROJECTS_JSON: &str = include_str!("../../../content/projects.json");
 
 /// Every content file, in hashing order.
-const FILES: [&str; 6] = [
+const FILES: [&str; 7] = [
     MAP_JSON,
     CARDS_JSON,
     THREATS_JSON,
     ADVERSARY_JSON,
     AIS_JSON,
     ALIGNMENT_JSON,
+    PROJECTS_JSON,
 ];
 
 /// Player resources, in display order.
@@ -81,6 +83,8 @@ pub struct Content {
     pub ais: Vec<AiBoard>,
     /// The Unity and Discord decks (module `alignment`).
     pub alignment: Vec<AlignmentCard>,
+    /// The adversary's project deck (module `adversary`, 017).
+    pub projects: Vec<ProjectCard>,
     /// Card id -> index into `cards`, for [`Content::card_index`] (rules and
     /// agents look cards up by id constantly). Built by `parse`.
     #[serde(skip)]
@@ -400,6 +404,13 @@ pub enum Effect {
         amount: i64,
     },
     CounterThreat,
+    /// Remove up to `amount` compute from one visible adversary project
+    /// (017; the Security cards' primitive).
+    DrainProject {
+        amount: i64,
+    },
+    /// Discard one visible adversary project, with its compute (017).
+    DiscardProject,
     /// Sway `amount` toward Unity (module `alignment`).
     Unity {
         amount: i64,
@@ -554,6 +565,10 @@ pub enum ThreatOp {
     /// The adversary builds now (everywhere).
     Build,
     DiscardMostExpensive,
+    /// The adversary gains `amount` compute (onto its projects, 017).
+    Compute {
+        amount: i64,
+    },
 }
 
 fn one() -> i64 {
@@ -658,8 +673,35 @@ pub struct AlignmentCard {
     pub side: Side,
     /// 1, or 2 for the stronger tier.
     pub tier: u8,
-    /// Ongoing: stays in play and resolves its effects at the start of every
-    /// round instead of once.
+    pub text: String,
+    pub effects: Vec<AlignOp>,
+    /// Printed strength steps (017): from `at` tips of the card's side
+    /// (counted before this tip), `effects` replace the card's effects; the
+    /// last step reached applies.
+    #[serde(default)]
+    pub steps: Vec<Step>,
+}
+
+/// A strength step printed on an Alignment card.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Step {
+    pub at: i64,
+    pub effects: Vec<AlignOp>,
+}
+
+/// An adversary project (017): one shared deck, staged (stage 1 cheap,
+/// stage 2 big). Adversary compute fills the cheapest visible project; a
+/// full one resolves its effects once, or, `ongoing`, every round from then
+/// on. Effects are Alignment primitives; team choices are asked of seat 0.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectCard {
+    pub id: String,
+    pub name: String,
+    pub stage: u8,
+    /// Compute to fill it, per player.
+    pub cost: i64,
     #[serde(default)]
     pub ongoing: bool,
     pub text: String,
@@ -695,6 +737,21 @@ pub enum AlignOp {
     Build,
     /// The adversary spreads now.
     Spread,
+    /// Every player sacrifices one of their ambassadors (supply or board)
+    /// or one of their presence tokens (their choice).
+    Sacrifice,
+    /// Every node makes `amount` adversary ambassadors on its hex.
+    NodeAmbassadors { amount: i64 },
+    /// Every clean city gains `amount` adversary ambassadors.
+    CleanCityAmbassadors { amount: i64 },
+    /// In each country, `count` adversary troops onto a factory (players
+    /// choose; with no factory, onto a city).
+    Troops { count: i64 },
+    /// In each country, one research station that is not corrupted becomes
+    /// corrupted (players choose).
+    FlipStations,
+    /// Every player loses `amount` of `resource` (as much as they have).
+    PlayersLose { resource: String, amount: i64 },
 }
 
 // ---------- AI boards ----------
@@ -786,8 +843,8 @@ impl CardDef {
 }
 
 impl Content {
-    pub fn parse(files: [&str; 6]) -> Result<Content, String> {
-        let [map, cards, threats, adversary, ais, alignment] = files;
+    pub fn parse(files: [&str; 7]) -> Result<Content, String> {
+        let [map, cards, threats, adversary, ais, alignment, projects] = files;
         fn p<T: for<'de> Deserialize<'de>>(name: &str, s: &str) -> Result<T, String> {
             serde_json::from_str(s).map_err(|e| format!("content/{name}: {e}"))
         }
@@ -798,6 +855,7 @@ impl Content {
             adversary: p("adversary.json", adversary)?,
             ais: p("ais.json", ais)?,
             alignment: p("alignment.json", alignment)?,
+            projects: p("projects.json", projects)?,
             card_ix: BTreeMap::new(),
         };
         c.card_ix = c
@@ -819,7 +877,8 @@ impl Content {
             .chain(self.threats.iter().map(|t| &t.id))
             .chain(self.adversary.iter().map(|a| &a.id))
             .chain(self.ais.iter().map(|a| &a.id))
-            .chain(self.alignment.iter().map(|a| &a.id));
+            .chain(self.alignment.iter().map(|a| &a.id))
+            .chain(self.projects.iter().map(|a| &a.id));
         for id in all {
             if !ids.insert(id.as_str()) {
                 return Err(format!(
@@ -889,6 +948,34 @@ impl Content {
                     "alignment card {:?}: tier 1 or 2 and an effect",
                     a.id
                 ));
+            }
+            if a.steps.windows(2).any(|p| p[0].at >= p[1].at) || a.steps.iter().any(|s| s.at < 1) {
+                return Err(format!(
+                    "alignment card {:?}: steps at 1 or more tips, in rising order",
+                    a.id
+                ));
+            }
+            for op in a
+                .effects
+                .iter()
+                .chain(a.steps.iter().flat_map(|s| &s.effects))
+            {
+                if let AlignOp::PlayersLose { resource: r, .. } = op {
+                    resource(r, &format!("alignment card {:?}", a.id))?;
+                }
+            }
+        }
+        for p in &self.projects {
+            if !(1..=2).contains(&p.stage) || p.cost < 1 || p.effects.is_empty() {
+                return Err(format!(
+                    "project {:?}: stage 1 or 2, a cost of 1 or more and an effect",
+                    p.id
+                ));
+            }
+            for op in &p.effects {
+                if let AlignOp::PlayersLose { resource: r, .. } = op {
+                    resource(r, &format!("project {:?}", p.id))?;
+                }
             }
         }
         for b in &self.ais {
@@ -1002,6 +1089,10 @@ impl Content {
 
     pub fn threat_index(&self, id: &str) -> Option<usize> {
         self.threats.iter().position(|c| c.id == id)
+    }
+
+    pub fn project_index(&self, id: &str) -> Option<usize> {
+        self.projects.iter().position(|c| c.id == id)
     }
 
     pub fn alignment_index(&self, id: &str) -> Option<usize> {

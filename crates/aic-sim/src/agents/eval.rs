@@ -73,8 +73,9 @@ pub struct Weights {
     pub discord_tip: f64,
     /// Each level the clear-board bar has dropped (Unity tips).
     pub level: f64,
-    /// Each difficulty level Discord has escalated the adversary (a cost).
-    pub escalation: f64,
+    /// Each visible adversary project's fill, as a share of its cost (a
+    /// cost: it will resolve; 017).
+    pub project: f64,
     /// Each player presence on the board (reach, site claims, a share of
     /// city energy; its track income is counted as income).
     pub data_centre: f64,
@@ -192,7 +193,8 @@ impl Default for Weights {
             unity_tip: 24.0,
             discord_tip: 16.0,
             level: 10.0,
-            escalation: 20.0,
+            // 017: chosen by hand, not swept.
+            project: 8.0,
             data_centre: 4.0,
             // 016: chosen by hand for the r7 board, not swept.
             node: 6.0,
@@ -480,7 +482,15 @@ impl Eval {
             let fill = (g.var(alignment::bucket(side)) as f64 / cap).min(1.0);
             v += weight * (g.var(alignment::tips_key(side)) as f64 + fill);
         }
-        v += w.level * level as f64 - w.escalation * g.var(adversary::ESCALATION) as f64;
+        v += w.level * level as f64;
+        // A resolved (or ongoing) project counts in full, so letting one
+        // fill never scores better than holding it back.
+        for id in adversary::projects(g) {
+            let cost = adversary::project_cost(&world, g, &id).max(1) as f64;
+            v -= w.project * g.var(&adversary::project_key(&id)) as f64 / cost;
+        }
+        let resolved = g.stats.counters.get("adversary.projects_resolved");
+        v -= w.project * resolved.copied().unwrap_or(0) as f64;
         // Added in place, term by term, so the flat agents' values (and so
         // their games) do not depend on horizon mode.
         let unpaid = self.unpaid_threats(rules, g);

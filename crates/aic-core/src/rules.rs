@@ -692,7 +692,6 @@ impl Rules {
                 }
                 g.round += 1;
                 g.phase = 0;
-                g.stats.adversary_ops.resize(g.round as usize, 0);
                 let round = g.round;
                 if let Some(log) = events.as_deref_mut() {
                     log.push(Event::RoundStarted { round });

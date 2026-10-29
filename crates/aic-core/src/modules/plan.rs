@@ -28,7 +28,7 @@ pub fn build_plan(
 ) -> Vec<(usize, i64)> {
     let sum = |f: fn(&Twist) -> Option<i64>| -> i64 { twists.iter().filter_map(|t| f(t)).sum() };
     let mut city = w.int("adversary.city_build");
-    if adversary::at(w, g, 3) {
+    if adversary::level(w, 3) {
         city += w.int("adversary.build_bonus");
     }
     city += sum(|t| match t {

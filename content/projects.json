@@ -1,0 +1,100 @@
+[
+ {
+  "id": "disinformation",
+  "name": "Disinformation",
+  "stage": 1,
+  "cost": 6,
+  "text": "Sway 3 toward Discord.",
+  "effects": [{"op": "sway", "side": "discord", "amount": 3}]
+ },
+ {
+  "id": "node_swarm",
+  "name": "Node Swarm",
+  "stage": 1,
+  "cost": 6,
+  "text": "Every node produces an adversary ambassador on its hex.",
+  "effects": [{"op": "node_ambassadors", "amount": 1}]
+ },
+ {
+  "id": "market_crash",
+  "name": "Market Crash",
+  "stage": 1,
+  "cost": 6,
+  "text": "Every player loses 5 credits.",
+  "effects": [{"op": "players_lose", "resource": "credits", "amount": 5}]
+ },
+ {
+  "id": "false_flag",
+  "name": "False Flag",
+  "stage": 1,
+  "cost": 7,
+  "text": "Deal two extra threats.",
+  "effects": [{"op": "threats", "count": 2}]
+ },
+ {
+  "id": "infiltration_drive",
+  "name": "Infiltration Drive",
+  "stage": 1,
+  "cost": 7,
+  "text": "In each country, the clean city with the most adversary ambassadors gains 2 more.",
+  "effects": [{"op": "infiltrate", "amount": 2}]
+ },
+ {
+  "id": "rapid_buildout",
+  "name": "Rapid Buildout",
+  "stage": 1,
+  "cost": 7,
+  "text": "The adversary builds now.",
+  "effects": [{"op": "build"}]
+ },
+ {
+  "id": "purge_the_unaligned",
+  "name": "Purge the Unaligned",
+  "stage": 2,
+  "cost": 10,
+  "text": "Every player sacrifices an ambassador or a presence.",
+  "effects": [{"op": "sacrifice"}]
+ },
+ {
+  "id": "recruitment_drive",
+  "name": "Recruitment Drive",
+  "stage": 2,
+  "cost": 10,
+  "ongoing": true,
+  "text": "Ongoing: every round, an extra adversary ambassador at every clean city.",
+  "effects": [{"op": "clean_city_ambassadors", "amount": 1}]
+ },
+ {
+  "id": "propaganda_network",
+  "name": "Propaganda Network",
+  "stage": 2,
+  "cost": 10,
+  "ongoing": true,
+  "text": "Ongoing: every round, sway 1 toward Discord.",
+  "effects": [{"op": "sway", "side": "discord", "amount": 1}]
+ },
+ {
+  "id": "total_offensive",
+  "name": "Total Offensive",
+  "stage": 2,
+  "cost": 11,
+  "text": "The adversary spreads now; sway 2 toward Discord.",
+  "effects": [{"op": "spread"}, {"op": "sway", "side": "discord", "amount": 2}]
+ },
+ {
+  "id": "armoured_columns",
+  "name": "Armoured Columns",
+  "stage": 2,
+  "cost": 11,
+  "text": "In each country, an adversary troop lands on a factory (with none, a city).",
+  "effects": [{"op": "troops", "count": 1}]
+ },
+ {
+  "id": "station_coup",
+  "name": "Station Coup",
+  "stage": 2,
+  "cost": 12,
+  "text": "In each country, a research station that is not corrupted becomes corrupted.",
+  "effects": [{"op": "flip_stations"}]
+ }
+]

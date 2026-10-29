@@ -1,10 +1,10 @@
-//! The adversary (014, 016): its deck (the clock and the stager), its
-//! ambassadors (build, spread, corrupt), nodes and adversary compute, the
-//! ambassador supply and the difficulty levels. Also the shared rules for placing and removing
+//! The adversary (014, 016, 017): its deck (the clock and the stager), its
+//! ambassadors (build, spread, corrupt), nodes, adversary compute and the
+//! project deck it fills, the ambassador supply and the difficulty levels. Also the shared rules for placing and removing
 //! adversary ambassadors and troops, which cards, threats and Alignment use,
 //! and the board conditions for winning and losing.
 
-use crate::content::{AdversaryCard, Passive, Twist};
+use crate::content::{AdversaryCard, Passive, ProjectCard, Twist};
 use crate::module::{Build, Cx, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::rng::shuffle;
 use crate::state::GameState;
@@ -30,10 +30,13 @@ const PARAMS: &[ParamSpec] = &[
     ParamSpec::int("build_bonus", 0, 5, "difficulty 3+: ambassadors each corrupted city gains on top of city_build"),
     ParamSpec::int("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
     ParamSpec::int("supply_reduction", 0, 20, "difficulty 4+: ambassador supply smaller by this per country"),
+    ParamSpec::int("node_compute", 0, 5, "adversary compute each node makes a round (none with a player ambassador on it)"),
+    ParamSpec::list("project_cards", 0, 20, "adversary projects dealt from stage 1 (cheap) and stage 2 (big), cheap on top"),
+    ParamSpec::int("project_row", 1, 6, "adversary projects visible at once; a new row is dealt when all have resolved"),
 ];
 
 const PHASES: &[PhaseSpec] = &[
-    PhaseSpec::auto("build", "the next card becomes this round's; nodes make adversary compute; corrupted cities and the factories next to them gain ambassadors"),
+    PhaseSpec::auto("build", "the next card becomes this round's; corrupted cities and the factories next to them gain ambassadors; ongoing projects act; nodes make adversary compute onto the projects"),
     PhaseSpec::auto("spread", "every hex with several adversary ambassadors keeps one and sends the rest to pieces (a second on a piece makes a node)"),
     PhaseSpec::auto("corrupt", "cities that are not corrupted and hold enough adversary ambassadors are corrupted"),
     PhaseSpec::auto("reveal", "reveal the next adversary card face up, a round ahead"),
@@ -70,11 +73,18 @@ pub const STARVED: &str = "adversary.starved";
 pub const STAGE: &str = "adversary.stage";
 /// How many more deck cards beyond the next are shown (Recon Sweep).
 pub const PEEK: &str = "adversary.peek";
-/// How many levels Discord has escalated the adversary (module `alignment`).
-pub const ESCALATION: &str = "adversary.escalation";
-/// Adversary compute: 1 a round per node. A plain counter until the
-/// adversary's project deck spends it.
+/// Adversary compute made so far (all of it goes onto projects).
 pub const COMPUTE: &str = "adversary.compute";
+/// The project deck (face down), the visible row, ongoing projects in
+/// play, and resolved or discarded ones.
+pub const PROJECT_DECK: &str = "adversary.project_deck";
+pub const PROJECTS: &str = "adversary.projects";
+pub const PROJECTS_ONGOING: &str = "adversary.projects_ongoing";
+pub const PROJECTS_DONE: &str = "adversary.projects_done";
+/// The per-round counter of adversary operations (table time).
+pub const OPS: &str = "adversary.ops";
+/// The round the first project resolved (sim observation).
+const FIRST_PROJECT: &str = "adversary.first_project";
 /// The round of the first corruption after setup (sim observation).
 const FIRST_CORRUPTION: &str = "adversary.first_corruption";
 
@@ -88,15 +98,23 @@ pub fn level(w: &World, n: i64) -> bool {
     w.int("adversary.difficulty") >= n
 }
 
-/// Whether the difficulty in play, the configured one plus any Discord
-/// escalation, is at least `n`.
-pub fn at(w: &World, g: &GameState, n: i64) -> bool {
-    w.int("adversary.difficulty") + g.var(ESCALATION) >= n
+/// Compute on visible project `id`.
+pub fn project_key(id: &str) -> String {
+    format!("adversary.project.{id}")
 }
 
-/// The difficulty in play (configured plus escalation), up to 4.
-pub fn difficulty(w: &World, g: &GameState) -> i64 {
-    (w.int("adversary.difficulty") + g.var(ESCALATION)).min(4)
+/// The visible projects, in row order.
+pub fn projects(g: &GameState) -> Vec<String> {
+    g.pile(PROJECTS).to_vec()
+}
+
+fn project<'w>(w: &World<'w>, id: &str) -> &'w ProjectCard {
+    &w.content.projects[w.content.project_index(id).expect("project in content")]
+}
+
+/// Compute that fills project `id`: its printed cost per player.
+pub fn project_cost(w: &World, g: &GameState, id: &str) -> i64 {
+    project(w, id).cost * g.seats.len().max(1) as i64
 }
 
 /// The ambassador supply at the start, for this many countries.
@@ -114,7 +132,7 @@ pub fn threat_tier(w: &World, g: &GameState) -> u8 {
     if g.var(STAGE) >= 2 {
         return 2;
     }
-    if at(w, g, 4) {
+    if level(w, 4) {
         let early = w.int("adversary.tier2_early") as usize;
         let soon = g
             .pile(NEXT)
@@ -168,6 +186,7 @@ pub fn war_twist(w: &World, g: &GameState) -> bool {
 #[derive(Debug)]
 struct Adversary {
     stage_cards: Vec<i64>,
+    project_cards: Vec<i64>,
 }
 
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
@@ -190,7 +209,29 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
             ));
         }
     }
-    Ok(Box::new(Adversary { stage_cards }))
+    let project_cards = b.list("project_cards")?;
+    if project_cards.len() != 2 {
+        return Err("project_cards: give 2 counts (stage 1, stage 2)".into());
+    }
+    for (s, &n) in project_cards.iter().enumerate() {
+        let have = b
+            .world
+            .content
+            .projects
+            .iter()
+            .filter(|c| c.stage as usize == s + 1)
+            .count() as i64;
+        if n > have {
+            return Err(format!(
+                "project_cards: stage {} has only {have} projects",
+                s + 1
+            ));
+        }
+    }
+    Ok(Box::new(Adversary {
+        stage_cards,
+        project_cards,
+    }))
 }
 
 impl Module for Adversary {
@@ -221,6 +262,22 @@ impl Module for Adversary {
         }
         cx.set_pile(g, DECK, deck);
         reveal(g, cx);
+        // The project deck: each stage shuffled on its own, cheap on top.
+        let mut deck = Vec::new();
+        for stage in 1..=2u8 {
+            let mut ids: Vec<String> = w
+                .content
+                .projects
+                .iter()
+                .filter(|c| c.stage == stage)
+                .map(|c| c.id.clone())
+                .collect();
+            shuffle(&mut ids, cx.rng(g, "adversary"));
+            let n = self.project_cards[stage as usize - 1];
+            deck.extend(ids.into_iter().take(n as usize));
+        }
+        cx.set_pile(g, PROJECT_DECK, deck);
+        deal_projects(g, cx);
     }
 
     fn round_start(&self, g: &mut GameState, cx: &mut Cx) {
@@ -254,11 +311,6 @@ impl Module for Adversary {
                         alignment::sway(g, cx, crate::content::Side::Discord, *amount);
                     }
                 }
-                let nodes: i64 = (0..g.hexes.len()).map(|h| g.tokens(h, NODE)).sum();
-                if nodes > 0 {
-                    cx.add_key(g, COMPUTE.into(), nodes);
-                    cx.tally(g, "adversary.compute_made", nodes);
-                }
                 build_all(g, cx, None)?;
                 if c.escalation {
                     let n = w.int("adversary.escalation_ambassadors");
@@ -268,6 +320,34 @@ impl Module for Adversary {
                         place(g, cx, h, n);
                     }
                 }
+                // Ongoing projects act, in the order they came into play.
+                for id in g.pile(PROJECTS_ONGOING).to_vec() {
+                    for op in &project(&w, &id).effects {
+                        alignment::resolve(g, cx, op)?;
+                    }
+                    if g.is_over() {
+                        return Ok(());
+                    }
+                }
+                // Nodes make compute, except under a player ambassador.
+                let per = w.int("adversary.node_compute");
+                let (mut made, mut blocked) = (0, 0);
+                for h in 0..g.hexes.len() {
+                    let n = g.tokens(h, NODE) * per;
+                    if n == 0 {
+                        continue;
+                    }
+                    if player_ambassador(g, h).is_some() {
+                        blocked += n;
+                    } else {
+                        made += n;
+                    }
+                }
+                if blocked > 0 {
+                    cx.tally(g, "adversary.compute_blocked", blocked);
+                    cx.per_round(g, "adversary.compute_blocked", blocked);
+                }
+                gain_compute(g, cx, made)?;
             }
             1 => spread(g, cx, None)?,
             2 => {
@@ -360,27 +440,67 @@ impl Module for Adversary {
         );
         out.global(
             "compute",
-            "adv. compute",
+            "adv. compute made",
             g.var(COMPUTE),
             None,
-            "adversary compute so far: each node makes 1 a round (nothing spends it yet)",
+            "adversary compute made so far: each node makes 1 a round (none under a player ambassador); it fills the cheapest visible project",
         );
         out.global(
             "difficulty",
             "difficulty",
-            difficulty(w, g),
+            w.int("adversary.difficulty"),
             Some(4),
-            "difficulty level in play: the configured level plus Discord escalation",
+            "difficulty level",
         );
-        if g.var(ESCALATION) > 0 {
-            out.global(
-                "escalation",
-                "Discord escalation",
-                g.var(ESCALATION),
-                None,
-                "difficulty levels Discord tips have added",
-            );
-        }
+        // A visible project's status is its fill, "n/cost compute".
+        let pshow = |id: &str, status: &str, have: Option<i64>| {
+            let p = project(w, id);
+            let cost = project_cost(w, g, id);
+            let kind = if p.stage == 1 { "cheap" } else { "big" };
+            CardView {
+                id: id.to_string(),
+                name: p.name.clone(),
+                text: format!("{kind}: {}", p.text),
+                status: match have {
+                    Some(n) => format!("{n}/{cost} compute"),
+                    None => status.to_string(),
+                },
+                cost: Some(cost),
+            }
+        };
+        let row = g.pile(PROJECTS);
+        out.pile(
+            "projects",
+            "Adversary projects (compute fills the cheapest)",
+            None,
+            row.len(),
+            row.iter()
+                .map(|id| pshow(id, "filling", Some(g.var(&project_key(id)))))
+                .collect(),
+        );
+        let on = g.pile(PROJECTS_ONGOING);
+        out.pile(
+            "projects_ongoing",
+            "Ongoing adversary projects",
+            None,
+            on.len(),
+            on.iter().map(|id| pshow(id, "ongoing", None)).collect(),
+        );
+        let done = g.pile(PROJECTS_DONE);
+        out.pile(
+            "projects_done",
+            "Adversary projects resolved",
+            None,
+            done.len(),
+            done.iter().map(|id| pshow(id, "resolved", None)).collect(),
+        );
+        out.pile(
+            "project_deck",
+            "Adversary project deck",
+            None,
+            g.pile(PROJECT_DECK).len(),
+            Vec::new(),
+        );
         out.global(
             "deck",
             "adversary cards left",
@@ -388,7 +508,14 @@ impl Module for Adversary {
             None,
             "rounds left on the clock after this one; players lose when the next round has no card",
         );
-        out.bookkeeping(&[PEEK, STARVED, FIRST_CORRUPTION, "adversary.removed_troop."]);
+        out.bookkeeping(&[
+            PEEK,
+            STARVED,
+            FIRST_CORRUPTION,
+            FIRST_PROJECT,
+            "adversary.removed_troop.",
+            "adversary.project.",
+        ]);
     }
 }
 
@@ -397,6 +524,116 @@ impl Module for Adversary {
 pub fn peek(g: &mut GameState, cx: &mut Cx, n: i64) {
     let cur = g.var(PEEK);
     cx.set_key(g, PEEK.into(), cur.max(n));
+}
+
+/// Deals a new row of projects from the top of the project deck.
+fn deal_projects(g: &mut GameState, cx: &mut Cx) {
+    let n = cx.world.int("adversary.project_row") as usize;
+    let ids: Vec<String> = g.pile(PROJECT_DECK).iter().take(n).cloned().collect();
+    for id in ids {
+        cx.move_card(g, &id, PROJECT_DECK, PROJECTS, false)
+            .expect("top of the project deck");
+    }
+}
+
+/// The adversary gains `n` compute: each point goes onto the cheapest
+/// visible project (ties: the first in the row); a project that fills
+/// resolves at once. With no project left, compute is lost.
+pub fn gain_compute(g: &mut GameState, cx: &mut Cx, n: i64) -> Res {
+    if n <= 0 {
+        return Ok(());
+    }
+    let w = cx.world;
+    cx.add_key(g, COMPUTE.into(), n);
+    cx.tally(g, "adversary.compute_made", n);
+    cx.per_round(g, "adversary.compute", n);
+    for _ in 0..n {
+        let Some(id) = g
+            .pile(PROJECTS)
+            .iter()
+            .min_by_key(|id| project_cost(&w, g, id))
+            .cloned()
+        else {
+            cx.tally(g, "adversary.compute_lost", 1);
+            continue;
+        };
+        cx.add_key(g, project_key(&id), 1);
+        cx.per_round(g, OPS, 1);
+        if g.var(&project_key(&id)) >= project_cost(&w, g, &id) {
+            resolve_project(g, cx, &id)?;
+            if g.is_over() {
+                return Ok(());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A full project resolves: once (to the resolved pile), or as an ongoing
+/// project from next round's build on. An empty row deals a new one.
+fn resolve_project(g: &mut GameState, cx: &mut Cx, id: &str) -> Res {
+    let w = cx.world;
+    let p = project(&w, id);
+    cx.set_key(g, project_key(id), 0);
+    let to = if p.ongoing {
+        PROJECTS_ONGOING
+    } else {
+        PROJECTS_DONE
+    };
+    cx.move_card(g, id, PROJECTS, to, false)
+        .expect("visible project");
+    cx.tally(g, "adversary.projects_resolved", 1);
+    cx.tally(
+        g,
+        if p.stage == 1 {
+            "adversary.projects_resolved.cheap"
+        } else {
+            "adversary.projects_resolved.big"
+        },
+        1,
+    );
+    cx.tally(g, &format!("adversary.project.{id}"), 1);
+    if g.var(FIRST_PROJECT) == 0 {
+        cx.set_key(g, FIRST_PROJECT.into(), g.round as i64);
+        cx.tally(g, "adversary.first_project_round", g.round as i64);
+    }
+    cx.note(None, || {
+        format!("Adversary project {} resolves: {}", p.name, p.text)
+    });
+    if g.pile(PROJECTS).is_empty() {
+        deal_projects(g, cx);
+    }
+    if !p.ongoing {
+        for op in &p.effects {
+            alignment::resolve(g, cx, op)?;
+        }
+    }
+    Ok(())
+}
+
+/// Removes up to `n` compute from visible project `id` (Security cards).
+pub fn drain_project(g: &mut GameState, cx: &mut Cx, id: &str, n: i64) {
+    let k = n.min(g.var(&project_key(id))).max(0);
+    if k > 0 {
+        cx.add_key(g, project_key(id), -k);
+        cx.tally(g, "adversary.compute_drained", k);
+    }
+}
+
+/// Discards visible project `id` with its compute; an empty row deals a
+/// new one.
+pub fn discard_project(g: &mut GameState, cx: &mut Cx, id: &str) {
+    let w = cx.world;
+    cx.set_key(g, project_key(id), 0);
+    cx.move_card(g, id, PROJECTS, PROJECTS_DONE, false)
+        .expect("visible project");
+    cx.tally(g, "adversary.projects_discarded", 1);
+    cx.note(None, || {
+        format!("Adversary project {} is discarded", project(&w, id).name)
+    });
+    if g.pile(PROJECTS).is_empty() {
+        deal_projects(g, cx);
+    }
 }
 
 /// Reveals the top deck card face up as next round's card (nothing if the deck is empty).
@@ -433,7 +670,7 @@ pub fn place(g: &mut GameState, cx: &mut Cx, h: usize, n: i64) {
             return;
         }
         cx.add_key(g, SUPPLY.into(), -1);
-        cx.adversary_ops(g, 1);
+        cx.per_round(g, OPS, 1);
         arrive(g, cx, h, false);
     }
 }
@@ -471,6 +708,7 @@ pub fn remove_node(g: &mut GameState, cx: &mut Cx, h: usize) {
     if g.tokens(h, NODE) > 0 {
         cx.add_tokens(g, h, NODE, -1);
         cx.tally(g, "adversary.nodes_removed", 1);
+        alignment::for_node_removed(g, cx);
     }
 }
 
@@ -628,7 +866,7 @@ pub fn spread(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> Res {
                 break;
             };
             cx.add_tokens(g, from, ADV_AMBASSADOR, -1);
-            cx.adversary_ops(g, 1);
+            cx.per_round(g, OPS, 1);
             arrive(g, cx, dest[i], true);
         }
     }

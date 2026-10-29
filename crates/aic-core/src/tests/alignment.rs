@@ -185,10 +185,11 @@ fn the_antimatter_action_and_the_empty_undecided() {
         .all(|a| !matches!(a, Action::Antimatter { .. })));
 }
 
-/// Discord tips escalate the adversary at 2 and 5; Momentum shrinks a
-/// bucket by 1 per 2 of its side's tips, down to 1 per player.
+/// A Discord tip no longer escalates the difficulty (017): it resolves one
+/// card, one-shot; Momentum shrinks a bucket by 1 per 2 of its side's tips,
+/// down to 1 per player.
 #[test]
-fn discord_tips_escalate_and_momentum_shrinks_buckets() {
+fn discord_tips_do_not_escalate_and_momentum_shrinks_buckets() {
     let (rules, mut g) = action_only(&[]);
     g.vars.insert("alignment.discord_tips".into(), 1);
     let undecided = g.var("alignment.undecided");
@@ -196,20 +197,17 @@ fn discord_tips_escalate_and_momentum_shrinks_buckets() {
     g.vars.insert("alignment.discord".into(), 4);
     give(&rules, &mut g);
     assert_eq!(g.var("alignment.discord_tips"), 2);
-    assert_eq!(g.var("adversary.escalation"), 1);
+    assert_eq!(g.var("adversary.escalation"), 0);
     let w = rules.world();
-    assert!(adversary::at(&w, &g, 1) && !adversary::level(&w, 1));
-    assert_eq!(
-        g.pile("alignment.resolved.discord").len() + g.pile("alignment.ongoing").len(),
-        1
-    );
+    assert!(!adversary::level(&w, 1));
+    assert_eq!(g.pile("alignment.resolved.discord").len(), 1);
     let d = rules
         .view(&g)
         .globals
         .into_iter()
         .find(|v| v.key == "adversary.difficulty")
         .unwrap();
-    assert_eq!(d.value, 1);
+    assert_eq!(d.value, 0);
 
     use crate::content::Side;
     let rules = Rules::new(&baseline_with(&["alignment.momentum_every=2"])).unwrap();

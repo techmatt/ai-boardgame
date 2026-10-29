@@ -386,18 +386,15 @@ impl<'a> Cx<'a> {
         });
     }
 
-    /// Records `n` adversary operations in the current round. Operations
-    /// during setup (round 0) go to `stats.setup_ops` instead.
-    pub fn adversary_ops(&mut self, g: &mut GameState, n: u32) {
+    /// Adds `n` to the per-round counter `key` (full key) for the current
+    /// round: entry `r` is round `r`, entry 0 setup.
+    pub fn per_round(&mut self, g: &mut GameState, key: &str, n: i64) {
         let r = g.round as usize;
-        if r == 0 {
-            g.stats.setup_ops += n;
-            return;
+        let v = g.stats.per_round.entry(key.to_string()).or_default();
+        if v.len() <= r {
+            v.resize(r + 1, 0);
         }
-        if g.stats.adversary_ops.len() < r {
-            g.stats.adversary_ops.resize(r, 0);
-        }
-        g.stats.adversary_ops[r - 1] += n;
+        v[r] += n;
     }
 
     /// Adds to the counter `"<module>.<name>"`.

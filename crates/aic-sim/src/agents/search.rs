@@ -18,7 +18,7 @@ use crate::prof::{self, Part};
 /// table: every pile [`determinize`] guesses (the shuffled decks and the
 /// adversary deck).
 fn hidden(key: &str) -> bool {
-    key == adversary::DECK || SHUFFLED.contains(&key)
+    key == adversary::DECK || key == adversary::PROJECT_DECK || SHUFFLED.contains(&key)
 }
 
 /// `g` after `a`, or `None` if the rules refuse it (a guess of the hidden

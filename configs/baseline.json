@@ -67,7 +67,13 @@
         "extra_corrupted": 0,
         "build_bonus": 1,
         "tier2_early": 1,
-        "supply_reduction": 2
+        "supply_reduction": 2,
+        "node_compute": 1,
+        "project_cards": [
+          6,
+          6
+        ],
+        "project_row": 3
       }
     },
     {
@@ -81,10 +87,13 @@
       "module": "alignment",
       "variant": "tug",
       "params": {
-        "undecided_per_player": 4,
+        "undecided_per_player": 3,
         "tip_per_player": 2,
         "momentum_every": 0,
         "troop": 1,
+        "free_city": 2,
+        "node": 1,
+        "troop_advance": 1,
         "threat_discord": 1,
         "adversary_discord": 0,
         "antimatter_discord": 1,
@@ -93,10 +102,7 @@
           2,
           5
         ],
-        "discord_escalate": [
-          2,
-          5
-        ],
+        "discord_tier2": 2,
         "unity_win": 8,
         "clear_win_stage": 1
       }
@@ -173,7 +179,9 @@
         "modular_expansion",
         "point_defense",
         "strike_team",
-        "shelter_order"
+        "shelter_order",
+        "security_patch",
+        "zero_day_wipe"
       ]
     }
   ],

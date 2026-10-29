@@ -998,5 +998,38 @@
    }
   ],
   "unique": "protector"
+ },
+ {
+  "id": "security_patch",
+  "name": "Security Patch",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 0,
+  "tags": [
+   "cyber"
+  ],
+  "text": "Remove up to 4 compute from one adversary project (placeholder Security card).",
+  "effects": [
+   {
+    "op": "drain_project",
+    "amount": 4
+   }
+  ]
+ },
+ {
+  "id": "zero_day_wipe",
+  "name": "Zero-Day Wipe",
+  "tier": 2,
+  "kind": "program",
+  "cost": 16,
+  "antimatter": 2,
+  "insight": 2,
+  "text": "Discard one visible adversary project, with its compute (placeholder).",
+  "effects": [
+   {
+    "op": "discard_project"
+   }
+  ]
  }
 ]

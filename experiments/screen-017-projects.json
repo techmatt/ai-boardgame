@@ -1,0 +1,29 @@
+{
+  "name": "screen-017-projects",
+  "note": "017 quick screen of rules r8 (the adversary project deck filled by node and threat compute, the Discord troop advance, one-shot Alignment cards with printed Discord steps, more Unity sources, no Discord escalation): win rates and length, the strategy-health gate, and per game projects resolved (cheap, big), adversary compute made and blocked, Discord and Unity tips, troop advances and strikes, and the round of the first project. 2 and 3 countries, d0 and d4, greedy and engine. No tuning.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 32,
+  "records": 2
+}

@@ -44,9 +44,8 @@
   "name": "Volunteer Corps",
   "side": "unity",
   "tier": 1,
-  "ongoing": true,
-  "text": "Ongoing: at the start of each round, sway 1 toward Unity.",
-  "effects": [{"op": "sway", "side": "unity", "amount": 1}]
+  "text": "Sway 3 toward Unity.",
+  "effects": [{"op": "sway", "side": "unity", "amount": 3}]
  },
  {
   "id": "global_coalition",
@@ -69,56 +68,62 @@
   "name": "Incursion",
   "side": "discord",
   "tier": 1,
-  "text": "Deal one extra threat.",
-  "effects": [{"op": "threats", "count": 1}]
+  "text": "Deal one extra threat (2+ Discord tips: two; 5+: three).",
+  "effects": [{"op": "threats", "count": 1}],
+  "steps": [{"at": 2, "effects": [{"op": "threats", "count": 2}]}, {"at": 5, "effects": [{"op": "threats", "count": 3}]}]
  },
  {
   "id": "blight",
   "name": "Blight",
   "side": "discord",
   "tier": 1,
-  "text": "In each country, the clean city with the most adversary ambassadors gains 1 more.",
-  "effects": [{"op": "infiltrate", "amount": 1}]
+  "text": "In each country, the clean city with the most adversary ambassadors gains 1 more (2+ Discord tips: 2; 5+: 3).",
+  "effects": [{"op": "infiltrate", "amount": 1}],
+  "steps": [{"at": 2, "effects": [{"op": "infiltrate", "amount": 2}]}, {"at": 5, "effects": [{"op": "infiltrate", "amount": 3}]}]
  },
  {
   "id": "buildup",
   "name": "Buildup",
   "side": "discord",
   "tier": 1,
-  "text": "The adversary builds now.",
-  "effects": [{"op": "build"}]
+  "text": "The adversary builds now (5+ Discord tips: it builds, then spreads).",
+  "effects": [{"op": "build"}],
+  "steps": [{"at": 5, "effects": [{"op": "build"}, {"op": "spread"}]}]
  },
  {
   "id": "propaganda",
   "name": "Propaganda",
   "side": "discord",
   "tier": 1,
-  "ongoing": true,
-  "text": "Ongoing: at the start of each round, sway 1 toward Discord.",
-  "effects": [{"op": "sway", "side": "discord", "amount": 1}]
+  "text": "Every player loses 4 credits (2+ Discord tips: 6; 5+: 8).",
+  "effects": [{"op": "players_lose", "resource": "credits", "amount": 4}],
+  "steps": [{"at": 2, "effects": [{"op": "players_lose", "resource": "credits", "amount": 6}]}, {"at": 5, "effects": [{"op": "players_lose", "resource": "credits", "amount": 8}]}]
  },
  {
   "id": "offensive",
   "name": "Offensive",
   "side": "discord",
   "tier": 2,
-  "text": "The adversary spreads now.",
-  "effects": [{"op": "spread"}]
+  "text": "The adversary spreads now (5+ Discord tips: it builds, then spreads).",
+  "effects": [{"op": "spread"}],
+  "steps": [{"at": 5, "effects": [{"op": "build"}, {"op": "spread"}]}]
  },
  {
   "id": "two_fronts",
   "name": "Two Fronts",
   "side": "discord",
   "tier": 2,
-  "text": "Deal two extra threats.",
-  "effects": [{"op": "threats", "count": 2}]
+  "text": "Deal two extra threats (5+ Discord tips: three).",
+  "effects": [{"op": "threats", "count": 2}],
+  "steps": [{"at": 5, "effects": [{"op": "threats", "count": 3}]}]
  },
  {
   "id": "firestorm",
   "name": "Firestorm",
   "side": "discord",
   "tier": 2,
-  "text": "In each country, the clean city with the most adversary ambassadors gains 2 more.",
-  "effects": [{"op": "infiltrate", "amount": 2}]
+  "text": "In each country, the clean city with the most adversary ambassadors gains 2 more (5+ Discord tips: 3).",
+  "effects": [{"op": "infiltrate", "amount": 2}],
+  "steps": [{"at": 5, "effects": [{"op": "infiltrate", "amount": 3}]}]
  }
 ]

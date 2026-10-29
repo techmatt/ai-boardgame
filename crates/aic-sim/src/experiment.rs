@@ -586,8 +586,16 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         .map_or("timeout".into(), |o| o.reason.clone());
     r.rounds = g.round;
     r.margin = margin(rules, &g);
-    r.adversary_ops = g.stats.adversary_ops.clone();
-    r.setup_ops = g.stats.setup_ops;
+    // The generic per-round counter (017): entry 0 is setup, entry r round r.
+    let ops = g
+        .stats
+        .per_round
+        .get("adversary.ops")
+        .map_or(&[][..], |v| v.as_slice());
+    r.setup_ops = ops.first().copied().unwrap_or(0) as u32;
+    r.adversary_ops = (1..=g.round as usize)
+        .map(|i| ops.get(i).copied().unwrap_or(0) as u32)
+        .collect();
     r.counters = g.stats.counters.clone();
     r.build = build_signature(rules, &g);
     r.final_state = Some(Box::new(g));

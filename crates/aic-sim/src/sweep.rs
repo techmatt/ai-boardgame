@@ -464,14 +464,12 @@ fn simulate(
         options += rec.options_total;
         forced += rec.forced as u64;
         max_options = max_options.max(rec.max_options);
-        ops += rec
-            .stats
-            .adversary_ops
-            .iter()
-            .map(|&x| x as u64)
-            .sum::<u64>();
-        ops_max = ops_max.max(rec.stats.adversary_ops.iter().copied().max().unwrap_or(0));
-        setup_ops += rec.stats.setup_ops as u64;
+        // `adversary.ops` per round: entry 0 is setup (017).
+        let per = rec.stats.per_round.get("adversary.ops");
+        let rounds_ops = per.map_or(&[][..], |v| v.get(1..).unwrap_or(&[]));
+        ops += rounds_ops.iter().map(|&x| x as u64).sum::<u64>();
+        ops_max = ops_max.max(rounds_ops.iter().copied().max().unwrap_or(0) as u32);
+        setup_ops += per.and_then(|v| v.first()).copied().unwrap_or(0) as u64;
         for (k, v) in &rec.stats.counters {
             *counters.entry(k.clone()).or_insert(0.0) += *v as f64;
         }

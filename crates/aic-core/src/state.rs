@@ -119,11 +119,10 @@ pub struct HexState {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Stats {
-    /// Adversary operations (token placements/moves) per round; entry
-    /// `r - 1` is round `r`. A proxy for table time.
-    pub adversary_ops: Vec<u32>,
-    /// Adversary operations during setup, before round 1.
-    pub setup_ops: u32,
+    /// Per-round counters, keyed `"<module>.<name>"`: entry `r` is round
+    /// `r`, entry 0 setup (017). `adversary.ops` counts adversary operations
+    /// (token placements and moves), a proxy for table time.
+    pub per_round: BTreeMap<String, Vec<i64>>,
     /// Player actions applied, passes included.
     pub actions: u32,
     /// Free-form counters, keyed `"<module>.<name>"`.

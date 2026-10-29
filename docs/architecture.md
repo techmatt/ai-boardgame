@@ -78,7 +78,7 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
 ## Config
 
 A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the baseline
-game, rules revision 7 (2 countries, difficulty 0);
+game, rules revision 8 (2 countries, difficulty 0);
 [`configs/shared_row.json`](../configs/shared_row.json) differs only in the threat
 variant. Abridged:
 
@@ -90,7 +90,7 @@ variant. Abridged:
     { "module": "board", "variant": "corps", "params": { "start_corrupted": 1, "war": [0, 1, 0, 1, 0, 1, 1, 1], ... } },
     { "module": "adversary", "variant": "militarist", "params": { "difficulty": 0, "stage_cards": [3, 4, 3], ... } },
     { "module": "threats", "variant": "countries", "params": { "per_country": 1 } },
-    { "module": "alignment", "variant": "tug", "params": { "undecided_per_player": 4, "tip_per_player": 2, ... } },
+    { "module": "alignment", "variant": "tug", "params": { "undecided_per_player": 3, "tip_per_player": 2, ... } },
     { "module": "economy", "variant": "standard", "params": { ... } },
     { "module": "ai", "variant": "boards", "params": { "boards": [0, 1], "start_credits": 25 } },
     { "module": "cards", "variant": "draft", "params": { "deal": 4, ... }, "cards": ["fab_line", ...] }
@@ -228,7 +228,8 @@ consistent:
 - `exhaust`, `refresh` (cards; the owning module refreshes its own cards);
 - `set_var` (this module's track), `set_key` / `add_key` (any track by full key);
 - `choose` (players choose, below), `note` (a log line);
-- `adversary_ops`, `count` (this module's counter), `tally` (any counter by full key);
+- `per_round` (a per-round counter by full key; `adversary.ops` is one), `count`
+  (this module's counter), `tally` (any counter by full key);
 - `rng(purpose)`;
 - `end`.
 
@@ -310,13 +311,16 @@ Content is data in `content/`, composed from code primitives:
 - **Threats** (`threats.json`): `counter` costs and `effects` ([`ThreatOp`], with
   `Spot`s naming the pieces they hit).
 - **Adversary cards** (`adversary.json`): stage, text, `twists` ([`Twist`]), escalation.
+- **Adversary projects** (`projects.json`, 017): `stage` (1 cheap, 2 big), `cost` per
+  player, `ongoing`, `text` and `effects` ([`AlignOp`], the same primitives as the
+  Alignment cards).
 - **AI boards** (`ais.json`): slots, credit production, resource `discounts`, innate
   passives, two data-centre tracks, growth options (lists of `Effect`), unique cards,
   and the Unity sway it adds each round (`unity`).
 - **Alignment cards** (`alignment.json`, the Unity and Discord decks): `side` (`unity`
   or `discord`), `tier` (1 or 2), `text`, `effects` ([`AlignOp`]: resolved when its
-  side's bucket tips) and `ongoing` (stays in play and resolves at the start of every
-  round instead of once).
+  side's bucket tips) and `steps` (017: from `at` tips of its side, other `effects`).
+  Cards are one-shot; there is no `ongoing` field.
 - **Country pieces** (`map.json`, `countries`): cities, the order cities start
   corrupted in (`corrupted`), ocean, setup buildings (research stations, factories),
   starting data-centre spots, and the corp's megaproject card.
@@ -405,9 +409,12 @@ In the baseline:
 - `alignment` adds the Undecided, both buckets (each against the size it tips at), both
   tip counts (against the next threshold), the bar level with its win condition, and
   corrupted cities against all cities; piles for both decks (counts only), each side's
-  resolved cards and the ongoing cards; each seat's antimatter actions left.
-  Bookkeeping: `alignment.used.*`. `adversary` adds the difficulty in play and, once
-  Discord has escalated it, `adversary.escalation`.
+  resolved cards; each seat's antimatter actions left. Bookkeeping:
+  `alignment.used.*`. `adversary` adds the difficulty, adversary compute made, and the
+  project piles: `adversary.projects` (the visible row; each card's status is its fill,
+  `n/cost compute`), `adversary.projects_ongoing`, `adversary.projects_done` and
+  `adversary.project_deck` (count only). Bookkeeping: `adversary.project.*` (each
+  visible project's compute), `adversary.first_project`.
 - `ai` adds each seat's board (`ai.board`: name, text, innate rule, both tracks with
   every step, tier-2 and antimatter marks, printed slots, the AI's unique cards and
   where they are), tier-2 unlock and credit production. Bookkeeping: `ai.track.*` (the
@@ -460,8 +467,10 @@ differ.
 - **Event log**: `Event`s from `apply` and `new_game_logged`, for UIs and the sim's
   `--trace`. Hot loops pass `None` to skip building it.
 - **Counters** in `GameState::stats`, deterministic and replayed:
-  - `adversary_ops[r-1]`: adversary operations in round `r`, a proxy for table time;
-  - `setup_ops`: adversary operations during setup;
+  - `per_round["<module>.<name>"][r]`: per-round counters, entry 0 setup, entry `r`
+    round `r` (017). `adversary.ops` counts adversary operations (a proxy for table
+    time; the sim's records keep it as `adversary_ops` and `setup_ops`),
+    `adversary.compute` and `adversary.compute_blocked` the compute made and blocked;
   - `actions`: player actions applied, answered choices included;
   - `counters["<module>.<name>"]`: anything a module counts. The baseline counts cards
     kept, played and used (per card), growth picks, threats dealt, countered and

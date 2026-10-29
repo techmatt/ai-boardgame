@@ -169,7 +169,7 @@ fn shared_row(w: &World) -> Option<bool> {
 /// and Jam Signals applied).
 pub fn requirement(w: &World, g: &GameState, threat: &str) -> Vec<(String, i64)> {
     let jam = g.var(&jam_key(threat));
-    let (bonus, all) = if adversary::at(w, g, 1) {
+    let (bonus, all) = if adversary::level(w, 1) {
         (
             w.int("adversary.counter_bonus"),
             w.int("adversary.counter_bonus_all"),
@@ -359,7 +359,7 @@ impl Module for Threats {
             // Difficulty 1: `extra_threats` more a round in all, one per
             // country in turn (country index 0 first in round 1, then 1, ...).
             let n = w.map.countries.len();
-            let extra = if adversary::at(&w, g, 1) {
+            let extra = if adversary::level(&w, 1) {
                 w.int("adversary.extra_threats").max(0) as usize
             } else {
                 0
@@ -594,7 +594,7 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
                     break;
                 };
                 adversary::place_troop(g, cx, spots[i]);
-                cx.adversary_ops(g, 1);
+                cx.per_round(g, adversary::OPS, 1);
                 cx.tally(g, "threats.troops", 1);
             }
         }
@@ -628,6 +628,7 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
                 cx.add_resource(g, s, resource, -k);
             }
         }
+        ThreatOp::Compute { amount } => adversary::gain_compute(g, cx, *amount)?,
         ThreatOp::Flag { name } => {
             for c in scope_countries(&w, scope) {
                 cx.set_key(g, board::flag(*name, c), 1);

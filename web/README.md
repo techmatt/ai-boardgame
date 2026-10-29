@@ -65,12 +65,13 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   and the Discord bucket, red, filling rightward on either side of the Undecided; each
   side's tip count with its next threshold; the Unity tips that win outright; the
   clear-board bar level and its win condition; adversary ambassadors and troops on the
-  board), the Unity, Discord and ongoing cards resolved so far (hover a chip for its
+  board), the Unity and Discord cards resolved so far (hover a chip for its
   text) with what is left in each deck, and the loss conditions (adversary ambassador
   supply, corrupted cities out of all cities, adversary cards left); the adversary row
-  (stage, difficulty, escalation, threat tier and fronts, then deck →
+  (stage, difficulty, adversary compute, threat tier and fronts, then deck →
   next round's card, face up → this round's card → discard, each card with its stage,
-  text and escalation/war marks); the countries strip with each country's name, its
+  text and escalation/war marks; under it the adversary's projects (017: each visible
+  project with its compute bar, ongoing ones, the resolved count and the deck)); the countries strip with each country's name, its
   cities (clean, aligned, corrupted), adversary pieces and corp units, its megaproject
   card (one box per cube place, filled by owner: purple for the adversary, the seat's
   colour for a player; "completed" once done), its round flags (blackout, sabotage,

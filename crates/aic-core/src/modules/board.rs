@@ -339,6 +339,7 @@ pub fn place_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
             }
             cx.add_tokens(g, h, ADV_CUBE, -1);
             cx.tally(g, "board.cities_freed", 1);
+            alignment::for_city_freed(g, cx);
             cx.note(Some(h), || format!("{} is freed", hex_name(&w, h)));
         }
     }
@@ -678,36 +679,104 @@ fn battle(g: &mut GameState, cx: &mut Cx) {
 /// Production step 3: each adversary troop destroys one building on or
 /// next to its hex (players choose).
 fn strike(g: &mut GameState, cx: &mut Cx) -> Res {
-    let w = cx.world;
     let troops: Vec<(usize, i64)> = (0..g.hexes.len())
         .map(|h| (h, g.tokens(h, TROOP)))
         .filter(|&(_, n)| n > 0)
         .collect();
     for (h, n) in troops {
         for _ in 0..n {
-            let mut targets: Vec<(usize, String)> = Vec::new();
-            let mut near = vec![h];
-            near.extend(w.map.hexes[h].neighbours.iter().copied());
-            for x in near {
-                for k in buildings_on(g, x) {
-                    targets.push((x, k));
+            if !strike_from(g, cx, h, "board.troop_destroyed")? {
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One adversary troop at `h` strikes a building or presence on or next to
+/// its hex (players choose); a destruction is tallied under `key`.
+/// Returns false when it had no target.
+fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize, key: &str) -> Res<bool> {
+    let w = cx.world;
+    let mut targets: Vec<(usize, String)> = Vec::new();
+    let mut near = vec![h];
+    near.extend(w.map.hexes[h].neighbours.iter().copied());
+    for x in near {
+        for k in buildings_on(g, x) {
+            targets.push((x, k));
+        }
+    }
+    let opts = targets
+        .iter()
+        .map(|(x, k)| opt(format!("{k} at {}", hex_name(&w, *x))))
+        .collect();
+    let prompt = format!(
+        "Adversary troop at {}: which building does it destroy?",
+        hex_name(&w, h)
+    );
+    let Some(i) = cx.choose(0, &prompt, opts)? else {
+        return Ok(false);
+    };
+    let (x, k) = targets[i].clone();
+    if destroy_building(g, cx, x, &k, true) {
+        cx.tally(g, key, 1);
+    }
+    Ok(true)
+}
+
+/// A Discord tip (017): every adversary troop, one at a time (by hex
+/// number order, fixed when the advance starts), moves one hex toward the
+/// nearest player presence or player-owned station or factory, then
+/// strikes. Among equally good steps the players choose; a troop already on
+/// such a hex stays, and with no such hex on the board troops stay. This is
+/// the one movement rule.
+pub fn advance_troops(g: &mut GameState, cx: &mut Cx) -> Res {
+    let w = cx.world;
+    let troops: Vec<usize> = (0..g.hexes.len())
+        .flat_map(|h| std::iter::repeat_n(h, g.tokens(h, TROOP).max(0) as usize))
+        .collect();
+    // Troops that already advanced this tip, per hex (they don't move twice).
+    let mut moved = vec![0i64; g.hexes.len()];
+    for from in troops {
+        if g.tokens(from, TROOP) - moved[from] <= 0 {
+            continue;
+        }
+        let targets: Vec<usize> = (0..g.hexes.len())
+            .filter(|&h| {
+                presence_owner(g, h).is_some()
+                    || ((g.tokens(h, STATION) > 0 || g.tokens(h, FACTORY) > 0)
+                        && cube_owner(g, h).is_some())
+            })
+            .collect();
+        let gap = |h: usize| targets.iter().map(|&t| w.map.distance(h, t)).min();
+        let mut at = from;
+        if let Some(d) = gap(from) {
+            if d > 0 {
+                let steps: Vec<usize> = w.map.hexes[from]
+                    .neighbours
+                    .iter()
+                    .copied()
+                    .filter(|&n| !is_ocean(&w, n) && gap(n).is_some_and(|x| x < d))
+                    .collect();
+                let opts = steps.iter().map(|&h| hex_opt(&w, h)).collect();
+                let prompt = format!(
+                    "Discord: the adversary troop at {} advances to which hex?",
+                    hex_name(&w, from)
+                );
+                if let Some(i) = cx.choose(0, &prompt, opts)? {
+                    at = steps[i];
+                    cx.add_tokens(g, from, TROOP, -1);
+                    cx.add_tokens(g, at, TROOP, 1);
+                    moved[at] += 1;
+                    cx.per_round(g, adversary::OPS, 1);
+                    cx.tally(g, "board.troop_advances", 1);
                 }
             }
-            let opts = targets
-                .iter()
-                .map(|(x, k)| opt(format!("{k} at {}", hex_name(&w, *x))))
-                .collect();
-            let prompt = format!(
-                "Adversary troop at {}: which building does it destroy?",
-                hex_name(&w, h)
-            );
-            let Some(i) = cx.choose(0, &prompt, opts)? else {
-                break;
-            };
-            let (x, k) = targets[i].clone();
-            if destroy_building(g, cx, x, &k, true) {
-                cx.tally(g, "board.troop_destroyed", 1);
-            }
+        }
+        cx.tally(g, "board.advance_strikes", 1);
+        strike_from(g, cx, at, "board.advance_destroyed")?;
+        if g.is_over() {
+            return Ok(());
         }
     }
     Ok(())

@@ -62,7 +62,7 @@
   "id": "blackout",
   "name": "Blackout",
   "tier": 1,
-  "text": "Cities here produce no energy this round.",
+  "text": "Cities here produce no energy this round; the adversary gains 2 compute.",
   "counter": [
    [
     "compute",
@@ -73,6 +73,10 @@
    {
     "op": "flag",
     "name": "blackout"
+   },
+   {
+    "op": "compute",
+    "amount": 2
    }
   ]
  },
@@ -80,7 +84,7 @@
   "id": "sabotage",
   "name": "Sabotage",
   "tier": 1,
-  "text": "Data centres here produce no compute this round.",
+  "text": "Data centres here produce no compute this round; the adversary gains 2 compute.",
   "counter": [
    [
     "compute",
@@ -95,6 +99,10 @@
    {
     "op": "flag",
     "name": "sabotage"
+   },
+   {
+    "op": "compute",
+    "amount": 2
    }
   ]
  },
@@ -102,7 +110,7 @@
   "id": "infiltration",
   "name": "Infiltration",
   "tier": 1,
-  "text": "2 adversary ambassadors land on player buildings here (players choose each).",
+  "text": "2 adversary ambassadors land on player buildings here (players choose each); the adversary gains 2 compute.",
   "counter": [
    [
     "energy",
@@ -114,6 +122,10 @@
     "op": "ambassadors",
     "at": "player_buildings",
     "count": 2
+   },
+   {
+    "op": "compute",
+    "amount": 2
    }
   ]
  },
@@ -144,7 +156,7 @@
   "id": "orbital_strike",
   "name": "Orbital strike",
   "tier": 1,
-  "text": "An adversary troop lands on a factory here (players choose); with no factory, on a city.",
+  "text": "An adversary troop lands on a factory here (players choose); with no factory, on a city; the adversary gains 2 compute.",
   "counter": [
    [
     "energy",
@@ -159,6 +171,10 @@
    {
     "op": "troop",
     "count": 1
+   },
+   {
+    "op": "compute",
+    "amount": 2
    }
   ]
  },
@@ -187,7 +203,7 @@
   "id": "station_seizure",
   "name": "Station seizure",
   "tier": 2,
-  "text": "A research station here that is not corrupted becomes corrupted (players choose).",
+  "text": "A research station here that is not corrupted becomes corrupted (players choose); the adversary gains 3 compute.",
   "counter": [
    [
     "antimatter",
@@ -197,6 +213,10 @@
   "effects": [
    {
     "op": "flip_station"
+   },
+   {
+    "op": "compute",
+    "amount": 3
    }
   ]
  },
@@ -221,7 +241,7 @@
   "id": "mass_production",
   "name": "Mass production",
   "tier": 2,
-  "text": "The adversary builds now.",
+  "text": "The adversary builds now; the adversary gains 3 compute.",
   "counter": [
    [
     "energy",
@@ -231,6 +251,10 @@
   "effects": [
    {
     "op": "build"
+   },
+   {
+    "op": "compute",
+    "amount": 3
    }
   ]
  },
@@ -255,7 +279,7 @@
   "id": "total_war",
   "name": "Total war",
   "tier": 2,
-  "text": "2 adversary troops land on factories here (else cities), and 2 adversary ambassadors on military bases.",
+  "text": "2 adversary troops land on factories here (else cities), and 2 adversary ambassadors on military bases; the adversary gains 3 compute.",
   "counter": [
    [
     "antimatter",
@@ -275,6 +299,10 @@
     "op": "ambassadors",
     "at": "bases",
     "count": 2
+   },
+   {
+    "op": "compute",
+    "amount": 3
    }
   ]
  }

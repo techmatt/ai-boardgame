@@ -71,6 +71,10 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
         Effect::BuildFactory => !factory_sites(w, g, seat).is_empty(),
         Effect::Cleanse { .. } => any_hex(g, |h| cleansable(w, g, h) && in_reach(w, g, seat, h)),
         Effect::Jam { .. } | Effect::CounterThreat => !threats::active(g).is_empty(),
+        Effect::DrainProject { .. } => adversary::projects(g)
+            .iter()
+            .any(|p| g.var(&adversary::project_key(p)) > 0),
+        Effect::DiscardProject => !adversary::projects(g).is_empty(),
         Effect::MoveAmbassadors { .. } => movable_ambassadors(g, seat) > 0,
         Effect::PlacePresence { .. } => {
             ai::can_place(w, g, seat) && !board::presence_hexes(w, g, seat).is_empty()
@@ -248,6 +252,9 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
                 cx.add_tokens(g, hexes[i], ADV_CUBE, -1);
                 cx.tally(g, "effects.cleansed", 1);
+                if is_city(&w, hexes[i]) {
+                    alignment::for_city_freed(g, cx);
+                }
                 if *one_country {
                     country = Some(w.map.hexes[hexes[i]].country);
                 }
@@ -334,6 +341,25 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             let prompt = format!("Seat {seat}: counter which threat?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 threats::counter(g, cx, &active[i].0);
+            }
+        }
+        Effect::DrainProject { amount } => {
+            let ids: Vec<String> = adversary::projects(g)
+                .into_iter()
+                .filter(|p| g.var(&adversary::project_key(p)) > 0)
+                .collect();
+            let opts = ids.iter().map(|p| opt(p.clone())).collect();
+            let prompt = format!("Seat {seat}: remove compute from which adversary project?");
+            if let Some(i) = cx.choose(seat, &prompt, opts)? {
+                adversary::drain_project(g, cx, &ids[i], *amount);
+            }
+        }
+        Effect::DiscardProject => {
+            let ids = adversary::projects(g);
+            let opts = ids.iter().map(|p| opt(p.clone())).collect();
+            let prompt = format!("Seat {seat}: discard which adversary project?");
+            if let Some(i) = cx.choose(seat, &prompt, opts)? {
+                adversary::discard_project(g, cx, &ids[i]);
             }
         }
         Effect::Unity { amount } => alignment::sway(g, cx, Side::Unity, *amount),

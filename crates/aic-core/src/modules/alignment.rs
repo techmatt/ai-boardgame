@@ -3,7 +3,9 @@
 //! and Discord decks, the +1 Discord antimatter action, and the win and loss
 //! conditions, checked after every action and every automatic phase.
 //!
-//! Replaces human opposition (rules revision 5).
+//! Replaces human opposition (rules revision 5). Since 017 every card is
+//! one-shot, a Discord card's strength steps up with the Discord tip count
+//! (printed steps), and each Discord tip advances the adversary troops.
 
 use crate::action::Action;
 use crate::content::{AlignOp, AlignmentCard, Passive, Side};
@@ -15,26 +17,35 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{adversary, ai, cards, threats};
+use super::{adversary, ai, board, cards, threats};
 
-const PARAMS: [ParamSpec; 12] = [
+const PARAMS: [ParamSpec; 15] = [
     ParamSpec::int("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
     ParamSpec::int("tip_per_player", 1, 50, "a bucket tips when it holds this many Sway per player"),
     ParamSpec::int("momentum_every", 0, 10, "Momentum: a side's bucket holds 1 fewer Sway per this many of its tips, down to 1 per player (0: off)"),
     ParamSpec::int("troop", 0, 10, "Sway toward Unity for removing an adversary troop"),
+    ParamSpec::int("free_city", 0, 10, "Sway toward Unity for freeing a corrupted city"),
+    ParamSpec::int("node", 0, 10, "Sway toward Unity for removing a node"),
+    ParamSpec::int("troop_advance", 0, 1, "1: each Discord tip advances every adversary troop one hex toward player pieces, then it strikes (0: off)"),
     ParamSpec::int("threat_discord", 0, 10, "Sway toward Discord when a threat executes uncountered"),
     ParamSpec::int("adversary_discord", 0, 10, "Sway toward Discord the adversary adds at the start of every round"),
     ParamSpec::int("antimatter_discord", 0, 5, "the antimatter action: Sway toward Discord to produce 1 antimatter (0: no such action)"),
     ParamSpec::int("antimatter_uses", 0, 5, "times each player may take the antimatter action per round"),
     ParamSpec::list("unity_ease", 0, 50, "Unity tip counts at which the clear-board bar drops a level (the first also starts the stronger Unity cards)"),
-    ParamSpec::list("discord_escalate", 0, 50, "Discord tip counts at which the adversary escalates a difficulty level (the first also starts the stronger Discord cards)"),
+    ParamSpec::int("discord_tier2", 1, 50, "Discord tip count from which a Discord tip draws the stronger tier"),
     ParamSpec::int("unity_win", 0, 50, "Unity tips that win outright (0: never)"),
     ParamSpec::int("clear_win_stage", 1, 3, "the bar-0 win counts only once this round's adversary card is of this stage (1: any time)"),
 ];
 
 const PHASES: &[PhaseSpec] = &[
-    PhaseSpec::auto("sway", "the round's Sway: the adversary toward Discord, AI boards toward Unity, then ongoing cards"),
-    PhaseSpec::decision("act", "the antimatter action: sway toward Discord to produce 1 antimatter"),
+    PhaseSpec::auto(
+        "sway",
+        "the round's Sway: the adversary toward Discord, AI boards toward Unity",
+    ),
+    PhaseSpec::decision(
+        "act",
+        "the antimatter action: sway toward Discord to produce 1 antimatter",
+    ),
 ];
 
 pub static DEF: ModuleDef = ModuleDef {
@@ -74,13 +85,9 @@ pub static DEF: ModuleDef = ModuleDef {
 
 /// Every variant is one struct: `sway` and the action read the variant.
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
-    for name in ["unity_ease", "discord_escalate"] {
-        let v = b.list(name)?;
-        if v.is_empty() || v.iter().any(|&x| x < 1) || v.windows(2).any(|p| p[0] > p[1]) {
-            return Err(format!(
-                "alignment.{name}: give tip counts of 1 or more, in order"
-            ));
-        }
+    let v = b.list("unity_ease")?;
+    if v.is_empty() || v.iter().any(|&x| x < 1) || v.windows(2).any(|p| p[0] > p[1]) {
+        return Err("alignment.unity_ease: give tip counts of 1 or more, in order".into());
     }
     Ok(Box::new(Alignment))
 }
@@ -96,8 +103,6 @@ const INCOME_BONUS: &str = "alignment.income_bonus";
 const FREE_LEFT: &str = "alignment.free_purchases";
 /// Insight every player gains each round from Unity cards.
 const INSIGHT_BONUS: &str = "alignment.insight_bonus";
-/// Ongoing cards in play.
-pub const ONGOING: &str = "alignment.ongoing";
 
 /// Credit income every player has from Unity cards (economy's upkeep).
 pub fn income_bonus(g: &GameState) -> i64 {
@@ -228,6 +233,18 @@ pub fn for_troop_removed(g: &mut GameState, cx: &mut Cx, seat: Option<usize>) {
     sway(g, cx, Side::Unity, base + bonus);
 }
 
+/// Sway toward Unity for a freed corrupted city.
+pub fn for_city_freed(g: &mut GameState, cx: &mut Cx) {
+    let n = cx.world.int("alignment.free_city");
+    sway(g, cx, Side::Unity, n);
+}
+
+/// Sway toward Unity for a removed node.
+pub fn for_node_removed(g: &mut GameState, cx: &mut Cx) {
+    let n = cx.world.int("alignment.node");
+    sway(g, cx, Side::Unity, n);
+}
+
 /// Whether the adversary's presence is under the bar for `level`. The
 /// level-0 bar (no adversary pieces) counts only once a card of stage
 /// `clear_win_stage` has been revealed (the stages are stacked and public).
@@ -238,8 +255,9 @@ fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
     adversary::under_bar(w, g, level)
 }
 
-/// Resolves one card effect. Team choices are asked of seat 0.
-fn resolve(g: &mut GameState, cx: &mut Cx, op: &AlignOp) -> Res {
+/// Resolves one Alignment-card or adversary-project effect. Team choices
+/// are asked of seat 0; a sacrifice of each player.
+pub fn resolve(g: &mut GameState, cx: &mut Cx, op: &AlignOp) -> Res {
     let w = cx.world;
     match op {
         AlignOp::Income { credits } => cx.add_key(g, INCOME_BONUS.into(), *credits),
@@ -274,6 +292,112 @@ fn resolve(g: &mut GameState, cx: &mut Cx, op: &AlignOp) -> Res {
         AlignOp::Infiltrate { amount } => adversary::infiltrate(g, cx, *amount),
         AlignOp::Build => adversary::build_all(g, cx, None)?,
         AlignOp::Spread => adversary::spread(g, cx, None)?,
+        AlignOp::Sacrifice => {
+            for s in 0..g.seats.len() {
+                sacrifice(g, cx, s)?;
+            }
+        }
+        AlignOp::NodeAmbassadors { amount } => {
+            let nodes: Vec<(usize, i64)> = (0..g.hexes.len())
+                .map(|h| (h, g.tokens(h, NODE)))
+                .filter(|&(_, n)| n > 0)
+                .collect();
+            for (h, n) in nodes {
+                adversary::place(g, cx, h, n * amount);
+            }
+        }
+        AlignOp::CleanCityAmbassadors { amount } => {
+            let cities: Vec<usize> = (0..g.hexes.len())
+                .filter(|&h| clean_city(&w, g, h))
+                .collect();
+            for h in cities {
+                adversary::place(g, cx, h, *amount);
+            }
+        }
+        AlignOp::Troops { count } => {
+            for c in 0..w.map.countries.len() {
+                let hexes = &w.map.countries[c].hexes;
+                for _ in 0..*count {
+                    let mut spots: Vec<usize> = hexes
+                        .iter()
+                        .copied()
+                        .filter(|&h| g.tokens(h, FACTORY) > 0)
+                        .collect();
+                    if spots.is_empty() {
+                        spots = hexes.iter().copied().filter(|&h| is_city(&w, h)).collect();
+                    }
+                    let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
+                    let Some(i) = cx.choose(0, "An adversary troop lands on which hex?", opts)?
+                    else {
+                        break;
+                    };
+                    adversary::place_troop(g, cx, spots[i]);
+                    cx.per_round(g, adversary::OPS, 1);
+                    cx.tally(g, "adversary.project_troops", 1);
+                }
+            }
+        }
+        AlignOp::FlipStations => {
+            for c in 0..w.map.countries.len() {
+                let spots: Vec<usize> = w.map.countries[c]
+                    .hexes
+                    .iter()
+                    .copied()
+                    .filter(|&h| g.tokens(h, STATION) > 0 && !corrupted(g, h))
+                    .collect();
+                let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
+                if let Some(i) =
+                    cx.choose(0, "Which research station flips to the adversary?", opts)?
+                {
+                    adversary::corrupt_station(g, cx, spots[i]);
+                }
+            }
+        }
+        AlignOp::PlayersLose { resource, amount } => {
+            for s in 0..g.seats.len() {
+                let k = (*amount).min(g.resource(s, resource));
+                cx.add_resource(g, s, resource, -k);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Seat `s` sacrifices one of their ambassadors (from their supply or a
+/// hex) or one of their presence tokens, their choice; with none, nothing.
+/// A sacrificed presence leaves the game.
+fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
+    let w = cx.world;
+    let k = ambassador(s);
+    let ambs: Vec<usize> = (0..g.hexes.len())
+        .filter(|&h| g.tokens(h, &k) > 0)
+        .collect();
+    let pres = board::presence_hexes(&w, g, s);
+    let labelled = |what: &str, h: usize| {
+        let mut o = hex_opt(&w, h);
+        o.option = format!("{what} at {}", o.option);
+        o
+    };
+    let mut opts = Vec::new();
+    if g.resource(s, AMBASSADORS) > 0 {
+        opts.push(opt("an ambassador from your supply"));
+    }
+    let off = opts.len();
+    opts.extend(ambs.iter().map(|&h| labelled("ambassador", h)));
+    opts.extend(pres.iter().map(|&h| labelled("presence", h)));
+    let prompt = format!("Seat {s}: sacrifice which ambassador or presence?");
+    let Some(i) = cx.choose(s, &prompt, opts)? else {
+        return Ok(());
+    };
+    if i < off {
+        cx.add_resource(g, s, AMBASSADORS, -1);
+        cx.tally(g, "alignment.sacrificed_ambassadors", 1);
+    } else if i - off < ambs.len() {
+        cx.add_tokens(g, ambs[i - off], &k, -1);
+        cx.tally(g, "alignment.sacrificed_ambassadors", 1);
+    } else {
+        cx.add_tokens(g, pres[i - off - ambs.len()], &presence(s), -1);
+        cx.tally(g, "alignment.sacrificed_presence", 1);
     }
     Ok(())
 }
@@ -283,84 +407,99 @@ impl Alignment {
     /// count has reached its first threshold, else tier 1; the other tier
     /// if that deck is empty; with both empty, the side's resolved cards
     /// are shuffled back into their decks first.
-    fn draw(&self, g: &mut GameState, cx: &mut Cx, side: Side) -> Option<(String, String)> {
+    fn draw(
+        &self,
+        g: &mut GameState,
+        cx: &mut Cx,
+        side: Side,
+        tips: i64,
+    ) -> Option<(String, String)> {
         let w = cx.world;
         let first = match side {
             Side::Unity => w.list("alignment.unity_ease")[0],
-            Side::Discord => w.list("alignment.discord_escalate")[0],
+            Side::Discord => w.int("alignment.discord_tier2"),
         };
-        let want: u8 = if g.var(tips_key(side)) >= first { 2 } else { 1 };
+        let want: u8 = if tips >= first { 2 } else { 1 };
         for pass in 0..2 {
             for tier in [want, 3 - want] {
                 if let Some(id) = g.pile(&deck(side, tier)).first().cloned() {
                     return Some((id, deck(side, tier)));
                 }
             }
-            if pass == 0 {
-                let back = g.pile(&resolved(side)).to_vec();
-                if back.is_empty() {
-                    return None;
-                }
-                cx.set_pile(g, &resolved(side), Vec::new());
-                for tier in [1u8, 2] {
-                    let mut ids: Vec<String> = back
-                        .iter()
-                        .filter(|id| card(&w, id).tier == tier)
-                        .cloned()
-                        .collect();
-                    shuffle(&mut ids, cx.rng(g, "alignment"));
-                    cx.set_pile(g, &deck(side, tier), ids);
-                }
-                cx.note(None, || {
-                    format!("The resolved {} cards are shuffled back", side.name())
-                });
+            if pass == 0 && !self.reshuffle(g, cx, side) {
+                return None;
             }
         }
         None
     }
 
-    /// A bucket tips: one card of its side resolves, the side's tip count
-    /// goes up by one, and the bucket's Sway returns to the Undecided.
+    /// Shuffles a side's resolved cards back into their tier decks; false
+    /// with none resolved.
+    fn reshuffle(&self, g: &mut GameState, cx: &mut Cx, side: Side) -> bool {
+        let w = cx.world;
+        let back = g.pile(&resolved(side)).to_vec();
+        if back.is_empty() {
+            return false;
+        }
+        cx.set_pile(g, &resolved(side), Vec::new());
+        for tier in [1u8, 2] {
+            let mut ids: Vec<String> = back
+                .iter()
+                .filter(|id| card(&w, id).tier == tier)
+                .cloned()
+                .collect();
+            shuffle(&mut ids, cx.rng(g, "alignment"));
+            cx.set_pile(g, &deck(side, tier), ids);
+        }
+        cx.note(None, || {
+            format!("The resolved {} cards are shuffled back", side.name())
+        });
+        true
+    }
+
+    /// A bucket tips: one card of its side resolves (at the strength step
+    /// its side's tip count has reached), the side's tip count goes up by
+    /// one, and the bucket's Sway returns to the Undecided. A Discord tip
+    /// then advances every adversary troop, which strikes.
     fn tip(&self, g: &mut GameState, cx: &mut Cx, side: Side) -> Res {
         let w = cx.world;
         let round = g.round;
         cx.note(None, || format!("The {} bucket tips", side.name()));
-        if let Some((id, from)) = self.draw(g, cx, side) {
+        let before = g.var(tips_key(side));
+        let back = g.var(bucket(side));
+        cx.set_key(g, bucket(side).into(), 0);
+        cx.add_key(g, UNDECIDED.into(), back);
+        cx.set_key(g, tips_key(side).into(), before + 1);
+        cx.tally(g, &format!("alignment.tips_{}", side.name()), 1);
+        cx.tally(g, &format!("alignment.tip_{}.r{round:02}", side.name()), 1);
+        if let Some((id, from)) = self.draw(g, cx, side, before) {
             let c = card(&w, &id);
-            if c.ongoing {
-                cx.move_card(g, &id, &from, ONGOING, false).unwrap();
-                cx.note(None, || {
-                    format!("{} ({}) is now in play: {}", c.name, side.name(), c.text)
-                });
-            } else {
-                cx.move_card(g, &id, &from, &resolved(side), true).unwrap();
-                cx.note(None, || {
-                    format!("{} ({}) resolves: {}", c.name, side.name(), c.text)
-                });
-                for op in &c.effects {
-                    resolve(g, cx, op)?;
+            cx.move_card(g, &id, &from, &resolved(side), true).unwrap();
+            // The last card drawn: the resolved cards are shuffled back now,
+            // before the card acts, so a draw never shuffles (a pending
+            // choice after the draw then replays on a fixed deck).
+            if g.pile(&deck(side, 1)).is_empty() && g.pile(&deck(side, 2)).is_empty() {
+                self.reshuffle(g, cx, side);
+            }
+            cx.note(None, || {
+                format!("{} ({}) resolves: {}", c.name, side.name(), c.text)
+            });
+            let effects = c
+                .steps
+                .iter()
+                .rev()
+                .find(|st| before >= st.at)
+                .map_or(&c.effects, |st| &st.effects);
+            for op in effects {
+                resolve(g, cx, op)?;
+                if g.is_over() {
+                    return Ok(());
                 }
             }
             cx.tally(g, &format!("alignment.card.{id}"), 1);
         }
-        let tips = g.var(tips_key(side)) + 1;
-        cx.set_key(g, tips_key(side).into(), tips);
-        cx.tally(g, &format!("alignment.tips_{}", side.name()), 1);
-        cx.tally(g, &format!("alignment.tip_{}.r{round:02}", side.name()), 1);
-        let back = g.var(bucket(side));
-        cx.set_key(g, bucket(side).into(), 0);
-        cx.add_key(g, UNDECIDED.into(), back);
-        if side == Side::Discord {
-            let esc = reached(w.list("alignment.discord_escalate"), tips);
-            if esc > g.var(adversary::ESCALATION) {
-                cx.set_key(g, adversary::ESCALATION.into(), esc);
-                cx.note(None, || {
-                    format!(
-                        "Discord escalates the adversary (difficulty {})",
-                        adversary::difficulty(&w, g)
-                    )
-                });
-            }
+        if side == Side::Discord && w.int("alignment.troop_advance") > 0 {
+            board::advance_troops(g, cx)?;
         }
         Ok(())
     }
@@ -401,11 +540,6 @@ impl Module for Alignment {
         sway(g, cx, Side::Discord, w.int("alignment.adversary_discord"));
         for s in 0..g.seats.len() {
             sway(g, cx, Side::Unity, ai::board(&w, s).unity);
-        }
-        for id in g.pile(ONGOING).to_vec() {
-            for op in &card(&w, &id).effects {
-                resolve(g, cx, op)?;
-            }
         }
         Ok(())
     }
@@ -520,12 +654,13 @@ impl Module for Alignment {
             next(w.list("alignment.unity_ease"), ut),
             "Unity tips so far; the clear-board bar drops at each Unity threshold",
         );
+        let tier2 = w.int("alignment.discord_tier2");
         out.global(
             "discord_tips",
             "Discord tips",
             dt,
-            next(w.list("alignment.discord_escalate"), dt),
-            "Discord tips so far; the adversary escalates at each Discord threshold",
+            (dt < tier2).then_some(tier2),
+            "Discord tips so far; Discord cards print stronger steps by this count, and each tip advances the adversary troops",
         );
         let level = bar_level(w, g);
         let mut text = adversary::win_text(w, level);
@@ -617,14 +752,6 @@ impl Module for Alignment {
                 done.iter().map(|id| show(id, "resolved")).collect(),
             );
         }
-        let on = g.pile(ONGOING);
-        out.pile(
-            "ongoing",
-            "Ongoing cards",
-            None,
-            on.len(),
-            on.iter().map(|id| show(id, "ongoing")).collect(),
-        );
         out.bookkeeping(&["alignment.used."]);
         let uses = w.int("alignment.antimatter_uses");
         if w.int("alignment.antimatter_discord") > 0 {
