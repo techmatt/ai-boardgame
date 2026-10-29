@@ -4,10 +4,7 @@
 
 use crate::action::Action;
 use crate::content::{AiBoard, Track};
-use crate::module::{
-    Build, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef,
-    World,
-};
+use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::state::GameState;
 use crate::view::{BoardView, CardView, InnateView, TrackMark, TrackStep, TrackView, ViewOut};
 
@@ -22,26 +19,10 @@ pub static DEF: ModuleDef = ModuleDef {
         name: "boards",
         summary: "Each seat plays an AI board from content/ais.json",
         params: &[
-            ParamSpec {
-                name: "boards",
-                kind: ParamKind::List,
-                min: 0,
-                max: 99,
-                doc: "AI board (index into content/ais.json) of each seat; the list repeats for more seats",
-            },
-            ParamSpec {
-                name: "start_credits",
-                kind: ParamKind::Int,
-                min: 0,
-                max: 100,
-                doc: "credits each player starts with",
-            },
+            ParamSpec::list("boards", 0, 99, "AI board (index into content/ais.json) of each seat; the list repeats for more seats"),
+            ParamSpec::int("start_credits", 0, 100, "credits each player starts with"),
         ],
-        phases: &[PhaseSpec {
-            name: "growth",
-            kind: PhaseKind::Decision,
-            doc: "each player picks one growth option on their board",
-        }],
+        phases: &[PhaseSpec::decision("growth", "each player picks one growth option on their board")],
         rng: &[],
         uses_cards: false,
         build,
@@ -129,7 +110,7 @@ pub fn place_data_centre(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<boo
 pub fn dc_hexes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
     let mine = dc(seat);
     if dc_count(g, seat) == 0 {
-        let c = seat % w.map.countries.len();
+        let c = home_country(w, seat);
         return w.map.countries[c].hexes.iter().copied().filter(|&h| buildable(w, g, h)).collect();
     }
     (0..g.hexes.len())

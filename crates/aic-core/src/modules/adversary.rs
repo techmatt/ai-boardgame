@@ -5,9 +5,7 @@
 //! and the board conditions for winning and losing.
 
 use crate::content::{AdversaryCard, Passive, Twist};
-use crate::module::{
-    Build, Cx, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef, World,
-};
+use crate::module::{Build, Cx, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::rng::shuffle;
 use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
@@ -16,29 +14,29 @@ use super::common::*;
 use super::{alignment, cards};
 
 const PARAMS: &[ParamSpec] = &[
-    i("difficulty", 0, 4, "difficulty level 0-4 (each level includes the ones below)"),
-    l("stage_cards", "adversary cards dealt from stage I, II and III (before difficulty)"),
-    i("supply_per_country", 0, 40, "adversary ambassadors in the supply per country"),
-    i("city_build", 0, 10, "build: ambassadors each corrupted city gains"),
-    i("factory_build", 0, 10, "build: ambassadors each factory next to a corrupted city gains"),
-    i("spread_range", 1, 6, "spread: how far (hexes) a spreading ambassador may travel"),
-    i("corrupt_at", 1, 20, "corrupt: a clean city holding this many adversary ambassadors is corrupted"),
-    i("escalation_ambassadors", 0, 5, "stage-II escalation: ambassadors each military base gains when the card builds"),
-    i("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
-    i("counter_bonus_all", 0, 10, "difficulty 1+: added to every counter requirement of every threat"),
-    i("extra_threats", 0, 5, "difficulty 1+: extra threats dealt each round in all, one per country in turn"),
-    i("stage1_removed", 0, 3, "difficulty 2+: stage-I cards removed"),
-    i("extra_corrupted", 0, 3, "difficulty 4: more cities per country start corrupted"),
-    i("build_bonus", 0, 5, "difficulty 3+: ambassadors each corrupted city gains on top of city_build"),
-    i("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
-    i("supply_reduction", 0, 20, "difficulty 4+: ambassador supply smaller by this per country"),
+    ParamSpec::int("difficulty", 0, 4, "difficulty level 0-4 (each level includes the ones below)"),
+    ParamSpec::list("stage_cards", 0, 20, "adversary cards dealt from stage I, II and III (before difficulty)"),
+    ParamSpec::int("supply_per_country", 0, 40, "adversary ambassadors in the supply per country"),
+    ParamSpec::int("city_build", 0, 10, "build: ambassadors each corrupted city gains"),
+    ParamSpec::int("factory_build", 0, 10, "build: ambassadors each factory next to a corrupted city gains"),
+    ParamSpec::int("spread_range", 1, 6, "spread: how far (hexes) a spreading ambassador may travel"),
+    ParamSpec::int("corrupt_at", 1, 20, "corrupt: a city that is not corrupted, holding this many adversary ambassadors, is corrupted"),
+    ParamSpec::int("escalation_ambassadors", 0, 5, "stage-II escalation: ambassadors each military base gains when the card builds"),
+    ParamSpec::int("counter_bonus", 0, 10, "difficulty 1+: added to every threat's first counter requirement"),
+    ParamSpec::int("counter_bonus_all", 0, 10, "difficulty 1+: added to every counter requirement of every threat"),
+    ParamSpec::int("extra_threats", 0, 5, "difficulty 1+: extra threats dealt each round in all, one per country in turn"),
+    ParamSpec::int("stage1_removed", 0, 3, "difficulty 2+: stage-I cards removed"),
+    ParamSpec::int("extra_corrupted", 0, 3, "difficulty 4: more cities per country start corrupted"),
+    ParamSpec::int("build_bonus", 0, 5, "difficulty 3+: ambassadors each corrupted city gains on top of city_build"),
+    ParamSpec::int("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
+    ParamSpec::int("supply_reduction", 0, 20, "difficulty 4+: ambassador supply smaller by this per country"),
 ];
 
 const PHASES: &[PhaseSpec] = &[
-    ph("build", "the next card becomes this round's; corrupted cities and the factories next to them gain ambassadors"),
-    ph("spread", "every hex with several adversary ambassadors keeps one and sends the rest out"),
-    ph("corrupt", "clean cities holding enough adversary ambassadors are corrupted"),
-    ph("reveal", "reveal the next adversary card face up, a round ahead"),
+    PhaseSpec::auto("build", "the next card becomes this round's; corrupted cities and the factories next to them gain ambassadors"),
+    PhaseSpec::auto("spread", "every hex with several adversary ambassadors keeps one and sends the rest out"),
+    PhaseSpec::auto("corrupt", "cities that are not corrupted and hold enough adversary ambassadors are corrupted"),
+    PhaseSpec::auto("reveal", "reveal the next adversary card face up, a round ahead"),
 ];
 
 pub static DEF: ModuleDef = ModuleDef {
@@ -66,34 +64,6 @@ pub static DEF: ModuleDef = ModuleDef {
         },
     ],
 };
-
-const fn i(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSpec {
-    ParamSpec {
-        name,
-        kind: ParamKind::Int,
-        min,
-        max,
-        doc,
-    }
-}
-
-const fn l(name: &'static str, doc: &'static str) -> ParamSpec {
-    ParamSpec {
-        name,
-        kind: ParamKind::List,
-        min: 0,
-        max: 20,
-        doc,
-    }
-}
-
-const fn ph(name: &'static str, doc: &'static str) -> PhaseSpec {
-    PhaseSpec {
-        name,
-        kind: PhaseKind::Auto,
-        doc,
-    }
-}
 
 pub const DECK: &str = "adversary.deck";
 pub const DISCARD: &str = "adversary.discard";
@@ -333,6 +303,13 @@ impl Module for Adversary {
     }
 }
 
+/// Shows the next `n` deck cards beyond the face-up one (Recon Sweep); a
+/// longer peek already running is kept.
+pub fn peek(g: &mut GameState, cx: &mut Cx, n: i64) {
+    let cur = g.var(PEEK);
+    cx.set_key(g, PEEK.into(), cur.max(n));
+}
+
 /// Reveals the top deck card face up as next round's card (nothing if the deck is empty).
 fn reveal(g: &mut GameState, cx: &mut Cx) {
     if let Some(id) = g.pile(DECK).first().cloned() {
@@ -414,7 +391,7 @@ pub fn place(g: &mut GameState, cx: &mut Cx, h: usize, n: i64) {
 /// Unity); with overflow, it corrupts a city or station already holding one.
 fn arrive(g: &mut GameState, cx: &mut Cx, h: usize) {
     let w = cx.world;
-    if let Some(s) = (0..g.seats.len()).find(|&s| g.tokens(h, &ambassador(s)) > 0) {
+    if let Some(s) = player_ambassador(g, h) {
         cx.add_tokens(g, h, &ambassador(s), -1);
         cx.add_key(g, SUPPLY.into(), 1);
         cx.tally(g, "adversary.cancelled", 1);
@@ -443,6 +420,24 @@ pub fn remove(g: &mut GameState, cx: &mut Cx, h: usize, n: i64) -> i64 {
         cx.add_key(g, SUPPLY.into(), k);
     }
     k
+}
+
+/// Removes every adversary ambassador in country `c` to the supply (one
+/// tally for them all); returns how many.
+pub fn remove_all_in_country(g: &mut GameState, cx: &mut Cx, c: usize) -> i64 {
+    let w = cx.world;
+    let mut removed = 0;
+    for &h in &w.map.countries[c].hexes {
+        let n = g.tokens(h, ADV_AMBASSADOR);
+        removed += remove(g, cx, h, n);
+    }
+    cx.tally(g, "adversary.ambassadors_removed", removed);
+    removed
+}
+
+/// An adversary troop lands on hex `h` (the caller counts it).
+pub fn place_troop(g: &mut GameState, cx: &mut Cx, h: usize) {
+    cx.add_tokens(g, h, TROOP, 1);
 }
 
 /// City `h` is corrupted: the adversary's cube goes on (a player cube
@@ -594,7 +589,7 @@ pub fn remove_piece(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, h: usiz
         if let Some(s) = seat {
             cx.set_key(g, removed_troop(s), 1);
         }
-        alignment::for_kill(g, cx, seat, TROOP);
+        alignment::for_troop_removed(g, cx, seat);
     } else {
         remove(g, cx, h, 1);
         cx.tally(g, "adversary.ambassadors_removed", 1);
@@ -629,20 +624,26 @@ pub fn pushback(g: &mut GameState, cx: &mut Cx, c: usize) -> Res {
 pub fn infiltrate(g: &mut GameState, cx: &mut Cx, n: i64) {
     let w = cx.world;
     for c in 0..w.map.countries.len() {
-        let mut best: Option<(usize, i64)> = None;
-        for &h in &w.map.countries[c].hexes {
-            if clean_city(&w, g, h) {
-                let k = g.tokens(h, ADV_AMBASSADOR);
-                if best.is_none_or(|(_, b)| k > b) {
-                    best = Some((h, k));
-                }
-            }
-        }
-        if let Some((h, _)) = best {
+        if let Some(h) = most_infiltrated_city(&w, g, c, |h| clean_city(&w, g, h)) {
             cx.note(Some(h), || format!("Discord: ambassadors at {}", hex_name(&w, h)));
             place(g, cx, h, n);
         }
     }
+}
+
+/// In country `c`, the hex passing `pred` with the most adversary
+/// ambassadors (ties: the first in the country's hex order), if any.
+pub fn most_infiltrated_city(w: &World, g: &GameState, c: usize, pred: impl Fn(usize) -> bool) -> Option<usize> {
+    let mut best: Option<(usize, i64)> = None;
+    for &h in &w.map.countries[c].hexes {
+        if pred(h) {
+            let k = g.tokens(h, ADV_AMBASSADOR);
+            if best.is_none_or(|(_, b)| k > b) {
+                best = Some((h, k));
+            }
+        }
+    }
+    best.map(|(h, _)| h)
 }
 
 /// What still counts against the win at bar `level`: corrupted cities

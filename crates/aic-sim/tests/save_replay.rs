@@ -1,27 +1,17 @@
 //! Runs the built binary: `run --save` writes records that parse, replay
 //! cleanly and pass `aic-sim replay`; a tampered record fails it.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod common;
+
+use std::path::PathBuf;
 
 use aic_core::SavedGame;
-
-fn sim() -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_aic-sim"));
-    // configs/ is relative to the workspace root.
-    c.current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
-    c
-}
-
-fn fresh_dir(name: &str) -> PathBuf {
-    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
-    let _ = std::fs::remove_dir_all(&d);
-    d
-}
+use common::{fresh_dir, sim};
 
 #[test]
 fn save_then_replay() {
-    let dir = fresh_dir("aic-sim-save");
+    // Left absent: `--save` makes it.
+    let dir = fresh_dir("aic-sim-save", false);
     let out = sim()
         .args(["run", "configs/baseline.json", "--games", "30", "--save"])
         .arg(&dir)

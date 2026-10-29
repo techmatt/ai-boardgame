@@ -50,6 +50,30 @@ pub struct ParamSpec {
     pub doc: &'static str,
 }
 
+impl ParamSpec {
+    /// An integer parameter in `min..=max`.
+    pub const fn int(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSpec {
+        ParamSpec {
+            name,
+            kind: ParamKind::Int,
+            min,
+            max,
+            doc,
+        }
+    }
+
+    /// A list parameter, each entry in `min..=max`.
+    pub const fn list(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSpec {
+        ParamSpec {
+            name,
+            kind: ParamKind::List,
+            min,
+            max,
+            doc,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
     Int,
@@ -57,11 +81,39 @@ pub enum ParamKind {
     List,
 }
 
+impl ParamKind {
+    /// `"int"` or `"list"` (the registry description, tunables).
+    pub fn name(self) -> &'static str {
+        match self {
+            ParamKind::Int => "int",
+            ParamKind::List => "list",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct PhaseSpec {
     pub name: &'static str,
     pub kind: PhaseKind,
     pub doc: &'static str,
+}
+
+impl PhaseSpec {
+    pub const fn auto(name: &'static str, doc: &'static str) -> PhaseSpec {
+        PhaseSpec {
+            name,
+            kind: PhaseKind::Auto,
+            doc,
+        }
+    }
+
+    pub const fn decision(name: &'static str, doc: &'static str) -> PhaseSpec {
+        PhaseSpec {
+            name,
+            kind: PhaseKind::Decision,
+            doc,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,6 +124,16 @@ pub enum PhaseKind {
     /// Simultaneous player phase: every seat may act, in any order, until
     /// every seat has passed.
     Decision,
+}
+
+impl PhaseKind {
+    /// `"auto"` or `"decision"` (the registry description, the view).
+    pub fn name(self) -> &'static str {
+        match self {
+            PhaseKind::Auto => "auto",
+            PhaseKind::Decision => "decision",
+        }
+    }
 }
 
 /// Why resolution stopped early.
@@ -190,12 +252,6 @@ impl World<'_> {
             Amount::Lit(v) => *v,
             Amount::Param { param } => self.int(&format!("cards.{param}")),
         }
-    }
-
-    /// Whether a module is in the config.
-    pub fn has_module(&self, id: &str) -> bool {
-        let prefix = format!("{id}.");
-        self.params.keys().any(|k| k.starts_with(&prefix))
     }
 }
 
@@ -364,7 +420,8 @@ impl<'a> Cx<'a> {
     }
 
     /// Sets any module's track by its full key (shared rules code acting
-    /// for another module, such as opposition gained from a card).
+    /// for another module, such as a card setting a country's
+    /// `board.shelter` flag).
     pub fn set_key(&mut self, g: &mut GameState, key: String, v: i64) {
         let old = if v == 0 {
             g.vars.remove(&key).unwrap_or(0)
@@ -464,20 +521,29 @@ impl<'a> Cx<'a> {
         if g.outcome.is_some() {
             return;
         }
-        let round = g.round;
-        self.emit(|| Event::GameEnded {
+        let log = if self.choices.replaying() { None } else { self.events.as_deref_mut() };
+        end_game(g, won, reason, detail, log);
+    }
+}
+
+/// Sets the game's outcome and logs its `GameEnded` event to `log`, if any
+/// (shared by [`Cx::end`] and the engine's round limit).
+pub(crate) fn end_game(g: &mut GameState, won: bool, reason: &str, detail: String, log: Option<&mut Vec<Event>>) {
+    let round = g.round;
+    if let Some(log) = log {
+        log.push(Event::GameEnded {
             won,
             round,
             reason: reason.to_string(),
             detail: detail.clone(),
         });
-        g.outcome = Some(Outcome {
-            won,
-            round,
-            reason: reason.to_string(),
-            detail,
-        });
     }
+    g.outcome = Some(Outcome {
+        won,
+        round,
+        reason: reason.to_string(),
+        detail,
+    });
 }
 
 /// Input to a variant's `build`: its validated parameters and content.
@@ -487,7 +553,6 @@ pub struct Build<'a> {
     /// Content indices of the cards selected in config, in config order.
     pub cards: Vec<usize>,
     pub world: World<'a>,
-    pub countries: u8,
 }
 
 impl Build<'_> {

@@ -19,7 +19,6 @@
 use serde::Serialize;
 
 use crate::hex::Hex;
-use crate::module::PhaseKind;
 use crate::state::{GameState, Outcome};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -51,7 +50,7 @@ pub struct ChoiceView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PhaseInfo {
-    /// The round entry, e.g. `"actions.play"` or `"a.play+b.build"`.
+    /// The round entry, e.g. `"board.act"` or `"cards.play+board.act"`.
     pub name: String,
     /// `"auto"` or `"decision"`.
     pub kind: &'static str,
@@ -367,13 +366,6 @@ fn upsert(values: &mut Vec<Value>, v: Value) {
     }
 }
 
-pub(crate) fn kind_name(k: PhaseKind) -> &'static str {
-    match k {
-        PhaseKind::Auto => "auto",
-        PhaseKind::Decision => "decision",
-    }
-}
-
 /// The parts of the view the engine fills in for every config.
 pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
     let content = crate::content();
@@ -501,7 +493,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
     let phase = rules.phase(g).map(|p| PhaseView {
         index: g.phase,
         name: p.name.clone(),
-        kind: kind_name(p.kind),
+        kind: p.kind.name(),
         waiting: g
             .seats
             .iter()
@@ -518,7 +510,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             .iter()
             .map(|p| PhaseInfo {
                 name: p.name.clone(),
-                kind: kind_name(p.kind),
+                kind: p.kind.name(),
             })
             .collect(),
         outcome: g.outcome.clone(),

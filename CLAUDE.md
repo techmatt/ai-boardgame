@@ -12,9 +12,10 @@ The standing contract for every executor working in this repo.
 - Intended shape: a **Rust core** that simulates the rules, with clients that render
   it. The first client is **wasm + a JS front-end**. Clients render and take input;
   rules live in the core.
-- Design is still being gathered. The engine skeleton exists (core, sim, wasm), but the
-  game rules don't: the modules are placeholders. Don't describe or document code as
-  if it does more than it does.
+- Design is still being gathered. The core implements the rules in
+  [docs/rules.md](docs/rules.md) (revision `RULES_REVISION` in `aic-core/src/lib.rs`):
+  the board, the adversary, threats, Alignment and cards. The card, AI-board and
+  megaproject content are placeholders pending redesign. Don't describe or document code as if it does more than it does.
 
 ## Engine rules
 
@@ -24,15 +25,15 @@ The standing contract for every executor working in this repo.
 - Tunable numbers live in configs, never in code. A new mechanic is a module; another
   way of doing one is a variant.
 - Any change to how games play out: bump `RULES_REVISION` and update the golden
-  fingerprint (`tests.rs` and `scripts/wasm-smoke.mjs`).
+  fingerprint (`crates/aic-core/src/tests/mod.rs` and `scripts/wasm-smoke.mjs`).
 - Every rules change updates [docs/rules.md](docs/rules.md) in the same commit.
 
 ## Working rules
 
 - **Commit to the branch you are on.** Leave nothing uncommitted.
-- **Tests come in two lanes.** `cargo test --workspace` is the fast lane (~6 s once
+- **Tests come in two lanes.** `cargo test --workspace` is the fast lane (~4 s once
   built): run it after every change. `cargo test-all` is the full run, the `#[ignore]`d
-  slow lane included (~2.5 min since 014): run it before every commit. A test slower than about a second goes
+  slow lane included (~30 s built, ~1 min after an edit, since 015): run it before every commit. A test slower than about a second goes
   in the slow lane, with a cheaper fast-lane twin where one makes sense. Details in
   the README's *Build and test*.
 - **Times are local, 12-hour clock** (2:45pm), in reports, docs and progress lines.

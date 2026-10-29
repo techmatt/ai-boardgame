@@ -18,7 +18,7 @@ npm run dev -- --port 61870     # another port
 npm run wasm                    # only rebuild web/src/wasm/ from crates/aic-wasm
 npm run check                   # typecheck
 npm run build                   # wasm + typecheck + static site in web/dist/
-npm run e2e -- <record.json>    # browser check, dev server must be running (see below)
+npm run e2e [-- <record.json>] # browser check, dev server must be running (see below)
 ```
 
 - **The wasm build step:** `scripts/build-wasm.mjs` runs `wasm-pack build
@@ -82,13 +82,13 @@ npm run e2e -- <record.json>    # browser check, dev server must be running (see
   hex pick.
 - **Seat panels:** the AI board's name (hover it for its text, innate rule, slots and
   unique cards), resources with income, then the board's two tracks with every printed
-  step: solid steps are uncovered, dashed ones still under processors, the boxed one
+  step: solid steps are uncovered, dashed ones still under data centres, the boxed one
   is the value in effect, and green **T2** / pink **+n AM** marks are the tier-2 unlock
   and antimatter income. Hover a step for its details. This is drawn from the generic
   `seats[].board` shape, not from AI-specific keys.
 - **Globals** hold only game-wide tracks: modules keep per-seat and per-card
   bookkeeping out of them (`ViewOut::bookkeeping`). A `vars` track no module labels is
-  folded under *Unlabelled tracks* below the piles; in v0 there are none.
+  folded under *Unlabelled tracks* below the piles; in the baseline there are none.
 - **Undo** (Ctrl+Z) drops the last action. Every state is a replay of config + seed +
   actions, so undo never has to reverse anything.
 - **Timeline:** ⏮ ◀ ▶ ⏭, the slider, ← → Home End, and Space to auto-play. Clicking an
@@ -119,7 +119,7 @@ rules revision) and the saved outcome and final fingerprint. The engine writes i
 
 ## Browser check
 
-`npm run e2e -- <record.json>` (`scripts/e2e.mjs`) drives headless Edge or Chrome
+`npm run e2e [-- <record.json>]` (`scripts/e2e.mjs`; the record is optional) drives headless Edge or Chrome
 over the DevTools protocol, with no extra packages. Point it at the dev server with
 `AIC_URL` (default `http://localhost:5173/`), and at a browser with `AIC_BROWSER` if it
 isn't at the usual path. It checks the board drawing (fills by hex kind, borders, base
@@ -141,7 +141,7 @@ checks the following:
 - no page scroll at 1366×768, 1920×1080 and 2560×1440;
 - a 4-country game (64 hexes) still fits at 1366×768 and 1920×1080;
 - the shared threat row (`configs/shared_row.json`), if that config exists;
-- loading the record and stepping through it.
+- loading the record and stepping through it, if one was given.
 
 Screenshots go to `web/e2e-out/` (git-ignored): the start, draft, growth, first
 choice, mid-game and end of the game, the layouts, four countries and the shared row.

@@ -1,13 +1,11 @@
-//! Militarist threats: dealt each round, countered by pooled payments,
-//! executed if still uncountered when the action phase ends. Variants:
-//! threats sit on countries (default), or in one shared row.
+//! Threats: dealt each round, countered by pooled payments, executed if
+//! still uncountered when the action phase ends. Variants: `countries`
+//! (each threat sits on a country), `shared_row` (one row for every
+//! country) and `off` (no threats).
 
 use crate::action::Action;
 use crate::content::{Passive, Side, Spot, ThreatDef, ThreatOp};
-use crate::module::{
-    Build, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef,
-    World,
-};
+use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::rng::shuffle;
 use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
@@ -15,30 +13,12 @@ use crate::view::{CardView, ViewOut};
 use super::common::*;
 use super::{adversary, alignment, board, cards};
 
-const PARAMS: &[ParamSpec] = &[ParamSpec {
-    name: "per_country",
-    kind: ParamKind::Int,
-    min: 0,
-    max: 5,
-    doc: "threats dealt each round per country",
-}];
+const PARAMS: &[ParamSpec] = &[ParamSpec::int("per_country", 0, 5, "threats dealt each round per country")];
 
 const PHASES: &[PhaseSpec] = &[
-    PhaseSpec {
-        name: "deal",
-        kind: PhaseKind::Auto,
-        doc: "deal threats face up (tier 1 until stage II begins, then tier 2)",
-    },
-    PhaseSpec {
-        name: "counter",
-        kind: PhaseKind::Decision,
-        doc: "pay toward threat counters (pooled; withdraw until the phase ends)",
-    },
-    PhaseSpec {
-        name: "execute",
-        kind: PhaseKind::Auto,
-        doc: "refund partial payments, then uncountered threats execute in order",
-    },
+    PhaseSpec::auto("deal", "deal threats face up (tier 1 until stage II begins, then tier 2)"),
+    PhaseSpec::decision("counter", "pay toward threat counters (pooled; withdraw until the phase ends)"),
+    PhaseSpec::auto("execute", "refund partial payments, then uncountered threats execute in order"),
 ];
 
 pub static DEF: ModuleDef = ModuleDef {
@@ -100,6 +80,11 @@ fn on(country: usize) -> String {
     format!("threats.on.{country}")
 }
 
+/// Prefix of every payment toward `threat` (by any seat, in any resource).
+pub fn paid_prefix(threat: &str) -> String {
+    format!("threats.paid.{threat}.")
+}
+
 fn paid_key(threat: &str, seat: usize, resource: &str) -> String {
     format!("threats.paid.{threat}.{seat}.{resource}")
 }
@@ -130,6 +115,33 @@ pub fn active(g: &GameState) -> Vec<(String, Option<usize>)> {
 
 fn pile_of(scope: Option<usize>) -> String {
     scope.map_or(ROW.to_string(), on)
+}
+
+/// Where a threat dealt for country `c` goes: the shared row, or on `c`.
+fn deal_pile(shared: bool, c: usize) -> String {
+    if shared { ROW.to_string() } else { on(c) }
+}
+
+/// Deals the top threat of the `tier` deck onto `to`, counted under
+/// `threats.dealt` whichever module is running. False if the deck is empty
+/// (no reshuffle here: the caller refills first if it may).
+fn deal(g: &mut GameState, cx: &mut Cx, tier: u8, to: &str) -> bool {
+    let Some(id) = g.pile(&deck(tier)).first().cloned() else {
+        return false;
+    };
+    cx.move_card(g, &id, &deck(tier), to, false).unwrap();
+    cx.tally(g, "threats.dealt", 1);
+    true
+}
+
+/// Whether the threats variant in play deals to the shared row (`None`:
+/// no threats). For rules code outside the module, which has no `Threats`.
+fn shared_row(w: &World) -> Option<bool> {
+    match w.variant("threats") {
+        Some("countries") => Some(false),
+        Some("shared_row") => Some(true),
+        _ => None,
+    }
 }
 
 /// What countering `threat` asks for now, resource by resource (difficulty
@@ -196,20 +208,15 @@ pub fn counter(g: &mut GameState, cx: &mut Cx, threat: &str) {
 /// out of turn). Variant `off`: nothing.
 pub fn deal_extra(g: &mut GameState, cx: &mut Cx, n: i64) {
     let w = cx.world;
-    let shared = match w.variant("threats") {
-        Some("countries") => false,
-        Some("shared_row") => true,
-        _ => return,
+    let Some(shared) = shared_row(&w) else {
+        return;
     };
     let tier = adversary::threat_tier(&w, g);
     let countries = w.map.countries.len().max(1);
     for k in 0..n.max(0) as usize {
-        let Some(id) = g.pile(&deck(tier)).first().cloned() else {
+        if !deal(g, cx, tier, &deal_pile(shared, k % countries)) {
             return;
-        };
-        let to = if shared { ROW.to_string() } else { on(k % countries) };
-        cx.move_card(g, &id, &deck(tier), &to, false).unwrap();
-        cx.tally(g, "threats.dealt", 1);
+        }
     }
 }
 
@@ -288,17 +295,18 @@ impl Threats {
         }
     }
 
-    fn draw(&self, g: &mut GameState, cx: &mut Cx, tier: u8) -> Option<String> {
+    /// An empty `tier` deck is refilled from its shuffled discard (the
+    /// round's deal only; extra deals out of turn don't reshuffle).
+    fn refill(&self, g: &mut GameState, cx: &mut Cx, tier: u8) {
         if g.pile(&deck(tier)).is_empty() {
             let mut cards = g.pile(&discard(tier)).to_vec();
             if cards.is_empty() {
-                return None;
+                return;
             }
             shuffle(&mut cards, cx.rng(g, "threats"));
             cx.set_pile(g, &discard(tier), Vec::new());
             cx.set_pile(g, &deck(tier), cards);
         }
-        g.pile(&deck(tier)).first().cloned()
     }
 }
 
@@ -323,7 +331,7 @@ impl Module for Threats {
         if phase == 0 {
             let tier = adversary::threat_tier(&w, g);
             // Difficulty 1: `extra_threats` more a round in all, one per
-            // country in turn (country 1 first in round 1, then 2, ...).
+            // country in turn (country index 0 first in round 1, then 1, ...).
             let n = w.map.countries.len();
             let extra = if adversary::at(&w, g, 1) {
                 w.int("adversary.extra_threats").max(0) as usize
@@ -334,12 +342,10 @@ impl Module for Threats {
             for c in 0..n {
                 let more = (0..extra).filter(|k| (first + k) % n == c).count() as i64;
                 for _ in 0..self.per_country + more {
-                    let Some(id) = self.draw(g, cx, tier) else {
+                    self.refill(g, cx, tier);
+                    if !deal(g, cx, tier, &deal_pile(self.shared, c)) {
                         break;
-                    };
-                    let to = if self.shared { ROW.to_string() } else { on(c) };
-                    cx.move_card(g, &id, &deck(tier), &to, false).unwrap();
-                    cx.count(g, "dealt", 1);
+                    }
                 }
             }
             return Ok(());
@@ -543,7 +549,7 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
                 let Some(i) = cx.choose(0, "Threat: an adversary troop lands on which hex?", opts)? else {
                     break;
                 };
-                cx.add_tokens(g, spots[i], TROOP, 1);
+                adversary::place_troop(g, cx, spots[i]);
                 cx.adversary_ops(g, 1);
                 cx.tally(g, "threats.troops", 1);
             }
@@ -558,16 +564,7 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
         }
         ThreatOp::CorruptCity => {
             for c in scope_countries(&w, scope) {
-                let mut best: Option<(usize, i64)> = None;
-                for &h in &w.map.countries[c].hexes {
-                    if is_city(&w, h) && !corrupted(g, h) {
-                        let k = g.tokens(h, ADV_AMBASSADOR);
-                        if best.is_none_or(|(_, b)| k > b) {
-                            best = Some((h, k));
-                        }
-                    }
-                }
-                if let Some((h, _)) = best {
+                if let Some(h) = adversary::most_infiltrated_city(&w, g, c, |h| is_city(&w, h) && !corrupted(g, h)) {
                     adversary::corrupt_city(g, cx, h);
                 }
             }
@@ -580,7 +577,7 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
         }
         ThreatOp::Flag { name } => {
             for c in scope_countries(&w, scope) {
-                cx.set_key(g, board::flag(name, c), 1);
+                cx.set_key(g, board::flag(*name, c), 1);
             }
         }
         ThreatOp::Requisition {

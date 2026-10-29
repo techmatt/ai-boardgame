@@ -93,24 +93,12 @@ pub fn describe_modules() -> serde_json::Value {
                     let params: Vec<_> = v
                         .params
                         .iter()
-                        .map(|p| {
-                            let kind = match p.kind {
-                                module::ParamKind::Int => "int",
-                                module::ParamKind::List => "list",
-                            };
-                            json!({"name": p.name, "kind": kind, "min": p.min, "max": p.max, "doc": p.doc})
-                        })
+                        .map(|p| json!({"name": p.name, "kind": p.kind.name(), "min": p.min, "max": p.max, "doc": p.doc}))
                         .collect();
                     let phases: Vec<_> = v
                         .phases
                         .iter()
-                        .map(|p| {
-                            let kind = match p.kind {
-                                module::PhaseKind::Auto => "auto",
-                                module::PhaseKind::Decision => "decision",
-                            };
-                            json!({"name": p.name, "kind": kind, "doc": p.doc})
-                        })
+                        .map(|p| json!({"name": p.name, "kind": p.kind.name(), "doc": p.doc}))
                         .collect();
                     json!({
                         "name": v.name, "summary": v.summary, "params": params, "phases": phases,

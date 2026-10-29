@@ -3,7 +3,7 @@ prints one compact row each. Every result is appended to out/tune/log.jsonl.
 
     python scripts/tune/sweep.py SPEC.json
     python scripts/tune/sweep.py --config configs/baseline.json --agents random,greedy \
-        --games 48 --seed 0 --var "pool8=adversary.pool_base=6" --var "base="
+        --games 48 --seed 0 --var "supply8=adversary.supply_per_country=8" --var "base="
 
 A variant is `name=set1;set2;...` (each a `--set K=V`). A SPEC file holds
 {"config", "agents", "games", "seed", "common": [sets], "variants": {name: [sets]}}.
@@ -40,7 +40,7 @@ def row(name, agent, r, secs):
     rounds = r["end_round"] if isinstance(r.get("end_round"), dict) else {}
     return (f"{name:<22} {agent:<10} win {100 * r['win_rate']:5.1f}% ±{100 * r['win_rate_se']:4.1f} "
             f"rnd {r['rounds_mean']:4.2f} ops {r['adversary_ops_per_round']:5.1f} "
-            f"corr+ {c.get('adversary.corruption_added', 0):4.1f} popl {c.get('adversary.population_lost', 0):4.1f} "
+            f"corr {c.get('adversary.corruptions', 0):4.1f} dest {c.get('board.destroyed', 0):4.1f} "
             f"[{ended}] {secs:5.0f}s")
 
 

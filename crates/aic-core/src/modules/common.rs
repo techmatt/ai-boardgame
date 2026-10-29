@@ -8,7 +8,6 @@
 //! - **reach**: a seat's reach is every hex within 1 of one of its data centres.
 
 use crate::content::HexKind;
-use crate::hex::Hex;
 use crate::module::World;
 use crate::state::{GameState, Opt};
 
@@ -92,6 +91,11 @@ pub fn player_owned(g: &GameState, h: usize) -> bool {
     dc_owner(g, h).is_some() || cube_owner(g, h).is_some()
 }
 
+/// A player ambassador's seat on hex `h`, if any (seat order).
+pub fn player_ambassador(g: &GameState, h: usize) -> Option<usize> {
+    (0..g.seats.len()).find(|&s| g.tokens(h, &ambassador(s)) > 0)
+}
+
 pub fn adversary_count(g: &GameState, h: usize) -> i64 {
     g.tokens(h, ADV_AMBASSADOR) + g.tokens(h, TROOP)
 }
@@ -119,6 +123,18 @@ pub fn scope_countries(w: &World, scope: Option<usize>) -> Vec<usize> {
         Some(c) => vec![c],
         None => (0..w.map.countries.len()).collect(),
     }
+}
+
+/// Empty open hexes touching a city: where a factory may be built.
+pub fn factory_hexes(w: &World, g: &GameState) -> Vec<usize> {
+    (0..g.hexes.len())
+        .filter(|&h| buildable(w, g, h) && w.map.hexes[h].neighbours.iter().any(|&x| is_city(w, x)))
+        .collect()
+}
+
+/// The country seat `s` starts in (one seat per country, wrapping).
+pub fn home_country(w: &World, seat: usize) -> usize {
+    seat % w.map.countries.len()
 }
 
 /// Hexes holding seat `s`'s data centres, in board order.
@@ -175,12 +191,6 @@ pub fn opt(label: impl Into<String>) -> Opt {
         option: label.into(),
         target: None,
     }
-}
-
-/// The hex of option `i` among hex options built from `hexes`.
-pub fn hex_at(w: &World, hexes: &[usize], at: Option<Hex>) -> Option<usize> {
-    let at = at?;
-    hexes.iter().copied().find(|&h| w.map.hexes[h].hex == at)
 }
 
 /// Seat `s` as an option label.

@@ -26,7 +26,7 @@ use rand::RngCore;
 use rand_chacha::ChaCha8Rng;
 
 /// Piles whose order is hidden but whose contents are known.
-const SHUFFLED: [&str; 8] = [
+pub(crate) const SHUFFLED: [&str; 8] = [
     "cards.deck.1",
     "cards.deck.2",
     "threats.deck.1",
@@ -133,24 +133,8 @@ fn resample_adversary_deck(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rn
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aic_core::Config;
+    use crate::agents::tests::{config_rules, rules};
     use rand::SeedableRng;
-
-    fn rules(difficulty: i64) -> Rules {
-        config_rules("baseline", difficulty)
-    }
-
-    fn config_rules(name: &str, difficulty: i64) -> Rules {
-        let text = std::fs::read_to_string(format!(
-            "{}/../../configs/{name}.json",
-            env!("CARGO_MANIFEST_DIR")
-        ))
-        .unwrap();
-        let mut c = Config::from_json(&text).unwrap();
-        c.apply_override(&format!("adversary.difficulty={difficulty}"))
-            .unwrap();
-        Rules::new(&c).unwrap()
-    }
 
     #[test]
     fn keeps_public_information() {

@@ -1,5 +1,5 @@
-//! Every module the engine knows: the v0 ruleset, one module per rules
-//! area. To add one: write `modules/<id>.rs` with a `pub static DEF:
+//! Every module the engine knows: the current ruleset, one module per
+//! rules area. To add one: write `modules/<id>.rs` with a `pub static DEF:
 //! ModuleDef`, add it to [`REGISTRY`], and document it in `docs/rules.md`
 //! and `docs/architecture.md`.
 //!
@@ -13,12 +13,12 @@ use crate::module::ModuleDef;
 
 pub mod adversary;
 pub mod ai;
+pub mod alignment;
 pub mod board;
 pub mod cards;
 pub mod common;
 pub mod economy;
 pub mod effects;
-pub mod alignment;
 pub mod threats;
 
 pub static REGISTRY: &[&ModuleDef] = &[

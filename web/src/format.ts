@@ -153,15 +153,6 @@ export const KINDS: Record<string, { fill: string; label: string }> = {
 export const kindFill = (k: string) => KINDS[k]?.fill ?? '#e4e0d8';
 export const kindName = (k: string) => KINDS[k]?.label ?? words(k);
 
-/** A `#rrggbb` colour mixed toward black by `k` (0..1). */
-export function darken(hex: string, k: number): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  const ch = (s: number) => Math.round(((n >> s) & 255) * (1 - k)).toString(16).padStart(2, '0');
-  return `#${ch(16)}${ch(8)}${ch(0)}`;
-}
-
 /** A `#rrggbb` colour pushed to a saturated, mid-dark version of its hue (for borders). */
 export function strong(hex: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);

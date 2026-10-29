@@ -62,5 +62,5 @@ Until the rules are close to final, scoping runs use shallow, fast agents (greed
 engine) and short runs (`aic-sim experiment --quick`); deep-search agents stay in the
 code, ready, but don't get run time until the rules settle.
 
-The agents (random, greedy, beam, rollout) and how each measure is computed are in the
+The agents (random, greedy, beam, rollout, engine) and how each measure is computed are in the
 README (*Agents*, *Experiments*); `aic-sim experiment` writes them up as a cycle report.

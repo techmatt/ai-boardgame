@@ -118,10 +118,6 @@ impl Map {
         self.index.get(&hex).copied()
     }
 
-    pub fn country_of(&self, hex_index: usize) -> u8 {
-        self.hexes[hex_index].country
-    }
-
     /// Hex index of printed number `n` in country `c`.
     pub fn numbered(&self, c: usize, n: u8) -> usize {
         self.countries[c].hexes[n as usize - 1]

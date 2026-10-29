@@ -39,7 +39,9 @@ pub fn version() -> String {
     aic_core::VERSION.to_string()
 }
 
-/// All content (map pieces and layouts, cards) as JSON.
+/// All content as JSON: the map (piece shape, layouts, country pieces),
+/// player cards, threats, adversary cards, AI boards and the Unity and
+/// Discord decks.
 #[wasm_bindgen]
 pub fn content() -> String {
     to_json(aic_core::content())
@@ -60,8 +62,10 @@ pub fn resolve_config(config_json: &str) -> Result<String, JsValue> {
     ))
 }
 
-/// The board for a config: hexes (axial `[q, r]`, country, neighbours) and
-/// countries (hex indices, card slots, colour). `state.hexes[i]` is `hexes[i]`.
+/// The board for a config: hexes (axial `[q, r]`, country, piece position,
+/// neighbours, printed number, kind, and for a military base the country it
+/// faces), countries (hex indices, card slots, colour) and fronts (the two
+/// countries and their bases). `state.hexes[i]` is `hexes[i]`.
 #[wasm_bindgen]
 pub fn board(config_json: &str) -> Result<String, JsValue> {
     Ok(to_json(&rules(config_json)?.map))

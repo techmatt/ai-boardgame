@@ -137,7 +137,8 @@ pub struct Outcome {
     pub won: bool,
     /// The round in which the game ended.
     pub round: u32,
-    /// Stable reason code (`"survived"`, `"overrun"`, ...), for aggregation.
+    /// Stable reason code (`"purge"`, `"unity"`, `"deck_empty"`,
+    /// `"supply"`, `"cities"`, `"round_limit"`), for aggregation.
     pub reason: String,
     /// Human-readable detail.
     pub detail: String,

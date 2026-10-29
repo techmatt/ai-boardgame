@@ -77,9 +77,10 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
 
 ## Config
 
-A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the v0 game
-(2 countries, difficulty 0); [`configs/shared_row.json`](../configs/shared_row.json)
-differs only in the threat variant. Abridged:
+A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the baseline
+game, rules revision 6 (2 countries, difficulty 0);
+[`configs/shared_row.json`](../configs/shared_row.json) differs only in the threat
+variant. Abridged:
 
 ```json
 {
@@ -112,12 +113,14 @@ differs only in the threat variant. Abridged:
   schedule or a table (for schedules, the last entry repeats, via `module::scheduled`).
   A single integer is accepted for a list and normalized to a one-item list.
 - **cards**: content ids, for variants that play cards (`uses_cards`). A card belongs
-  to at most one module. In v0 the `cards` module lists every player card, AI uniques
-  included; leaving a card out removes it from the game.
+  to at most one module. In the baseline the `cards` module lists every player card,
+  AI uniques included; leaving a card out removes it from the game.
 - **round**: the phase sequence, as `"<module>.<phase>"`:
   - a phase may appear more than once, or not at all;
   - `"a.play+b.build"` combines several modules' **decision** phases into one
-    simultaneous phase (v0's action phase combines cards, threat counters and giving);
+    simultaneous phase (the baseline's action phase is
+    `cards.play+threats.counter+economy.give+alignment.act+board.act`: cards, threat
+    counters, giving, the antimatter action and the board's standard actions);
   - if `round` is empty, it defaults to every module's phases in module order.
 - **Config hash**: `Rules::config_hash` is a 64-bit FNV-1a hash of the *resolved*
   config's JSON (round filled in, lists normalized, `name` excluded). Every
@@ -132,9 +135,10 @@ differs only in the threat variant. Abridged:
   - `cards.variant=free_keep` switches variant and drops the parameters the new
     variant doesn't take, so only its new ones need setting
     (`--set cards.free_keeps=1`);
-  - `<module>=off` removes a module and its phases. In v0 every module is needed by
-    another (`ModuleDef::requires`), so this is rejected with the reason. To measure a
-    module's effect, use its `off` *variant* instead (`threats.variant=off`,
+  - `<module>=off` removes a module and its phases. Today every module is needed by
+    another (`ModuleDef::requires`, see [Modules](#modules)), so this is rejected with
+    the reason. To measure a module's effect, use its `off` *variant* instead
+    (`threats.variant=off`,
     `alignment.variant=off`, `cards.variant=off`): it keeps the module's phases and
     the parameters other modules read, and does nothing. See rules.md §9.
   - The adversary's two variants (`militarist`, `overflow`) take the same parameters,
@@ -164,7 +168,21 @@ areas lean on each other, so modules call each other's public functions (a card'
 removal calls `adversary::damage`, which sways toward Unity through
 `alignment::for_kill` when it takes a troop) and read each other's
 parameters through `World::int("<module>.<param>")`. A module lists the modules it reads
-in `ModuleDef::requires`; a config missing one is rejected.
+in `ModuleDef::requires`; a config missing one is rejected. Today:
+
+| Module | `requires` |
+|---|---|
+| `board` | `adversary`, `ai`, `cards`, `alignment` |
+| `adversary` | `board`, `cards`, `alignment` |
+| `threats` | `adversary`, `alignment`, `board`, `cards` |
+| `alignment` | `adversary`, `ai`, `board`, `cards`, `threats` |
+| `economy` | `ai`, `cards`, `alignment` |
+| `ai` | `cards`, `adversary`, `alignment`, `threats` |
+| `cards` | `ai`, `adversary`, `alignment`, `threats`, `economy`, `board` |
+
+Every module is required by at least one other, so `<module>=off` is always rejected
+today (the config tests assert it for `threats=off` and `board=off`); a module's effect
+is measured with its `off` variant instead (`threats`, `alignment` and `cards` have one).
 
 A rule that depends on another module's *variant* reads `World::variant("<module>")`
 (the `overflow` adversary variant is read inside `adversary::arrive`). Everything that
@@ -243,8 +261,8 @@ module calls `Cx::end`, or as a `round_limit` loss after 1000 rounds.
 **Decision phases are simultaneous.** Any seat may act in any order until all seats
 pass. One team agent drives every seat, and `legal_actions` lists all seats' actions
 together (seat by seat; within a seat, module by module in the order the round entry
-lists them, then the pass if allowed). In v0, seats' actions may depend on each other
-(pooled threat counters, giving insight, the shared board): the placeholder-era rule
+lists them, then the pass if allowed). In the baseline, seats' actions may depend on
+each other (pooled threat counters, giving insight, the shared board): the placeholder-era rule
 that simultaneous actions commute was dropped, since the ruleset has players help each
 other. Order matters the way it does at a table where the team talks it through.
 
@@ -256,8 +274,8 @@ other. Order matters the way it does at a table where the team talks it through.
 2. Add its parameters to a config in `configs/` and run
    `aic-sim compare configs/old.json configs/new.json`, or sweep it in place with
    `--set-b <module>.variant=<name> --set-b <module>.<new param>=...`.
-3. Add it to `variant_matrix` in `tests.rs`, bump `RULES_REVISION` if existing games
-   change, and document it in `docs/rules.md`.
+3. Add it to `variant_matrix` in `crates/aic-core/src/tests/mod.rs`, bump
+   `RULES_REVISION` if existing games change, and document it in `docs/rules.md`.
 
 ### Adding a module
 
@@ -268,7 +286,7 @@ other. Order matters the way it does at a table where the team talks it through.
 4. If it needs player input, reuse an `Action` if one fits (with `owns` claiming it)
    and `cx.choose` for choices inside its resolution. Add an `Action` variant only if
    neither fits.
-5. Make sure random games still replay (extend `variant_matrix` in `tests.rs`), and
+5. Make sure random games still replay (extend `variant_matrix` in `tests/mod.rs`), and
    document it in `docs/rules.md`.
 6. The viewer shows its tokens, resources, `vars` tracks and exhausted cards without
    any work. Add a `view` hook for derived values, card groups and piles (see
@@ -278,21 +296,30 @@ other. Order matters the way it does at a table where the team talks it through.
 
 Content is data in `content/`, composed from code primitives:
 
-- **Player cards** (`cards.json`): `effects` ([`Effect`]: on play, or when built),
-  `passives` ([`Passive`]: standing effects), an `ability` (once a round), `upkeep`,
-  `tags`, `needs`, a `tier` (0 for an AI's unique card). List the id in the `cards`
-  module's config `cards`. A cost written as `{"param": "name"}` becomes a tunable.
+- **Player cards** (`cards.json`): a `tier` (1 or 2; 0 for an AI's unique card), a
+  `kind` (`building` or `program`), a credit `cost`, an `insight` cost and an optional
+  `antimatter` cost, `effects` ([`Effect`]: on play, or when built), `passives`
+  ([`Passive`]: standing effects), an `ability` (once a round), `upkeep`, `tags`,
+  `needs`, `slotless` (a building that takes no slot) and `unique` (the AI board it
+  belongs to). List the id in the `cards` module's config `cards`. A cost written as
+  `{"param": "name"}` becomes a tunable.
 - **Threats** (`threats.json`): `counter` costs and `effects` ([`ThreatOp`], with
   `Spot`s naming the pieces they hit).
 - **Adversary cards** (`adversary.json`): stage, text, `twists` ([`Twist`]), escalation.
 - **AI boards** (`ais.json`): slots, credit production, resource `discounts`, innate
-  passives, two data-centre tracks, growth options (lists of `Effect`), unique cards.
-- **Country pieces** (`map.json`, `countries`): cities (in corruption order), ocean,
-  setup buildings, starting data-centre spots, and the corp's megaproject card.
+  passives, two data-centre tracks, growth options (lists of `Effect`), unique cards,
+  and the Unity sway it adds each round (`unity`).
+- **Alignment cards** (`alignment.json`, the Unity and Discord decks): `side` (`unity`
+  or `discord`), `tier` (1 or 2), `text`, `effects` ([`AlignOp`]: resolved when its
+  side's bucket tips) and `ongoing` (stays in play and resolves at the start of every
+  round instead of once).
+- **Country pieces** (`map.json`, `countries`): cities, the order cities start
+  corrupted in (`corrupted`), ocean, setup buildings (research stations, factories),
+  starting data-centre spots, and the corp's megaproject card.
 
 Ids are unique across all content, and actions refer to content by id, so reordering a
-file does not break action logs. `Content::check` validates references, tags and
-resources when the content loads.
+file does not break action logs. `Content::check` validates references, and every tag
+and resource name, when the content loads.
 
 ## Map
 
@@ -362,7 +389,7 @@ derive:
   value, a card's text or status, a board track. A `vars` key nobody declares still
   shows as a global, so a new module's track is never hidden by accident.
 
-In v0:
+In the baseline:
 
 - `adversary` adds its deck as piles (`deck` with any peeked cards, `next` face up,
   `current`, `discard`) and the ambassador supply, stage and difficulty. Its
@@ -390,7 +417,8 @@ In v0:
   adds hand, buildings (`n/slots`), draft hand and drafted cards with statuses, tags,
   next-building discount, drafting tier, Civic Shelter used, and the decks.
   Bookkeeping: `cards.tier.*`, `cards.picked.*`, `cards.next_discount.*`,
-  `cards.civic_used.*`, `cards.unpowered.*` (a building's `unpowered` status).
+  `cards.civic_used.*`, `cards.unpowered.*` (a building's `unpowered` status),
+  `cards.kept_round.*` (cards kept this round, for `free_keep`).
 
 So the globals hold only game-wide tracks (the Alignment track and tips, the
 adversary supply and stage, the war round and what modules derive).
@@ -401,7 +429,7 @@ The view is display data:
 - It is not in the state, the fingerprint or a replay.
 - A hook must not draw from the RNG; it gets `&GameState`, so it can't.
 
-Tests in `tests.rs` check it.
+Tests in `crates/aic-core/src/tests/view.rs` check it.
 
 **What the client assumes.** It draws hexes from `[q, r]` by kind, with the
 country colour, and draws token kinds it knows with their own glyph and any other kind
@@ -429,12 +457,14 @@ differ.
   - `adversary_ops[r-1]`: adversary operations in round `r`, a proxy for table time;
   - `setup_ops`: adversary operations during setup;
   - `actions`: player actions applied, answered choices included;
-  - `counters["<module>.<name>"]`: anything a module counts. v0 counts cards kept,
-    played and used (per card), growth picks, threats dealt, countered and executed,
-    corruptions (and the round of the first), adversary ambassadors on the board per
-    round (`adversary.ambassadors_rNN`), ambassadors and troops removed, buildings
-    destroyed (per war round too), standard actions (`board.std.<act>`), data centres
-    placed, insight given and credit income.
+  - `counters["<module>.<name>"]`: anything a module counts. The baseline counts cards
+    kept, played and used (per card), growth picks, threats dealt, countered and
+    executed, corruptions (and the round of the first), adversary ambassadors on the
+    board per round (`adversary.ambassadors_rNN`), ambassadors and troops removed,
+    buildings destroyed (per war round too), standard actions (`board.std.<act>`),
+    cities aligned and freed, stations owned, megaprojects completed, data centres
+    placed, Alignment sway, tips (and their rounds, `alignment.tip_<side>.rNN`), cards
+    resolved and antimatter actions, insight given and credit income.
 - **Outcome**: `won`, the `round` the game ended, a stable `reason` code for aggregation,
   and a human `detail`.
 - **Decisions** (`driver::play` → `GameRecord`): each applied action is one decision.
@@ -459,4 +489,4 @@ Left out on purpose until something needs them:
   `pending` default), so a state saved by an older engine may fail to load. Records
   (config + seed + actions) are the durable format.
 - **Snapshots cost**: every action and automatic phase clones the state first (the
-  snapshot a choice replays from). Fine at v0 speeds; a hot spot if sims need more.
+  snapshot a choice replays from). Fine at today's speeds; a hot spot if sims need more.

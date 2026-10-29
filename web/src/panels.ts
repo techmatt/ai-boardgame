@@ -365,7 +365,7 @@ export function seatCardsHtml(v: View, seatIndex: number): string {
 /**
  * Game-wide `vars` tracks that no module labels (source "engine"), folded away under
  * the piles. Modules keep their per-seat and per-card bookkeeping out of the globals
- * (`ViewOut::bookkeeping` in view.rs), so in v0 this is normally empty; a new module's
+ * (`ViewOut::bookkeeping` in view.rs), so in the baseline this is normally empty; a new module's
  * unlabelled track shows here.
  */
 export function varsHtml(v: View, open: boolean): string {

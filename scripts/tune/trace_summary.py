@@ -1,4 +1,6 @@
-"""Per-round summary of an `aic-sim run --games 1 --trace` stream (stdin):
+"""Retired: reads pre-014 token and track names, so on rules r6 it prints nothing useful.
+
+Per-round summary of an `aic-sim run --games 1 --trace` stream (stdin):
 adversary pieces on the board, pool, opposition, population, and what the
 players played. Usage:
 

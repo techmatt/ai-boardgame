@@ -3,7 +3,10 @@
 All at the tuned baseline (rules r3), 2 countries. Why each is worth a look is in
 [`../../payback-009.md`](../../payback-009.md#records-worth-a-look).
 
-| File | Build | Replays on main? |
+None of these replay today: rules r4 and later changed the game (r6 is the 014 board).
+The last column is what held on r3.
+
+| File | Build | Replayed on r3's main? |
 |---|---|---|
 | `base-d4-engine-seed300094.json` | main | yes |
 | `base-d4-greedy-seed300094.json` | main | yes |

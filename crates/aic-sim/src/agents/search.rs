@@ -6,21 +6,20 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
+use aic_core::modules::adversary;
 use aic_core::{Action, Agent, GameState, Rules};
 use rand_chacha::ChaCha8Rng;
 
-use super::determinize::determinize;
+use super::determinize::{determinize, SHUFFLED};
 use super::eval::Eval;
 use crate::prof::{self, Part};
 
-/// Hidden piles: compared by size only when checking a plan against the table.
-const HIDDEN: [&str; 5] = [
-    "cards.deck.1",
-    "cards.deck.2",
-    "threats.deck.1",
-    "threats.deck.2",
-    "adversary.deck",
-];
+/// Hidden piles, compared by size only when checking a plan against the
+/// table: every pile [`determinize`] guesses (the shuffled decks and the
+/// adversary deck).
+fn hidden(key: &str) -> bool {
+    key == adversary::DECK || SHUFFLED.contains(&key)
+}
 
 /// `g` after `a`, or `None` if the rules refuse it (a guess of the hidden
 /// cards can, rarely, make a replayed choice impossible).
@@ -272,7 +271,7 @@ fn same_table(a: &GameState, b: &GameState) -> bool {
     }
     let keys: std::collections::BTreeSet<&String> = a.piles.keys().chain(b.piles.keys()).collect();
     keys.into_iter().all(|k| {
-        if HIDDEN.contains(&k.as_str()) {
+        if hidden(k) {
             a.pile(k).len() == b.pile(k).len()
         } else {
             a.pile(k) == b.pile(k)

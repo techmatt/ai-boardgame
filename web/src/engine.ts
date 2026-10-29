@@ -147,13 +147,6 @@ export interface GameRecord {
 export interface CardDef { id: string; name: string; text: string; cost?: unknown }
 export interface ThreatDef { id: string; name: string; tier: number; text: string; counter: [string, number][] }
 export interface AdversaryDef { id: string; name: string; stage: number; text: string; twists: { op: string; amount?: number }[]; escalation?: boolean }
-/** A printed country piece (content/map.json): country `c` is piece `c`. */
-export interface PieceDef {
-  name: string;
-  cities: number[];
-  ocean: number[];
-  project: { name: string; cubes: number; text: string; benefit: [string, number][] };
-}
 export interface AiBoardDef {
   id: string;
   name: string;
@@ -162,7 +155,7 @@ export interface AiBoardDef {
   innate: { name: string; text: string };
   growth: { name: string }[];
 }
-export interface Content { cards: CardDef[]; threats: ThreatDef[]; adversary: AdversaryDef[]; ais: AiBoardDef[]; map?: { countries: PieceDef[] } }
+export interface Content { cards: CardDef[]; threats: ThreatDef[]; adversary: AdversaryDef[]; ais: AiBoardDef[] }
 
 /** A state as the engine produced it, plus a parsed copy for display. */
 export interface Snapshot { json: string; state: GameState }

@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use aic_core::content::Side;
-use aic_core::modules::{adversary, alignment, common};
+use aic_core::modules::{adversary, alignment, cards, common};
 use aic_core::{replay, Action, Config, GameState, Rules};
 use serde::{Deserialize, Serialize};
 
@@ -346,7 +346,7 @@ fn build_signature(rules: &Rules, g: &GameState) -> String {
         .map(|s| {
             let ai = &aic_core::modules::ai::board(&w, s).id;
             let mut b: Vec<&str> = g
-                .pile(&format!("cards.built.{s}"))
+                .pile(&cards::built(s))
                 .iter()
                 .map(|x| x.as_str())
                 .collect();
@@ -471,8 +471,8 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         if g.round != offered_round && legal.iter().any(|a| matches!(a, Action::Draft { .. })) {
             offered_round = g.round;
             picks.iter_mut().for_each(|p| *p = 0);
-            for (k, pile) in g.piles.range("cards.packet.".to_string()..) {
-                if !k.starts_with("cards.packet.") {
+            for (k, pile) in g.piles.range(cards::PACKETS.to_string()..) {
+                if !k.starts_with(cards::PACKETS) {
                     break;
                 }
                 for c in pile {
@@ -525,7 +525,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         // A draw's card is only known once drawn: whatever is new in the hand.
         let hand_before = match &a {
             Action::Draw { seat, .. } => {
-                Some((*seat, g.pile(&format!("cards.hand.{seat}")).to_vec()))
+                Some((*seat, g.pile(&cards::hand(*seat as usize)).to_vec()))
             }
             _ => None,
         };
@@ -533,7 +533,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
             .apply_mut(&mut g, &a, None)
             .expect("a legal action applies");
         if let Some((seat, mut before)) = hand_before {
-            for c in g.pile(&format!("cards.hand.{seat}")) {
+            for c in g.pile(&cards::hand(seat as usize)) {
                 match before.iter().position(|b| b == c) {
                     Some(k) => {
                         before.swap_remove(k);

@@ -4,11 +4,8 @@
 //! megaproject cubes) is the board's production phase.
 
 use crate::action::Action;
-use crate::content::{Passive, RESOURCES};
-use crate::module::{
-    Build, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef,
-    World,
-};
+use crate::content::{Passive, ANTIMATTER, COMPUTE, CREDITS, ENERGY, INSIGHT, RESOURCES};
+use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::state::GameState;
 use crate::view::ViewOut;
 
@@ -16,31 +13,15 @@ use super::{ai, alignment, cards};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "economy",
-    summary: "Insight, income, production and upkeep; giving insight",
+    summary: "Insight, income and upkeep; giving insight",
     requires: &["ai", "cards", "alignment"],
     variants: &[VariantDef {
         name: "standard",
         summary: "Income in upkeep, insight at the start of each round",
-        params: &[
-            ParamSpec {
-                name: "give_insight",
-                kind: ParamKind::Int,
-                min: 0,
-                max: 10,
-                doc: "insight the receiver gains for 1 given",
-            },
-        ],
+        params: &[ParamSpec::int("give_insight", 0, 10, "insight the receiver gains for 1 given")],
         phases: &[
-            PhaseSpec {
-                name: "give",
-                kind: PhaseKind::Decision,
-                doc: "give 1 insight to another player (combine with the action phase)",
-            },
-            PhaseSpec {
-                name: "upkeep",
-                kind: PhaseKind::Auto,
-                doc: "collect income (credit production, tracks, buildings); pay building upkeep",
-            },
+            PhaseSpec::decision("give", "give 1 insight to another player (combine with the action phase)"),
+            PhaseSpec::auto("upkeep", "collect income (credit production, tracks, buildings); pay building upkeep"),
         ],
         rng: &[],
         uses_cards: false,
@@ -50,6 +31,11 @@ pub static DEF: ModuleDef = ModuleDef {
 
 /// Insight every player gains next round (Global Mandate).
 pub const BONUS_INSIGHT: &str = "economy.bonus_insight";
+
+/// Every player gains `n` more insight next round.
+pub fn add_bonus_insight(g: &mut GameState, cx: &mut Cx, n: i64) {
+    cx.add_key(g, BONUS_INSIGHT.into(), n);
+}
 
 #[derive(Debug)]
 struct Economy {
@@ -62,10 +48,10 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     }))
 }
 
-/// Seat `s`'s income per resource from its AI tracks, buildings and level
-/// rewards (not production), in `RESOURCES` order.
-pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; 5] {
-    let mut out = [0i64; 5];
+/// Seat `s`'s income per resource from its AI board, tracks, buildings and
+/// Unity cards (not the board's production), in `RESOURCES` order.
+pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; RESOURCES.len()] {
+    let mut out = [0i64; RESOURCES.len()];
     let mut add = |r: &str, n: i64| {
         if let Some(i) = RESOURCES.iter().position(|x| *x == r) {
             out[i] += n;
@@ -97,8 +83,8 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; 5] {
             _ => {}
         }
     }
-    add("credits", g.var(alignment::INCOME_BONUS));
-    add("insight", g.var(alignment::INSIGHT_BONUS));
+    add("credits", alignment::income_bonus(g));
+    add("insight", alignment::insight_bonus(g));
     out
 }
 
@@ -109,7 +95,7 @@ impl Module for Economy {
         for s in 0..g.seats.len() {
             // Unspent insight is lost.
             let have = g.resource(s, "insight");
-            let n = income(&w, g, s)[4] + bonus;
+            let n = income(&w, g, s)[INSIGHT] + bonus;
             cx.add_resource(g, s, "insight", n - have);
         }
         cx.set_key(g, BONUS_INSIGHT.into(), 0);
@@ -159,7 +145,7 @@ impl Module for Economy {
                     cx.add_resource(g, s, r, inc[i]);
                 }
             }
-            cx.count(g, "credits_income", inc[0]);
+            cx.count(g, "credits_income", inc[CREDITS]);
             cards::upkeep(g, cx, s);
         }
         Ok(())
@@ -169,11 +155,11 @@ impl Module for Economy {
         for s in 0..g.seats.len() {
             let inc = income(w, g, s);
             let parts = [
-                ("credits", inc[0], "credits in upkeep: credit production, tracks, buildings"),
-                ("compute", inc[1], "compute in upkeep: buildings (data centres make compute in production)"),
-                ("energy", inc[2], "energy in upkeep: tracks, buildings (cities make energy in production)"),
-                ("antimatter", inc[3], "antimatter in upkeep: late track values"),
-                ("insight", inc[4], "insight at the start of each round (unspent insight is lost)"),
+                ("credits", inc[CREDITS], "credits in upkeep: credit production, tracks, buildings"),
+                ("compute", inc[COMPUTE], "compute in upkeep: buildings (data centres make compute in production)"),
+                ("energy", inc[ENERGY], "energy in upkeep: tracks, buildings (cities make energy in production)"),
+                ("antimatter", inc[ANTIMATTER], "antimatter in upkeep: late track values"),
+                ("insight", inc[INSIGHT], "insight at the start of each round (unspent insight is lost)"),
             ];
             for (r, n, doc) in parts {
                 out.seat(s, &format!("income.{r}"), &format!("+{r}"), n, None, doc);

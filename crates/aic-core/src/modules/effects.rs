@@ -7,16 +7,12 @@ use crate::module::{Cx, Res, World};
 use crate::state::GameState;
 
 use super::common::*;
-use super::{adversary, ai, alignment, board, economy, threats};
+use super::{adversary, ai, alignment, board, cards, economy, threats};
 
 /// What earlier effects of the same card chose (the other player).
 #[derive(Debug, Default)]
 pub struct Ctx {
     pub other: Option<usize>,
-}
-
-fn next_discount(seat: usize) -> String {
-    format!("cards.next_discount.{seat}")
 }
 
 /// Hexes a removal effect of seat `s` may target.
@@ -28,13 +24,6 @@ pub fn damage_hexes(w: &World, g: &GameState, seat: usize, at: DamageAt) -> Vec<
             DamageAt::Reach => in_reach(w, g, seat, h),
             DamageAt::DataCentreCountry => has_dc_in(w, g, seat, w.map.hexes[h].country as usize),
         })
-        .collect()
-}
-
-/// Empty open hexes touching a city: where a factory may be built.
-pub fn factory_hexes(w: &World, g: &GameState) -> Vec<usize> {
-    (0..g.hexes.len())
-        .filter(|&h| buildable(w, g, h) && w.map.hexes[h].neighbours.iter().any(|&x| is_city(w, x)))
         .collect()
 }
 
@@ -53,6 +42,11 @@ fn any_hex(g: &GameState, f: impl Fn(usize) -> bool) -> bool {
     (0..g.hexes.len()).any(f)
 }
 
+/// Ambassadors seat `s` could move: in its supply or on the board.
+fn movable_ambassadors(g: &GameState, seat: usize) -> i64 {
+    g.resource(seat, AMBASSADORS) + board::ambassadors_on_board(g, seat)
+}
+
 /// Whether every targeted effect in `effects` has something to act on
 /// (a card is not offered when it would do nothing).
 pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bool {
@@ -63,7 +57,7 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
         Effect::BuildFactory => !factory_hexes(w, g).is_empty(),
         Effect::Cleanse { .. } => any_hex(g, |h| cleansable(w, g, h)),
         Effect::Jam { .. } | Effect::CounterThreat => !threats::active(g).is_empty(),
-        Effect::MoveAmbassadors { .. } => g.resource(seat, AMBASSADORS) + board::ambassadors_on_board(g, seat) > 0,
+        Effect::MoveAmbassadors { .. } => movable_ambassadors(g, seat) > 0,
         Effect::PlaceDataCentre { .. } => ai::can_place(w, g, seat) && !ai::dc_hexes(w, g, seat).is_empty(),
         // Giving needs someone to give to (Grant and Venture Capital still pay you).
         Effect::Transfer { .. } => g.seats.len() > 1,
@@ -174,12 +168,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             let opts = cs.iter().map(|&c| country_opt(c)).collect();
             let prompt = format!("Seat {seat}: remove every adversary ambassador in which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
-                let mut removed = 0;
-                for &h in &w.map.countries[cs[i]].hexes {
-                    let n = g.tokens(h, ADV_AMBASSADOR);
-                    removed += adversary::remove(g, cx, h, n);
-                }
-                cx.tally(g, "adversary.ambassadors_removed", removed);
+                let removed = adversary::remove_all_in_country(g, cx, cs[i]);
                 if *unity_per > 0 {
                     alignment::sway(g, cx, Side::Unity, removed / unity_per);
                 }
@@ -245,7 +234,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         }
         Effect::MoveAmbassadors { max } => {
             for k in 0..*max {
-                if g.resource(seat, AMBASSADORS) + board::ambassadors_on_board(g, seat) == 0 {
+                if movable_ambassadors(g, seat) == 0 {
                     break;
                 }
                 let dest: Vec<usize> =
@@ -268,13 +257,10 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             let opts = cs.iter().map(|&c| country_opt(c)).collect();
             let prompt = format!("Seat {seat}: shelter the buildings of which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
-                cx.set_key(g, board::flag("shelter", cs[i]), 1);
+                board::shelter(g, cx, cs[i]);
             }
         }
-        Effect::Peek { count } => {
-            let cur = g.var(adversary::PEEK);
-            cx.set_key(g, adversary::PEEK.into(), cur.max(*count));
-        }
+        Effect::Peek { count } => adversary::peek(g, cx, *count),
         Effect::Jam { amount } => {
             let active = threats::active(g);
             let opts = active.iter().map(|(t, _)| opt(t.clone())).collect();
@@ -292,8 +278,8 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             }
         }
         Effect::Unity { amount } => alignment::sway(g, cx, Side::Unity, *amount),
-        Effect::NextRoundInsight { amount } => cx.add_key(g, economy::BONUS_INSIGHT.into(), *amount),
-        Effect::NextBuildingDiscount { amount } => cx.add_key(g, next_discount(seat), *amount),
+        Effect::NextRoundInsight { amount } => economy::add_bonus_insight(g, cx, *amount),
+        Effect::NextBuildingDiscount { amount } => cx.add_key(g, cards::next_discount(seat), *amount),
         Effect::If {
             cond: c,
             then,

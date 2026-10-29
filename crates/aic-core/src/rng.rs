@@ -1,6 +1,6 @@
 //! Seeded, per-purpose random streams held in the game state.
 //!
-//! Every purpose (a name such as `"spread"`) gets its own ChaCha8 stream,
+//! Every purpose (a name such as `"adversary"`) gets its own ChaCha8 stream,
 //! keyed by the game seed and a hash of the purpose name. Adding, removing or
 //! reordering modules therefore never shifts the numbers another module sees.
 

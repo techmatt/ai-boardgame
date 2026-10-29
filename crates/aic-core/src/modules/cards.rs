@@ -5,10 +5,7 @@
 
 use crate::action::Action;
 use crate::content::{CardDef, Passive};
-use crate::module::{
-    Build, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef,
-    World,
-};
+use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::rng::shuffle;
 use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
@@ -24,9 +21,9 @@ pub static DEF: ModuleDef = ModuleDef {
         name: "draft",
         summary: "Terraforming Mars draft: choose a tier, take one card and pass the rest, then keep any at a price",
         params: &[
-            i("deal", 0, 10, "cards each player is dealt for the draft"),
-            i("keep_cost", 0, 20, "credits to keep one drafted card"),
-            i("draw_cost", 0, 20, "compute to draw one card"),
+            ParamSpec::int("deal", 0, 10, "cards each player is dealt for the draft"),
+            ParamSpec::int("keep_cost", 0, 20, "credits to keep one drafted card"),
+            ParamSpec::int("draw_cost", 0, 20, "compute to draw one card"),
         ],
         phases: PHASES,
         rng: &["cards"],
@@ -36,10 +33,10 @@ pub static DEF: ModuleDef = ModuleDef {
         name: "free_keep",
         summary: "The draft, but each player's first free_keeps kept cards each round are free; further keeps cost keep_cost",
         params: &[
-            i("deal", 0, 10, "cards each player is dealt for the draft"),
-            i("keep_cost", 0, 20, "credits to keep one drafted card beyond the free ones"),
-            i("draw_cost", 0, 20, "compute to draw one card"),
-            i("free_keeps", 0, 10, "drafted cards each player keeps free each round"),
+            ParamSpec::int("deal", 0, 10, "cards each player is dealt for the draft"),
+            ParamSpec::int("keep_cost", 0, 20, "credits to keep one drafted card beyond the free ones"),
+            ParamSpec::int("draw_cost", 0, 20, "compute to draw one card"),
+            ParamSpec::int("free_keeps", 0, 10, "drafted cards each player keeps free each round"),
         ],
         phases: PHASES,
         rng: &["cards"],
@@ -57,42 +54,12 @@ pub static DEF: ModuleDef = ModuleDef {
 };
 
 const PHASES: &[PhaseSpec] = &[
-    PhaseSpec {
-        name: "tier",
-        kind: PhaseKind::Decision,
-        doc: "players who have unlocked tier 2 choose which tier they are dealt from",
-    },
-    PhaseSpec {
-        name: "deal",
-        kind: PhaseKind::Auto,
-        doc: "deal each player their draft hand",
-    },
-    PhaseSpec {
-        name: "draft",
-        kind: PhaseKind::Decision,
-        doc: "take one card and pass the rest to the next seat, until the hands are gone",
-    },
-    PhaseSpec {
-        name: "keep",
-        kind: PhaseKind::Decision,
-        doc: "buy any drafted cards into your hand; the rest are discarded",
-    },
-    PhaseSpec {
-        name: "play",
-        kind: PhaseKind::Decision,
-        doc: "play cards, use building abilities, draw with compute",
-    },
+    PhaseSpec::decision("tier", "players who have unlocked tier 2 choose which tier they are dealt from"),
+    PhaseSpec::auto("deal", "deal each player their draft hand"),
+    PhaseSpec::decision("draft", "take one card and pass the rest to the next seat, until the hands are gone"),
+    PhaseSpec::decision("keep", "buy any drafted cards into your hand; the rest are discarded"),
+    PhaseSpec::decision("play", "play cards, use building abilities, draw with compute"),
 ];
-
-const fn i(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSpec {
-    ParamSpec {
-        name,
-        kind: ParamKind::Int,
-        min,
-        max,
-        doc,
-    }
-}
 
 pub fn hand(seat: usize) -> String {
     format!("cards.hand.{seat}")
@@ -102,11 +69,16 @@ pub fn built(seat: usize) -> String {
     format!("cards.built.{seat}")
 }
 
-fn packet(seat: usize) -> String {
-    format!("cards.packet.{seat}")
+/// Prefix of every seat's draft packet pile.
+pub const PACKETS: &str = "cards.packet.";
+
+/// The draft hand in front of seat `s`.
+pub fn packet(seat: usize) -> String {
+    format!("{PACKETS}{seat}")
 }
 
-fn drafted(seat: usize) -> String {
+/// Cards seat `s` has drafted this round and not yet kept.
+pub fn drafted(seat: usize) -> String {
     format!("cards.drafted.{seat}")
 }
 
@@ -126,11 +98,13 @@ fn picked_key(seat: usize) -> String {
     format!("cards.picked.{seat}")
 }
 
-fn next_discount(seat: usize) -> String {
+/// Credits seat `s`'s next building this round costs less (a one-off discount).
+pub fn next_discount(seat: usize) -> String {
     format!("cards.next_discount.{seat}")
 }
 
-fn civic_used(seat: usize) -> String {
+/// Set once seat `s`'s Civic Shelter has saved a building this round (module `board`).
+pub fn civic_used(seat: usize) -> String {
     format!("cards.civic_used.{seat}")
 }
 
@@ -180,23 +154,6 @@ pub fn tags(w: &World, g: &GameState, seat: usize, tag: &str) -> i64 {
         .iter()
         .map(|id| def(w, id).tags.iter().filter(|t| *t == tag).count() as i64)
         .sum()
-}
-
-
-
-/// Uses a Civic Shelter for a building destruction in `country`, if one applies.
-pub fn civic_shelter(g: &mut GameState, cx: &mut Cx, country: usize) -> bool {
-    let w = cx.world;
-    for s in 0..g.seats.len() {
-        if g.var(&civic_used(s)) == 0
-            && has_dc_in(&w, g, s, country)
-            && has_passive(&w, g, s, |p| matches!(p, Passive::CivicShelter))
-        {
-            cx.set_key(g, civic_used(s), 1);
-            return true;
-        }
-    }
-    false
 }
 
 /// Building upkeep for seat `s` (in the economy's upkeep): pay each
@@ -452,7 +409,6 @@ impl Cards {
         cx.add_resource(g, seat, "antimatter", -w.amount(&d.antimatter));
         cx.add_resource(g, seat, "insight", -w.amount(&d.insight));
         cx.count(g, &format!("played.{id}"), 1);
-        let mut ctx = effects::Ctx::default();
         if d.is_building() {
             cx.set_key(g, next_discount(seat), 0);
             if !d.slotless {
@@ -467,12 +423,10 @@ impl Cards {
                 }
             }
             cx.move_card(g, id, &hand(seat), &built(seat), false)?;
-            effects::run(g, cx, seat, &d.effects, &mut ctx)?;
         } else {
             discard(g, cx, id, &hand(seat));
-            effects::run(g, cx, seat, &d.effects, &mut ctx)?;
         }
-        Ok(())
+        effects::run(g, cx, seat, &d.effects, &mut effects::Ctx::default())
     }
 }
 
@@ -582,7 +536,7 @@ impl Module for Cards {
                 }
             }
             3 => {
-                if g.resource(s, "credits") >= self.keep_price(g, s) || g.var(alignment::FREE_LEFT) > 0 {
+                if g.resource(s, "credits") >= self.keep_price(g, s) || alignment::free_purchases(g) > 0 {
                     for id in g.pile(&drafted(s)) {
                         out.push(Action::Keep {
                             seat,
@@ -671,14 +625,11 @@ impl Module for Cards {
                 if !g.pile(&drafted(s)).contains(card) {
                     return Err(Halt::Illegal(format!("{card} was not drafted by seat {s}")));
                 }
-                // A free keep of the round first, then a level's free
+                // A free keep of the round first, then a Unity card's free
                 // purchase, then credits.
-                let free = g.var(alignment::FREE_LEFT);
                 let price = self.keep_price(g, s);
-                if price > 0 {
-                    if free > 0 {
-                        cx.set_key(g, alignment::FREE_LEFT.into(), free - 1);
-                    } else if g.resource(s, "credits") >= price {
+                if price > 0 && !alignment::take_free_purchase(g, cx) {
+                    if g.resource(s, "credits") >= price {
                         cx.add_resource(g, s, "credits", -price);
                     } else {
                         return Err("can't afford to keep it".into());

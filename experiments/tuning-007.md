@@ -1,5 +1,9 @@
 # 007 tuning run: change log
 
+> **Historical:** ran on rules r2 and produced r3 (today's is r6). Configs, rules.md
+> sections and game records named here were removed or rewritten later; the records do
+> not replay.
+
 Overnight calibration of ruleset v0 against the difficulty targets in
 [`docs/principles.md`](../docs/principles.md), 2026-10-27. Numbers only: no rule, effect
 or phase changed. The pre-run numbers are kept in

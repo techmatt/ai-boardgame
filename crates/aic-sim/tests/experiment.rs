@@ -2,22 +2,23 @@
 //! the report, the machine-readable results and records that replay, and
 //! its results do not depend on the thread count.
 
+mod common;
+
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use aic_core::SavedGame;
+use common::{fresh_dir, sim};
 
-fn sim() -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_aic-sim"));
-    c.current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
-    c
-}
-
-fn fresh_dir(name: &str) -> PathBuf {
-    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
-    d
+/// `aic-sim experiment <spec> --out <out> <extra>`.
+fn experiment(spec: &Path, out: &Path, extra: &[&str]) -> std::process::Output {
+    sim()
+        .arg("experiment")
+        .arg(spec)
+        .arg("--out")
+        .arg(out)
+        .args(extra)
+        .output()
+        .expect("runs aic-sim")
 }
 
 const SPEC: &str = r#"{
@@ -84,7 +85,7 @@ fn experiment_writes_report_and_records() {
 }
 
 fn writes_report_and_records(dir: &str, body: &str, cells: usize) {
-    let root = fresh_dir(dir);
+    let root = fresh_dir(dir, true);
     let spec = root.join("spec.json");
     std::fs::write(&spec, body).unwrap();
     // Both runs at once: the one-thread run is the long one.
@@ -94,14 +95,7 @@ fn writes_report_and_records(dir: &str, body: &str, cells: usize) {
                 let out = root.join(format!("out-{threads}"));
                 let spec = &spec;
                 s.spawn(move || {
-                    let res = sim()
-                        .arg("experiment")
-                        .arg(spec)
-                        .arg("--out")
-                        .arg(&out)
-                        .args(["--threads", threads])
-                        .output()
-                        .expect("runs aic-sim");
+                    let res = experiment(spec, &out, &["--threads", threads]);
                     (out, res)
                 })
             })
@@ -178,17 +172,11 @@ const VARIANT_SPEC: &str = r#"{
 /// comparison sections appear, with their machine-readable twins.
 #[test]
 fn experiment_reports_comparisons() {
-    let root = fresh_dir("aic-sim-experiment-variants");
+    let root = fresh_dir("aic-sim-experiment-variants", true);
     let spec = root.join("spec.json");
     std::fs::write(&spec, VARIANT_SPEC).unwrap();
     let out = root.join("out");
-    let res = sim()
-        .arg("experiment")
-        .arg(&spec)
-        .arg("--out")
-        .arg(&out)
-        .output()
-        .expect("runs aic-sim");
+    let res = experiment(&spec, &out, &[]);
     assert!(
         res.status.success(),
         "experiment failed: {}",
@@ -232,7 +220,7 @@ fn experiment_reports_comparisons() {
 /// One agent and one variant: no comparison sections.
 #[test]
 fn experiment_omits_comparisons_that_do_not_apply() {
-    let root = fresh_dir("aic-sim-experiment-single");
+    let root = fresh_dir("aic-sim-experiment-single", true);
     let spec = root.join("spec.json");
     let body = VARIANT_SPEC
         .replace(
@@ -242,13 +230,7 @@ fn experiment_omits_comparisons_that_do_not_apply() {
         .replace(r#""random", "greedy""#, r#""random""#);
     std::fs::write(&spec, body).unwrap();
     let out = root.join("out");
-    let res = sim()
-        .arg("experiment")
-        .arg(&spec)
-        .arg("--out")
-        .arg(&out)
-        .output()
-        .expect("runs aic-sim");
+    let res = experiment(&spec, &out, &[]);
     assert!(res.status.success(), "{}", String::from_utf8_lossy(&res.stderr));
     let report = std::fs::read_to_string(out.join("report.md")).unwrap();
     assert!(report.contains("## Strategy health"));
@@ -262,7 +244,7 @@ fn experiment_omits_comparisons_that_do_not_apply() {
 /// An unknown variant is an argument error.
 #[test]
 fn experiment_filters_variants_and_turns_probes_on() {
-    let root = fresh_dir("aic-sim-experiment-two-stage");
+    let root = fresh_dir("aic-sim-experiment-two-stage", true);
     let spec = root.join("spec.json");
     let body = r#"{
   "name": "two-stage",
@@ -279,14 +261,7 @@ fn experiment_filters_variants_and_turns_probes_on() {
 }"#;
     std::fs::write(&spec, body).unwrap();
     let out = root.join("out");
-    let res = sim()
-        .arg("experiment")
-        .arg(&spec)
-        .arg("--out")
-        .arg(&out)
-        .args(["--variants", "keep2", "--winprob", "1", "--closeness", "2"])
-        .output()
-        .unwrap();
+    let res = experiment(&spec, &out, &["--variants", "keep2", "--winprob", "1", "--closeness", "2"]);
     assert!(res.status.success(), "{}", String::from_utf8_lossy(&res.stderr));
     let results: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap()).unwrap();
@@ -300,13 +275,7 @@ fn experiment_filters_variants_and_turns_probes_on() {
     assert_eq!(results["spec"]["winprob"]["games"], 1);
     assert_eq!(results["spec"]["closeness"]["every"], 2);
     // Without the flags the spec's defaults hold: both probes off.
-    let res = sim()
-        .arg("experiment")
-        .arg(&spec)
-        .arg("--out")
-        .arg(root.join("out2"))
-        .output()
-        .unwrap();
+    let res = experiment(&spec, &root.join("out2"), &[]);
     assert!(res.status.success());
     let results: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(root.join("out2/results.json")).unwrap()).unwrap();
@@ -325,7 +294,7 @@ fn experiment_filters_variants_and_turns_probes_on() {
 
 #[test]
 fn experiment_rejects_bad_specs() {
-    let root = fresh_dir("aic-sim-experiment-bad");
+    let root = fresh_dir("aic-sim-experiment-bad", true);
     for (name, body) in [
         ("agent", SPEC.replace("\"greedy\"", "\"greedy:nope=1\"")),
         ("field", SPEC.replace("\"records\": 2", "\"recordz\": 2")),
@@ -333,13 +302,7 @@ fn experiment_rejects_bad_specs() {
     ] {
         let spec = root.join(format!("{name}.json"));
         std::fs::write(&spec, body).unwrap();
-        let res = sim()
-            .arg("experiment")
-            .arg(&spec)
-            .arg("--out")
-            .arg(root.join("out"))
-            .output()
-            .unwrap();
+        let res = experiment(&spec, &root.join("out"), &[]);
         assert_eq!(
             res.status.code(),
             Some(2),
@@ -358,23 +321,12 @@ const STREAM_SPEC: &str = r#"{
   "records": 1
 }"#;
 
-fn experiment(spec: &Path, out: &Path, extra: &[&str]) -> std::process::Output {
-    sim()
-        .arg("experiment")
-        .arg(spec)
-        .arg("--out")
-        .arg(out)
-        .args(extra)
-        .output()
-        .expect("runs aic-sim")
-}
-
 /// Every game is streamed to games.jsonl as it finishes; a run killed
 /// mid-write (its last line cut short) resumes with only the missing games
 /// and reports the same as an unbroken run; another spec can't resume it.
 #[test]
 fn experiment_streams_games_and_resumes() {
-    let root = fresh_dir("aic-sim-experiment-stream");
+    let root = fresh_dir("aic-sim-experiment-stream", true);
     let spec = root.join("spec.json");
     std::fs::write(&spec, STREAM_SPEC).unwrap();
     let whole = root.join("whole");
@@ -434,7 +386,7 @@ fn experiment_streams_games_and_resumes() {
 /// probes turned off; the shallow agents stay.
 #[test]
 fn experiment_quick_keeps_shallow_agents() {
-    let root = fresh_dir("aic-sim-experiment-quick");
+    let root = fresh_dir("aic-sim-experiment-quick", true);
     let spec = root.join("spec.json");
     let body = STREAM_SPEC
         .replace(
@@ -465,7 +417,7 @@ fn experiment_quick_keeps_shallow_agents() {
 #[test]
 #[ignore = "slow lane: greedy games, killed partway"]
 fn experiment_killed_partway_leaves_a_partial_report() {
-    let root = fresh_dir("aic-sim-experiment-killed");
+    let root = fresh_dir("aic-sim-experiment-killed", true);
     let spec = root.join("spec.json");
     let body = STREAM_SPEC
         .replace(r#""agents": ["random"]"#, r#""agents": ["greedy"]"#)

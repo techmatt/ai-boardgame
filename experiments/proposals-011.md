@@ -1,5 +1,9 @@
 # 011: 007's accepted proposals, agent and harness fixes
 
+> **Historical:** ran on rules r4 (today's is r6). The `opposition` module, parameters
+> and rules.md sections named here were removed or rewritten later;
+> `proposals-011.json` and two of its screens are refused today.
+
 2026-10-28. Rules **r4**, 2 countries, the tuned baseline. Each rule change is a variant
 or a tunable (a broader overhaul is coming). Three are new defaults: the clear-board
 win from stage II, and new effects for difficulty levels 1 and 3. Everything else is

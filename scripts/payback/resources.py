@@ -1,4 +1,6 @@
-"""Unspent resources by round from `aic-sim run --games 1 --trace` (009): each seat's
+"""Retired: keys on the phase `adversary.ravage`, removed in 014, so on rules r6 it prints nothing useful.
+
+Unspent resources by round from `aic-sim run --games 1 --trace` (009): each seat's
 credits, energy, compute, antimatter and insight when the adversary phase begins
 (after the action phase, before upkeep pays income), and what was played.
 

@@ -1,5 +1,9 @@
 # 009 engine-payback sweep: which levers make a building engine win?
 
+> **Historical:** ran on rules r3 (today's is r6). Configs, parameters, rules.md
+> sections and game records named here were removed or rewritten later; several of its
+> specs are refused today and the records do not replay.
+
 2026-10-28. Rules r3 (007's tuned v0), 2 countries. **Measure only:** the baseline
 config, content and `RULES_REVISION` are unchanged. Every lever is a config override in a
 spec, or a **content patch** built into a separate binary (marked ◆). Committed content is

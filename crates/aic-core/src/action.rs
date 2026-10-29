@@ -10,43 +10,44 @@ use crate::hex::Hex;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    /// The seat is done for this phase.
+    /// The seat is done for this phase (the engine).
     Pass { seat: u8 },
-    /// Answer the open choice (`GameState::pending`).
+    /// Answer the open choice (`GameState::pending`; the engine).
     Choose {
         seat: u8,
         option: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         target: Option<Hex>,
     },
-    /// Draft: choose which tier to be dealt from.
+    /// Draft: choose which tier to be dealt from (module `cards`).
     Tier { seat: u8, tier: u8 },
-    /// Draft: take a card from the hand in front of you.
+    /// Draft: take a card from the hand in front of you (module `cards`).
     Draft { seat: u8, card: String },
-    /// Draft: buy a drafted card into your hand.
+    /// Draft: buy a drafted card into your hand (module `cards`).
     Keep { seat: u8, card: String },
-    /// Pick a growth option of your AI board.
+    /// Pick a growth option of your AI board (module `ai`).
     Growth { seat: u8, option: u8 },
-    /// Play a card from your hand.
+    /// Play a card from your hand (module `cards`).
     Play { seat: u8, card: String },
-    /// Use a building's once-a-round ability.
+    /// Use a building's once-a-round ability (module `cards`).
     Use { seat: u8, card: String },
-    /// Pay compute to draw a card from a tier's deck.
+    /// Pay compute to draw a card from a tier's deck (module `cards`).
     Draw { seat: u8, tier: u8 },
-    /// Put `amount` of a resource on a threat's counter.
+    /// Put `amount` of a resource on a threat's counter (module `threats`).
     Pay {
         seat: u8,
         threat: String,
         resource: String,
         amount: i64,
     },
-    /// Take back everything you put on a threat's counter in a resource.
+    /// Take back everything you put on a threat's counter in a resource
+    /// (module `threats`).
     Withdraw {
         seat: u8,
         threat: String,
         resource: String,
     },
-    /// Give 1 insight to another seat.
+    /// Give 1 insight to another seat (module `economy`).
     Give { seat: u8, to: u8 },
     /// Sway toward Discord to produce one antimatter (module `alignment`).
     Antimatter { seat: u8 },

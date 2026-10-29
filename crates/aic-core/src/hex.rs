@@ -29,10 +29,6 @@ impl Hex {
         Hex { q, r }
     }
 
-    pub fn s(self) -> i32 {
-        -self.q - self.r
-    }
-
     #[allow(clippy::should_implement_trait)]
     pub fn add(self, o: Hex) -> Hex {
         Hex::new(self.q + o.q, self.r + o.r)

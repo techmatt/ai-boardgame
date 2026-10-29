@@ -1,11 +1,12 @@
 //! Game content as data, embedded from `content/` at compile time (no I/O
 //! at runtime): the map (piece shape, layouts, the printed country pieces),
-//! player cards, threats, the adversary deck and the AI boards.
+//! player cards, threats, the adversary deck, the AI boards and the
+//! Alignment decks.
 //!
 //! Effects are composed from code primitives ([`Effect`], [`Passive`],
-//! [`ThreatOp`]). A new primitive is a code change; a new card, threat,
-//! adversary card or AI board that only combines existing primitives is a
-//! data change.
+//! [`ThreatOp`], [`Twist`], [`AlignOp`]). A new primitive is a code change;
+//! a new card, threat, adversary card, AI board or Alignment card that only
+//! combines existing primitives is a data change.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
@@ -27,6 +28,38 @@ const FILES: [&str; 6] = [MAP_JSON, CARDS_JSON, THREATS_JSON, ADVERSARY_JSON, AI
 
 /// Player resources, in display order.
 pub const RESOURCES: [&str; 5] = ["credits", "compute", "energy", "antimatter", "insight"];
+
+/// Positions in [`RESOURCES`], the order of income and production arrays.
+pub const CREDITS: usize = 0;
+pub const COMPUTE: usize = 1;
+pub const ENERGY: usize = 2;
+pub const ANTIMATTER: usize = 3;
+pub const INSIGHT: usize = 4;
+
+// The positions above name the right resources (checked at compile time).
+const _: () = {
+    assert!(str_eq(RESOURCES[CREDITS], "credits"));
+    assert!(str_eq(RESOURCES[COMPUTE], "compute"));
+    assert!(str_eq(RESOURCES[ENERGY], "energy"));
+    assert!(str_eq(RESOURCES[ANTIMATTER], "antimatter"));
+    assert!(str_eq(RESOURCES[INSIGHT], "insight"));
+};
+
+/// String equality usable in a const context.
+const fn str_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
 
 /// Card tags.
 pub const TAGS: [&str; 5] = ["economy", "cyber", "power", "unity", "discord"];
@@ -119,7 +152,8 @@ pub struct CountryPiece {
     pub name: String,
     pub cities: Vec<u8>,
     /// The order cities start corrupted in (an adversary cube): setup
-    /// corrupts the first `board.start_corrupted`, difficulty 3 more.
+    /// corrupts the first `board.start_corrupted`, difficulty 4
+    /// `adversary.extra_corrupted` more.
     pub corrupted: Vec<u8>,
     pub ocean: Vec<u8>,
     /// Research stations at setup (they start corrupted).
@@ -185,6 +219,9 @@ pub enum CardKind {
 /// A resource and an amount, written `["energy", 2]`.
 pub type Cost = (String, i64);
 
+/// A tag and a count, written `["power", 2]`.
+pub type TagCount = (String, i64);
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CardDef {
@@ -203,7 +240,7 @@ pub struct CardDef {
     pub tags: Vec<String>,
     /// Tags you must have (on your buildings) to play it.
     #[serde(default)]
-    pub needs: Vec<Cost>,
+    pub needs: Vec<TagCount>,
     #[serde(default)]
     pub text: String,
     /// On play (a program), or when built (a building).
@@ -398,7 +435,7 @@ pub enum ThreatOp {
     /// Each player with a data centre in scope loses `amount` of `resource`.
     PlayersLose { resource: String, amount: i64 },
     /// A round marker on the country, read by production.
-    Flag { name: String },
+    Flag { name: RoundFlag },
     /// Each player in scope discards `cards` cards or pays `amount`
     /// `resource` (their choice).
     Requisition {
@@ -419,6 +456,29 @@ pub enum ThreatOp {
 
 fn one() -> i64 {
     1
+}
+
+/// A country marker that lasts until the end of the round (module `board`):
+/// set by threats and cards, cleared in the board's cleanup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoundFlag {
+    /// Cities in the country make no energy.
+    Blackout,
+    /// Data centres in the country make no compute.
+    Sabotage,
+    /// Buildings in the country can't be destroyed.
+    Shelter,
+}
+
+impl RoundFlag {
+    pub fn name(self) -> &'static str {
+        match self {
+            RoundFlag::Blackout => "blackout",
+            RoundFlag::Sabotage => "sabotage",
+            RoundFlag::Shelter => "shelter",
+        }
+    }
 }
 
 // ---------- adversary ----------
@@ -662,18 +722,15 @@ impl Content {
                 return Err(format!("content: duplicate id {id:?} (ids are unique across all content)"));
             }
         }
-        let resource = |r: &str, what: &str| -> Result<(), String> {
-            if RESOURCES.contains(&r) {
-                Ok(())
-            } else {
-                Err(format!("{what}: unknown resource {r:?}"))
-            }
-        };
         for c in &self.cards {
+            let what = format!("card {:?}", c.id);
             for t in c.tags.iter().chain(c.needs.iter().map(|(t, _)| t)) {
-                if !TAGS.contains(&t.as_str()) {
-                    return Err(format!("card {:?}: unknown tag {t:?}", c.id));
-                }
+                tag(t, &what)?;
+            }
+            check_effects(&c.effects, &what)?;
+            check_passives(&c.passives, &what)?;
+            if let Some(a) = &c.ability {
+                check_effects(&a.effects, &what)?;
             }
             if !c.is_building()
                 && (!c.passives.is_empty() || c.ability.is_some() || !c.upkeep.is_empty() || c.slotless)
@@ -684,15 +741,24 @@ impl Content {
                 return Err(format!("card {:?}: tier 0 exactly for unique cards, else 1 or 2", c.id));
             }
             for (r, _) in c.upkeep.iter().chain(c.ability.iter().flat_map(|a| &a.cost)) {
-                resource(r, &format!("card {:?}", c.id))?;
+                resource(r, &what)?;
             }
         }
         for t in &self.threats {
             if !(1..=2).contains(&t.tier) || t.counter.is_empty() {
                 return Err(format!("threat {:?}: tier 1 or 2 and a counter cost", t.id));
             }
+            let what = format!("threat {:?}", t.id);
             for (r, _) in &t.counter {
-                resource(r, &format!("threat {:?}", t.id))?;
+                resource(r, &what)?;
+            }
+            for op in &t.effects {
+                match op {
+                    ThreatOp::PlayersLose { resource: r, .. } | ThreatOp::Requisition { resource: r, .. } => {
+                        resource(r, &what)?
+                    }
+                    _ => {}
+                }
             }
         }
         for a in &self.adversary {
@@ -715,6 +781,20 @@ impl Content {
                     _ => return Err(format!("AI board {:?}: {c:?} is not a card unique to it", b.id)),
                 }
             }
+            let what = format!("AI board {:?}", b.id);
+            for t in &b.tracks {
+                resource(&t.resource, &what)?;
+            }
+            for d in &b.discounts {
+                resource(&d.resource, &what)?;
+                if d.tag != "building" {
+                    tag(&d.tag, &what)?;
+                }
+            }
+            for gr in &b.growth {
+                check_effects(&gr.effects, &what)?;
+            }
+            check_passives(&b.innate.passives, &what)?;
         }
         let size = self.map.piece.size;
         let n = size as usize * size as usize;
@@ -783,7 +863,8 @@ impl Content {
         self.map.layouts.iter().find(|l| l.countries == countries)
     }
 
-    /// Display name of any content id (card, threat, adversary card, AI board).
+    /// Display name of any content id (card, threat, adversary card, AI
+    /// board, Alignment card).
     pub fn name_of(&self, id: &str) -> Option<&str> {
         self.cards
             .iter()
@@ -795,6 +876,76 @@ impl Content {
             .find(|(i, _)| *i == id)
             .map(|(_, n)| n.as_str())
     }
+}
+
+fn resource(r: &str, what: &str) -> Result<(), String> {
+    if RESOURCES.contains(&r) {
+        Ok(())
+    } else {
+        Err(format!("{what}: unknown resource {r:?}"))
+    }
+}
+
+/// A resource an effect may give or move: a player resource, or the seat's
+/// ambassador supply (`modules::common::AMBASSADORS`), which effects reach
+/// through the same `add_resource`.
+fn seat_resource(r: &str, what: &str) -> Result<(), String> {
+    if r == "ambassadors" {
+        Ok(())
+    } else {
+        resource(r, what)
+    }
+}
+
+fn tag(t: &str, what: &str) -> Result<(), String> {
+    if TAGS.contains(&t) {
+        Ok(())
+    } else {
+        Err(format!("{what}: unknown tag {t:?}"))
+    }
+}
+
+/// Checks the resource names in `effects`, `if` branches included.
+fn check_effects(effects: &[Effect], what: &str) -> Result<(), String> {
+    for e in effects {
+        match e {
+            Effect::Gain { resource: r, .. }
+            | Effect::GainPerDataCentre { resource: r, .. }
+            | Effect::OtherGain { resource: r, .. }
+            | Effect::Transfer { resource: r, .. } => seat_resource(r, what)?,
+            Effect::Convert { from, to, .. } => {
+                resource(from, what)?;
+                resource(to, what)?;
+            }
+            Effect::If { then, otherwise, .. } => {
+                check_effects(then, what)?;
+                check_effects(otherwise, what)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Checks the resource and tag names in `passives`.
+fn check_passives(passives: &[Passive], what: &str) -> Result<(), String> {
+    for p in passives {
+        match p {
+            Passive::Income { resource: r, .. }
+            | Passive::Logistics { resource: r, .. }
+            | Passive::GiveBonus { resource: r, .. } => resource(r, what)?,
+            Passive::IncomePerTag { resource: r, tag: t, .. } | Passive::IncomeIfTags { resource: r, tag: t, .. } => {
+                resource(r, what)?;
+                tag(t, what)?;
+            }
+            Passive::ConvertUpkeep { from, to, .. } => {
+                resource(from, what)?;
+                resource(to, what)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// The embedded content, parsed once.

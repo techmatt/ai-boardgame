@@ -1,5 +1,8 @@
 # 008 engine agent: does a building engine beat no-building play?
 
+> **Historical:** ran on rules r3 (today's is r6); the rules and content it measured
+> were rewritten later (the board in 014, opposition replaced by Alignment in 013).
+
 2026-10-28. Rules r3 (007's tuned v0), 2 countries; no rules changed. The question for
 the engine-payback design call: 007's strongest agent (greedy) never plays an economy
 building, and beam and rollout scored at or below it. Is that the rules or the agents?

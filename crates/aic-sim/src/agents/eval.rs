@@ -24,7 +24,7 @@
 
 use std::collections::BTreeMap;
 
-use aic_core::content::{Passive, Side, Twist, RESOURCES};
+use aic_core::content::{Passive, Side, Twist, ANTIMATTER, COMPUTE, CREDITS, ENERGY, INSIGHT, RESOURCES};
 use aic_core::modules::common::{self, ADV_AMBASSADOR, ADV_CUBE, AMBASSADORS, FACTORY, HARDEN, STATION, TROOP};
 use aic_core::modules::{adversary, ai, alignment, board, cards, economy, threats};
 use aic_core::{GameState, Rules};
@@ -116,7 +116,9 @@ pub struct Weights {
     pub horizon: f64,
     /// Horizon mode: Sway toward Unity the team is assumed to gain per round
     /// before it has a record of its own (round 1), for the win estimate.
-    pub opp_rate: f64,
+    /// Was `opp_rate` (still accepted).
+    #[serde(alias = "opp_rate")]
+    pub unity_rate_start: f64,
     /// Horizon mode: rounds a win needs after the Unity target is reached.
     pub win_lag: f64,
     /// Horizon mode: chance of losing per round per unit of danger (an
@@ -144,6 +146,18 @@ pub struct Weights {
     /// after the adversary deck runs out. 0 = off.
     pub clock: f64,
 }
+
+/// Weights renamed since experiments named them: (former name, name).
+const RENAMED: [(&str, &str); 1] = [("opp_rate", "unity_rate_start")];
+
+/// A card's cost in credits: each antimatter counts this many credits...
+const ANTIMATTER_COST: i64 = 3;
+/// ...and each insight this many.
+const INSIGHT_COST: i64 = 2;
+/// Flat mode: a point of track income is worth this many of the resource's
+/// own points for antimatter and insight (1 for the rest), times `income`.
+const ANTIMATTER_INCOME_UNIT: f64 = 3.0;
+const INSIGHT_INCOME_UNIT: f64 = 1.5;
 
 impl Default for Weights {
     fn default() -> Self {
@@ -190,7 +204,7 @@ impl Default for Weights {
             built_cost: 0.5,
             threat: 6.0,
             horizon: 0.0,
-            opp_rate: 2.0,
+            unity_rate_start: 2.0,
             win_lag: 1.0,
             risk: 0.1,
             ability: 0.5,
@@ -229,8 +243,13 @@ impl Weights {
         }
     }
 
-    /// Sets one weight by name; false if there is no such weight.
+    /// Sets one weight by name (or a former name, see [`RENAMED`]); false
+    /// if there is no such weight.
     pub fn set(&mut self, name: &str, v: f64) -> bool {
+        let name = RENAMED
+            .iter()
+            .find(|(old, _)| *old == name)
+            .map_or(name, |(_, new)| *new);
         let mut map = match serde_json::to_value(&*self) {
             Ok(serde_json::Value::Object(m)) => m,
             _ => return false,
@@ -282,8 +301,8 @@ impl Eval {
             .iter()
             .map(|c| {
                 let cost = world.amount(&c.cost)
-                    + 3 * world.amount(&c.antimatter)
-                    + 2 * world.amount(&c.insight);
+                    + ANTIMATTER_COST * world.amount(&c.antimatter)
+                    + INSIGHT_COST * world.amount(&c.insight);
                 (c.id.clone(), cost.max(0) as f64)
             })
             .collect();
@@ -502,7 +521,7 @@ impl Eval {
             if req <= 0 {
                 continue;
             }
-            let prefix = format!("threats.paid.{t}.");
+            let prefix = threats::paid_prefix(&t);
             let paid: i64 = g
                 .vars
                 .range(prefix.clone()..)
@@ -558,16 +577,16 @@ impl Eval {
         (points, self.target_tips as f64 * per)
     }
 
-    /// Unity gained per round so far, in Sway (`opp_rate` before the team
-    /// has a record of its own). Sway held may include this round's, so
+    /// Unity gained per round so far, in Sway (`unity_rate_start` before the
+    /// team has a record of its own). Sway held may include this round's, so
     /// this round counts as played.
     fn unity_rate(&self, rules: &Rules, g: &GameState) -> f64 {
         let w = &self.w;
         let points = self.unity_progress(rules, g).0;
         if g.round > 1 {
-            (points / g.round as f64).max(w.opp_rate * 0.25)
+            (points / g.round as f64).max(w.unity_rate_start * 0.25)
         } else {
-            w.opp_rate
+            w.unity_rate_start
         }
         .max(0.1)
     }
@@ -602,8 +621,8 @@ impl Eval {
                 + w.insight * res("insight");
             for (r, n) in ai::track_income(&world, g, s) {
                 let unit = match r.as_str() {
-                    "antimatter" => 3.0,
-                    "insight" => 1.5,
+                    "antimatter" => ANTIMATTER_INCOME_UNIT,
+                    "insight" => INSIGHT_INCOME_UNIT,
                     _ => 1.0,
                 };
                 *v += w.income * unit * n as f64;
@@ -611,7 +630,7 @@ impl Eval {
             for id in g.pile(&cards::hand(s)) {
                 *v += w.hand + w.hand_cost * self.cost(id);
             }
-            for id in g.pile(&format!("cards.drafted.{s}")) {
+            for id in g.pile(&cards::drafted(s)) {
                 *v += w.drafted * (w.hand + w.hand_cost * self.cost(id));
             }
             for id in g.pile(&cards::built(s)) {
@@ -623,19 +642,19 @@ impl Eval {
     /// What the board makes each seat a round if production came now, in
     /// `RESOURCES` order: the energy of its aligned cities and the compute
     /// of its data centres, less what adversary ambassadors there divert.
-    fn board_production(&self, rules: &Rules, g: &GameState) -> Vec<[i64; 5]> {
+    fn board_production(&self, rules: &Rules, g: &GameState) -> Vec<[i64; RESOURCES.len()]> {
         let world = rules.world();
-        let mut out = vec![[0i64; 5]; self.seats];
+        let mut out = vec![[0i64; RESOURCES.len()]; self.seats];
         for h in 0..g.hexes.len() {
             if g.tokens(h, ADV_AMBASSADOR) > 0 || g.tokens(h, ADV_CUBE) > 0 {
                 continue;
             }
             if common::is_city(&world, h) {
                 if let Some(s) = common::cube_owner(g, h).filter(|&s| s < self.seats) {
-                    out[s][2] += self.city_energy + self.aligned_bonus;
+                    out[s][ENERGY] += self.city_energy + self.aligned_bonus;
                 }
             } else if let Some(s) = common::dc_owner(g, h).filter(|&s| s < self.seats) {
-                out[s][1] += self.dc_compute;
+                out[s][COMPUTE] += self.dc_compute;
             }
         }
         out
@@ -657,7 +676,7 @@ impl Eval {
         let prod = if w.production != 0.0 {
             self.board_production(rules, g)
         } else {
-            vec![[0; 5]; self.seats]
+            vec![[0; RESOURCES.len()]; self.seats]
         };
         // Resources fade once fewer than `spend_horizon` rounds are left.
         let fade = if w.spend_horizon > 0.0 {
@@ -708,7 +727,7 @@ impl Eval {
             // Insight is spent one card at a time: each card waits for the
             // insight the cards before it in hand take.
             let tier2 = ai::tier2(&world, g, s);
-            let earn_credits = income[0];
+            let earn_credits = income[CREDITS];
             let mut insight_queue = 0i64;
             // The same for every building in hand: worked out once.
             let discount = cards::building_discount(&world, g, s);
@@ -725,8 +744,8 @@ impl Eval {
                         cards::discounted_cost(&world, d, discount),
                         earn_credits,
                     ),
-                    (res("antimatter"), world.amount(&d.antimatter), income[3]),
-                    (res("insight"), insight_need, income[4]),
+                    (res("antimatter"), world.amount(&d.antimatter), income[ANTIMATTER]),
+                    (res("insight"), insight_need, income[INSIGHT]),
                 ] {
                     let short = need - have;
                     if short > 0 {
@@ -745,10 +764,30 @@ impl Eval {
             for id in g.pile(&cards::hand(s)) {
                 v += play(id);
             }
-            for id in g.pile(&format!("cards.drafted.{s}")) {
+            for id in g.pile(&cards::drafted(s)) {
                 v += w.drafted * play(id);
             }
         }
         *out += v;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renamed_weight_keeps_its_old_name() {
+        let mut w = Weights::default();
+        assert!(w.set("opp_rate", 1.5));
+        assert_eq!(w.unity_rate_start, 1.5);
+        assert!(w.set("unity_rate_start", 0.5));
+        assert_eq!(w.unity_rate_start, 0.5);
+        let mut v = serde_json::to_value(Weights::default()).unwrap();
+        let m = v.as_object_mut().unwrap();
+        m.remove("unity_rate_start");
+        m.insert("opp_rate".into(), serde_json::json!(3.0));
+        let w: Weights = serde_json::from_value(v).unwrap();
+        assert_eq!(w.unity_rate_start, 3.0);
     }
 }

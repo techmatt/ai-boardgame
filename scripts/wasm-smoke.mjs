@@ -39,7 +39,7 @@ const recordOk = parsed.seed === s.seed && parsed.actions.length === actions && 
   && checked.warnings.length === 0 && !parsed.config_error;
 console.log(`view ${viewOk ? 'ok' : 'BAD'}, record ${recordOk ? 'ok' : 'BAD'} (${record.length} bytes), start ${sameStart ? 'ok' : 'BAD'}`);
 
-// Must equal GOLDEN_FINGERPRINT in crates/aic-core/src/tests.rs (same config,
+// Must equal GOLDEN_FINGERPRINT in crates/aic-core/src/tests/mod.rs (same config,
 // seed and policy), proving native and wasm builds play the same game.
 const GOLDEN = 'a26ae448b79bd0ee';
 let h = 0xcbf29ce484222325n;

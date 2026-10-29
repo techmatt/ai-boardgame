@@ -345,10 +345,15 @@ mod tests {
     use super::*;
     use aic_core::{play, replay, Config};
 
-    fn rules(difficulty: i64) -> Rules {
-        let text = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../configs/baseline.json"
+    pub(crate) fn rules(difficulty: i64) -> Rules {
+        config_rules("baseline", difficulty)
+    }
+
+    /// Rules for `configs/<name>.json` at `difficulty`.
+    pub(crate) fn config_rules(name: &str, difficulty: i64) -> Rules {
+        let text = std::fs::read_to_string(format!(
+            "{}/../../configs/{name}.json",
+            env!("CARGO_MANIFEST_DIR")
         ))
         .unwrap();
         let mut c = Config::from_json(&text).unwrap();
@@ -393,8 +398,9 @@ mod tests {
     }
 
     // Slow lane: whole games, one test per agent so they run side by side
-    // (014 board, each run alone: rollout ~56 s, beam ~40 s, engine ~3 s,
-    // greedy ~1 s; the beam's cost is in the action phase's wide menus).
+    // (014 board, 015 timings, each run alone: beam ~18 s, rollout ~10 s,
+    // engine ~3 s, greedy ~1 s; the beam's cost is in the action phase's wide
+    // menus).
     #[test]
     #[ignore = "slow lane: a whole search-agent game"]
     fn greedy_replays_and_repeats() {

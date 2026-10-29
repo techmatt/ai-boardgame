@@ -12,10 +12,10 @@ use crate::content::{content, Content};
 use crate::event::Event;
 use crate::hash::fnv1a64;
 use crate::map::Map;
-use crate::module::{Build, Choices, Cx, Halt, Module, ModuleDef, ParamKind, PhaseKind, Res, VariantDef, World};
+use crate::module::{end_game, Build, Choices, Cx, Halt, Module, ModuleDef, ParamKind, PhaseKind, Res, VariantDef, World};
 use crate::modules;
 use crate::rng::Stream;
-use crate::state::{GameState, HexState, Outcome, Pending, Pick, Seat, Stats, Trigger};
+use crate::state::{GameState, HexState, Pending, Pick, Seat, Stats, Trigger};
 use crate::view::{self, View, ViewOut};
 
 /// Hard stop for configs whose round never ends the game.
@@ -45,7 +45,7 @@ pub struct Rules {
 #[derive(Debug, Clone)]
 pub struct PhaseRef {
     pub parts: Vec<PhasePart>,
-    /// The round entry, e.g. `"actions.play"`.
+    /// The round entry, e.g. `"board.act"`.
     pub name: String,
     pub kind: PhaseKind,
 }
@@ -169,7 +169,6 @@ impl Rules {
                 params: &mc.params,
                 cards,
                 world,
-                countries: config.countries,
             };
             let module = (variant.build)(&b).map_err(|e| format!("module {}: {e}", def.id))?;
             instances.push(Instance {
@@ -272,10 +271,7 @@ impl Rules {
             for s in &i.specs {
                 out.push(Tunable {
                     key: format!("{}.{}", i.id, s.name),
-                    kind: match s.kind {
-                        ParamKind::Int => "int",
-                        ParamKind::List => "list",
-                    },
+                    kind: s.kind.name(),
                     min: s.min,
                     max: s.max,
                     doc: s.doc,
@@ -679,24 +675,8 @@ impl Rules {
             }
             if g.phase >= self.round.len() {
                 if g.round >= MAX_ROUNDS {
-                    let (reason, detail) = (
-                        "round_limit",
-                        format!("no module ended the game within {MAX_ROUNDS} rounds"),
-                    );
-                    if let Some(log) = events.as_deref_mut() {
-                        log.push(Event::GameEnded {
-                            won: false,
-                            round: g.round,
-                            reason: reason.into(),
-                            detail: detail.clone(),
-                        });
-                    }
-                    g.outcome = Some(Outcome {
-                        won: false,
-                        round: g.round,
-                        reason: reason.into(),
-                        detail,
-                    });
+                    let detail = format!("no module ended the game within {MAX_ROUNDS} rounds");
+                    end_game(g, false, "round_limit", detail, events.as_deref_mut());
                     return;
                 }
                 g.round += 1;

@@ -5,30 +5,13 @@
 //! standard actions and the round-end cleanup.
 
 use crate::action::Action;
-use crate::content::{Passive, Side};
-use crate::module::{
-    scheduled, Build, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef,
-    World,
-};
+use crate::content::{Passive, RoundFlag, Side};
+use crate::module::{scheduled, Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::state::GameState;
 use crate::view::ViewOut;
 
 use super::common::*;
 use super::{adversary, ai, alignment, cards};
-
-const fn p(name: &'static str, max: i64, doc: &'static str) -> ParamSpec {
-    ParamSpec {
-        name,
-        kind: ParamKind::Int,
-        min: 0,
-        max,
-        doc,
-    }
-}
-
-const fn ph(name: &'static str, kind: PhaseKind, doc: &'static str) -> PhaseSpec {
-    PhaseSpec { name, kind, doc }
-}
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "board",
@@ -38,48 +21,42 @@ pub static DEF: ModuleDef = ModuleDef {
         name: "corps",
         summary: "Each country is a printed piece with cities, a research station, factories and a corp's bases",
         params: &[
-            p("start_corrupted", 3, "cities per country that start corrupted"),
-            p("start_ambassadors", 10, "player ambassadors each player starts with"),
-            p("troop_health", 10, "removal a card must spend on an adversary troop (an ambassador takes 1)"),
-            p("unit_cap", 20, "corp units a base holds at most"),
-            p("factory_units", 5, "units each factory builds a round for its corp's nearest base"),
-            ParamSpec {
-                name: "war",
-                kind: ParamKind::List,
-                min: 0,
-                max: 1,
-                doc: "per round, 1 for a war round (the last entry repeats)",
-            },
-            p("city_energy", 10, "energy a city makes a round"),
-            p("aligned_bonus", 10, "extra energy an aligned city gives its owner"),
-            p("dc_compute", 10, "compute a data centre makes a round"),
-            p("station_cubes", 5, "megaproject cubes a research station makes a round"),
-            p("project_credits", 50, "credits each player cube pays when a megaproject completes"),
-            p("project_discord_per", 10, "adversary cubes per Discord when a megaproject completes"),
-            p("divert_discord", 5, "Discord per unit of energy or compute diverted to the adversary"),
-            p("base_discord", 10, "Discord an adversary ambassador on a producing base sways"),
-            p("base_unity", 10, "Unity a player ambassador on a producing base sways"),
-            p("factory_unity", 10, "Unity a player ambassador on a producing factory sways"),
-            p("free_city_at", 10, "player ambassadors on a corrupted city that free it"),
-            p("destruction_discord", 5, "Discord each destroyed building sways"),
-            p("dc_energy", 20, "standard action: energy to place a data centre"),
-            p("dc_credits", 50, "standard action: credits to place a data centre"),
-            p("build_energy", 20, "standard action: energy to build a factory or research station"),
-            p("build_credits", 50, "standard action: credits to build a factory or research station"),
-            p("remove_energy", 20, "standard action: energy to remove an adversary ambassador within reach"),
-            p("move_energy", 20, "standard action: energy to move a player ambassador"),
-            p("ambassador_credits", 50, "standard action: credits to gain a player ambassador"),
-            p("harden_credits", 50, "standard action (Harden passive): credits a hardening token"),
-            p("sell_credits", 20, "standard action: credits for selling a card from hand"),
-            p("align_energy", 20, "standard action: energy (and 1 ambassador) to align a clean city"),
+            ParamSpec::int("start_corrupted", 0, 3, "cities per country that start corrupted"),
+            ParamSpec::int("start_ambassadors", 0, 10, "player ambassadors each player starts with"),
+            ParamSpec::int("troop_health", 0, 10, "removal a card must spend on an adversary troop (an ambassador takes 1)"),
+            ParamSpec::int("unit_cap", 0, 20, "corp units a base holds at most"),
+            ParamSpec::int("factory_units", 0, 5, "units each factory builds a round for its corp's nearest base"),
+            ParamSpec::list("war", 0, 1, "per round, 1 for a war round (the last entry repeats)"),
+            ParamSpec::int("city_energy", 0, 10, "energy a city makes a round"),
+            ParamSpec::int("aligned_bonus", 0, 10, "extra energy an aligned city gives its owner"),
+            ParamSpec::int("dc_compute", 0, 10, "compute a data centre makes a round"),
+            ParamSpec::int("station_cubes", 0, 5, "megaproject cubes a research station makes a round"),
+            ParamSpec::int("project_credits", 0, 50, "credits each player cube pays when a megaproject completes"),
+            ParamSpec::int("project_discord_per", 0, 10, "adversary cubes per Discord when a megaproject completes"),
+            ParamSpec::int("divert_discord", 0, 5, "Discord per unit of energy or compute diverted to the adversary"),
+            ParamSpec::int("base_discord", 0, 10, "Discord an adversary ambassador on a producing base sways"),
+            ParamSpec::int("base_unity", 0, 10, "Unity a player ambassador on a producing base sways"),
+            ParamSpec::int("factory_unity", 0, 10, "Unity a player ambassador on a producing factory sways"),
+            ParamSpec::int("free_city_at", 0, 10, "player ambassadors on a corrupted city that free it"),
+            ParamSpec::int("destruction_discord", 0, 5, "Discord each destroyed building sways"),
+            ParamSpec::int("dc_energy", 0, 20, "standard action: energy to place a data centre"),
+            ParamSpec::int("dc_credits", 0, 50, "standard action: credits to place a data centre"),
+            ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a factory or research station"),
+            ParamSpec::int("build_credits", 0, 50, "standard action: credits to build a factory or research station"),
+            ParamSpec::int("remove_energy", 0, 20, "standard action: energy to remove an adversary ambassador within reach"),
+            ParamSpec::int("move_energy", 0, 20, "standard action: energy to move a player ambassador"),
+            ParamSpec::int("ambassador_credits", 0, 50, "standard action: credits to gain a player ambassador"),
+            ParamSpec::int("harden_credits", 0, 50, "standard action (Harden passive): credits a hardening token"),
+            ParamSpec::int("sell_credits", 0, 20, "standard action: credits for selling a card from hand"),
+            ParamSpec::int("align_energy", 0, 20, "standard action: energy (and 1 ambassador) to align a clean city"),
         ],
         phases: &[
-            ph("act", PhaseKind::Decision, "standard actions: build, place, remove, move, align, harden, sell"),
-            ph("bases", PhaseKind::Auto, "bases and factories produce corp units (ambassadors divert them)"),
-            ph("war", PhaseKind::Auto, "on a war round, the units on either side of each front fight"),
-            ph("strike", PhaseKind::Auto, "each adversary troop destroys an adjacent building"),
-            ph("produce", PhaseKind::Auto, "cities, research stations and data centres produce (ambassadors divert)"),
-            ph("cleanup", PhaseKind::Auto, "remove the round's country flags"),
+            PhaseSpec::decision("act", "standard actions: build, place, remove, move, align, harden, sell"),
+            PhaseSpec::auto("bases", "bases and factories produce corp units (ambassadors divert them)"),
+            PhaseSpec::auto("war", "on a war round, the units on either side of each front fight"),
+            PhaseSpec::auto("strike", "each adversary troop destroys an adjacent building"),
+            PhaseSpec::auto("produce", "cities, research stations and data centres produce (ambassadors divert)"),
+            PhaseSpec::auto("cleanup", "remove the round's country flags"),
         ],
         rng: &[],
         uses_cards: false,
@@ -88,15 +65,21 @@ pub static DEF: ModuleDef = ModuleDef {
 };
 
 /// Country flags that last until the end of the round.
-pub const FLAGS: [&str; 3] = ["blackout", "sabotage", "shelter"];
+pub const FLAGS: [RoundFlag; 3] = [RoundFlag::Blackout, RoundFlag::Sabotage, RoundFlag::Shelter];
 
 /// The var key of a country flag.
-pub fn flag(name: &str, country: usize) -> String {
-    format!("board.{name}.{country}")
+pub fn flag(f: RoundFlag, country: usize) -> String {
+    format!("board.{}.{country}", f.name())
 }
 
+/// Whether a country flag is up, by its name (`"blackout"`, ...).
 pub fn flagged(g: &GameState, name: &str, country: usize) -> bool {
-    g.var(&flag(name, country)) > 0
+    g.var(&format!("board.{name}.{country}")) > 0
+}
+
+/// Shelters country `c`'s buildings for the rest of the round.
+pub fn shelter(g: &mut GameState, cx: &mut Cx, country: usize) {
+    cx.set_key(g, flag(RoundFlag::Shelter, country), 1);
 }
 
 /// Cubes on country `c`'s megaproject: `None` for the adversary's.
@@ -153,9 +136,7 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
                 Vec::new()
             }
         }
-        "factory" => all
-            .filter(|&h| buildable(w, g, h) && reach(h) && w.map.hexes[h].neighbours.iter().any(|&x| is_city(w, x)))
-            .collect(),
+        "factory" => factory_hexes(w, g).into_iter().filter(|&h| reach(h)).collect(),
         "station" => all.filter(|&h| buildable(w, g, h) && reach(h)).collect(),
         "remove" => all.filter(|&h| reach(h) && g.tokens(h, ADV_AMBASSADOR) > 0).collect(),
         "move" => {
@@ -268,7 +249,7 @@ fn buildings_on(g: &GameState, h: usize) -> Vec<String> {
 pub fn destroy_building(g: &mut GameState, cx: &mut Cx, h: usize, kind: &str) -> bool {
     let w = cx.world;
     let c = w.map.hexes[h].country as usize;
-    if flagged(g, "shelter", c) {
+    if flagged(g, RoundFlag::Shelter.name(), c) {
         return false;
     }
     if g.tokens(h, HARDEN) > 0 {
@@ -276,12 +257,12 @@ pub fn destroy_building(g: &mut GameState, cx: &mut Cx, h: usize, kind: &str) ->
         cx.tally(g, "board.hardening_used", 1);
         return false;
     }
-    if let Some(s) = (0..g.seats.len()).find(|&s| g.tokens(h, &ambassador(s)) > 0) {
+    if let Some(s) = player_ambassador(g, h) {
         cx.add_tokens(g, h, &ambassador(s), -1);
         cx.tally(g, "board.ambassador_shield", 1);
         return false;
     }
-    if cards::civic_shelter(g, cx, c) {
+    if civic_shelter(g, cx, c) {
         return false;
     }
     cx.add_tokens(g, h, kind, -1);
@@ -296,7 +277,22 @@ pub fn destroy_building(g: &mut GameState, cx: &mut Cx, h: usize, kind: &str) ->
     true
 }
 
-/// The nearest hex to `from` among `hexes` (ties: lower hex number, then country).
+/// Uses a Civic Shelter for a building destruction in `country`, if one applies.
+fn civic_shelter(g: &mut GameState, cx: &mut Cx, country: usize) -> bool {
+    let w = cx.world;
+    for s in 0..g.seats.len() {
+        if g.var(&cards::civic_used(s)) == 0
+            && has_dc_in(&w, g, s, country)
+            && cards::has_passive(&w, g, s, |p| matches!(p, Passive::CivicShelter))
+        {
+            cx.set_key(g, cards::civic_used(s), 1);
+            return true;
+        }
+    }
+    false
+}
+
+/// The nearest hex to `from` among `hexes` (ties: country, then lower hex number).
 fn nearest(w: &World, from: usize, hexes: impl Iterator<Item = usize>) -> Option<usize> {
     hexes.min_by_key(|&h| (w.map.distance(from, h), w.map.hexes[h].country, w.map.hexes[h].number))
 }
@@ -307,11 +303,6 @@ fn add_unit(g: &mut GameState, cx: &mut Cx, base: usize) {
         cx.add_tokens(g, base, UNIT, 1);
         cx.tally(g, "board.units_built", 1);
     }
-}
-
-/// A player ambassador's seat on hex `h`, if any (seat order).
-fn player_ambassador(g: &GameState, h: usize) -> Option<usize> {
-    (0..g.seats.len()).find(|&s| g.tokens(h, &ambassador(s)) > 0)
 }
 
 /// Production step 1: bases, then factories, build their corp's units; an
@@ -341,7 +332,7 @@ fn produce_units(g: &mut GameState, cx: &mut Cx) {
         }
         if g.tokens(h, ADV_AMBASSADOR) > 0 {
             adversary::remove(g, cx, h, 1);
-            cx.add_tokens(g, h, TROOP, 1);
+            adversary::place_troop(g, cx, h);
             cx.tally(g, "board.troops_built", 1);
             cx.note(Some(h), || format!("The factory at {} builds an adversary troop", hex_name(&w, h)));
         } else if let Some(s) = player_ambassador(g, h) {
@@ -440,7 +431,7 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             continue;
         }
         let c = w.map.hexes[h].country as usize;
-        if flagged(g, "blackout", c) {
+        if flagged(g, RoundFlag::Blackout.name(), c) {
             continue;
         }
         if corrupted(g, h) {
@@ -503,7 +494,7 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             continue;
         };
         let c = w.map.hexes[h].country as usize;
-        if flagged(g, "sabotage", c) {
+        if flagged(g, RoundFlag::Sabotage.name(), c) {
             continue;
         }
         let n = w.int("board.dc_compute");
@@ -562,7 +553,7 @@ impl Module for Board {
             }
         }
         for s in 0..g.seats.len() {
-            let c = s % w.map.countries.len();
+            let c = home_country(&w, s);
             for &n in &w.content.map.countries[c].data_centres {
                 cx.add_tokens(g, w.map.numbered(c, n), &dc(s), 1);
             }
@@ -685,14 +676,14 @@ impl Module for Board {
     }
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
-        let flags: Vec<String> = FLAGS.iter().map(|f| format!("board.{f}.")).collect();
+        let flags: Vec<String> = FLAGS.iter().map(|f| format!("board.{}.", f.name())).collect();
         let mut keys: Vec<&str> = flags.iter().map(String::as_str).collect();
         keys.extend(["board.project.", "board.project_done."]);
         out.bookkeeping(&keys);
         for c in 0..w.map.countries.len() {
             for f in FLAGS {
-                if flagged(g, f, c) {
-                    out.country(c, f, f, 1, None, flag_doc(f));
+                if flagged(g, f.name(), c) {
+                    out.country(c, f.name(), f.name(), 1, None, flag_doc(f));
                 }
             }
             let p = &w.content.map.countries[c].project;
@@ -740,10 +731,10 @@ impl Module for Board {
     }
 }
 
-fn flag_doc(f: &str) -> &'static str {
+fn flag_doc(f: RoundFlag) -> &'static str {
     match f {
-        "blackout" => "Blackout: cities here make no energy this round",
-        "sabotage" => "Sabotage: data centres here make no compute this round",
-        _ => "Shelter Order: buildings here can't be destroyed this round",
+        RoundFlag::Blackout => "Blackout: cities here make no energy this round",
+        RoundFlag::Sabotage => "Sabotage: data centres here make no compute this round",
+        RoundFlag::Shelter => "Shelter Order: buildings here can't be destroyed this round",
     }
 }

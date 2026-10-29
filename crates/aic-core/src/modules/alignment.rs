@@ -7,10 +7,7 @@
 
 use crate::action::Action;
 use crate::content::{AlignOp, AlignmentCard, Passive, Side};
-use crate::module::{
-    Build, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, PhaseSpec, Res, VariantDef,
-    World,
-};
+use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::rng::shuffle;
 use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
@@ -18,52 +15,24 @@ use crate::view::{CardView, ViewOut};
 use super::common::*;
 use super::{adversary, ai, cards, threats};
 
-const fn i(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSpec {
-    ParamSpec {
-        name,
-        kind: ParamKind::Int,
-        min,
-        max,
-        doc,
-    }
-}
-
-const fn l(name: &'static str, doc: &'static str) -> ParamSpec {
-    ParamSpec {
-        name,
-        kind: ParamKind::List,
-        min: 0,
-        max: 50,
-        doc,
-    }
-}
-
 const PARAMS: [ParamSpec; 12] = [
-    i("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
-    i("tip_per_player", 1, 50, "a bucket tips when it holds this many Sway per player"),
-    i("momentum_every", 0, 10, "Momentum: a side's bucket holds 1 fewer Sway per this many of its tips, down to 1 per player (0: off)"),
-    i("troop", 0, 10, "Sway toward Unity for removing an adversary troop"),
-    i("threat_discord", 0, 10, "Sway toward Discord when a threat executes uncountered"),
-    i("adversary_discord", 0, 10, "Sway toward Discord the adversary adds at the start of every round"),
-    i("antimatter_discord", 0, 5, "the antimatter action: Sway toward Discord to produce 1 antimatter (0: no such action)"),
-    i("antimatter_uses", 0, 5, "times each player may take the antimatter action per round"),
-    l("unity_ease", "Unity tip counts at which the clear-board bar drops a level (the first also starts the stronger Unity cards)"),
-    l("discord_escalate", "Discord tip counts at which the adversary escalates a difficulty level (the first also starts the stronger Discord cards)"),
-    i("unity_win", 0, 50, "Unity tips that win outright (0: never)"),
-    i("clear_win_stage", 1, 3, "the bar-0 win counts only once this round's adversary card is of this stage (1: any time)"),
+    ParamSpec::int("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
+    ParamSpec::int("tip_per_player", 1, 50, "a bucket tips when it holds this many Sway per player"),
+    ParamSpec::int("momentum_every", 0, 10, "Momentum: a side's bucket holds 1 fewer Sway per this many of its tips, down to 1 per player (0: off)"),
+    ParamSpec::int("troop", 0, 10, "Sway toward Unity for removing an adversary troop"),
+    ParamSpec::int("threat_discord", 0, 10, "Sway toward Discord when a threat executes uncountered"),
+    ParamSpec::int("adversary_discord", 0, 10, "Sway toward Discord the adversary adds at the start of every round"),
+    ParamSpec::int("antimatter_discord", 0, 5, "the antimatter action: Sway toward Discord to produce 1 antimatter (0: no such action)"),
+    ParamSpec::int("antimatter_uses", 0, 5, "times each player may take the antimatter action per round"),
+    ParamSpec::list("unity_ease", 0, 50, "Unity tip counts at which the clear-board bar drops a level (the first also starts the stronger Unity cards)"),
+    ParamSpec::list("discord_escalate", 0, 50, "Discord tip counts at which the adversary escalates a difficulty level (the first also starts the stronger Discord cards)"),
+    ParamSpec::int("unity_win", 0, 50, "Unity tips that win outright (0: never)"),
+    ParamSpec::int("clear_win_stage", 1, 3, "the bar-0 win counts only once this round's adversary card is of this stage (1: any time)"),
 ];
 
 const PHASES: &[PhaseSpec] = &[
-    PhaseSpec {
-        name: "sway",
-        kind: PhaseKind::Auto,
-        doc: "the round's Sway: the adversary toward Discord, AI boards toward Unity, then ongoing cards",
-    },
-    PhaseSpec {
-        name: "act",
-        kind: PhaseKind::Decision,
-        doc: "the antimatter action: sway toward Discord to produce 1 antimatter",
-    },
+    PhaseSpec::auto("sway", "the round's Sway: the adversary toward Discord, AI boards toward Unity, then ongoing cards"),
+    PhaseSpec::decision("act", "the antimatter action: sway toward Discord to produce 1 antimatter"),
 ];
 
 pub static DEF: ModuleDef = ModuleDef {
@@ -78,7 +47,7 @@ pub static DEF: ModuleDef = ModuleDef {
             phases: PHASES,
             rng: &["alignment"],
             uses_cards: false,
-            build: build_tug,
+            build,
         },
         VariantDef {
             name: "still",
@@ -87,7 +56,7 @@ pub static DEF: ModuleDef = ModuleDef {
             phases: PHASES,
             rng: &["alignment"],
             uses_cards: false,
-            build: build_still,
+            build,
         },
         VariantDef {
             name: "off",
@@ -96,18 +65,10 @@ pub static DEF: ModuleDef = ModuleDef {
             phases: PHASES,
             rng: &["alignment"],
             uses_cards: false,
-            build: build_still,
+            build,
         },
     ],
 };
-
-fn build_tug(b: &Build) -> Result<Box<dyn Module>, String> {
-    build(b)
-}
-
-fn build_still(b: &Build) -> Result<Box<dyn Module>, String> {
-    build(b)
-}
 
 /// Every variant is one struct: `sway` and the action read the variant.
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
@@ -126,13 +87,38 @@ struct Alignment;
 /// Sway in the Undecided.
 pub const UNDECIDED: &str = "alignment.undecided";
 /// Credit income every player has from Unity cards.
-pub const INCOME_BONUS: &str = "alignment.income_bonus";
+const INCOME_BONUS: &str = "alignment.income_bonus";
 /// Free card purchases left (Unity cards).
-pub const FREE_LEFT: &str = "alignment.free_purchases";
+const FREE_LEFT: &str = "alignment.free_purchases";
 /// Insight every player gains each round from Unity cards.
-pub const INSIGHT_BONUS: &str = "alignment.insight_bonus";
+const INSIGHT_BONUS: &str = "alignment.insight_bonus";
 /// Ongoing cards in play.
 pub const ONGOING: &str = "alignment.ongoing";
+
+/// Credit income every player has from Unity cards (economy's upkeep).
+pub fn income_bonus(g: &GameState) -> i64 {
+    g.var(INCOME_BONUS)
+}
+
+/// Insight every player gains each round from Unity cards.
+pub fn insight_bonus(g: &GameState) -> i64 {
+    g.var(INSIGHT_BONUS)
+}
+
+/// Free card purchases left from Unity cards.
+pub fn free_purchases(g: &GameState) -> i64 {
+    g.var(FREE_LEFT)
+}
+
+/// Uses up one free card purchase, if any is left; returns whether it did.
+pub fn take_free_purchase(g: &mut GameState, cx: &mut Cx) -> bool {
+    let free = g.var(FREE_LEFT);
+    if free <= 0 {
+        return false;
+    }
+    cx.set_key(g, FREE_LEFT.into(), free - 1);
+    true
+}
 
 /// Sway in a side's bucket.
 pub fn bucket(side: Side) -> &'static str {
@@ -220,11 +206,8 @@ pub fn sway(g: &mut GameState, cx: &mut Cx, side: Side, n: i64) {
 
 /// Sway toward Unity for a removed adversary troop (plus the remover's
 /// Unity bonus).
-pub fn for_kill(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, kind: &str) {
+pub fn for_troop_removed(g: &mut GameState, cx: &mut Cx, seat: Option<usize>) {
     let w = cx.world;
-    if kind != TROOP {
-        return;
-    }
     let base = w.int("alignment.troop");
     let bonus: i64 = seat.map_or(0, |s| {
         cards::passives(&w, g, s)
@@ -237,7 +220,6 @@ pub fn for_kill(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, kind: &str)
     });
     sway(g, cx, Side::Unity, base + bonus);
 }
-
 
 /// Whether the adversary's presence is under the bar for `level`. The
 /// level-0 bar (no adversary pieces) counts only once a card of stage
