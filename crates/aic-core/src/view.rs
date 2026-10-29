@@ -43,6 +43,23 @@ pub struct View {
     pub standard: Vec<StandardView>,
     /// The open choice, if the rules are waiting for one.
     pub choice: Option<ChoiceView>,
+    /// Where pieces are heading (019: each adversary troop's next target),
+    /// so clients draw it without knowing the rules.
+    pub arrows: Vec<ArrowView>,
+}
+
+/// A piece's heading: from its hex to the hex it targets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ArrowView {
+    /// What is heading there (`troop`).
+    pub kind: String,
+    pub from: usize,
+    pub to: usize,
+    /// How many pieces on `from` share it.
+    pub count: i64,
+    /// The rounds until it arrives (1: this coming one).
+    pub rounds: i64,
+    pub doc: String,
 }
 
 /// A standard action (`Action::Standard { act }`) and its cost.
@@ -274,6 +291,18 @@ impl ViewOut<'_> {
             source: self.module.to_string(),
             doc: doc.to_string(),
         }
+    }
+
+    /// Publishes a piece's heading (an arrow from hex `from` to hex `to`).
+    pub fn arrow(&mut self, kind: &str, from: usize, to: usize, count: i64, rounds: i64, doc: &str) {
+        self.view.arrows.push(ArrowView {
+            kind: kind.to_string(),
+            from,
+            to,
+            count,
+            rounds,
+            doc: doc.to_string(),
+        });
     }
 
     /// Publishes a standard action and its cost.
@@ -531,6 +560,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
         globals,
         piles: Vec::new(),
         standard: Vec::new(),
+        arrows: Vec::new(),
         choice: g.pending.as_ref().map(|p| ChoiceView {
             seat: p.ask.seat,
             prompt: p.ask.prompt.clone(),

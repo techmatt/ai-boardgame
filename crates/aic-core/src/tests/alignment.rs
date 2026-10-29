@@ -61,8 +61,8 @@ fn a_full_unity_bucket_tips_a_card_and_lowers_the_bar() {
     assert_eq!(g.var("alignment.unity"), 0);
     assert_eq!(g.var("alignment.undecided"), undecided);
     assert_eq!(g.pile("alignment.resolved.unity"), ["civil_defense"]);
-    // Two Unity tips: bar 1, where ambassadors no longer count.
-    assert_eq!(alignment::bar_level(&rules.world(), &g), 1);
+    // Two Unity tips: bar 3 (019), where only corrupted cities count.
+    assert_eq!(alignment::bar_level(&rules.world(), &g), 3);
     let o = g.outcome.as_ref().expect("a win");
     assert!(o.won && o.reason == "purge", "{o:?}");
 }
@@ -72,13 +72,15 @@ fn bar_levels_follow_the_unity_tips() {
     let rules = Rules::new(&baseline()).unwrap();
     let w = rules.world();
     let mut g = rules.new_game(1);
-    for (tips, level) in [(0, 0), (1, 1), (2, 1), (3, 2), (9, 2)] {
+    // 019: `unity_ease` 1, 1, 2: ambassadors and troops at 1 tip, nodes at 2.
+    for (tips, level) in [(0, 0), (1, 2), (2, 3), (9, 3)] {
         g.vars.insert("alignment.unity_tips".into(), tips);
         assert_eq!(alignment::bar_level(&w, &g), level, "{tips} tips");
     }
     assert!(adversary::win_text(&w, 0).contains("node, adversary troop or adversary ambassador"));
     assert!(adversary::win_text(&w, 1).contains("ambassadors no longer count"));
     assert!(adversary::win_text(&w, 2).contains("no corrupted city or node"));
+    assert!(adversary::win_text(&w, 3).contains("nodes no longer count"));
 }
 
 #[test]
@@ -90,12 +92,13 @@ fn the_board_clear_win_and_the_bar_easing() {
         (0, 2, 1, None, false),
         (0, 2, 2, None, true),
         (0, 1, 1, Some(ADV_AMBASSADOR), false),
-        (2, 1, 1, Some(ADV_AMBASSADOR), true),
-        (2, 1, 1, Some(TROOP), false),
-        (5, 1, 1, Some(TROOP), true),
+        (1, 1, 1, Some(ADV_AMBASSADOR), true),
+        (0, 1, 1, Some(TROOP), false),
+        (1, 1, 1, Some(TROOP), true),
         (5, 1, 1, Some(ADV_CUBE), false),
         (0, 1, 1, Some(NODE), false),
-        (5, 1, 1, Some(NODE), false),
+        (1, 1, 1, Some(NODE), false),
+        (2, 1, 1, Some(NODE), true),
     ];
     for &(tips, rule, stage, piece_left, wins) in cases {
         let (rules, mut g) = action_only(&[&format!("alignment.clear_win_stage={rule}")]);

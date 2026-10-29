@@ -6,7 +6,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 
 - [docs/principles.md](docs/principles.md): design pillars, difficulty targets, lenses,
   measures.
-- [docs/rules.md](docs/rules.md): what the code implements: **rules revision 9** (018: the structural fixes and calibration, troops used up when they strike; 017: the adversary project deck, the Discord troop advance, one-shot Alignment cards; on 016: presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the purge), on the 014
+- [docs/rules.md](docs/rules.md): what the code implements: **rules revision 10** (019: adversary troops march 2 steps a round toward player presence and destroy it, nodes removed only by tier-2 effects, Unity makes nodes stop counting; 018: the structural fixes and calibration, troops used up when they strike; 017: the adversary project deck, one-shot Alignment cards; on 016: presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the purge), on the 014
   board model, Militarist against Builder and Protector, 1–4 countries, with every
   default and deviation.
 - [docs/ruleset-v0.md](docs/ruleset-v0.md): the v0 design draft as handed over.
@@ -24,8 +24,8 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history and does not replay. `archive/`: specs the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces with their cities, ocean, setup buildings and megaproject), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, `alignment.json` (the Unity and Discord decks), all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects, r9 (2 countries, difficulty 0; 018 calibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. Opt-in variants: `cards.variant=free_keep` (+ `cards.free_keeps=1`). The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
-| `scripts/` | `wasm-smoke.mjs`: plays one game through the wasm package in Node (current). `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline (current). `board/`: `screen_018.py` (018), the r9 calibration summary with the strategy-health gate (current); `screen_017.py` (017), the r8 screen summary (reads r9 too); `screen_016.py` (016), the r7 screen summary (reads r8 too); `screen_summary.py` (014), the board screen summary (current). `alignment/` (013): the Alignment screen summary (current: the alignment counters it reads still exist). `bench/` (012): `same_results.py`, compares two experiment outputs (current). `tune/` (007–008): `sweep.py`, `log_table.py` and `engine_sweep.py` (`sweep.py` still runs on r9: 018 used it). `payback/` (009): content patches and summaries for r3's payback sweep, not checked against r6 (see [experiments/history.md](experiments/history.md)). |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects, r10 (2 countries, difficulty 0; 018 calibrated it and 019 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. Opt-in variants: `cards.variant=free_keep` (+ `cards.free_keeps=1`). The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
+| `scripts/` | `wasm-smoke.mjs`: plays one game through the wasm package in Node (current). `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline (current). `board/`: `screen_019.py` (019), the r10 troop and node summary with the strategy-health gate (current); `screen_018.py` (018), the r9 calibration summary (reads r10 too); `screen_017.py` (017), the r8 screen summary (reads r9 too); `screen_016.py` (016), the r7 screen summary (reads r8 too); `screen_summary.py` (014), the board screen summary (current). `alignment/` (013): the Alignment screen summary (current: the alignment counters it reads still exist). `bench/` (012): `same_results.py`, compares two experiment outputs (current). `tune/` (007–008): `sweep.py`, `log_table.py` and `engine_sweep.py` (`sweep.py` still runs on r9: 018 used it). `payback/` (009): content patches and summaries for r3's payback sweep, not checked against r6 (see [experiments/history.md](experiments/history.md)). |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
 Core source map: `rules.rs` (config compilation, round/phase loop, apply, choice
@@ -59,6 +59,16 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
   reloads mid-run, which breaks e2e (`Cannot read properties of undefined (reading
   'view')`). Check against a snapshot instead: `node scripts/build-wasm.mjs && npx vite
   build && npx vite preview --port $PORT --strictPort`.
+- The board draws each adversary troop's next target (019, `View.arrows`): a dashed red
+  arrow from the troop to the presence, station or factory it is heading for, solid when
+  it strikes in the next march; hover for the text. `node scripts/shots-019.mjs` (with
+  `AIC_URL` and `AIC_SHOTS=<dir>`, ~1–3 min: it often needs a few seeds) plays baseline
+  seeds with Random actions and saves the board with a dashed arrow, then a solid one on
+  a presence, then after the march that hits it (019's shots:
+  `experiments/results/screen-019-troops/viewer/`). e2e (019, 1366x768 and up): every
+  check passes. Gotcha: a backgrounded `npx vite preview` outlives its tool-runner
+  wrapper when that is stopped at its time limit, so the port stays taken: stop the
+  `node` process that holds it.
 - `node scripts/shots-017.mjs` (with `AIC_URL` and `AIC_SHOTS=<dir>`, ~30–90 s) plays
   baseline seeds and saves viewer shots of the adversary project row mid-fill and after
   a project resolved (017).
@@ -302,6 +312,24 @@ cities corrupted at the end, destructions per war round, Unity and Discord tips,
 standard actions and how games ended; then adversary ambassadors on the board by round,
 and standard actions by kind. Committed with the report and records in
 `experiments/results/screen-014-board/` (`board.md`).
+
+**Troop and node screen (019, r10)**, `experiments/screen-019-troops.json` (`c2`, `c3` ×
+d0–d4 × random, greedy, engine; 480 games): `aic-sim experiment
+experiments/screen-019-troops.json --quick --out out/screen-019` (**~2 min** wall on 12
+threads with the tuned r10, 107–129 s; 211 s for r10 before tuning, whose games ran to
+the deck's end), then `python scripts/board/screen_019.py out/screen-019`: per cell the win
+rate, rounds and the purge's blockers left; then the troops (built, march steps, moves,
+strikes, destructions by target, absorbed, presence lost and placed back from the
+reserve), nodes (made, removed, peak; the rounds that ended with only nodes blocking the
+purge) and the strategy-health gate with a pass line per cell (the gate is defined in the
+script's docstring). Counters new in 019: `board.troop_steps`, `.troop_moves`,
+`.troop_strikes`, `.troop_destroyed.<presence|station|factory>`, `.troop_absorbed`,
+`.presence_from_reserve`, `adversary.nodes_peak`, `alignment.purge_blocked_by_nodes`
+(017's `board.troop_advances`, `.advance_strikes`, `.advance_destroyed` are gone).
+Variant sweeps: an experiment file with several `variants`, each a list of `--set`
+overrides (lists comma-separated, `alignment.unity_ease=1,1,2`), as in
+`experiments/results/screen-019-troops/tuning.md`. Committed in
+`experiments/results/screen-019-troops/` (`troops.md`, `before-tuning.md`, `tuning.md`).
 
 **Calibration screen (018, r9)**, `experiments/screen-018-calibration.json` (`c2`, `c3`
 × d0–d4 × random, greedy, engine; 480 games): `aic-sim experiment

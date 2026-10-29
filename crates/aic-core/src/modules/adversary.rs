@@ -697,6 +697,8 @@ fn arrive(g: &mut GameState, cx: &mut Cx, h: usize, spreading: bool) {
         cx.add_key(g, SUPPLY.into(), 1);
         cx.add_tokens(g, h, NODE, 1);
         cx.tally(g, "adversary.nodes_made", 1);
+        let nodes: i64 = (0..g.hexes.len()).map(|x| g.tokens(x, NODE)).sum();
+        cx.peak(g, "adversary.nodes_peak", nodes);
         cx.note(Some(h), || format!("A node forms at {}", hex_name(&w, h)));
         return;
     }
@@ -990,15 +992,18 @@ pub fn most_infiltrated_city(
 }
 
 /// What still counts against the purge at `level` (the Unity thresholds
-/// reached): corrupted cities and nodes always; adversary ambassadors below
-/// level 1; adversary troops below level 2.
+/// reached): corrupted cities always; adversary ambassadors below level 1;
+/// adversary troops below level 2; nodes below level 3 (019; with two
+/// thresholds, always).
 pub fn purge_count(w: &World, g: &GameState, level: i64) -> i64 {
     let mut n = 0;
     for h in 0..g.hexes.len() {
         if is_city(w, h) && corrupted(g, h) {
             n += 1;
         }
-        n += g.tokens(h, NODE);
+        if level < 3 {
+            n += g.tokens(h, NODE);
+        }
         if level < 1 {
             n += g.tokens(h, ADV_AMBASSADOR);
         }
@@ -1020,7 +1025,8 @@ pub fn win_text(_w: &World, level: i64) -> String {
         1 => {
             "purge: no corrupted city, node or adversary troop (ambassadors no longer count)".into()
         }
-        _ => "purge: no corrupted city or node (ambassadors and troops no longer count)".into(),
+        2 => "purge: no corrupted city or node (ambassadors and troops no longer count)".into(),
+        _ => "purge: no corrupted city (ambassadors, troops and nodes no longer count)".into(),
     }
 }
 

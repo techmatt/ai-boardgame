@@ -96,10 +96,10 @@ variant. Abridged:
     { "module": "cards", "variant": "draft", "params": { "deal": 4, ... }, "cards": ["fab_line", ...] }
   ],
   "round": ["alignment.sway", "adversary.build", "adversary.spread", "adversary.corrupt",
-            "threats.deal", "adversary.reveal", "cards.tier", "cards.deal", "cards.draft",
-            "cards.keep", "ai.growth",
+            "board.march", "threats.deal", "adversary.reveal", "cards.tier", "cards.deal",
+            "cards.draft", "cards.keep", "ai.growth",
             "cards.play+threats.counter+economy.give+alignment.act+board.act",
-            "board.bases", "board.war", "board.strike", "board.produce", "economy.upkeep",
+            "board.bases", "board.war", "board.produce", "economy.upkeep",
             "threats.execute", "board.cleanup"]
 }
 ```
@@ -423,7 +423,8 @@ In the baseline:
   megaproject (cubes by owner, against its size) as country values, the war round and
   fronts and the clock's step as globals, each seat's presence on the board and left
   on its track, and ambassadors on the board; it publishes every standard action with
-  its cost (`View.standard`, read by the viewer's labels); bookkeeping
+  its cost (`View.standard`, read by the viewer's labels) and each adversary troop's
+  next target and how many marches away (`View.arrows`, 019, drawn as arrows); bookkeeping
   `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`.
 - `economy` adds each seat's income per resource and the next round's bonus insight
   (bookkeeping `economy.bonus_insight`, shown as its own global while >0); `cards`

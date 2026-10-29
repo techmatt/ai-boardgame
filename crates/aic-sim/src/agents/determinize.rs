@@ -301,7 +301,7 @@ mod tests {
     }
 
     /// 3 countries at d0 and d4 (017: the Discord deck reshuffles mid-step
-    /// often, and each Discord tip's troop advance asks).
+    /// often; 019: the troops' march asks every round).
     #[test]
     #[ignore = "slow lane: the pending-choice guess check at 3 countries"]
     fn pending_choices_replay_on_the_guess_three_countries() {

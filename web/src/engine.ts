@@ -134,7 +134,11 @@ export interface View {
   standard: StandardView[];
   /** The open choice, if the rules are waiting for one. */
   choice: ChoiceView | null;
+  /** Where pieces are heading (019: each adversary troop's next target). */
+  arrows?: ArrowView[];
 }
+/** A piece's heading, hex index to hex index; `rounds` 1 means it arrives this coming round. */
+export interface ArrowView { kind: string; from: number; to: number; count: number; rounds: number; doc: string }
 
 // --- records (crates/aic-core/src/record.rs) ---
 

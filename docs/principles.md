@@ -18,6 +18,30 @@ The standards every module and every rules change is judged against.
   that is a prior on the design, and mechanics may be reworked to make the rules easier
   to explain.
 
+## Small numbers (Matt, 2026-10-29)
+
+> Keep every currency small. Totals should rarely reach the hundreds; the most expensive
+> thing costs on the order of 50, as in Terraforming Mars. Prefer "things produce 1"
+> wherever it works, for every resource.
+
+**Flagged (019), not rescaled:** the card rework will rescale cards, so these stand
+until then.
+
+- **Credits are the outlier.** 25 to start and 8 a round from each AI board
+  (`content/ais.json`), plus Unity income (Grassroots Funding, New Deal +2 each): a
+  player sees about 110–150 credits over an 11-round game, so totals do reach the
+  hundreds. Card costs run 0–25 (Megastructure 25, Orbital Lance 20, Fusion Plant 18,
+  Zero-Day Wipe and Quantum Core 16): within "about 50", but the income is not "produce
+  1".
+- **Credit sinks priced off that income:** a megaproject cube pays `project_credits` 10;
+  a player ambassador costs `ambassador_credits` 6; hardware `hardware_credits` 4; Market
+  Crash takes 5 and Propaganda 4–8.
+- **Adversary compute:** project costs are 6–12 *a player*, so 18–36 at 3 players and
+  24–48 at 4: the top of the range, still under 50.
+- Within the principle: energy (cities make 1, presence costs 1), hardware (a factory
+  makes 1), compute (a node makes 1, the presence track 1–2), insight, antimatter, Sway
+  (tips at 2 a player), the supply (14 a country, pieces rather than a currency).
+
 ## Difficulty targets
 
 - **Difficulty 0:** random play almost never wins; moderately skilled play essentially

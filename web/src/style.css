@@ -375,3 +375,11 @@ pre.tab { font: 0.85em/1.3 ui-monospace, Consolas, monospace; white-space: pre-w
   .country { padding: 0.1em 0.45em; }
   .threat { line-height: 1.2; }
 }
+
+/* 019: each adversary troop's next target. */
+.arrows .arrow line, .arrows .arrow circle { stroke: #b3261e; stroke-width: 0.06; stroke-dasharray: 0.16 0.1; opacity: 0.75; }
+.arrows .arrow.soon circle { stroke-dasharray: none; stroke-width: 0.09; opacity: 0.95; }
+.arrows .arrow path { fill: #b3261e; opacity: 0.75; }
+.arrows .arrow.soon line { stroke-dasharray: none; stroke-width: 0.09; opacity: 0.95; }
+.arrows .arrow.soon path { opacity: 0.95; }
+.arrows .arrow { pointer-events: visibleStroke; }

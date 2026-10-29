@@ -1,10 +1,10 @@
 //! 017: the adversary project deck, compute and its counterplay, the
-//! Discord troop advance, Discord card steps and the new Unity sources.
+//! Discord card steps, the new Unity sources and (019) tier-2 node removal.
 
 use super::alignment::give;
 use super::*;
 use crate::modules::adversary::{self, PROJECTS, PROJECTS_DONE, PROJECTS_ONGOING, PROJECT_DECK};
-use crate::modules::common::{presence, NODE};
+use crate::modules::common::{presence, presence_of, NODE};
 
 fn row(g: &mut GameState, ids: &[&str]) {
     g.piles
@@ -205,10 +205,10 @@ fn fill_discord(rules: &Rules, g: &mut GameState) {
 }
 
 #[test]
-fn a_discord_tip_advances_every_troop_which_then_strikes() {
+fn a_discord_tip_no_longer_moves_troops() {
+    // 019: the march replaced 017's Discord-tip advance.
     let (rules, mut g) = lab(&[]);
     let m = &rules.map;
-    // A presence of seat 0 and a troop 3 hexes away, both on land.
     let p = m.numbered(0, piece(0).presence);
     let t = (0..m.hexes.len())
         .find(|&h| m.distance(p, h) == 3 && kind(m, h) != content::HexKind::Ocean)
@@ -219,22 +219,9 @@ fn a_discord_tip_advances_every_troop_which_then_strikes() {
     fill_discord(&rules, &mut g);
     give(&rules, &mut g);
     answer_all(&rules, &mut g);
-    let at = (0..m.hexes.len())
-        .find(|&h| g.tokens(h, TROOP) > 0)
-        .unwrap();
-    assert_eq!(m.distance(at, p), 2);
-    assert_eq!(g.stats.counters["board.troop_advances"], 1);
-    // The second tip brings it next to the presence, and it strikes it,
-    // which uses it up (`troop_spent`).
-    next_discord(&mut g, "propaganda");
-    fill_discord(&rules, &mut g);
-    give(&rules, &mut g);
-    answer_all(&rules, &mut g);
-    assert_eq!(g.tokens(p, &presence(0)), 0);
-    assert_eq!(total(&g, TROOP), 0);
-    assert_eq!(g.stats.counters["board.troop_advances"], 2);
-    assert_eq!(g.stats.counters["board.advance_destroyed"], 1);
-    assert_eq!(g.stats.counters["board.troops_spent"], 1);
+    assert_eq!(g.var("alignment.discord_tips"), 1);
+    assert_eq!((g.tokens(t, TROOP), g.tokens(p, &presence(0))), (1, 1));
+    assert!(!g.stats.counters.contains_key("board.troop_moves"));
     // No escalation any more.
     assert_eq!(g.var("adversary.escalation"), 0);
 }
@@ -277,14 +264,51 @@ fn freeing_a_city_and_removing_a_node_sway_unity() {
     answer_hex(&rules, &mut g, city);
     answer_all(&rules, &mut g);
     assert_eq!(g.tokens(city, ADV_CUBE), 0);
-    assert_eq!(g.var("alignment.unity"), 2);
-    put(&mut g, city, NODE, 1);
-    rules.apply_mut(&mut g, &std_act(0, "node"), None).unwrap();
-    if g.pending.is_some() {
-        answer_hex(&rules, &mut g, city);
-    }
-    assert_eq!(g.tokens(city, NODE), 0);
     assert_eq!(g.var("alignment.unity"), 3);
+    // No standard action removes a node (019); the Decommission Unity card does.
+    put(&mut g, city, NODE, 1);
+    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "node"), None).is_err());
+    with_cx(&rules, |cx| {
+        crate::modules::alignment::resolve(
+            &mut g,
+            cx,
+            &content::AlignOp::RemoveNodes { count: 1 },
+        )
+    })
+    .unwrap();
+    assert_eq!(g.tokens(city, NODE), 0);
+    // 019: freeing a city sways 3, removing a node 2 (the bucket tips only
+    // once an action or phase finishes, so it holds both here).
+    assert_eq!(g.var("alignment.unity"), 5);
+}
+
+#[test]
+fn node_takedown_removes_a_node_in_reach() {
+    let (rules, mut g) = lab_actions();
+    let m = &rules.map;
+    let p = presence_of(&g, 0)[0];
+    let far = (0..m.hexes.len())
+        .find(|&h| m.distance(p, h) >= 3 && g.hexes[h].tokens.is_empty())
+        .unwrap();
+    let near = m.hexes[p].neighbours[0];
+    put(&mut g, far, NODE, 1);
+    g.piles.insert("cards.hand.0".into(), vec!["node_takedown".into()]);
+    set_res(&mut g, 0, "credits", 30);
+    set_res(&mut g, 0, "insight", 5);
+    set_res(&mut g, 0, "antimatter", 2);
+    g.vars.insert("ai.tier2.0".into(), 1);
+    g.vars.insert(crate::modules::board::track_key(0), 3);
+    let play = Action::Play {
+        seat: 0,
+        card: "node_takedown".into(),
+    };
+    // Only a node within reach.
+    assert!(!rules.legal_actions(&g).contains(&play));
+    put(&mut g, near, NODE, 1);
+    assert!(rules.legal_actions(&g).contains(&play));
+    act(&rules, &mut g, play);
+    assert_eq!((g.tokens(near, NODE), g.tokens(far, NODE)), (0, 1));
+    assert_eq!(g.stats.counters["adversary.nodes_removed"], 1);
 }
 
 #[test]

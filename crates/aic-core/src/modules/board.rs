@@ -43,13 +43,13 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("free_city_at", 0, 10, "player ambassadors on a corrupted city that free it"),
             ParamSpec::int("destruction_discord", 0, 5, "Discord each building destroyed in war sways"),
             ParamSpec::int("troop_spent", 0, 1, "1: an adversary troop that strikes a target is used up"),
+            ParamSpec::int("troop_steps", 0, 5, "steps each adversary troop takes in the march: destroy a target on or next to it, else move 1 hex toward the nearest"),
             ParamSpec::int("presence_returns", 0, 1, "1: a destroyed presence goes to its owner's reserve, placed before the track"),
             ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence"),
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_hardware", 0, 20, "standard action: hardware to build a research station"),
             ParamSpec::int("factory_hardware", 0, 5, "hardware a player-owned factory makes its owner on a production step"),
             ParamSpec::int("hardware_credits", 0, 50, "standard action: credits for 1 hardware"),
-            ParamSpec::int("node_energy", 0, 20, "standard action: energy to remove a node within reach"),
             ParamSpec::int("remove_energy", 0, 20, "standard action: energy to remove an adversary ambassador within reach"),
             ParamSpec::int("move_energy", 0, 20, "standard action: energy to move a player ambassador"),
             ParamSpec::int("ambassador_credits", 0, 50, "standard action: credits to gain a player ambassador"),
@@ -58,10 +58,10 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("align_energy", 0, 20, "standard action: energy (and 1 ambassador) to align a clean city"),
         ],
         phases: &[
-            PhaseSpec::decision("act", "standard actions: presence, station, remove, node, move, align, harden, hardware, sell"),
+            PhaseSpec::decision("act", "standard actions: presence, station, remove, move, align, harden, hardware, sell"),
             PhaseSpec::auto("bases", "on a production step: bases and factories make troops and hardware, cities grow factories"),
             PhaseSpec::auto("war", "on a war step, the troops on either side of each front fight"),
-            PhaseSpec::auto("strike", "each adversary troop destroys an adjacent building"),
+            PhaseSpec::auto("march", "each adversary troop takes its steps: destroy a target next to it, else move toward the nearest"),
             PhaseSpec::auto("produce", "cities and research stations produce; ambassadors divert them and leak presence compute"),
             PhaseSpec::auto("cleanup", "remove the round's country flags"),
         ],
@@ -103,11 +103,10 @@ pub fn project_done(c: usize) -> String {
 }
 
 /// The standard actions, by name.
-pub const STANDARD: [&str; 9] = [
+pub const STANDARD: [&str; 8] = [
     "presence",
     "station",
     "remove",
-    "node",
     "move",
     "ambassador",
     "align",
@@ -188,6 +187,7 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
     };
     if reserve {
         cx.add_resource(g, seat, RESERVE, -1);
+        cx.tally(g, "board.presence_from_reserve", 1);
     } else {
         cx.add_key(g, track_key(seat), 1);
     }
@@ -217,7 +217,6 @@ pub fn std_cost(w: &World, act: &str) -> (i64, i64, i64) {
         "presence" => (i("presence_energy"), 0, 0),
         "station" => (i("build_energy"), 0, i("station_hardware")),
         "remove" => (i("remove_energy"), 0, 0),
-        "node" => (i("node_energy"), 0, 0),
         "move" => (i("move_energy"), 0, 0),
         "ambassador" => (0, i("ambassador_credits"), 0),
         "align" => (i("align_energy"), 0, 0),
@@ -232,7 +231,6 @@ pub fn std_text(act: &str) -> &'static str {
         "presence" => "place a presence next to yours (uncovers your track's next space)",
         "station" => "build a research station in reach (yours)",
         "remove" => "remove an adversary ambassador in reach",
-        "node" => "remove a node in reach",
         "move" => "move a player ambassador onto a piece in reach",
         "ambassador" => "gain a player ambassador",
         "align" => "align a clean city you can claim (1 ambassador)",
@@ -265,7 +263,6 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
         "remove" => all
             .filter(|&h| reach(h) && g.tokens(h, ADV_AMBASSADOR) > 0)
             .collect(),
-        "node" => all.filter(|&h| reach(h) && g.tokens(h, NODE) > 0).collect(),
         "move" => {
             if g.resource(seat, AMBASSADORS) > 0 || ambassadors_on_board(g, seat) > 0 {
                 all.filter(|&h| reach(h) && has_piece(w, g, h)).collect()
@@ -380,21 +377,6 @@ pub fn move_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, to: usize) -
     }
     place_ambassador(g, cx, seat, to);
     Ok(())
-}
-
-/// The building kinds on hex `h` a destruction can take, as token keys.
-fn buildings_on(g: &GameState, h: usize) -> Vec<String> {
-    let mut out = Vec::new();
-    if g.tokens(h, FACTORY) > 0 && !corrupted(g, h) {
-        out.push(FACTORY.to_string());
-    }
-    if g.tokens(h, STATION) > 0 && !corrupted(g, h) {
-        out.push(STATION.to_string());
-    }
-    if let Some(s) = presence_owner(g, h) {
-        out.push(presence(s));
-    }
-    out
 }
 
 /// A building of `kind` on hex `h` would be destroyed. A Shelter Order in
@@ -720,33 +702,155 @@ fn battle(g: &mut GameState, cx: &mut Cx) {
     cx.tally(g, "board.war_destroyed", destroyed);
 }
 
-/// Production step 3: each adversary troop destroys one building on or
-/// next to its hex (players choose).
-fn strike(g: &mut GameState, cx: &mut Cx) -> Res {
-    let troops: Vec<(usize, i64)> = (0..g.hexes.len())
-        .map(|h| (h, g.tokens(h, TROOP)))
-        .filter(|&(_, n)| n > 0)
+/// The adversary phase's march (019): every adversary troop, one at a time
+/// (in hex-number order, fixed when the march starts), takes `troop_steps`
+/// steps. A step destroys a target on or next to its hex (players choose)
+/// or, with none there, moves one hex toward the nearest target (players
+/// choose among equally good steps; with no target on the board it stays).
+/// A troop that strikes is used up (`troop_spent`).
+fn march(g: &mut GameState, cx: &mut Cx) -> Res {
+    let w = cx.world;
+    let steps = w.int("board.troop_steps");
+    let troops: Vec<usize> = (0..g.hexes.len())
+        .flat_map(|h| std::iter::repeat_n(h, g.tokens(h, TROOP).max(0) as usize))
         .collect();
-    for (h, n) in troops {
-        for _ in 0..n {
-            if !strike_from(g, cx, h, "board.troop_destroyed")? {
-                break;
+    // Troops that have already marched, per hex (none marches twice).
+    let mut marched = vec![0i64; g.hexes.len()];
+    for from in troops {
+        if g.tokens(from, TROOP) - marched[from] <= 0 {
+            continue;
+        }
+        let mut at = from;
+        let mut alive = true;
+        for _ in 0..steps {
+            if has_troop_target(&w, g, at) {
+                cx.tally(g, "board.troop_steps", 1);
+                if !strike_from(g, cx, at)? {
+                    break;
+                }
+                if w.int("board.troop_spent") > 0 {
+                    alive = false;
+                    break;
+                }
+            } else {
+                let Some(to) = step_toward(g, cx, at)? else {
+                    break;
+                };
+                cx.add_tokens(g, at, TROOP, -1);
+                cx.add_tokens(g, to, TROOP, 1);
+                cx.per_round(g, adversary::OPS, 1);
+                cx.tally(g, "board.troop_steps", 1);
+                cx.tally(g, "board.troop_moves", 1);
+                at = to;
             }
+            if g.is_over() {
+                return Ok(());
+            }
+        }
+        if alive {
+            marched[at] += 1;
         }
     }
     Ok(())
 }
 
-/// One adversary troop at `h` strikes a building or presence on or next to
-/// its hex (players choose); a destruction is tallied under `key`.
-/// Returns false when it had no target.
-fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize, key: &str) -> Res<bool> {
+/// What an adversary troop may destroy on hex `h`, as token keys: a
+/// presence, and a player-owned research station or factory (019: not
+/// neutral or corrupted ones, and never cities).
+fn troop_targets_on(g: &GameState, h: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    if cube_owner(g, h).is_some() && !corrupted(g, h) {
+        if g.tokens(h, FACTORY) > 0 {
+            out.push(FACTORY.to_string());
+        }
+        if g.tokens(h, STATION) > 0 {
+            out.push(STATION.to_string());
+        }
+    }
+    if let Some(s) = presence_owner(g, h) {
+        out.push(presence(s));
+    }
+    out
+}
+
+/// Whether hex `h` holds anything an adversary troop targets.
+pub fn is_troop_target(g: &GameState, h: usize) -> bool {
+    !troop_targets_on(g, h).is_empty()
+}
+
+/// Whether an adversary troop at `h` has a target on or next to it.
+fn has_troop_target(w: &World, g: &GameState, h: usize) -> bool {
+    next_to(w, h, |x| is_troop_target(g, x))
+}
+
+/// Walking distance over land from the nearest of `sources`, for every hex
+/// (`None`: no land path). Troops never enter ocean, and some pieces print
+/// ocean inside the board, so straight-line distance would strand a troop.
+fn land_distances(w: &World, sources: impl Iterator<Item = usize>) -> Vec<Option<u32>> {
+    let mut dist: Vec<Option<u32>> = vec![None; w.map.hexes.len()];
+    let mut queue = std::collections::VecDeque::new();
+    for h in sources {
+        if dist[h].is_none() {
+            dist[h] = Some(0);
+            queue.push_back(h);
+        }
+    }
+    while let Some(h) = queue.pop_front() {
+        let d = dist[h].unwrap_or(0);
+        for &n in &w.map.hexes[h].neighbours {
+            if dist[n].is_none() && !is_ocean(w, n) {
+                dist[n] = Some(d + 1);
+                queue.push_back(n);
+            }
+        }
+    }
+    dist
+}
+
+/// Walking distance from the nearest troop target, for every hex (`None`
+/// with no target reachable over land).
+fn target_gaps(w: &World, g: &GameState) -> Vec<Option<u32>> {
+    land_distances(w, (0..g.hexes.len()).filter(|&h| is_troop_target(g, h)))
+}
+
+/// The land hexes next to `at` that bring a troop closer to the nearest
+/// target, in hex order.
+pub fn troop_steps_from(w: &World, g: &GameState, at: usize) -> Vec<usize> {
+    let gaps = target_gaps(w, g);
+    let Some(d) = gaps[at] else {
+        return Vec::new();
+    };
+    w.map.hexes[at]
+        .neighbours
+        .iter()
+        .copied()
+        .filter(|&n| !is_ocean(w, n) && gaps[n].is_some_and(|x| x < d))
+        .collect()
+}
+
+/// One move of the adversary troop at `at` toward the nearest target
+/// (players choose among equally good steps). `None`: nowhere to go.
+fn step_toward(g: &mut GameState, cx: &mut Cx, at: usize) -> Res<Option<usize>> {
+    let w = cx.world;
+    let steps = troop_steps_from(&w, g, at);
+    let opts = steps.iter().map(|&h| hex_opt(&w, h)).collect();
+    let prompt = format!(
+        "The adversary troop at {} moves to which hex?",
+        hex_name(&w, at)
+    );
+    Ok(cx.choose(0, &prompt, opts)?.map(|i| steps[i]))
+}
+
+/// One adversary troop at `h` strikes a target on or next to its hex
+/// (players choose): it is destroyed or the hit absorbed, and the troop is
+/// used up (`troop_spent`). Returns false when it had no target.
+fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize) -> Res<bool> {
     let w = cx.world;
     let mut targets: Vec<(usize, String)> = Vec::new();
     let mut near = vec![h];
     near.extend(w.map.hexes[h].neighbours.iter().copied());
     for x in near {
-        for k in buildings_on(g, x) {
+        for k in troop_targets_on(g, x) {
             targets.push((x, k));
         }
     }
@@ -755,15 +859,20 @@ fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize, key: &str) -> Res<bool>
         .map(|(x, k)| opt(format!("{k} at {}", hex_name(&w, *x))))
         .collect();
     let prompt = format!(
-        "Adversary troop at {}: which building does it destroy?",
+        "Adversary troop at {}: which target does it destroy?",
         hex_name(&w, h)
     );
     let Some(i) = cx.choose(0, &prompt, opts)? else {
         return Ok(false);
     };
     let (x, k) = targets[i].clone();
+    cx.tally(g, "board.troop_strikes", 1);
     if destroy_building(g, cx, x, &k, true) {
-        cx.tally(g, key, 1);
+        let kind = if k == FACTORY || k == STATION { k.as_str() } else { "presence" };
+        cx.tally(g, &format!("board.troop_destroyed.{kind}"), 1);
+        cx.tally(g, "board.troop_destroyed", 1);
+    } else {
+        cx.tally(g, "board.troop_absorbed", 1);
     }
     if w.int("board.troop_spent") > 0 {
         cx.add_tokens(g, h, TROOP, -1);
@@ -772,71 +881,24 @@ fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize, key: &str) -> Res<bool>
     Ok(true)
 }
 
-/// A Discord tip (017): every adversary troop, one at a time (by hex
-/// number order, fixed when the advance starts), moves one hex toward the
-/// nearest player presence or player-owned station or factory, then
-/// strikes. Among equally good steps the players choose; a troop already on
-/// such a hex stays, and with no such hex on the board troops stay. This is
-/// the one movement rule.
-pub fn advance_troops(g: &mut GameState, cx: &mut Cx) -> Res {
-    let w = cx.world;
-    let troops: Vec<usize> = (0..g.hexes.len())
-        .flat_map(|h| std::iter::repeat_n(h, g.tokens(h, TROOP).max(0) as usize))
-        .collect();
-    // Troops that already advanced this tip, per hex (they don't move twice).
-    let mut moved = vec![0i64; g.hexes.len()];
-    for from in troops {
-        if g.tokens(from, TROOP) - moved[from] <= 0 {
-            continue;
-        }
-        let targets: Vec<usize> = (0..g.hexes.len())
-            .filter(|&h| {
-                presence_owner(g, h).is_some()
-                    || ((g.tokens(h, STATION) > 0 || g.tokens(h, FACTORY) > 0)
-                        && cube_owner(g, h).is_some())
-            })
-            .collect();
-        let gap = |h: usize| targets.iter().map(|&t| w.map.distance(h, t)).min();
-        let mut at = from;
-        if let Some(d) = gap(from) {
-            if d > 0 {
-                let steps: Vec<usize> = w.map.hexes[from]
-                    .neighbours
-                    .iter()
-                    .copied()
-                    .filter(|&n| !is_ocean(&w, n) && gap(n).is_some_and(|x| x < d))
-                    .collect();
-                let opts = steps.iter().map(|&h| hex_opt(&w, h)).collect();
-                let prompt = format!(
-                    "Discord: the adversary troop at {} advances to which hex?",
-                    hex_name(&w, from)
-                );
-                if let Some(i) = cx.choose(0, &prompt, opts)? {
-                    at = steps[i];
-                    cx.add_tokens(g, from, TROOP, -1);
-                    cx.add_tokens(g, at, TROOP, 1);
-                    moved[at] += 1;
-                    cx.per_round(g, adversary::OPS, 1);
-                    cx.tally(g, "board.troop_advances", 1);
-                }
-            }
-        }
-        cx.tally(g, "board.advance_strikes", 1);
-        if strike_from(g, cx, at, "board.advance_destroyed")?
-            && at != from
-            && w.int("board.troop_spent") > 0
-        {
-            // The troop that moved here was used up.
-            moved[at] -= 1;
-        }
-        if g.is_over() {
-            return Ok(());
-        }
+/// Where the adversary troops on hex `h` are heading, for the view: the
+/// nearest target over land (ties: country, then hex number; the players
+/// choose in play) and the march in which they strike (1: the next one).
+pub fn troop_plan(w: &World, g: &GameState, h: usize) -> Option<(usize, i64)> {
+    if w.int("board.troop_steps") <= 0 {
+        return None;
     }
-    Ok(())
+    let from = land_distances(w, std::iter::once(h));
+    let target = (0..g.hexes.len())
+        .filter(|&x| is_troop_target(g, x) && from[x].is_some())
+        .min_by_key(|&x| (from[x], w.map.hexes[x].country, w.map.hexes[x].number))?;
+    let steps = w.int("board.troop_steps");
+    // Moves until the target is on or next to the troop, then the strike.
+    let moves = (from[target].unwrap_or(0) as i64 - 1).max(0);
+    Some((target, (moves + 1 + steps - 1) / steps))
 }
 
-/// Production step 4: cities make energy, stations megaproject cubes, data
+/// Production step 3: cities make energy, stations megaproject cubes, data
 /// centres compute; an adversary ambassador on the piece diverts its output
 /// and is removed. Diverted energy and compute sway toward Discord.
 fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
@@ -1068,9 +1130,6 @@ impl Module for Board {
                 };
                 let h = targets[i];
                 match act {
-                    "node" => {
-                        adversary::remove_node(g, cx, h);
-                    }
                     "station" => {
                         cx.add_tokens(g, h, STATION, 1);
                         cx.add_tokens(g, h, &cube(s), 1);
@@ -1099,13 +1158,21 @@ impl Module for Board {
         match phase {
             1 => produce_units(g, cx)?,
             2 => battle(g, cx),
-            3 => strike(g, cx)?,
+            3 => march(g, cx)?,
             4 => produce(g, cx)?,
             _ => {
                 for c in 0..w.map.countries.len() {
                     for f in FLAGS {
                         cx.set_key(g, flag(f, c), 0);
                     }
+                }
+                // Rounds that end with only nodes between the players and the
+                // purge (019: nodes are hard to remove).
+                let level = alignment::bar_level(&w, g);
+                let nodes: i64 = (0..g.hexes.len()).map(|h| g.tokens(h, NODE)).sum();
+                cx.peak(g, "adversary.nodes_peak", nodes);
+                if level < 3 && nodes > 0 && adversary::purge_count(&w, g, level) == nodes {
+                    cx.tally(g, "alignment.purge_blocked_by_nodes", 1);
                 }
                 // Factories per side, as the game ends (the last round's level).
                 let mut sides = [0i64; 3];
@@ -1227,6 +1294,28 @@ impl Module for Board {
             None,
             "printed borders between countries, each with a base on either side",
         );
+        // Each adversary troop's next target (019): players see each hit coming.
+        for h in 0..g.hexes.len() {
+            let n = g.tokens(h, TROOP);
+            if n <= 0 {
+                continue;
+            }
+            if let Some((t, rounds)) = troop_plan(w, g, h) {
+                let what = troop_targets_on(g, t).join(", ");
+                let when = if rounds <= 1 {
+                    "strikes it in the next adversary phase".to_string()
+                } else {
+                    format!("strikes it in {rounds} adversary phases unless stopped")
+                };
+                let doc = format!(
+                    "adversary troop{} at {} heading for {what} at {}: {when} (players choose among equally near targets)",
+                    if n > 1 { "s" } else { "" },
+                    hex_name(w, h),
+                    hex_name(w, t)
+                );
+                out.arrow("troop", h, t, n, rounds, &doc);
+            }
+        }
         for act in STANDARD {
             let (e, cr, hw) = std_cost(w, act);
             let cost: Vec<String> = [(e, "energy"), (cr, "credits"), (hw, "hardware")]

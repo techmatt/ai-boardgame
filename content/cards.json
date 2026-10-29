@@ -1031,5 +1031,20 @@
     "op": "discard_project"
    }
   ]
+ },
+ {
+  "id": "node_takedown",
+  "name": "Node Takedown",
+  "tier": 2,
+  "kind": "program",
+  "cost": 8,
+  "antimatter": 1,
+  "insight": 1,
+  "text": "Remove a node within your reach (placeholder, 019: the tier-2 way to remove a node).",
+  "effects": [
+   {
+    "op": "remove_node"
+   }
+  ]
  }
 ]

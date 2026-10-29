@@ -233,13 +233,14 @@ fn ambassadors_divert_cities_and_stations_and_leak_presence_compute() {
 
 #[test]
 fn a_player_ambassador_absorbs_a_destruction() {
-    let (rules, mut g) = lab(&["board.strike"]);
+    let (rules, mut g) = lab(&["board.march"]);
     let m = &rules.map;
     let at = m.numbered(0, piece(0).factories[0]);
     for h in std::iter::once(at).chain(m.hexes[at].neighbours.iter().copied()) {
         assert!(g.hexes[h].tokens.is_empty());
     }
     put(&mut g, at, FACTORY, 1);
+    put(&mut g, at, &cube(0), 1);
     put(&mut g, at, TROOP, 1);
     put(&mut g, at, &ambassador(0), 1);
     let discord = g.var("alignment.discord");
@@ -493,7 +494,7 @@ fn bases_hold_at_most_three_units() {
 
 #[test]
 fn adversary_troops_strike_buildings_next_to_them() {
-    let (rules, mut g0) = lab(&["board.strike"]);
+    let (rules, mut g0) = lab(&["board.march"]);
     let m = &rules.map;
     let (city, n) = city_with_lonely_neighbours(m);
     let at = n[0];
@@ -508,6 +509,7 @@ fn adversary_troops_strike_buildings_next_to_them() {
 
     let mut g = g0.clone();
     put(&mut g, next[0], FACTORY, 1);
+    put(&mut g, next[0], &cube(0), 1);
     run(&rules, &mut g);
     // A troop strike sways no Discord (only war does), and uses the troop up.
     assert_eq!(
@@ -518,6 +520,7 @@ fn adversary_troops_strike_buildings_next_to_them() {
     // Two in reach: the players choose.
     let mut g = g0.clone();
     put(&mut g, next[0], FACTORY, 1);
+    put(&mut g, next[0], &cube(0), 1);
     put(&mut g, next[1], &presence(0), 1);
     run(&rules, &mut g);
     let p = g.pending.as_ref().expect("a strike choice");
@@ -549,7 +552,7 @@ fn adversary_troops_strike_buildings_next_to_them() {
 
 #[test]
 fn a_troop_that_strikes_is_used_up_and_one_with_no_target_stays() {
-    let (rules, mut g0) = lab(&["board.strike"]);
+    let (rules, mut g0) = lab(&["board.march"]);
     let m = &rules.map;
     assert_eq!(rules.world().int("board.troop_spent"), 1);
     let (city, n) = city_with_lonely_neighbours(m);
@@ -573,14 +576,16 @@ fn a_troop_that_strikes_is_used_up_and_one_with_no_target_stays() {
     // the second finds nothing left and stays.
     let mut g = g0.clone();
     put(&mut g, target, FACTORY, 1);
+    put(&mut g, target, &cube(0), 1);
     run(&rules, &mut g);
     assert_eq!((g.tokens(target, FACTORY), g.tokens(at, TROOP)), (0, 1));
     assert_eq!(g.stats.counters["board.troops_spent"], 1);
 
     // With `troop_spent` 0 a troop strikes and stays.
-    let (rules, mut g) = lab_with(&["board.strike"], &["board.troop_spent=0"]);
+    let (rules, mut g) = lab_with(&["board.march"], &["board.troop_spent=0"]);
     put(&mut g, at, TROOP, 1);
     put(&mut g, target, FACTORY, 1);
+    put(&mut g, target, &cube(0), 1);
     run(&rules, &mut g);
     assert_eq!((g.tokens(target, FACTORY), g.tokens(at, TROOP)), (0, 1));
 }
@@ -588,7 +593,7 @@ fn a_troop_that_strikes_is_used_up_and_one_with_no_target_stays() {
 #[test]
 fn with_presence_returns_a_destroyed_presence_goes_to_the_reserve_and_is_placed_first() {
     use crate::modules::common::RESERVE;
-    let (rules, mut g) = lab_with(&["board.strike"], &["board.presence_returns=1"]);
+    let (rules, mut g) = lab_with(&["board.march"], &["board.presence_returns=1"]);
     let m = &rules.map;
     let (city, n) = city_with_lonely_neighbours(m);
     let at = n[0];
@@ -623,7 +628,7 @@ fn with_presence_returns_a_destroyed_presence_goes_to_the_reserve_and_is_placed_
     assert_eq!(presence_of(&g, 0).len(), 2);
 
     // Off: the presence is just gone.
-    let (rules, mut g) = lab_with(&["board.strike"], &["board.presence_returns=0"]);
+    let (rules, mut g) = lab_with(&["board.march"], &["board.presence_returns=0"]);
     put(&mut g, at, TROOP, 1);
     put(&mut g, target, &presence(0), 1);
     run(&rules, &mut g);
@@ -691,15 +696,16 @@ fn standard_actions_are_offered_only_when_affordable_and_targeted() {
         assert!(o0.contains(a), "{a}: {o0:?}");
     }
     assert!(
-        !o0.contains("remove") && !o0.contains("harden") && !o0.contains("node"),
+        !o0.contains("remove") && !o0.contains("harden"),
         "{o0:?}"
     );
     assert!(!o0.contains("factory"), "cities build factories now");
     let d = presence_of(&g, 0)[0];
     put(&mut g, d, ADV_AMBASSADOR, 1);
     assert!(standard_offered(&rules, &g, 0).contains("remove"));
+    // Removing a node is no standard action (019: only tier-2 effects remove nodes).
     put(&mut g, d, NODE, 1);
-    assert!(standard_offered(&rules, &g, 0).contains("node"));
+    assert!(!standard_offered(&rules, &g, 0).contains("node"));
     // Only the Protector (seat 1) may harden.
     assert!(standard_offered(&rules, &g, 1).contains("harden"));
     assert!(!standard_offered(&rules, &g, 0).contains("harden"));
@@ -773,12 +779,6 @@ fn standard_actions_cost_what_the_config_says() {
         (spent(&g, 0), g.tokens(d, ADV_AMBASSADOR), g.var(SUPPLY)),
         ((2, 0, 0), 0, supply + 1)
     );
-
-    let mut g = g0.clone();
-    put(&mut g, d, NODE, 1);
-    let nodes = total(&g, NODE);
-    act(&rules, &mut g, std_act(0, "node"));
-    assert_eq!((spent(&g, 0), total(&g, NODE)), ((2, 0, 0), nodes - 1));
 
     let mut g = g0.clone();
     act(&rules, &mut g, std_act(1, "harden"));
@@ -1214,7 +1214,7 @@ fn an_adversary_factory_makes_adversary_troops() {
 
 #[test]
 fn a_troop_at_a_base_absorbs_a_strike_next_to_it() {
-    let (rules, mut g) = lab(&["board.strike"]);
+    let (rules, mut g) = lab(&["board.march"]);
     let m = &rules.map;
     let [b0, _] = m.fronts[0].bases;
     let next = m.hexes[b0]
@@ -1224,6 +1224,7 @@ fn a_troop_at_a_base_absorbs_a_strike_next_to_it() {
         .find(|&h| kind(m, h) == HexKind::Open)
         .unwrap();
     put(&mut g, next, FACTORY, 1);
+    put(&mut g, next, &cube(0), 1);
     put(&mut g, next, TROOP, 1);
     put(&mut g, b0, UNIT, 1);
     let discord = g.var("alignment.discord");
@@ -1293,4 +1294,204 @@ fn selling_a_card_discards_it_for_a_credit() {
             None
         )
         .is_err());
+}
+
+// ---------- the march (019) ----------
+
+/// A land hex `d` from `p` with a land path toward it, for march tests.
+fn land_at(m: &Map, p: usize, d: i32) -> usize {
+    (0..m.hexes.len())
+        .find(|&h| {
+            m.distance(p, h) == d
+                && kind(m, h) != HexKind::Ocean
+                && m.hexes[h]
+                    .neighbours
+                    .iter()
+                    .any(|&n| kind(m, n) != HexKind::Ocean && m.distance(p, n) == d - 1)
+        })
+        .unwrap()
+}
+
+#[test]
+fn a_troop_marches_two_steps_toward_presence_then_strikes() {
+    let (rules, g0) = lab(&["board.march"]);
+    let m = &rules.map;
+    assert_eq!(rules.world().int("board.troop_steps"), 2);
+    let p = m.numbered(0, piece(0).presence);
+
+    // Three away: two moves, ending next to the presence, which survives the round.
+    let mut g = g0.clone();
+    put(&mut g, p, &presence(0), 1);
+    let t = land_at(m, p, 3);
+    put(&mut g, t, TROOP, 1);
+    // The view shows where it is heading, two adversary phases out.
+    let v = rules.view(&g);
+    assert_eq!(v.arrows.len(), 1);
+    assert_eq!((v.arrows[0].from, v.arrows[0].to, v.arrows[0].rounds), (t, p, 2));
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    let at = (0..m.hexes.len()).find(|&h| g.tokens(h, TROOP) > 0).unwrap();
+    assert_eq!(m.distance(at, p), 1);
+    assert_eq!(g.tokens(p, &presence(0)), 1);
+    assert_eq!(g.stats.counters["board.troop_moves"], 2);
+    let v = rules.view(&g);
+    assert_eq!(v.arrows[0].rounds, 1);
+    // Next round it strikes, sways no Discord, and is used up.
+    let discord = g.var("alignment.discord");
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!((g.tokens(p, &presence(0)), total(&g, TROOP)), (0, 0));
+    assert_eq!(g.stats.counters["board.troop_destroyed.presence"], 1);
+    assert_eq!(g.var("alignment.discord"), discord);
+    assert!(rules.view(&g).arrows.is_empty());
+
+    // Two away: one move, then it destroys in the same round.
+    let mut g = g0.clone();
+    put(&mut g, p, &presence(0), 1);
+    put(&mut g, land_at(m, p, 2), TROOP, 1);
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!((g.tokens(p, &presence(0)), total(&g, TROOP)), (0, 0));
+    assert_eq!(g.stats.counters["board.troop_steps"], 2);
+}
+
+#[test]
+fn troops_ignore_neutral_buildings_and_cities_and_stay_with_no_target() {
+    let (rules, mut g) = lab(&["board.march"]);
+    let m = &rules.map;
+    let f = m.numbered(0, piece(0).factories[0]);
+    let city = m.numbered(0, piece(0).cities[0]);
+    put(&mut g, f, FACTORY, 1);
+    let t = land_at(m, f, 1);
+    put(&mut g, t, TROOP, 1);
+    put(&mut g, city, &cube(0), 1);
+    run(&rules, &mut g);
+    assert_eq!((g.tokens(t, TROOP), g.tokens(f, FACTORY)), (1, 1));
+    assert!(rules.view(&g).arrows.is_empty());
+    // A player-owned factory is a target.
+    put(&mut g, f, &cube(0), 1);
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!((total(&g, TROOP), g.tokens(f, FACTORY)), (0, 0));
+    assert_eq!(g.stats.counters["board.troop_destroyed.factory"], 1);
+}
+
+#[test]
+fn equally_near_targets_are_the_players_choice() {
+    let (rules, g0) = lab(&["board.march"]);
+    let m = &rules.map;
+    let w = rules.world();
+    // A troop with two presence tokens equally far on foot, each alone
+    // reachable by exactly one best step, the two steps different: with both
+    // on the board the players choose between them.
+    let land: Vec<usize> = (0..m.hexes.len()).filter(|&h| kind(m, h) != HexKind::Ocean).collect();
+    let steps = |t: usize, targets: &[usize]| {
+        let mut g = g0.clone();
+        for (i, &x) in targets.iter().enumerate() {
+            put(&mut g, x, &presence(i), 1);
+        }
+        board::troop_steps_from(&w, &g, t)
+    };
+    let (t, a, b) = land
+        .iter()
+        .flat_map(|&t| land.iter().map(move |&a| (t, a)))
+        .filter(|&(t, a)| m.distance(t, a) == 3)
+        .flat_map(|(t, a)| land.iter().map(move |&b| (t, a, b)))
+        .find(|&(t, a, b)| {
+            a < b && m.distance(t, b) == 3 && {
+                let (sa, sb) = (steps(t, &[a]), steps(t, &[b]));
+                sa.len() == 1 && sb.len() == 1 && sa != sb && steps(t, &[a, b]).len() == 2
+            }
+        })
+        .expect("a troop between two equally near targets");
+    let mut g = g0.clone();
+    put(&mut g, t, TROOP, 1);
+    put(&mut g, a, &presence(0), 1);
+    put(&mut g, b, &presence(1), 1);
+    run(&rules, &mut g);
+    let p = g.pending.as_ref().expect("a step choice");
+    assert!(p.ask.prompt.contains("moves to which hex"), "{}", p.ask.prompt);
+    assert_eq!(p.ask.options.len(), 2);
+}
+
+#[test]
+fn a_troop_walking_onto_an_unmarched_troop_marches_once_and_so_does_it() {
+    let (rules, g0) = lab(&["board.march"]);
+    let m = &rules.map;
+    let w = rules.world();
+    let land = |h: usize| kind(m, h) != HexKind::Ocean;
+    // Troop A (lower hex number, so it marches first) whose first step is
+    // onto troop B's hex; the target 4 hexes from A on foot.
+    let p = m.numbered(0, piece(0).presence);
+    let mut g = g0.clone();
+    put(&mut g, p, &presence(0), 1);
+    let (a, b) = (0..m.hexes.len())
+        .filter(|&a| land(a) && m.distance(a, p) == 4)
+        .find_map(|a| {
+            let first = *board::troop_steps_from(&w, &g, a).first()?;
+            (a < first && m.distance(first, p) == 3).then_some((a, first))
+        })
+        .expect("a troop whose first step lands on a later hex");
+    put(&mut g, a, TROOP, 1);
+    put(&mut g, b, TROOP, 1);
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    // Each marched exactly 2 steps, no strike: both still on the board, the
+    // presence untouched, one 2 hexes away and one next to it.
+    assert_eq!(g.stats.counters["board.troop_moves"], 4);
+    assert_eq!((total(&g, TROOP), g.tokens(p, &presence(0))), (2, 1));
+    let mut gaps: Vec<i32> = (0..m.hexes.len())
+        .flat_map(|h| std::iter::repeat_n(m.distance(h, p), g.tokens(h, TROOP) as usize))
+        .collect();
+    gaps.sort();
+    assert_eq!(gaps, vec![1, 2]);
+}
+
+#[test]
+fn with_troop_spent_off_a_troop_strikes_on_both_steps() {
+    let (rules, mut g) = lab_with(&["board.march"], &["board.troop_spent=0"]);
+    let m = &rules.map;
+    let p = m.numbered(0, piece(0).presence);
+    let q = m.hexes[p]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&h| kind(m, h) != HexKind::Ocean)
+        .unwrap();
+    put(&mut g, p, TROOP, 1);
+    put(&mut g, p, &presence(0), 1);
+    put(&mut g, q, &presence(1), 1);
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(g.stats.counters["board.troop_strikes"], 2);
+    assert_eq!((presence_of(&g, 0).len(), presence_of(&g, 1).len(), total(&g, TROOP)), (0, 0, 1));
+}
+
+#[test]
+fn troops_walk_around_ocean_rather_than_stall() {
+    // A troop whose every straight-line step toward the target is ocean
+    // still walks (019: distance is the walk over land).
+    let (rules, g0) = lab(&["board.march"]);
+    let m = &rules.map;
+    let land = |h: usize| kind(m, h) != HexKind::Ocean;
+    let (t, p) = (0..m.hexes.len())
+        .filter(|&t| land(t))
+        .flat_map(|t| (0..m.hexes.len()).map(move |p| (t, p)))
+        .find(|&(t, p)| {
+            land(p)
+                && m.distance(t, p) >= 3
+                && m.hexes[t].neighbours.iter().any(|&n| land(n))
+                && !m.hexes[t]
+                    .neighbours
+                    .iter()
+                    .any(|&n| land(n) && m.distance(n, p) < m.distance(t, p))
+        })
+        .expect("a bay between a land hex and a target");
+    let mut g = g0.clone();
+    put(&mut g, p, &presence(0), 1);
+    put(&mut g, t, TROOP, 1);
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(g.tokens(t, TROOP), 0, "the troop left {t}");
+    assert!(g.stats.counters["board.troop_moves"] >= 1);
 }

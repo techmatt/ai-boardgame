@@ -18,7 +18,8 @@ pub const STATION: &str = "station";
 /// The adversary's owner cube (on a city or research station): corrupted.
 pub const ADV_CUBE: &str = "cube:adversary";
 pub const ADV_AMBASSADOR: &str = "ambassador:adversary";
-/// An adversary troop: stays on the board and strikes in production.
+/// An adversary troop: marches in the adversary phase (019) and is used up
+/// when it strikes.
 pub const TROOP: &str = "troop";
 /// Corp units waiting at a military base (the base's country's corp).
 pub const UNIT: &str = "unit";

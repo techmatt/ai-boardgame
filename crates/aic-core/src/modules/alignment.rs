@@ -5,7 +5,8 @@
 //!
 //! Replaces human opposition (rules revision 5). Since 017 every card is
 //! one-shot, a Discord card's strength steps up with the Discord tip count
-//! (printed steps), and each Discord tip advances the adversary troops.
+//! (printed steps); 017–018's Discord-tip troop advance became 019's march
+//! (module `board`).
 
 use crate::action::Action;
 use crate::content::{AlignOp, AlignmentCard, Passive, Side};
@@ -19,19 +20,18 @@ use crate::view::{CardView, ViewOut};
 use super::common::*;
 use super::{adversary, ai, board, cards, threats};
 
-const PARAMS: [ParamSpec; 15] = [
+const PARAMS: [ParamSpec; 14] = [
     ParamSpec::int("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
     ParamSpec::int("tip_per_player", 1, 50, "a bucket tips when it holds this many Sway per player"),
     ParamSpec::int("momentum_every", 0, 10, "Momentum: a side's bucket holds 1 fewer Sway per this many of its tips, down to 1 per player (0: off)"),
     ParamSpec::int("troop", 0, 10, "Sway toward Unity for removing an adversary troop"),
     ParamSpec::int("free_city", 0, 10, "Sway toward Unity for freeing a corrupted city"),
     ParamSpec::int("node", 0, 10, "Sway toward Unity for removing a node"),
-    ParamSpec::int("troop_advance", 0, 1, "1: each Discord tip advances every adversary troop one hex toward player pieces, then it strikes (0: off)"),
     ParamSpec::int("threat_discord", 0, 10, "Sway toward Discord when a threat executes uncountered"),
     ParamSpec::int("adversary_discord", 0, 10, "Sway toward Discord the adversary adds at the start of every round"),
     ParamSpec::int("antimatter_discord", 0, 5, "the antimatter action: Sway toward Discord to produce 1 antimatter (0: no such action)"),
     ParamSpec::int("antimatter_uses", 0, 5, "times each player may take the antimatter action per round"),
-    ParamSpec::list("unity_ease", 0, 50, "Unity tip counts at which the clear-board bar drops a level (the first also starts the stronger Unity cards)"),
+    ParamSpec::list("unity_ease", 0, 50, "Unity tip counts at which the clear-board bar drops a level: ambassadors, then troops, then nodes stop counting (the first also starts the stronger Unity cards)"),
     ParamSpec::int("discord_tier2", 1, 50, "Discord tip count from which a Discord tip draws the stronger tier"),
     ParamSpec::int("unity_win", 0, 50, "Unity tips that win outright (0: never)"),
     ParamSpec::int("clear_win_stage", 1, 3, "the bar-0 win counts only once this round's adversary card is of this stage (1: any time)"),
@@ -306,6 +306,18 @@ pub fn resolve(g: &mut GameState, cx: &mut Cx, op: &AlignOp) -> Res {
                 adversary::place(g, cx, h, n * amount);
             }
         }
+        AlignOp::RemoveNodes { count } => {
+            for _ in 0..*count {
+                let nodes: Vec<usize> = (0..g.hexes.len())
+                    .filter(|&h| g.tokens(h, NODE) > 0)
+                    .collect();
+                let opts = nodes.iter().map(|&h| hex_opt(&w, h)).collect();
+                let Some(i) = cx.choose(0, "Remove the node in which hex?", opts)? else {
+                    break;
+                };
+                adversary::remove_node(g, cx, nodes[i]);
+            }
+        }
         AlignOp::CleanCityAmbassadors { amount } => {
             let cities: Vec<usize> = (0..g.hexes.len())
                 .filter(|&h| clean_city(&w, g, h))
@@ -459,8 +471,7 @@ impl Alignment {
 
     /// A bucket tips: one card of its side resolves (at the strength step
     /// its side's tip count has reached), the side's tip count goes up by
-    /// one, and the bucket's Sway returns to the Undecided. A Discord tip
-    /// then advances every adversary troop, which strikes.
+    /// one, and the bucket's Sway returns to the Undecided.
     fn tip(&self, g: &mut GameState, cx: &mut Cx, side: Side) -> Res {
         let w = cx.world;
         let round = g.round;
@@ -497,9 +508,6 @@ impl Alignment {
                 }
             }
             cx.tally(g, &format!("alignment.card.{id}"), 1);
-        }
-        if side == Side::Discord && w.int("alignment.troop_advance") > 0 {
-            board::advance_troops(g, cx)?;
         }
         Ok(())
     }
@@ -660,7 +668,7 @@ impl Module for Alignment {
             "Discord tips",
             dt,
             (dt < tier2).then_some(tier2),
-            "Discord tips so far; Discord cards print stronger steps by this count, and each tip advances the adversary troops",
+            "Discord tips so far; Discord cards print stronger steps by this count",
         );
         let level = bar_level(w, g);
         let mut text = adversary::win_text(w, level);

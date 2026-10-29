@@ -67,6 +67,7 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
     effects.iter().all(|e| match e {
         Effect::Damage { at, .. } => !damage_hexes(w, g, seat, *at).is_empty(),
         Effect::DamageCountry { .. } | Effect::DestroyAll => any_hex(g, |h| has_adversary(g, h)),
+        Effect::RemoveNode => any_hex(g, |h| g.tokens(h, NODE) > 0 && in_reach(w, g, seat, h)),
         Effect::RemoveAmbassadorsCountry { .. } => any_hex(g, |h| g.tokens(h, ADV_AMBASSADOR) > 0),
         Effect::BuildFactory => !factory_sites(w, g, seat).is_empty(),
         Effect::Cleanse { .. } => any_hex(g, |h| cleansable(w, g, h) && in_reach(w, g, seat, h)),
@@ -202,6 +203,16 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 format!("Seat {seat}: remove every adversary ambassador and troop in which hex?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 adversary::destroy_all(g, cx, seat, hexes[i]);
+            }
+        }
+        Effect::RemoveNode => {
+            let hexes: Vec<usize> = (0..g.hexes.len())
+                .filter(|&h| g.tokens(h, NODE) > 0 && in_reach(&w, g, seat, h))
+                .collect();
+            let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+            let prompt = format!("Seat {seat}: remove the node in which hex?");
+            if let Some(i) = cx.choose(seat, &prompt, opts)? {
+                adversary::remove_node(g, cx, hexes[i]);
             }
         }
         Effect::RemoveAmbassadorsCountry { unity_per } => {

@@ -64,6 +64,14 @@
   "effects": [{"op": "income", "credits": 2}, {"op": "credits", "credits": 4}]
  },
  {
+  "id": "decommission",
+  "name": "Decommission",
+  "side": "unity",
+  "tier": 2,
+  "text": "Remove a node anywhere on the board (placeholder, 019).",
+  "effects": [{"op": "remove_nodes", "count": 1}]
+ },
+ {
   "id": "incursion",
   "name": "Incursion",
   "side": "discord",

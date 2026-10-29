@@ -31,13 +31,13 @@
         "free_city_at": 2,
         "destruction_discord": 1,
         "troop_spent": 1,
+        "troop_steps": 2,
         "presence_returns": 1,
         "presence_energy": 1,
         "build_energy": 2,
         "station_hardware": 2,
         "factory_hardware": 1,
         "hardware_credits": 4,
-        "node_energy": 2,
         "remove_energy": 2,
         "move_energy": 1,
         "ambassador_credits": 6,
@@ -93,16 +93,16 @@
         "tip_per_player": 2,
         "momentum_every": 0,
         "troop": 1,
-        "free_city": 2,
-        "node": 1,
-        "troop_advance": 1,
+        "free_city": 3,
+        "node": 2,
         "threat_discord": 1,
         "adversary_discord": 0,
         "antimatter_discord": 1,
         "antimatter_uses": 1,
         "unity_ease": [
           1,
-          3
+          1,
+          2
         ],
         "discord_tier2": 2,
         "unity_win": 8,
@@ -183,7 +183,8 @@
         "strike_team",
         "shelter_order",
         "security_patch",
-        "zero_day_wipe"
+        "zero_day_wipe",
+        "node_takedown"
       ]
     }
   ],
@@ -192,6 +193,7 @@
     "adversary.build",
     "adversary.spread",
     "adversary.corrupt",
+    "board.march",
     "threats.deal",
     "adversary.reveal",
     "cards.tier",
@@ -202,7 +204,6 @@
     "cards.play+threats.counter+economy.give+alignment.act+board.act",
     "board.bases",
     "board.war",
-    "board.strike",
     "board.produce",
     "economy.upkeep",
     "threats.execute",

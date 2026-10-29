@@ -272,5 +272,33 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
     labelLayer.append(g);
   }
 
-  svg.append(hexLayer, labelLayer, borderLayer, frontLayer, tokenLayer, markLayer);
+  // Each adversary troop's next target (019): a dashed arrow from the troop to the
+  // piece it is heading for, solid red when it strikes in the next adversary phase.
+  const arrowLayer = el('g', { class: 'arrows' });
+  for (const a of view.arrows ?? []) {
+    // From the troop (low on its hex, where the adversary's row sits) toward the
+    // target's centre, stopping short of it; the head follows the drawn shaft.
+    const [ax, ay] = [pts[a.from][0], pts[a.from][1] + 0.3];
+    const [bx, by] = pts[a.to];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (len < 0.8) {
+      // A target on the troop's own hex: a ring round the hex instead of an arrow.
+      const g = el('g', { class: `arrow ${a.kind}${a.rounds <= 1 ? ' soon' : ''}`, 'data-from': a.from, 'data-to': a.to });
+      g.append(el('circle', { cx: f(bx), cy: f(by), r: 0.78, fill: 'none' }), el('title', {}, a.doc));
+      arrowLayer.append(g);
+      continue;
+    }
+    const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+    const [sx, sy] = [ax + ux * 0.25, ay + uy * 0.25];
+    const [ex, ey] = [bx - ux * 0.45, by - uy * 0.45];
+    const g = el('g', { class: `arrow ${a.kind}${a.rounds <= 1 ? ' soon' : ''}`, 'data-from': a.from, 'data-to': a.to });
+    g.append(el('line', { x1: f(sx), y1: f(sy), x2: f(ex), y2: f(ey) }));
+    const [px, py] = [-uy, ux];
+    const head = `M${f(ex + ux * 0.2)},${f(ey + uy * 0.2)} L${f(ex + px * 0.12)},${f(ey + py * 0.12)} L${f(ex - px * 0.12)},${f(ey - py * 0.12)} Z`;
+    g.append(el('path', { d: head }));
+    g.append(el('title', {}, a.doc));
+    arrowLayer.append(g);
+  }
+
+  svg.append(hexLayer, labelLayer, borderLayer, frontLayer, tokenLayer, arrowLayer, markLayer);
 }

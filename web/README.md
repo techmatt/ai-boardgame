@@ -80,7 +80,7 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   hover text.
 - **Actions:** besides cards, threats and gifts, each seat panel offers the board's
   standard actions (`standard`: place presence, build a research station, remove an
-  adversary ambassador or a node, move an ambassador, gain an ambassador, align a city,
+  adversary ambassador, move an ambassador, gain an ambassador, align a city,
   harden a building, buy hardware) labelled with the words and costs the rules publish
   in the view (`standard`), and one *sell*
   button per card in hand. A standard action that needs a hex asks for it next, as a

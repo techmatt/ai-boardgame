@@ -366,6 +366,8 @@ pub enum Effect {
     },
     /// Remove every adversary ambassador and troop in one hex.
     DestroyAll,
+    /// Remove one node within your reach (019: the tier-2 way to remove a node).
+    RemoveNode,
     /// Remove every adversary ambassador in one country; sway 1 toward Unity per `unity_per` removed.
     RemoveAmbassadorsCountry {
         unity_per: i64,
@@ -752,6 +754,8 @@ pub enum AlignOp {
     FlipStations,
     /// Every player loses `amount` of `resource` (as much as they have).
     PlayersLose { resource: String, amount: i64 },
+    /// Remove `count` nodes anywhere on the board, one at a time (players choose).
+    RemoveNodes { count: i64 },
 }
 
 // ---------- AI boards ----------
