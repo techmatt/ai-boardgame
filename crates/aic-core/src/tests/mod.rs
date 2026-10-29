@@ -5,17 +5,21 @@ use rand::{RngCore, SeedableRng};
 use super::*;
 use crate::content::HexKind;
 use crate::modules::adversary::{CURRENT, DECK, NEXT, STAGE, SUPPLY};
-use crate::modules::common::{ambassador, cube, dc, dcs_of, ADV_AMBASSADOR, ADV_CUBE, AMBASSADORS, FACTORY, HARDEN, STATION, TROOP, UNIT};
+use crate::modules::common::{
+    ambassador, cube, presence, presence_of, ADV_AMBASSADOR, ADV_CUBE, AMBASSADORS, FACTORY,
+    HARDEN, STATION, TROOP, UNIT,
+};
 
-mod config;
-mod map;
-mod setup;
 mod adversary;
-mod board;
-mod threats;
 mod alignment;
+mod board;
 mod cards;
+mod config;
 mod determinism;
+mod map;
+mod plan;
+mod setup;
+mod threats;
 mod view;
 
 const BASELINE: &str = include_str!("../../../../configs/baseline.json");
@@ -136,7 +140,15 @@ fn answer(rules: &Rules, g: &mut GameState, i: usize) {
     let o = p.ask.options[i].clone();
     let seat = p.ask.seat;
     rules
-        .apply_mut(g, &Action::Choose { seat, option: o.option, target: o.target }, None)
+        .apply_mut(
+            g,
+            &Action::Choose {
+                seat,
+                option: o.option,
+                target: o.target,
+            },
+            None,
+        )
         .unwrap();
 }
 
@@ -166,12 +178,17 @@ fn answer_all(rules: &Rules, g: &mut GameState) {
 
 /// Applies `a` and answers whatever it asks with first options.
 fn act(rules: &Rules, g: &mut GameState, a: Action) {
-    rules.apply_mut(g, &a, None).unwrap_or_else(|e| panic!("{a:?}: {e}"));
+    rules
+        .apply_mut(g, &a, None)
+        .unwrap_or_else(|e| panic!("{a:?}: {e}"));
     answer_all(rules, g);
 }
 
 fn std_act(seat: u8, act: &str) -> Action {
-    Action::Standard { seat, act: act.into() }
+    Action::Standard {
+        seat,
+        act: act.into(),
+    }
 }
 
 /// A Cx for calling module functions directly on a crafted state.
@@ -211,7 +228,7 @@ fn random_game(rules: &Rules, seed: u64) -> (GameState, Vec<Action>) {
     (g, rec.actions)
 }
 
-/// Threat variants, Alignment variants, overflow, difficulty 0 and 4, the
+/// Threat variants, Alignment variants, difficulty 0 and 4, the
 /// draft variants and 1-4 countries.
 fn variant_matrix() -> Vec<Config> {
     let sets: &[&[&str]] = &[
@@ -220,22 +237,27 @@ fn variant_matrix() -> Vec<Config> {
         &["threats.variant=off"],
         &["alignment.variant=still"],
         &["alignment.variant=off"],
-        &["alignment.momentum_every=2", "alignment.antimatter_discord=0"],
-        &["adversary.variant=overflow"],
+        &[
+            "alignment.momentum_every=2",
+            "alignment.antimatter_discord=0",
+        ],
         &["adversary.difficulty=4"],
         &[
             "adversary.difficulty=4",
             "adversary.counter_bonus_all=1",
-            "adversary.variant=overflow",
             "threats.variant=shared_row",
         ],
         &["cards.variant=free_keep", "cards.free_keeps=1"],
         &["cards.variant=off"],
-        &["board.war=1"],
+        &["board.clock=3"],
         &["countries=1"],
         &["countries=3"],
         &["countries=4"],
-        &["countries=3", "adversary.difficulty=4", "alignment.variant=still"],
+        &[
+            "countries=3",
+            "adversary.difficulty=4",
+            "alignment.variant=still",
+        ],
     ];
     sets.iter()
         .map(|s| {
@@ -248,7 +270,7 @@ fn variant_matrix() -> Vec<Config> {
 
 // ---------- the golden game ----------
 
-const GOLDEN_FINGERPRINT: &str = "a26ae448b79bd0ee";
+const GOLDEN_FINGERPRINT: &str = "85002ca2649a3072";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).
@@ -268,5 +290,8 @@ fn golden_game() {
         rules.apply_mut(&mut g, &a, None).unwrap();
     }
     assert!(g.is_over());
-    assert_eq!((RULES_REVISION, g.fingerprint().as_str()), (6, GOLDEN_FINGERPRINT));
+    assert_eq!(
+        (RULES_REVISION, g.fingerprint().as_str()),
+        (7, GOLDEN_FINGERPRINT)
+    );
 }

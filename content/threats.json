@@ -43,7 +43,7 @@
   "id": "supply_raid",
   "name": "Supply raid",
   "tier": 1,
-  "text": "Each player with a data centre here loses 3 credits.",
+  "text": "Each player with presence here loses 3 credits.",
   "counter": [
    [
     "credits",

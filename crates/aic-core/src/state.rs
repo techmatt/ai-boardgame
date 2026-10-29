@@ -1,6 +1,6 @@
 //! The serializable game state. Everything the rules read is something a
 //! physical copy could hold: tokens on hexes, resources on seat boards,
-//! exhausted cards, card slots, a round and phase marker, numbered tracks.
+//! exhausted cards, a round and phase marker, numbered tracks.
 //! Two parts are not game components: `rng` (the dice) and `stats`
 //! (observation for the simulator; rules never read it). Geometry lives in
 //! [`crate::Map`].
@@ -56,8 +56,6 @@ pub struct Seat {
     /// Ids of this seat's used (face-down) cards, sorted. Set and refreshed
     /// by the module that owns each card, via `Cx::exhaust` / `Cx::refresh`.
     pub exhausted: Vec<String>,
-    /// The country piece's card strip: a content card id per slot. Unused so far.
-    pub slots: Vec<Option<String>>,
 }
 
 /// A choice in the middle of resolving a phase or an action ("players

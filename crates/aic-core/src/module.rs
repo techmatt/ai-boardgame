@@ -195,7 +195,9 @@ pub trait Module: Send + Sync + Debug {
     /// Validate and apply a non-pass action this module owns. On
     /// `Halt::Illegal` the engine restores the state from before it.
     fn act(&self, _phase: usize, _g: &mut GameState, _cx: &mut Cx, action: &Action) -> Res {
-        Err(Halt::Illegal(format!("this phase takes no action like {action:?}")))
+        Err(Halt::Illegal(format!(
+            "this phase takes no action like {action:?}"
+        )))
     }
     /// After every action and every automatic phase: standing checks
     /// (thresholds, the end of the game).
@@ -303,7 +305,10 @@ impl<'a> Cx<'a> {
     /// A log line, optionally about a hex.
     pub fn note(&mut self, hex: Option<usize>, text: impl FnOnce() -> String) {
         let at = hex.map(|h| self.world.map.hexes[h].hex);
-        self.emit(|| Event::Note { text: text(), hex: at });
+        self.emit(|| Event::Note {
+            text: text(),
+            hex: at,
+        });
     }
 
     /// Asks `seat` to choose one of `options` (players choose). `None` if
@@ -409,6 +414,17 @@ impl<'a> Cx<'a> {
         *g.stats.counters.entry(key.to_string()).or_insert(0) += n;
     }
 
+    /// Raises a counter by its full key to `n` if it is lower (a peak).
+    pub fn peak(&mut self, g: &mut GameState, key: &str, n: i64) {
+        let e = g.stats.counters.entry(key.to_string()).or_insert(0);
+        *e = (*e).max(n);
+    }
+
+    /// Sets a counter by its full key to `n` (a level; the last one set stays).
+    pub fn level(&mut self, g: &mut GameState, key: &str, n: i64) {
+        g.stats.counters.insert(key.to_string(), n);
+    }
+
     /// This module's track `"<module>.<name>"`.
     pub fn var(&self, g: &GameState, name: &str) -> i64 {
         g.var(&format!("{}.{name}", self.module))
@@ -454,7 +470,10 @@ impl<'a> Cx<'a> {
         top: bool,
     ) -> Result<(), String> {
         if !from.is_empty() {
-            let pile = g.piles.get_mut(from).ok_or_else(|| format!("{card} is not in {from}"))?;
+            let pile = g
+                .piles
+                .get_mut(from)
+                .ok_or_else(|| format!("{card} is not in {from}"))?;
             let i = pile
                 .iter()
                 .position(|c| c == card)
@@ -521,14 +540,24 @@ impl<'a> Cx<'a> {
         if g.outcome.is_some() {
             return;
         }
-        let log = if self.choices.replaying() { None } else { self.events.as_deref_mut() };
+        let log = if self.choices.replaying() {
+            None
+        } else {
+            self.events.as_deref_mut()
+        };
         end_game(g, won, reason, detail, log);
     }
 }
 
 /// Sets the game's outcome and logs its `GameEnded` event to `log`, if any
 /// (shared by [`Cx::end`] and the engine's round limit).
-pub(crate) fn end_game(g: &mut GameState, won: bool, reason: &str, detail: String, log: Option<&mut Vec<Event>>) {
+pub(crate) fn end_game(
+    g: &mut GameState,
+    won: bool,
+    reason: &str,
+    detail: String,
+    log: Option<&mut Vec<Event>>,
+) {
     let round = g.round;
     if let Some(log) = log {
         log.push(Event::GameEnded {

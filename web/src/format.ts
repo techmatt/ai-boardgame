@@ -72,14 +72,13 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       return `+1 antimatter${typeof n === 'number' ? ` (${n} Sway → Discord)` : ' (Sway → Discord)'}`;
     }
     case 'standard': {
-      const s = STANDARD[String(a.act)];
+      // The rules publish each standard action's words and cost in the view.
+      const s = cx.view?.standard?.find((x) => x.act === String(a.act));
       if (!s) return `standard: ${words(String(a.act))}`;
-      const n = (k: string) => {
-        const v = cx.config ? param(cx.config, 'board', k) : undefined;
-        return typeof v === 'number' ? v : undefined;
-      };
-      const costs = s.cost.map(([k, what]) => [n(k), what] as const).filter(([v]) => v !== undefined && v > 0).map(([v, what]) => `${v} ${what}`);
-      return `${s.label}${costs.length ? ` (${costs.join(', ')})` : ''}`;
+      const costs = ([[s.energy, 'energy'], [s.credits, 'credits'], [s.hardware, 'hardware']] as const)
+        .filter(([v]) => v > 0)
+        .map(([v, what]) => `${v} ${what}`);
+      return `${s.doc.split(';')[0]}${costs.length ? ` (${costs.join(', ')})` : ''}`;
     }
     case 'sell': {
       const n = cx.config ? param(cx.config, 'board', 'sell_credits') : undefined;
@@ -88,18 +87,6 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
   }
   return null;
 }
-
-/** The board's standard actions (`{"type":"standard","act":...}`): label and cost params. */
-const STANDARD: Record<string, { label: string; cost: [string, string][] }> = {
-  data_centre: { label: 'place a data centre', cost: [['dc_energy', 'energy'], ['dc_credits', 'credits']] },
-  factory: { label: 'build a factory', cost: [['build_energy', 'energy'], ['build_credits', 'credits']] },
-  station: { label: 'build a research station', cost: [['build_energy', 'energy'], ['build_credits', 'credits']] },
-  remove: { label: 'remove an adversary ambassador', cost: [['remove_energy', 'energy']] },
-  move: { label: 'move an ambassador', cost: [['move_energy', 'energy']] },
-  ambassador: { label: 'gain an ambassador', cost: [['ambassador_credits', 'credits']] },
-  align: { label: 'align a city', cost: [['align_energy', 'energy']] },
-  harden: { label: 'harden a building', cost: [['harden_credits', 'credits']] },
-};
 
 /**
  * "seat 1: play Fab Line". The seat is left out with `withSeat` false, and the
@@ -187,7 +174,7 @@ const KNOWN: Record<string, string> = {
 
 export function tokenColour(kind: string): string {
   if (KNOWN[kind]) return KNOWN[kind];
-  if (/^(cube|dc|ambassador):\d+$/.test(kind)) return '#37474f';
+  if (/^(cube|presence|ambassador):\d+$/.test(kind)) return '#37474f';
   let h = 0;
   for (const c of kind) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return `hsl(${h % 360} 65% 38%)`;
@@ -195,15 +182,16 @@ export function tokenColour(kind: string): string {
 
 const TOKEN_NAMES: Record<string, string> = {
   cube: 'owner cube',
-  dc: 'data centre',
+  presence: 'presence',
+  node: 'adversary node',
   ambassador: 'ambassador',
   station: 'research station',
   troop: 'adversary troop',
-  unit: 'corp unit',
+  unit: 'corp troop',
   harden: 'hardening token',
 };
 
-/** "dc:1" → "data centre (seat 1)", "cube:adversary" → "owner cube (adversary)". */
+/** "presence:1" → "presence (seat 1)", "cube:adversary" → "owner cube (adversary)". */
 export function tokenName(kind: string): string {
   const [base, owner] = kind.split(':');
   const name = TOKEN_NAMES[base] ?? words(base);

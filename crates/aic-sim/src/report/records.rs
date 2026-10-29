@@ -145,7 +145,10 @@ pub fn save_records(
         let c = &cells[g.cell];
         let low = g.winprob.iter().copied().fold(f64::INFINITY, f64::min);
         let why = if rank(c) == low_tier && low_tier < top_tier {
-            Some((0, format!("won by the weakest agent as measured ({})", c.agent.label())))
+            Some((
+                0,
+                format!("won by the weakest agent as measured ({})", c.agent.label()),
+            ))
         } else if low <= 0.25 {
             Some((1, format!("won after the playouts gave it {low:.2}")))
         } else if c.difficulty == top_d && rank(c) < top_tier {

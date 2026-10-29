@@ -2,7 +2,9 @@
 
 > **Historical:** ran on rules r3 (today's is r6). Configs, parameters, rules.md
 > sections and game records named here were removed or rewritten later; several of its
-> specs are refused today and the records do not replay.
+> specs are refused today and the records do not replay. The refused specs moved to
+> [`archive/`](archive/) in 016, and `scripts/payback/resources.py` was deleted
+> (retired in 015: it keyed on a phase removed in 014); paths below are as they were.
 
 2026-10-28. Rules r3 (007's tuned v0), 2 countries. **Measure only:** the baseline
 config, content and `RULES_REVISION` are unchanged. Every lever is a config override in a

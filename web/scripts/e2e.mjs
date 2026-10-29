@@ -150,7 +150,7 @@ try {
     const fill = (k) => [...document.querySelectorAll('#board .token[data-token="' + k + '"] .glyph')].map((e) => e.getAttribute('fill'))[0];
     const kinds = [...new Set(v.hexes.flatMap((h) => h.tokens.map((t) => t.kind)))].sort();
     return { stacks, drawn: document.querySelectorAll('#board .token').length, kinds,
-             adv: fill('cube:adversary'), dc0: fill('dc:0'), dc1: fill('dc:1') };
+             adv: fill('cube:adversary'), dc0: fill('presence:0'), dc1: fill('presence:1') };
   })()`);
   check(toks.stacks > 0 && toks.drawn === toks.stacks, `${toks.drawn} token stacks drawn (${toks.kinds.join(', ')})`);
   check(!!toks.adv && !!toks.dc0 && !!toks.dc1 && toks.dc0 !== toks.dc1 && toks.adv !== toks.dc0, `owner colours differ: adversary ${toks.adv}, seat 0 ${toks.dc0}, seat 1 ${toks.dc1}`);
@@ -181,10 +181,10 @@ try {
   })()`);
   check(named.names.every((n) => n && named.label.includes(n.split(' ')[0]) && named.strip.includes(n)),
     `countries named on the board and strip (${named.names.join(', ')})`);
-  check(named.boards.every((b) => b && b.length === 2) && named.rows.length === named.boards.length
-    && named.rows.every((r) => r.rows === 2 && r.current === 2 && r.open >= 2 && r.steps > r.open && r.t2 > 0),
-    `each seat's AI board drawn with 2 tracks (${named.rows.map((r) => `${r.open}/${r.steps} uncovered`).join(', ')})`);
-  const bookkeeping = /^(ai\.track\.|threats\.paid\.|threats\.jam\.|cards\.(tier|picked|next_discount|civic_used|unpowered)\.|adversary\.removed_troop\.|board\.(blackout|sabotage|shelter|project|project_done)\.)/;
+  check(named.boards.every((b) => b && b.length === 1) && named.rows.length === named.boards.length
+    && named.rows.every((r) => r.rows === 1 && r.current === 1 && r.open >= 1 && r.steps > r.open && r.t2 > 0),
+    `each seat's AI board drawn with its presence track (${named.rows.map((r) => `${r.open}/${r.steps} uncovered`).join(', ')})`);
+  const bookkeeping = /^(ai\.track\.|threats\.paid\.|threats\.jam\.|cards\.(tier|picked|next_discount|civic_used|unpowered)\.|adversary\.removed_troop\.|board\.(blackout|sabotage|shelter|project|project_done|track)\.)/;
   check(!named.keys.some((k) => bookkeeping.test(k)) && named.raw === 0,
     `no bookkeeping vars among the globals (${named.keys.length} globals)`);
 

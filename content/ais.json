@@ -22,62 +22,73 @@
     "rate": 1
    }
   ],
-  "tracks": [
+  "income": [
+   [
+    "insight",
+    2
+   ],
+   [
+    "credits",
+    1
+   ]
+  ],
+  "presence": [
    {
-    "resource": "insight",
-    "values": [
-     {
-      "value": 2
-     },
-     {
-      "value": 2
-     },
-     {
-      "value": 3
-     },
-     {
-      "value": 3
-     },
-     {
-      "value": 4
-     },
-     {
-      "value": 4
-     }
+    "income": [
+     [
+      "compute",
+      1
+     ]
     ]
    },
    {
-    "resource": "credits",
-    "values": [
-     {
-      "value": 1
-     },
-     {
-      "value": 2
-     },
-     {
-      "value": 3
-     },
-     {
-      "value": 4,
-      "tier2": true
-     },
-     {
-      "value": 5
-     },
-     {
-      "value": 6,
-      "antimatter": 1
-     }
+    "income": [
+     [
+      "compute",
+      1
+     ]
+    ]
+   },
+   {
+    "income": [
+     [
+      "credits",
+      2
+     ]
+    ],
+    "tier2": true
+   },
+   {
+    "income": [
+     [
+      "insight",
+      1
+     ]
+    ]
+   },
+   {
+    "income": [
+     [
+      "credits",
+      2
+     ]
+    ]
+   },
+   {
+    "income": [
+     [
+      "insight",
+      1
+     ]
     ]
    }
   ],
   "growth": [
    {
-    "name": "Place 1 data centre, gain 3 credits",
+    "name": "Place 1 presence, gain 3 credits",
     "effects": [
      {
-      "op": "place_data_centre",
+      "op": "place_presence",
       "count": 1
      },
      {
@@ -125,7 +136,7 @@
   "slots": 3,
   "innate": {
    "name": "Bulwark",
-   "text": "You may harden buildings (standard action, 3 credits a token).",
+   "text": "You may harden buildings (standard action, 1 hardware a token).",
    "passives": [
     {
      "op": "harden_action"
@@ -140,62 +151,73 @@
     "rate": 1
    }
   ],
-  "tracks": [
+  "income": [
+   [
+    "insight",
+    1
+   ],
+   [
+    "energy",
+    1
+   ]
+  ],
+  "presence": [
    {
-    "resource": "insight",
-    "values": [
-     {
-      "value": 1
-     },
-     {
-      "value": 2
-     },
-     {
-      "value": 2
-     },
-     {
-      "value": 3
-     },
-     {
-      "value": 3
-     },
-     {
-      "value": 4
-     }
+    "income": [
+     [
+      "compute",
+      1
+     ]
     ]
    },
    {
-    "resource": "energy",
-    "values": [
-     {
-      "value": 1
-     },
-     {
-      "value": 1,
-      "tier2": true
-     },
-     {
-      "value": 2
-     },
-     {
-      "value": 2
-     },
-     {
-      "value": 3
-     },
-     {
-      "value": 3,
-      "antimatter": 1
-     }
+    "income": [
+     [
+      "compute",
+      1
+     ]
+    ]
+   },
+   {
+    "income": [
+     [
+      "energy",
+      1
+     ]
+    ],
+    "tier2": true
+   },
+   {
+    "income": [
+     [
+      "insight",
+      1
+     ]
+    ]
+   },
+   {
+    "income": [
+     [
+      "energy",
+      1
+     ]
+    ]
+   },
+   {
+    "income": [
+     [
+      "insight",
+      1
+     ]
     ]
    }
   ],
   "growth": [
    {
-    "name": "Place 1 data centre, gain 1 energy",
+    "name": "Place 1 presence, gain 1 energy",
     "effects": [
      {
-      "op": "place_data_centre",
+      "op": "place_presence",
       "count": 1
      },
      {

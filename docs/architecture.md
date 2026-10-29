@@ -78,7 +78,7 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
 ## Config
 
 A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the baseline
-game, rules revision 6 (2 countries, difficulty 0);
+game, rules revision 7 (2 countries, difficulty 0);
 [`configs/shared_row.json`](../configs/shared_row.json) differs only in the threat
 variant. Abridged:
 
@@ -141,8 +141,6 @@ variant. Abridged:
     (`threats.variant=off`,
     `alignment.variant=off`, `cards.variant=off`): it keeps the module's phases and
     the parameters other modules read, and does nothing. See rules.md §9.
-  - The adversary's two variants (`militarist`, `overflow`) take the same parameters,
-    so `adversary.variant=overflow` needs nothing else.
 - **`aic-sim show <config>`** prints the resolved config, its hash and every tunable
   (card-derived ones included), with its range.
 
@@ -163,7 +161,9 @@ way of doing it. The difference matters for tuning:
 The modules are `board` (014: pieces, production, war, ambassadors, standard actions),
 `adversary` (014: deck, build, spread, corrupt), `threats`, `alignment` (013), `economy`,
 `ai` and `cards` (`crates/aic-core/src/modules/`); `common.rs` (board queries, token
-names, reach) and `effects.rs` (the player effect primitives) are shared code. Rules
+names, reach) and `effects.rs` (the player effect primitives) are shared code;
+`plan.rs` holds read-only forecasts of rules steps for agents and clients
+(`plan::next_build`, the adversary's next build off the face-up card). Rules
 areas lean on each other, so modules call each other's public functions (a card's
 removal calls `adversary::damage`, which sways toward Unity through
 `alignment::for_kill` when it takes a troop) and read each other's
@@ -181,16 +181,20 @@ in `ModuleDef::requires`; a config missing one is rejected. Today:
 | `cards` | `ai`, `adversary`, `alignment`, `threats`, `economy`, `board` |
 
 Every module is required by at least one other, so `<module>=off` is always rejected
-today (the config tests assert it for `threats=off` and `board=off`); a module's effect
+for `board`, `adversary`, `alignment` and `ai` (the config tests assert it for `alignment=off` and `board=off`); since 016 `requires` lists only the modules whose parameters a module reads, so `threats=off`, `cards=off` and `economy=off` are accepted and play (also tested); a module's effect
 is measured with its `off` variant instead (`threats`, `alignment` and `cards` have one).
 
 A rule that depends on another module's *variant* reads `World::variant("<module>")`
-(the `overflow` adversary variant is read inside `adversary::arrive`). Everything that
+(none do today: 016 removed the `overflow` variant). Everything that
 places or removes adversary ambassadors goes through `adversary::place`, `remove`,
 `remove_piece`, `build_all`, `spread`, `corrupt_city` and `corrupt_station`, so the supply,
-cancellation and overflow hold everywhere; buildings are destroyed only through
-`board::destroy_building`, which applies Shelter Order, hardening, a player
-ambassador's defense and Civic Shelter, and sways the Discord.
+cancellation and node-making hold everywhere; `build_all` places what
+`plan::build_plan` reads, the same plan the agents forecast with. Buildings and
+presence are destroyed only through `board::destroy_building`, which applies Shelter
+Order, a base's troop (adversary strikes), hardening, a player ambassador's defense and
+Civic Shelter, and sways the Discord. Presence lives in the board module
+(`board::place_presence`, `board::track_taken`); AI boards read their track through
+it.
 
 Each variant is a `VariantDef` (in `module.rs`), holding:
 
@@ -410,8 +414,10 @@ In the baseline:
   tracks' `uncovered`).
 - `board` shows its per-country flags (blackout, sabotage, shelter) and each country's
   megaproject (cubes by owner, against its size) as country values, the war round and
-  fronts as globals, and each seat's data centres and ambassadors on the board;
-  bookkeeping `board.<flag>.*`, `board.project.*`, `board.project_done.*`.
+  fronts and the clock's step as globals, each seat's presence on the board and left
+  on its track, and ambassadors on the board; it publishes every standard action with
+  its cost (`View.standard`, read by the viewer's labels); bookkeeping
+  `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`.
 - `economy` adds each seat's income per resource and the next round's bonus insight
   (bookkeeping `economy.bonus_insight`, shown as its own global while >0); `cards`
   adds hand, buildings (`n/slots`), draft hand and drafted cards with statuses, tags,
@@ -462,8 +468,11 @@ differ.
     executed, corruptions (and the round of the first), adversary ambassadors on the
     board per round (`adversary.ambassadors_rNN`), ambassadors and troops removed,
     buildings destroyed (per war round too), standard actions (`board.std.<act>`),
-    cities aligned and freed, stations owned, megaprojects completed, data centres
-    placed, Alignment sway, tips (and their rounds, `alignment.tip_<side>.rNN`), cards
+    cities aligned and freed, stations and factories owned, megaprojects completed,
+    presence placed, nodes made, removed and at their peak per board
+    (`adversary.nodes_peak.c<c>`), adversary compute made, factories built per side,
+    destroyed and owned per side at the end (`board.factories_end.<side>`), hardware
+    made, bought and spent, Alignment sway, tips (and their rounds, `alignment.tip_<side>.rNN`), cards
     resolved and antimatter actions, insight given and credit income.
 - **Outcome**: `won`, the `round` the game ended, a stable `reason` code for aggregation,
   and a human `detail`.

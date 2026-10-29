@@ -5,23 +5,37 @@
 
 use crate::action::Action;
 use crate::content::{Passive, ANTIMATTER, COMPUTE, CREDITS, ENERGY, INSIGHT, RESOURCES};
-use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
+use crate::module::{
+    Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
+};
 use crate::state::GameState;
 use crate::view::ViewOut;
 
-use super::{ai, alignment, cards};
+use super::common::has_presence_in;
+use super::{ai, alignment, board, cards};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "economy",
     summary: "Insight, income and upkeep; giving insight",
-    requires: &["ai", "cards", "alignment"],
+    requires: &["ai"],
     variants: &[VariantDef {
         name: "standard",
         summary: "Income in upkeep, insight at the start of each round",
-        params: &[ParamSpec::int("give_insight", 0, 10, "insight the receiver gains for 1 given")],
+        params: &[ParamSpec::int(
+            "give_insight",
+            0,
+            10,
+            "insight the receiver gains for 1 given",
+        )],
         phases: &[
-            PhaseSpec::decision("give", "give 1 insight to another player (combine with the action phase)"),
-            PhaseSpec::auto("upkeep", "collect income (credit production, tracks, buildings); pay building upkeep"),
+            PhaseSpec::decision(
+                "give",
+                "give 1 insight to another player (combine with the action phase)",
+            ),
+            PhaseSpec::auto(
+                "upkeep",
+                "collect income (credit production, tracks, buildings); pay building upkeep",
+            ),
         ],
         rng: &[],
         uses_cards: false,
@@ -139,7 +153,13 @@ impl Module for Economy {
     fn run(&self, _phase: usize, g: &mut GameState, cx: &mut Cx) -> Res {
         let w = cx.world;
         for s in 0..g.seats.len() {
-            let inc = income(&w, g, s);
+            let mut inc = income(&w, g, s);
+            // Sabotage: a player with presence in a sabotaged country makes no compute.
+            if (0..w.map.countries.len())
+                .any(|c| board::flagged(g, "sabotage", c) && has_presence_in(&w, g, s, c))
+            {
+                inc[COMPUTE] = 0;
+            }
             for (i, r) in RESOURCES.iter().enumerate() {
                 if *r != "insight" {
                     cx.add_resource(g, s, r, inc[i]);
@@ -155,11 +175,31 @@ impl Module for Economy {
         for s in 0..g.seats.len() {
             let inc = income(w, g, s);
             let parts = [
-                ("credits", inc[CREDITS], "credits in upkeep: credit production, tracks, buildings"),
-                ("compute", inc[COMPUTE], "compute in upkeep: buildings (data centres make compute in production)"),
-                ("energy", inc[ENERGY], "energy in upkeep: tracks, buildings (cities make energy in production)"),
-                ("antimatter", inc[ANTIMATTER], "antimatter in upkeep: late track values"),
-                ("insight", inc[INSIGHT], "insight at the start of each round (unspent insight is lost)"),
+                (
+                    "credits",
+                    inc[CREDITS],
+                    "credits in upkeep: credit production, tracks, buildings",
+                ),
+                (
+                    "compute",
+                    inc[COMPUTE],
+                    "compute in upkeep: the presence track, buildings",
+                ),
+                (
+                    "energy",
+                    inc[ENERGY],
+                    "energy in upkeep: the AI board, buildings (cities make energy in production)",
+                ),
+                (
+                    "antimatter",
+                    inc[ANTIMATTER],
+                    "antimatter in upkeep: buildings",
+                ),
+                (
+                    "insight",
+                    inc[INSIGHT],
+                    "insight at the start of each round (unspent insight is lost)",
+                ),
             ];
             for (r, n, doc) in parts {
                 out.seat(s, &format!("income.{r}"), &format!("+{r}"), n, None, doc);
@@ -167,7 +207,13 @@ impl Module for Economy {
         }
         out.bookkeeping(&[BONUS_INSIGHT]);
         if g.var(BONUS_INSIGHT) > 0 {
-            out.global("bonus_insight", "insight next round", g.var(BONUS_INSIGHT), None, "every player gains this next round");
+            out.global(
+                "bonus_insight",
+                "insight next round",
+                g.var(BONUS_INSIGHT),
+                None,
+                "every player gains this next round",
+            );
         }
     }
 }

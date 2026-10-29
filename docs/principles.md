@@ -14,6 +14,9 @@ The standards every module and every rules change is judged against.
   and nets more than it costs. Engines are never tightly interlinked.
 - **Scale "for each country"**, with as few "X per player" rules as possible.
 - **Complexity earns its place.**
+- **Explainable in prose.** The rules must be describable concisely to new players;
+  that is a prior on the design, and mechanics may be reworked to make the rules easier
+  to explain.
 
 ## Difficulty targets
 

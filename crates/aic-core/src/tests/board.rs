@@ -1,4 +1,5 @@
 use super::*;
+use crate::modules::common::{HARDWARE, NODE};
 use crate::modules::{adversary, board};
 
 // ---------- ambassadors ----------
@@ -14,7 +15,13 @@ fn opposing_ambassadors_on_one_piece_cancel_without_unity() {
     put(&mut g, city, ADV_AMBASSADOR, 1);
     let supply = g.var(SUPPLY);
     with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, city));
-    assert_eq!((g.tokens(city, ADV_AMBASSADOR), g.tokens(city, &ambassador(0))), (0, 0));
+    assert_eq!(
+        (
+            g.tokens(city, ADV_AMBASSADOR),
+            g.tokens(city, &ambassador(0))
+        ),
+        (0, 0)
+    );
     assert_eq!(g.var(SUPPLY), supply + 1);
     assert_eq!(sway(&g), sway(&g0));
 
@@ -23,7 +30,13 @@ fn opposing_ambassadors_on_one_piece_cancel_without_unity() {
     put(&mut g, city, &ambassador(1), 1);
     let supply = g.var(SUPPLY);
     with_cx(&rules, |cx| adversary::place(&mut g, cx, city, 1));
-    assert_eq!((g.tokens(city, ADV_AMBASSADOR), g.tokens(city, &ambassador(1))), (0, 0));
+    assert_eq!(
+        (
+            g.tokens(city, ADV_AMBASSADOR),
+            g.tokens(city, &ambassador(1))
+        ),
+        (0, 0)
+    );
     assert_eq!(g.var(SUPPLY), supply);
     assert_eq!(sway(&g), sway(&g0));
 }
@@ -37,20 +50,43 @@ fn a_player_ambassador_takes_a_neutral_station_and_three_free_a_corrupted_city()
     put(&mut g, neutral, STATION, 1);
     put(&mut g, corrupted, STATION, 1);
     put(&mut g, corrupted, ADV_CUBE, 1);
+    put(&mut g, neutral, &presence(0), 1);
     with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, neutral));
-    assert_eq!((g.tokens(neutral, &cube(0)), g.tokens(neutral, &ambassador(0))), (1, 0));
+    assert_eq!(
+        (
+            g.tokens(neutral, &cube(0)),
+            g.tokens(neutral, &ambassador(0))
+        ),
+        (1, 0)
+    );
     // On a corrupted station it just waits.
-    with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, corrupted));
-    assert_eq!((g.tokens(corrupted, &cube(0)), g.tokens(corrupted, &ambassador(0))), (0, 1));
+    with_cx(&rules, |cx| {
+        board::place_ambassador(&mut g, cx, 0, corrupted)
+    });
+    assert_eq!(
+        (
+            g.tokens(corrupted, &cube(0)),
+            g.tokens(corrupted, &ambassador(0))
+        ),
+        (0, 1)
+    );
 
     let city = m.numbered(0, piece(0).corrupted[0]);
     put(&mut g, city, ADV_CUBE, 1);
     for (k, seat) in [0, 1, 0].into_iter().enumerate() {
         with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, seat, city));
         let freed = k == 2;
-        assert_eq!(g.tokens(city, ADV_CUBE), !freed as i64, "after {} ambassadors", k + 1);
+        assert_eq!(
+            g.tokens(city, ADV_CUBE),
+            !freed as i64,
+            "after {} ambassadors",
+            k + 1
+        );
     }
-    assert_eq!(g.tokens(city, &ambassador(0)) + g.tokens(city, &ambassador(1)), 0);
+    assert_eq!(
+        g.tokens(city, &ambassador(0)) + g.tokens(city, &ambassador(1)),
+        0
+    );
     assert_eq!(g.stats.counters["board.cities_freed"], 1);
 }
 
@@ -74,33 +110,49 @@ fn ambassadors_divert_bases_and_factories() {
     let mut g = g0.clone();
     put(&mut g, base, ADV_AMBASSADOR, 1);
     run(&rules, &mut g);
-    assert_eq!((g.tokens(base, UNIT), g.tokens(base, ADV_AMBASSADOR)), (1, 0));
+    assert_eq!(
+        (g.tokens(base, UNIT), g.tokens(base, ADV_AMBASSADOR)),
+        (1, 0)
+    );
     assert_eq!((discord(&g) - discord(&g0), unity(&g) - unity(&g0)), (3, 0));
 
     // A player ambassador on a base: no unit, 2 Unity.
     let mut g = g0.clone();
     put(&mut g, base, &ambassador(0), 1);
     run(&rules, &mut g);
-    assert_eq!((g.tokens(base, UNIT), g.tokens(base, &ambassador(0))), (1, 0));
+    assert_eq!(
+        (g.tokens(base, UNIT), g.tokens(base, &ambassador(0))),
+        (1, 0)
+    );
     assert_eq!((discord(&g) - discord(&g0), unity(&g) - unity(&g0)), (0, 2));
 
     // An adversary ambassador on a factory: it builds an adversary troop.
     let mut g = g0.clone();
     put(&mut g, factory, ADV_AMBASSADOR, 1);
     run(&rules, &mut g);
-    assert_eq!((g.tokens(factory, TROOP), g.tokens(factory, ADV_AMBASSADOR), g.tokens(base, UNIT)), (1, 0, 1));
+    assert_eq!(
+        (
+            g.tokens(factory, TROOP),
+            g.tokens(factory, ADV_AMBASSADOR),
+            g.tokens(base, UNIT)
+        ),
+        (1, 0, 1)
+    );
     assert_eq!((discord(&g) - discord(&g0), unity(&g) - unity(&g0)), (0, 0));
 
     // A player ambassador on a factory: no unit, 1 Unity.
     let mut g = g0.clone();
     put(&mut g, factory, &ambassador(1), 1);
     run(&rules, &mut g);
-    assert_eq!((g.tokens(factory, &ambassador(1)), g.tokens(base, UNIT)), (0, 1));
+    assert_eq!(
+        (g.tokens(factory, &ambassador(1)), g.tokens(base, UNIT)),
+        (0, 1)
+    );
     assert_eq!((discord(&g) - discord(&g0), unity(&g) - unity(&g0)), (0, 1));
 }
 
 #[test]
-fn ambassadors_divert_cities_stations_and_data_centres() {
+fn ambassadors_divert_cities_and_stations_and_leak_presence_compute() {
     let (rules, g0) = lab(&["board.produce"]);
     let m = &rules.map;
     let discord = |g: &GameState| g.var("alignment.discord") - g0.var("alignment.discord");
@@ -111,24 +163,42 @@ fn ambassadors_divert_cities_stations_and_data_centres() {
     // A corrupted city's energy goes to the adversary: 1 Discord a unit.
     let mut g = g0.clone();
     put(&mut g, city, ADV_CUBE, 1);
-    put(&mut g, open_next(city), &dc(0), 1);
+    put(&mut g, open_next(city), &presence(0), 1);
     run(&rules, &mut g);
-    assert_eq!((discord(&g), res(&g, 0, "energy"), res(&g, 0, "compute")), (1, 0, 1));
+    assert_eq!(
+        (discord(&g), res(&g, 0, "energy"), res(&g, 0, "compute")),
+        (1, 0, 0)
+    );
 
     // So does a clean city's with an adversary ambassador on it (which goes).
     let mut g = g0.clone();
     put(&mut g, city, ADV_AMBASSADOR, 1);
-    put(&mut g, open_next(city), &dc(0), 1);
+    put(&mut g, open_next(city), &presence(0), 1);
     run(&rules, &mut g);
-    assert_eq!((discord(&g), res(&g, 0, "energy"), g.tokens(city, ADV_AMBASSADOR)), (1, 0, 0));
+    assert_eq!(
+        (
+            discord(&g),
+            res(&g, 0, "energy"),
+            g.tokens(city, ADV_AMBASSADOR)
+        ),
+        (1, 0, 0)
+    );
 
-    // And a data centre's compute.
+    // An adversary ambassador on a presence leaks 1 of its owner's compute.
     let mut g = g0.clone();
-    let d = m.numbered(0, piece(0).data_centres[0]);
-    put(&mut g, d, &dc(0), 1);
+    let d = m.numbered(0, piece(0).presence);
+    put(&mut g, d, &presence(0), 1);
     put(&mut g, d, ADV_AMBASSADOR, 1);
+    set_res(&mut g, 0, "compute", g0.resource(0, "compute") + 2);
     run(&rules, &mut g);
-    assert_eq!((discord(&g), res(&g, 0, "compute"), g.tokens(d, ADV_AMBASSADOR)), (1, 0, 0));
+    assert_eq!(
+        (
+            discord(&g),
+            res(&g, 0, "compute"),
+            g.tokens(d, ADV_AMBASSADOR)
+        ),
+        (1, 1, 0)
+    );
 
     // An owned station's cube goes to the adversary; a corrupted station's
     // always does; a neutral one makes none.
@@ -147,7 +217,10 @@ fn ambassadors_divert_cities_stations_and_data_centres() {
         let k = board::project_key(c, s);
         g.var(&k) - g0.var(&k)
     };
-    assert_eq!((key(&g, 0, None), key(&g, 0, Some(0)), key(&g, 1, None)), (1, 0, 1));
+    assert_eq!(
+        (key(&g, 0, None), key(&g, 0, Some(0)), key(&g, 1, None)),
+        (1, 0, 1)
+    );
     assert_eq!(g.tokens(s0, ADV_AMBASSADOR), 0);
     assert_eq!(g.tokens(neutral, ADV_AMBASSADOR), 0);
     let mut g = g0.clone();
@@ -170,7 +243,10 @@ fn a_player_ambassador_absorbs_a_destruction() {
     put(&mut g, at, &ambassador(0), 1);
     let discord = g.var("alignment.discord");
     run(&rules, &mut g);
-    assert_eq!((g.tokens(at, FACTORY), g.tokens(at, &ambassador(0))), (1, 0));
+    assert_eq!(
+        (g.tokens(at, FACTORY), g.tokens(at, &ambassador(0))),
+        (1, 0)
+    );
     assert_eq!(g.var("alignment.discord"), discord);
     run(&rules, &mut g);
     assert_eq!((g.tokens(at, FACTORY), g.tokens(at, TROOP)), (0, 1));
@@ -187,7 +263,12 @@ fn city_with_lonely_neighbours(m: &Map) -> (usize, Vec<usize>) {
             .iter()
             .copied()
             .filter(|&n| kind(m, n) == HexKind::Open)
-            .filter(|&n| m.hexes[n].neighbours.iter().all(|&x| x == c || kind(m, x) != HexKind::City))
+            .filter(|&n| {
+                m.hexes[n]
+                    .neighbours
+                    .iter()
+                    .all(|&x| x == c || kind(m, x) != HexKind::City)
+            })
             .collect();
         if lonely.len() >= 3 {
             return (c, lonely);
@@ -197,35 +278,39 @@ fn city_with_lonely_neighbours(m: &Map) -> (usize, Vec<usize>) {
 }
 
 #[test]
-fn cities_power_the_player_with_the_most_data_centres_next_to_them() {
+fn cities_power_the_player_with_the_most_presence_next_to_them() {
     let (rules, g0) = lab(&["board.produce"]);
     let (city, n) = city_with_lonely_neighbours(&rules.map);
     let res = |g: &GameState, s: usize, r: &str| g.resource(s, r) - g0.resource(s, r);
 
     let mut g = g0.clone();
-    put(&mut g, n[0], &dc(0), 1);
-    put(&mut g, n[1], &dc(1), 1);
-    put(&mut g, n[2], &dc(1), 1);
+    put(&mut g, n[0], &presence(0), 1);
+    put(&mut g, n[1], &presence(1), 1);
+    put(&mut g, n[2], &presence(1), 1);
     run(&rules, &mut g);
     assert!(g.pending.is_none());
     assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (0, 1));
-    // Every data centre makes its compute.
-    assert_eq!((res(&g, 0, "compute"), res(&g, 1, "compute")), (1, 2));
+    // Presence makes no compute in production (the track does, in upkeep).
+    assert_eq!((res(&g, 0, "compute"), res(&g, 1, "compute")), (0, 0));
 
     // A tie: the players choose.
     let mut g = g0.clone();
-    put(&mut g, n[0], &dc(0), 1);
-    put(&mut g, n[1], &dc(1), 1);
+    put(&mut g, n[0], &presence(0), 1);
+    put(&mut g, n[1], &presence(1), 1);
     run(&rules, &mut g);
     let p = g.pending.as_ref().expect("an energy choice");
-    assert!(p.ask.prompt.starts_with("The energy of"), "{}", p.ask.prompt);
+    assert!(
+        p.ask.prompt.starts_with("The energy of"),
+        "{}",
+        p.ask.prompt
+    );
     answer_with(&rules, &mut g, "seat 0");
     assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (1, 0));
 
     // An aligned city powers its owner, with the bonus.
     let mut g = g0.clone();
     put(&mut g, city, &cube(1), 1);
-    put(&mut g, n[0], &dc(0), 1);
+    put(&mut g, n[0], &presence(0), 1);
     run(&rules, &mut g);
     assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (0, 2));
 }
@@ -245,10 +330,17 @@ fn stations_fill_the_megaproject_and_its_completion_pays_out() {
     g.vars.insert(board::project_key(0, Some(1)), 1);
     g.vars.insert(board::project_key(0, None), 2);
     g.vars.remove(&board::project_key(1, None));
-    let (c0, c1, discord) = (g.resource(0, "credits"), g.resource(1, "credits"), g.var("alignment.discord"));
+    let (c0, c1, discord) = (
+        g.resource(0, "credits"),
+        g.resource(1, "credits"),
+        g.var("alignment.discord"),
+    );
     run(&rules, &mut g);
     // The 7th cube completes it: 10 credits a player cube, 1 Discord per 2 adversary cubes.
-    assert_eq!((g.resource(0, "credits") - c0, g.resource(1, "credits") - c1), (40, 10));
+    assert_eq!(
+        (g.resource(0, "credits") - c0, g.resource(1, "credits") - c1),
+        (40, 10)
+    );
     assert_eq!(g.var("alignment.discord") - discord, 1);
     assert_eq!(g.var(&board::project_done(0)), 1);
     for s in [Some(0), Some(1), None] {
@@ -265,21 +357,38 @@ fn stations_fill_the_megaproject_and_its_completion_pays_out() {
 // ---------- war ----------
 
 #[test]
-fn war_rounds_follow_the_schedule_and_the_war_twist() {
+fn the_clock_sets_production_and_war_steps_and_the_war_twist() {
     let rules = Rules::new(&baseline()).unwrap();
     let w = rules.world();
     let mut g = rules.new_game(1);
     g.piles.remove(CURRENT);
-    let war: Vec<u32> = (1..=12).filter(|&r| {
-        g.round = r;
-        board::war_round(&w, &g)
-    }).collect();
+    let war: Vec<u32> = (1..=12)
+        .filter(|&r| {
+            g.round = r;
+            board::war_round(&w, &g)
+        })
+        .collect();
     assert_eq!(war, [2, 4, 6, 7, 8, 9, 10, 11, 12]);
+    let production: Vec<u32> = (1..=8)
+        .filter(|&r| {
+            g.round = r;
+            board::production_round(&w, &g)
+        })
+        .collect();
+    assert_eq!(production, [1, 3, 5, 6, 7, 8]);
     g.round = 1;
-    g.piles.insert(CURRENT.into(), vec!["adv_s2_border_war".into()]);
+    g.piles
+        .insert(CURRENT.into(), vec!["adv_s2_border_war".into()]);
     assert!(board::war_round(&w, &g));
     let v = rules.view(&g);
-    assert_eq!(v.globals.iter().find(|x| x.key == "board.war").unwrap().value, 1);
+    assert_eq!(
+        v.globals
+            .iter()
+            .find(|x| x.key == "board.war")
+            .unwrap()
+            .value,
+        1
+    );
 }
 
 #[test]
@@ -288,13 +397,13 @@ fn on_a_war_round_units_cancel_and_the_surplus_destroys_rival_buildings() {
     let m = &rules.map;
     let [b0, b1] = m.fronts[0].bases;
     let [f1, f2] = [0, 1].map(|i| m.numbered(1, piece(1).factories[i]));
-    let d1 = m.numbered(1, piece(1).data_centres[0]);
-    put(&mut g0, d1, &dc(1), 1);
+    let d1 = m.numbered(1, piece(1).presence);
+    put(&mut g0, d1, &presence(1), 1);
     g0.round = 2;
     let discord = |g: &GameState| g.var("alignment.discord") - g0.var("alignment.discord");
     let units = |g: &GameState| (g.tokens(b0, UNIT), g.tokens(b1, UNIT));
 
-    // 3 against 1: two cross, and take both factories (not the data centre).
+    // 3 against 1: two cross, and take both factories (not the presence).
     let mut g = g0.clone();
     put(&mut g, f1, FACTORY, 1);
     put(&mut g, f2, FACTORY, 1);
@@ -302,15 +411,22 @@ fn on_a_war_round_units_cancel_and_the_surplus_destroys_rival_buildings() {
     put(&mut g, b1, UNIT, 1);
     run(&rules, &mut g);
     assert_eq!(units(&g), (0, 0));
-    assert_eq!((g.tokens(f1, FACTORY), g.tokens(f2, FACTORY), g.tokens(d1, &dc(1))), (0, 0, 1));
+    assert_eq!(
+        (
+            g.tokens(f1, FACTORY),
+            g.tokens(f2, FACTORY),
+            g.tokens(d1, &presence(1))
+        ),
+        (0, 0, 1)
+    );
     assert_eq!(discord(&g), 2);
 
-    // With no factory left, a data centre; a surplus with nothing to hit is spent.
+    // With no factory left, a presence; a surplus with nothing to hit is spent.
     let mut g = g0.clone();
     put(&mut g, f1, FACTORY, 1);
     put(&mut g, b0, UNIT, 3);
     run(&rules, &mut g);
-    assert_eq!((g.tokens(f1, FACTORY), g.tokens(d1, &dc(1))), (0, 0));
+    assert_eq!((g.tokens(f1, FACTORY), g.tokens(d1, &presence(1))), (0, 0));
     assert_eq!((units(&g), discord(&g)), ((0, 0), 2));
 
     // Hardening absorbs one.
@@ -322,7 +438,10 @@ fn on_a_war_round_units_cancel_and_the_surplus_destroys_rival_buildings() {
     put(&mut g, b0, UNIT, 2);
     put(&mut g, b1, UNIT, 1);
     run(&rules, &mut g);
-    assert_eq!((total(&g, FACTORY), total(&g, HARDEN), discord(&g)), (2, 1, 0));
+    assert_eq!(
+        (total(&g, FACTORY), total(&g, HARDEN), discord(&g)),
+        (2, 1, 0)
+    );
 
     // Equal forces cancel; the other way round hits the other country.
     let mut g = g0.clone();
@@ -370,26 +489,52 @@ fn adversary_troops_strike_buildings_next_to_them() {
     let m = &rules.map;
     let (city, n) = city_with_lonely_neighbours(m);
     let at = n[0];
-    let next: Vec<usize> = m.hexes[at].neighbours.iter().copied().filter(|&x| x != city && kind(m, x) != HexKind::Ocean).collect();
+    let next: Vec<usize> = m.hexes[at]
+        .neighbours
+        .iter()
+        .copied()
+        .filter(|&x| x != city && kind(m, x) != HexKind::Ocean)
+        .collect();
     put(&mut g0, at, TROOP, 1);
     let discord = |g: &GameState| g.var("alignment.discord") - g0.var("alignment.discord");
 
     let mut g = g0.clone();
     put(&mut g, next[0], FACTORY, 1);
     run(&rules, &mut g);
-    assert_eq!((g.tokens(next[0], FACTORY), discord(&g), g.tokens(at, TROOP)), (0, 1, 1));
+    assert_eq!(
+        (g.tokens(next[0], FACTORY), discord(&g), g.tokens(at, TROOP)),
+        (0, 1, 1)
+    );
 
     // Two in reach: the players choose.
     let mut g = g0.clone();
     put(&mut g, next[0], FACTORY, 1);
-    put(&mut g, next[1], &dc(0), 1);
+    put(&mut g, next[1], &presence(0), 1);
     run(&rules, &mut g);
     let p = g.pending.as_ref().expect("a strike choice");
-    assert!(p.ask.prompt.starts_with("Adversary troop"), "{}", p.ask.prompt);
+    assert!(
+        p.ask.prompt.starts_with("Adversary troop"),
+        "{}",
+        p.ask.prompt
+    );
     assert_eq!(p.ask.options.len(), 2);
-    let label = p.ask.options.iter().find(|o| o.option.starts_with("dc:0")).unwrap().option.clone();
+    let label = p
+        .ask
+        .options
+        .iter()
+        .find(|o| o.option.starts_with("presence:0"))
+        .unwrap()
+        .option
+        .clone();
     answer_with(&rules, &mut g, &label);
-    assert_eq!((g.tokens(next[0], FACTORY), g.tokens(next[1], &dc(0)), discord(&g)), (1, 0, 1));
+    assert_eq!(
+        (
+            g.tokens(next[0], FACTORY),
+            g.tokens(next[1], &presence(0)),
+            discord(&g)
+        ),
+        (1, 0, 1)
+    );
 }
 
 // ---------- standard actions ----------
@@ -406,12 +551,15 @@ fn standard_offered(rules: &Rules, g: &GameState, seat: u8) -> BTreeSet<String> 
 }
 
 /// The baseline at its action phase after setup. Every seat has room to
-/// grow at setup: free open hexes next to its starting data centres.
+/// grow at setup: free open hexes next to its starting presence.
 fn actions_with_room() -> (Rules, GameState) {
     let (rules, g) = lab_actions();
     let w = rules.world();
     for s in 0..2 {
-        assert!(modules::ai::dc_hexes(&w, &g, s).len() >= 2, "seat {s} has no room to grow at setup");
+        assert!(
+            modules::board::presence_hexes(&w, &g, s).len() >= 2,
+            "seat {s} has no room to grow at setup"
+        );
     }
     (rules, g)
 }
@@ -419,46 +567,66 @@ fn actions_with_room() -> (Rules, GameState) {
 #[test]
 fn standard_actions_are_offered_only_when_affordable_and_targeted() {
     let (rules, mut g) = actions_with_room();
-    let w = rules.world();
     for s in 0..2 {
         set_res(&mut g, s, "energy", 0);
         set_res(&mut g, s, "credits", 0);
+        set_res(&mut g, s, HARDWARE, 0);
         assert!(standard_offered(&rules, &g, s as u8).is_empty(), "seat {s}");
     }
-    // Enough for a data centre: placing, moving and aligning (a clean city
-    // in reach) are offered; removing needs an adversary ambassador in reach.
-    set_res(&mut g, 0, "energy", 2);
-    set_res(&mut g, 0, "credits", 4);
-    let clean_in_reach = (0..g.hexes.len()).any(|h| {
-        modules::common::clean_city(&w, &g, h) && modules::common::in_reach(&w, &g, 0, h)
-    });
-    let mut want: BTreeSet<String> = ["data_centre", "move"].map(String::from).into();
-    if clean_in_reach {
-        want.insert("align".into());
-    }
-    assert_eq!(standard_offered(&rules, &g, 0), want);
-    // No ambassadors: no moving or aligning.
+    // 1 energy: placing presence and moving an ambassador.
+    set_res(&mut g, 0, "energy", 1);
+    assert_eq!(
+        standard_offered(&rules, &g, 0),
+        ["move", "presence"].map(String::from).into()
+    );
+    // No ambassadors: no moving.
     set_res(&mut g, 0, AMBASSADORS, 0);
-    assert_eq!(standard_offered(&rules, &g, 0), ["data_centre".to_string()].into());
+    assert_eq!(
+        standard_offered(&rules, &g, 0),
+        ["presence".to_string()].into()
+    );
     set_res(&mut g, 0, AMBASSADORS, 1);
 
     for s in 0..2 {
         set_res(&mut g, s, "energy", 20);
         set_res(&mut g, s, "credits", 50);
+        set_res(&mut g, s, HARDWARE, 5);
     }
     let o0 = standard_offered(&rules, &g, 0);
-    for a in ["data_centre", "factory", "station", "move", "ambassador"] {
+    for a in ["presence", "station", "move", "ambassador", "hardware"] {
         assert!(o0.contains(a), "{a}: {o0:?}");
     }
-    assert!(!o0.contains("remove") && !o0.contains("harden"), "{o0:?}");
-    let d = dcs_of(&g, 0)[0];
+    assert!(
+        !o0.contains("remove") && !o0.contains("harden") && !o0.contains("node"),
+        "{o0:?}"
+    );
+    assert!(!o0.contains("factory"), "cities build factories now");
+    let d = presence_of(&g, 0)[0];
     put(&mut g, d, ADV_AMBASSADOR, 1);
     assert!(standard_offered(&rules, &g, 0).contains("remove"));
+    put(&mut g, d, NODE, 1);
+    assert!(standard_offered(&rules, &g, 0).contains("node"));
     // Only the Protector (seat 1) may harden.
     assert!(standard_offered(&rules, &g, 1).contains("harden"));
     assert!(!standard_offered(&rules, &g, 0).contains("harden"));
-    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "harden"), None).is_err());
-    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "nope"), None).is_err());
+    assert!(rules
+        .apply_mut(&mut g.clone(), &std_act(0, "harden"), None)
+        .is_err());
+    assert!(rules
+        .apply_mut(&mut g.clone(), &std_act(0, "factory"), None)
+        .is_err());
+    assert!(rules
+        .apply_mut(&mut g.clone(), &std_act(0, "nope"), None)
+        .is_err());
+    // The view publishes every standard action with its cost.
+    let v = rules.view(&g);
+    let acts: Vec<&str> = v.standard.iter().map(|x| x.act.as_str()).collect();
+    assert_eq!(acts, board::STANDARD);
+    let station = v.standard.iter().find(|x| x.act == "station").unwrap();
+    assert_eq!(
+        (station.energy, station.credits, station.hardware),
+        (2, 0, 2)
+    );
 }
 
 #[test]
@@ -467,42 +635,60 @@ fn standard_actions_cost_what_the_config_says() {
     for s in 0..2 {
         set_res(&mut g0, s, "energy", 20);
         set_res(&mut g0, s, "credits", 50);
+        set_res(&mut g0, s, HARDWARE, 5);
     }
     let spent = |g: &GameState, s: usize| {
-        (g0.resource(s, "energy") - g.resource(s, "energy"), g0.resource(s, "credits") - g.resource(s, "credits"))
+        (
+            g0.resource(s, "energy") - g.resource(s, "energy"),
+            g0.resource(s, "credits") - g.resource(s, "credits"),
+            g0.resource(s, HARDWARE) - g.resource(s, HARDWARE),
+        )
     };
 
     let mut g = g0.clone();
-    act(&rules, &mut g, std_act(0, "factory"));
-    assert_eq!((spent(&g, 0), total(&g, FACTORY) - total(&g0, FACTORY)), ((2, 8), 1));
-
-    let mut g = g0.clone();
     act(&rules, &mut g, std_act(0, "station"));
-    assert_eq!((spent(&g, 0), total(&g, STATION) - total(&g0, STATION)), ((2, 8), 1));
+    assert_eq!(
+        (spent(&g, 0), total(&g, STATION) - total(&g0, STATION)),
+        ((2, 0, 2), 1)
+    );
     assert_eq!(total(&g, &cube(0)), 1);
 
     let mut g = g0.clone();
-    act(&rules, &mut g, std_act(0, "data_centre"));
-    assert_eq!((spent(&g, 0), dcs_of(&g, 0).len()), ((2, 4), 3));
+    act(&rules, &mut g, std_act(0, "presence"));
+    assert_eq!((spent(&g, 0), presence_of(&g, 0).len()), ((1, 0, 0), 2));
+    assert_eq!(board::track_taken(&g, 0), 2);
+
+    let mut g = g0.clone();
+    act(&rules, &mut g, std_act(0, "hardware"));
+    assert_eq!(spent(&g, 0), (0, 4, -1));
 
     let mut g = g0.clone();
     act(&rules, &mut g, std_act(0, "ambassador"));
-    assert_eq!((spent(&g, 0), g.resource(0, AMBASSADORS)), ((0, 6), 2));
+    assert_eq!((spent(&g, 0), g.resource(0, AMBASSADORS)), ((0, 6, 0), 2));
 
     let mut g = g0.clone();
     act(&rules, &mut g, std_act(0, "move"));
-    assert_eq!((spent(&g, 0), g.resource(0, AMBASSADORS)), ((1, 0), 0));
+    assert_eq!((spent(&g, 0), g.resource(0, AMBASSADORS)), ((1, 0, 0), 0));
 
     let mut g = g0.clone();
-    let d = dcs_of(&g, 0)[0];
+    let d = presence_of(&g, 0)[0];
     put(&mut g, d, ADV_AMBASSADOR, 1);
     let supply = g.var(SUPPLY);
     act(&rules, &mut g, std_act(0, "remove"));
-    assert_eq!((spent(&g, 0), g.tokens(d, ADV_AMBASSADOR), g.var(SUPPLY)), ((2, 0), 0, supply + 1));
+    assert_eq!(
+        (spent(&g, 0), g.tokens(d, ADV_AMBASSADOR), g.var(SUPPLY)),
+        ((2, 0, 0), 0, supply + 1)
+    );
+
+    let mut g = g0.clone();
+    put(&mut g, d, NODE, 1);
+    let nodes = total(&g, NODE);
+    act(&rules, &mut g, std_act(0, "node"));
+    assert_eq!((spent(&g, 0), total(&g, NODE)), ((3, 0, 0), nodes - 1));
 
     let mut g = g0.clone();
     act(&rules, &mut g, std_act(1, "harden"));
-    assert_eq!((spent(&g, 1), total(&g, HARDEN)), ((0, 3), 1));
+    assert_eq!((spent(&g, 1), total(&g, HARDEN)), ((0, 0, 1), 1));
 }
 
 #[test]
@@ -510,16 +696,328 @@ fn aligning_puts_a_cube_on_a_clean_city_in_reach() {
     let (rules, mut g) = lab(&[]);
     let m = &rules.map;
     let (city, next) = city_with_lonely_neighbours(m);
-    put(&mut g, next[0], &dc(0), 1);
+    put(&mut g, next[0], &presence(0), 1);
     set_res(&mut g, 0, "energy", 2);
     set_res(&mut g, 0, AMBASSADORS, 1);
     act(&rules, &mut g, std_act(0, "align"));
     assert_eq!(g.tokens(city, &cube(0)), 1);
-    assert_eq!((g.resource(0, "energy"), g.resource(0, AMBASSADORS)), (0, 0));
+    assert_eq!(
+        (g.resource(0, "energy"), g.resource(0, AMBASSADORS)),
+        (0, 0)
+    );
     // A corrupted or aligned city can't be aligned.
     set_res(&mut g, 0, "energy", 2);
     set_res(&mut g, 0, AMBASSADORS, 1);
     assert!(!standard_offered(&rules, &g, 0).contains("align"));
+}
+
+// ---------- presence, reach and site claims ----------
+
+#[test]
+fn placing_presence_takes_the_next_track_token_and_uncovers_its_income() {
+    use crate::modules::ai;
+    let (rules, mut g) = actions_with_room();
+    let w = rules.world();
+    let compute = |g: &GameState| {
+        ai::track_income(&w, g, 0)
+            .iter()
+            .filter(|(r, _)| r == "compute")
+            .map(|(_, n)| n)
+            .sum::<i64>()
+    };
+    assert_eq!(
+        (board::track_taken(&g, 0), compute(&g), ai::tier2(&w, &g, 0)),
+        (1, 1, false)
+    );
+    set_res(&mut g, 0, "energy", 5);
+    let start = presence_of(&g, 0)[0];
+    // A seat 1 presence next to it blocks that hex (one presence a hex).
+    let blocked = rules.map.hexes[start]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&h| kind(&rules.map, h) != HexKind::Ocean)
+        .unwrap();
+    put(&mut g, blocked, &presence(1), 1);
+    let hexes = board::presence_hexes(&w, &g, 0);
+    assert!(!hexes.contains(&blocked));
+    assert!(hexes
+        .iter()
+        .all(|&h| rules.map.adjacent(h, start) && g.tokens(h, &presence(0)) == 0));
+    act(&rules, &mut g, std_act(0, "presence"));
+    // The 2nd space: +1 compute a round.
+    assert_eq!(
+        (board::track_taken(&g, 0), compute(&g), ai::tier2(&w, &g, 0)),
+        (2, 2, false)
+    );
+    act(&rules, &mut g, std_act(0, "presence"));
+    // The 3rd: tier 2.
+    assert_eq!((board::track_taken(&g, 0), ai::tier2(&w, &g, 0)), (3, true));
+    assert_eq!(presence_of(&g, 0).len(), 3);
+    // The track runs out after its last space.
+    g.vars
+        .insert(board::track_key(0), ai::board(&w, 0).presence.len() as i64);
+    assert!(!standard_offered(&rules, &g, 0).contains("presence"));
+}
+
+#[test]
+fn card_targets_on_the_map_must_be_in_reach() {
+    use crate::content::DamageAt;
+    use crate::modules::effects;
+    let (rules, mut g) = lab(&[]);
+    let w = rules.world();
+    let m = &rules.map;
+    let me = m.numbered(0, piece(0).presence);
+    put(&mut g, me, &presence(0), 1);
+    let near = m.hexes[me].neighbours[0];
+    let far = hexes_where(m, |h| m.distance(h, me) > 2 && kind(m, h) != HexKind::Ocean)[0];
+    put(&mut g, near, ADV_AMBASSADOR, 1);
+    put(&mut g, far, ADV_AMBASSADOR, 1);
+    assert_eq!(effects::damage_hexes(&w, &g, 0, DamageAt::Any), vec![near]);
+}
+
+#[test]
+fn claiming_a_site_needs_uncontested_presence_on_or_next_to_it() {
+    let (rules, g0) = lab(&[]);
+    let m = &rules.map;
+    let station = m.numbered(0, piece(0).stations[0]);
+    let next = m.hexes[station]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&h| kind(m, h) == HexKind::Open)
+        .unwrap();
+    let mut g0 = g0;
+    put(&mut g0, station, STATION, 1);
+
+    // Presence two hexes away: the ambassador just waits.
+    let mut g = g0.clone();
+    let away = hexes_where(m, |h| {
+        m.distance(h, station) == 2 && kind(m, h) == HexKind::Open
+    })[0];
+    put(&mut g, away, &presence(0), 1);
+    with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, station));
+    assert_eq!(
+        (
+            g.tokens(station, &cube(0)),
+            g.tokens(station, &ambassador(0))
+        ),
+        (0, 1)
+    );
+
+    // Presence next to it: claimed.
+    let mut g = g0.clone();
+    put(&mut g, next, &presence(0), 1);
+    with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, station));
+    assert_eq!(g.tokens(station, &cube(0)), 1);
+
+    // A node next to that presence contests it.
+    let mut g = g0.clone();
+    put(&mut g, next, &presence(0), 1);
+    let node_at = m.hexes[next]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&h| h != station)
+        .unwrap();
+    put(&mut g, node_at, NODE, 1);
+    with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, station));
+    assert_eq!(
+        (
+            g.tokens(station, &cube(0)),
+            g.tokens(station, &ambassador(0))
+        ),
+        (0, 1)
+    );
+
+    // Aligning a city: likewise.
+    let (city, lonely) = city_with_lonely_neighbours(m);
+    let mut g = g0.clone();
+    put(&mut g, lonely[0], &presence(0), 1);
+    set_res(&mut g, 0, "energy", 2);
+    set_res(&mut g, 0, AMBASSADORS, 1);
+    assert!(standard_offered(&rules, &g, 0).contains("align"));
+    let n2 = m.hexes[lonely[0]]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&h| h != city)
+        .unwrap();
+    put(&mut g, n2, NODE, 1);
+    assert!(!standard_offered(&rules, &g, 0).contains("align"));
+}
+
+// ---------- factories, troops and hardware ----------
+
+#[test]
+fn cities_grow_factories_that_take_their_owner() {
+    let (rules, g0) = lab(&["board.bases"]);
+    let m = &rules.map;
+    let at = |n: u8| m.numbered(0, n);
+    // Country 0: cities 6, 7, 14; zones 2 (by 6), 8 and 11 (by 7), 11 and 13 (by 14).
+    assert_eq!(
+        (piece(0).cities.clone(), piece(0).industry.clone()),
+        (vec![7, 6, 14], vec![2, 8, 11, 13])
+    );
+    let (c6, c7) = (at(6), at(7));
+    let zones =
+        |g: &GameState| [2, 8, 11, 13].map(|n| (g.tokens(at(n), FACTORY), cube_on(g, at(n))));
+
+    // Clean 6 builds at 2 (its only zone), neutral; corrupted 7 at the free
+    // zone with the lowest key: 8 (nearest, lowest number), adversary-owned.
+    let mut g = g0.clone();
+    put(&mut g, c7, ADV_CUBE, 1);
+    put(&mut g, at(14), ADV_CUBE, 1);
+    let mut gg = g.clone();
+    run(&rules, &mut gg);
+    answer_all(&rules, &mut gg);
+    assert_eq!(zones(&gg)[0], (1, None));
+    assert_eq!(zones(&gg)[1], (1, Some("cube:adversary".into())));
+
+    // An adversary ambassador draws it (13, further); a player ambassador repels it.
+    let mut gg = g.clone();
+    put(&mut gg, at(13), ADV_AMBASSADOR, 1);
+    put(&mut gg, at(8), &ambassador(0), 1);
+    run(&rules, &mut gg);
+    answer_all(&rules, &mut gg);
+    assert_eq!(gg.tokens(at(13), FACTORY), 1);
+    assert_eq!(gg.tokens(at(8), FACTORY), 0);
+
+    // An aligned city's factory is its owner's.
+    let mut gg = g0.clone();
+    put(&mut gg, c6, &cube(1), 1);
+    run(&rules, &mut gg);
+    answer_all(&rules, &mut gg);
+    assert_eq!(zones(&gg)[0], (1, Some("cube:1".into())));
+
+    // A clean city with two free zones: the players choose (seat 0).
+    let mut gg = g0.clone();
+    run(&rules, &mut gg);
+    let p = gg.pending.as_ref().expect("a factory choice");
+    assert!(
+        p.ask.prompt.starts_with("C0 #7 builds a factory"),
+        "{}",
+        p.ask.prompt
+    );
+    let options: BTreeSet<usize> = p
+        .ask
+        .options
+        .iter()
+        .map(|o| m.find(o.target.unwrap()).unwrap())
+        .collect();
+    assert_eq!(options, [at(8), at(11)].into());
+    answer_hex(&rules, &mut gg, at(11));
+    // 14 is then left only 13.
+    answer_all(&rules, &mut gg);
+    assert_eq!(zones(&gg).map(|z| z.0), [1, 0, 1, 1]);
+}
+
+fn cube_on(g: &GameState, h: usize) -> Option<String> {
+    g.hexes[h]
+        .tokens
+        .keys()
+        .find(|k| k.starts_with("cube:"))
+        .cloned()
+}
+
+#[test]
+fn player_factories_make_hardware_on_production_steps_only() {
+    let (rules, mut g0) = lab(&["board.bases"]);
+    let m = &rules.map;
+    let f = m.numbered(0, piece(0).factories[0]);
+    put(&mut g0, f, FACTORY, 1);
+    put(&mut g0, f, &cube(0), 1);
+    // Every zone taken, so nothing grows.
+    for c in 0..2 {
+        for &z in &piece(c).industry {
+            put(&mut g0, m.numbered(c, z), FACTORY, 1);
+        }
+    }
+    let mut g = g0.clone();
+    run(&rules, &mut g);
+    assert_eq!(g.resource(0, HARDWARE) - g0.resource(0, HARDWARE), 1);
+    // Round 2 is a war step only: no hardware, troops or growth.
+    let mut g = g0.clone();
+    g.round = 2;
+    run(&rules, &mut g);
+    assert_eq!(g.resource(0, HARDWARE), g0.resource(0, HARDWARE));
+    assert_eq!(total(&g, UNIT), 0);
+}
+
+#[test]
+fn a_factory_makes_a_troop_at_each_of_its_corps_bases() {
+    let (rules, mut g) = lab_with(&["board.bases"], &["countries=3"]);
+    let m = &rules.map;
+    for c in 0..3 {
+        for &z in &piece(c).industry {
+            put(&mut g, m.numbered(c, z), FACTORY, 1);
+        }
+        // Only country 0's first zone keeps its factory.
+        for &z in &piece(c).industry {
+            if !(c == 0 && z == piece(0).factories[0]) {
+                put(&mut g, m.numbered(c, z), FACTORY, 0);
+                put(&mut g, m.numbered(c, z), STATION, 1);
+            }
+        }
+    }
+    let bases: Vec<usize> = hexes_where(m, |h| {
+        kind(m, h) == HexKind::Base && m.hexes[h].country == 0
+    });
+    assert_eq!(bases.len(), 2);
+    run(&rules, &mut g);
+    for b in bases {
+        assert_eq!(g.tokens(b, UNIT), 2, "1 from the base, 1 from the factory");
+    }
+    let other: Vec<usize> = hexes_where(m, |h| {
+        kind(m, h) == HexKind::Base && m.hexes[h].country != 0
+    });
+    assert!(other.iter().all(|&b| g.tokens(b, UNIT) == 1));
+}
+
+#[test]
+fn an_adversary_factory_makes_adversary_troops() {
+    let (rules, mut g) = lab(&["board.bases"]);
+    let m = &rules.map;
+    for c in 0..2 {
+        for &z in &piece(c).industry {
+            put(&mut g, m.numbered(c, z), STATION, 1);
+        }
+    }
+    let f = m.numbered(0, piece(0).factories[0]);
+    put(&mut g, f, STATION, 0);
+    put(&mut g, f, FACTORY, 1);
+    put(&mut g, f, ADV_CUBE, 1);
+    let [b0, _] = m.fronts[0].bases;
+    run(&rules, &mut g);
+    assert_eq!((g.tokens(f, TROOP), g.tokens(b0, UNIT)), (1, 1));
+}
+
+#[test]
+fn a_troop_at_a_base_absorbs_a_strike_next_to_it() {
+    let (rules, mut g) = lab(&["board.strike"]);
+    let m = &rules.map;
+    let [b0, _] = m.fronts[0].bases;
+    let next = m.hexes[b0]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&h| kind(m, h) == HexKind::Open)
+        .unwrap();
+    put(&mut g, next, FACTORY, 1);
+    put(&mut g, next, TROOP, 1);
+    put(&mut g, b0, UNIT, 1);
+    let discord = g.var("alignment.discord");
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(
+        (
+            g.tokens(next, FACTORY),
+            g.tokens(b0, UNIT),
+            g.var("alignment.discord")
+        ),
+        (1, 0, discord)
+    );
+    assert_eq!(g.stats.counters["board.base_absorbed"], 1);
 }
 
 #[test]
@@ -530,16 +1028,49 @@ fn selling_a_card_discards_it_for_a_credit() {
             pile.retain(|c| c != "fab_line");
         }
     }
-    g.piles.insert("cards.hand.0".into(), vec!["turnkey_factory".into(), "fab_line".into()]);
-    let sells: Vec<Action> = rules.legal_actions(&g).into_iter().filter(|a| matches!(a, Action::Sell { seat: 0, .. })).collect();
+    g.piles.insert(
+        "cards.hand.0".into(),
+        vec!["turnkey_factory".into(), "fab_line".into()],
+    );
+    let sells: Vec<Action> = rules
+        .legal_actions(&g)
+        .into_iter()
+        .filter(|a| matches!(a, Action::Sell { seat: 0, .. }))
+        .collect();
     assert_eq!(sells.len(), 2);
     let credits = g.resource(0, "credits");
-    act(&rules, &mut g, Action::Sell { seat: 0, card: "fab_line".into() });
-    act(&rules, &mut g, Action::Sell { seat: 0, card: "turnkey_factory".into() });
+    act(
+        &rules,
+        &mut g,
+        Action::Sell {
+            seat: 0,
+            card: "fab_line".into(),
+        },
+    );
+    act(
+        &rules,
+        &mut g,
+        Action::Sell {
+            seat: 0,
+            card: "turnkey_factory".into(),
+        },
+    );
     assert_eq!(g.resource(0, "credits"), credits + 2);
     assert!(g.pile("cards.hand.0").is_empty());
     // A tier-1 card to its discard pile; an AI's unique card back to the box.
     assert_eq!(g.pile("cards.discard.1")[0], "fab_line");
-    assert!(g.piles.values().all(|p| !p.contains(&"turnkey_factory".to_string())));
-    assert!(rules.apply_mut(&mut g, &Action::Sell { seat: 0, card: "fab_line".into() }, None).is_err());
+    assert!(g
+        .piles
+        .values()
+        .all(|p| !p.contains(&"turnkey_factory".to_string())));
+    assert!(rules
+        .apply_mut(
+            &mut g,
+            &Action::Sell {
+                seat: 0,
+                card: "fab_line".into()
+            },
+            None
+        )
+        .is_err());
 }

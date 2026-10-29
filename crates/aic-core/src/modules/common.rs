@@ -5,7 +5,9 @@
 //! Terms used throughout (see `docs/rules.md`):
 //! - **adjacent**: a neighbouring hex on the board (across country borders too);
 //! - **next to X**: holding X, or adjacent to a hex holding X;
-//! - **reach**: a seat's reach is every hex within 1 of one of its data centres.
+//! - **reach**: a seat's reach is every hex within 1 of one of its presence.
+//! - **presence**: a player's tokens on the board (one per hex), placed off
+//!   their AI board's presence track.
 
 use crate::content::HexKind;
 use crate::module::World;
@@ -24,10 +26,14 @@ pub const UNIT: &str = "unit";
 pub const HARDEN: &str = "harden";
 /// Seat resource: player ambassadors in the seat's supply.
 pub const AMBASSADORS: &str = "ambassadors";
+/// Seat resource: hardware, made by player-owned factories.
+pub const HARDWARE: &str = "hardware";
+/// An adversary node: persistent, makes adversary compute, contests presence.
+pub const NODE: &str = "node";
 
-/// Seat `s`'s data centre on a hex.
-pub fn dc(seat: usize) -> String {
-    format!("dc:{seat}")
+/// Seat `s`'s presence on a hex.
+pub fn presence(seat: usize) -> String {
+    format!("presence:{seat}")
 }
 
 /// Seat `s`'s owner cube (an aligned city or an owned station).
@@ -66,14 +72,14 @@ pub fn clean_city(w: &World, g: &GameState, h: usize) -> bool {
     is_city(w, h) && !corrupted(g, h) && cube_owner(g, h).is_none()
 }
 
-/// The seat whose data centre is on hex `h`, if any.
-pub fn dc_owner(g: &GameState, h: usize) -> Option<usize> {
-    (0..g.seats.len()).find(|&s| g.tokens(h, &dc(s)) > 0)
+/// The seat whose presence is on hex `h`, if any.
+pub fn presence_owner(g: &GameState, h: usize) -> Option<usize> {
+    (0..g.seats.len()).find(|&s| g.tokens(h, &presence(s)) > 0)
 }
 
-/// Whether hex `h` holds a building (factory, research station, data centre).
+/// Whether hex `h` holds a building (factory, research station).
 pub fn has_building(g: &GameState, h: usize) -> bool {
-    g.tokens(h, FACTORY) > 0 || g.tokens(h, STATION) > 0 || dc_owner(g, h).is_some()
+    g.tokens(h, FACTORY) > 0 || g.tokens(h, STATION) > 0
 }
 
 /// An open hex with no building: where buildings go.
@@ -81,14 +87,14 @@ pub fn buildable(w: &World, g: &GameState, h: usize) -> bool {
     w.map.hexes[h].kind == HexKind::Open && !has_building(g, h)
 }
 
-/// Whether hex `h` holds a piece an ambassador can sit on.
+/// Whether hex `h` holds a piece an ambassador can sit on (presence included).
 pub fn has_piece(w: &World, g: &GameState, h: usize) -> bool {
-    is_city(w, h) || is_base(w, h) || has_building(g, h)
+    is_city(w, h) || is_base(w, h) || has_building(g, h) || presence_owner(g, h).is_some()
 }
 
-/// Player-owned: a data centre, or an aligned city or owned station.
+/// Player-owned: a presence, or an aligned city or owned station.
 pub fn player_owned(g: &GameState, h: usize) -> bool {
-    dc_owner(g, h).is_some() || cube_owner(g, h).is_some()
+    presence_owner(g, h).is_some() || cube_owner(g, h).is_some()
 }
 
 /// A player ambassador's seat on hex `h`, if any (seat order).
@@ -125,10 +131,10 @@ pub fn scope_countries(w: &World, scope: Option<usize>) -> Vec<usize> {
     }
 }
 
-/// Empty open hexes touching a city: where a factory may be built.
+/// Free industrial zones (no building): where a factory may be built.
 pub fn factory_hexes(w: &World, g: &GameState) -> Vec<usize> {
     (0..g.hexes.len())
-        .filter(|&h| buildable(w, g, h) && w.map.hexes[h].neighbours.iter().any(|&x| is_city(w, x)))
+        .filter(|&h| w.map.hexes[h].industrial && !has_building(g, h))
         .collect()
 }
 
@@ -137,33 +143,40 @@ pub fn home_country(w: &World, seat: usize) -> usize {
     seat % w.map.countries.len()
 }
 
-/// Hexes holding seat `s`'s data centres, in board order.
-pub fn dcs_of(g: &GameState, seat: usize) -> Vec<usize> {
-    let k = dc(seat);
-    (0..g.hexes.len()).filter(|&h| g.tokens(h, &k) > 0).collect()
+/// Hexes holding seat `s`'s presence, in board order.
+pub fn presence_of(g: &GameState, seat: usize) -> Vec<usize> {
+    let k = presence(seat);
+    (0..g.hexes.len())
+        .filter(|&h| g.tokens(h, &k) > 0)
+        .collect()
 }
 
-pub fn dc_count(g: &GameState, seat: usize) -> i64 {
-    dcs_of(g, seat).len() as i64
+pub fn presence_count(g: &GameState, seat: usize) -> i64 {
+    presence_of(g, seat).len() as i64
 }
 
-/// Whether hex `h` is within seat `s`'s reach (1 of one of its data centres).
+/// Whether hex `h` is within seat `s`'s reach (1 of one of its presence).
 pub fn in_reach(w: &World, g: &GameState, seat: usize, h: usize) -> bool {
-    let k = dc(seat);
+    let k = presence(seat);
     next_to(w, h, |x| g.tokens(x, &k) > 0)
 }
 
-pub fn has_dc_in(w: &World, g: &GameState, seat: usize, country: usize) -> bool {
-    let k = dc(seat);
-    w.map.countries[country].hexes.iter().any(|&h| g.tokens(h, &k) > 0)
+pub fn has_presence_in(w: &World, g: &GameState, seat: usize, country: usize) -> bool {
+    let k = presence(seat);
+    w.map.countries[country]
+        .hexes
+        .iter()
+        .any(|&h| g.tokens(h, &k) > 0)
 }
 
-/// Seats with a data centre in `country`, in seat order.
+/// Seats with a presence in `country`, in seat order.
 pub fn seats_in_country(w: &World, g: &GameState, country: usize) -> Vec<usize> {
-    (0..g.seats.len()).filter(|&s| has_dc_in(w, g, s, country)).collect()
+    (0..g.seats.len())
+        .filter(|&s| has_presence_in(w, g, s, country))
+        .collect()
 }
 
-/// Seats a threat in `scope` concerns: with a data centre in the country,
+/// Seats a threat in `scope` concerns: with a presence in the country,
 /// or every seat for the whole board.
 pub fn seats_in_scope(w: &World, g: &GameState, scope: Option<usize>) -> Vec<usize> {
     match scope {

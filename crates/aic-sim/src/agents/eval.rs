@@ -24,9 +24,11 @@
 
 use std::collections::BTreeMap;
 
-use aic_core::content::{Passive, Side, Twist, ANTIMATTER, COMPUTE, CREDITS, ENERGY, INSIGHT, RESOURCES};
-use aic_core::modules::common::{self, ADV_AMBASSADOR, ADV_CUBE, AMBASSADORS, FACTORY, HARDEN, STATION, TROOP};
-use aic_core::modules::{adversary, ai, alignment, board, cards, economy, threats};
+use aic_core::content::{Passive, Side, Twist, ANTIMATTER, CREDITS, ENERGY, INSIGHT, RESOURCES};
+use aic_core::modules::common::{
+    self, ADV_AMBASSADOR, ADV_CUBE, AMBASSADORS, FACTORY, HARDEN, STATION, TROOP,
+};
+use aic_core::modules::{adversary, ai, alignment, board, cards, economy, plan, threats};
 use aic_core::{GameState, Rules};
 use serde::{Deserialize, Serialize};
 
@@ -73,8 +75,17 @@ pub struct Weights {
     pub level: f64,
     /// Each difficulty level Discord has escalated the adversary (a cost).
     pub escalation: f64,
-    /// Each player data centre (compute, reach, a share of city energy).
+    /// Each player presence on the board (reach, site claims, a share of
+    /// city energy; its track income is counted as income).
     pub data_centre: f64,
+    /// Each node on the board (a cost: adversary compute, contests presence,
+    /// blocks the purge).
+    pub node: f64,
+    /// Each player-owned factory (hardware each production step); an
+    /// adversary-owned one costs as much.
+    pub owned_factory: f64,
+    /// Each hardware a seat holds.
+    pub hardware: f64,
     /// Each city, base or station hex inside some seat's reach.
     pub reach: f64,
     /// Each research station a player owns; a corrupted one costs as much.
@@ -135,7 +146,7 @@ pub struct Weights {
     /// this share of its value.
     pub locked: f64,
     /// Horizon mode: board production (energy of aligned cities, compute of
-    /// data centres not diverted) counts this share of income over the
+    /// presence not diverted) counts this share of income over the
     /// rounds left, on top of the flat piece weights.
     pub production: f64,
     /// Horizon mode, when above 0: cards in hand wait their turn for
@@ -183,6 +194,10 @@ impl Default for Weights {
             level: 10.0,
             escalation: 20.0,
             data_centre: 4.0,
+            // 016: chosen by hand for the r7 board, not swept.
+            node: 6.0,
+            owned_factory: 4.0,
+            hardware: 2.0,
             reach: 0.5,
             station: 5.0,
             project_cube: 2.0,
@@ -282,14 +297,9 @@ pub struct Eval {
     /// the last bar drop.
     target_tips: i64,
     corrupt_at: i64,
-    city_build: i64,
-    build_bonus: i64,
-    factory_build: i64,
-    escalation_ambassadors: i64,
     free_at: i64,
     city_energy: i64,
     aligned_bonus: i64,
-    dc_compute: i64,
 }
 
 impl Eval {
@@ -311,7 +321,11 @@ impl Eval {
         let target_tips = if outright > 0 {
             outright
         } else {
-            world.list("alignment.unity_ease").last().copied().unwrap_or(1)
+            world
+                .list("alignment.unity_ease")
+                .last()
+                .copied()
+                .unwrap_or(1)
         };
         Eval {
             w,
@@ -319,14 +333,9 @@ impl Eval {
             seats,
             target_tips,
             corrupt_at: world.int("adversary.corrupt_at"),
-            city_build: world.int("adversary.city_build"),
-            build_bonus: world.int("adversary.build_bonus"),
-            factory_build: world.int("adversary.factory_build"),
-            escalation_ambassadors: world.int("adversary.escalation_ambassadors"),
             free_at: world.int("board.free_city_at").max(1),
             city_energy: world.int("board.city_energy"),
             aligned_bonus: world.int("board.aligned_bonus"),
-            dc_compute: world.int("board.dc_compute"),
         }
     }
 
@@ -340,61 +349,26 @@ impl Eval {
     }
 
     /// The next build and corrupt steps, read off the face-up card (public).
+    /// The build is the core's own forecast (`plan::next_build`).
     fn forecast(&self, rules: &Rules, g: &GameState) -> Forecast {
         let world = rules.world();
         let content = world.content;
-        let next = g
+        let sooner: i64 = g
             .pile(adversary::NEXT)
             .first()
             .and_then(|id| content.adversary_index(id))
-            .map(|i| &content.adversary[i]);
-        let twist = |f: &dyn Fn(&Twist) -> Option<i64>| -> i64 {
-            next.map_or(0, |c| c.twists.iter().filter_map(f).sum())
-        };
-        let mut city = self.city_build
-            + twist(&|t| match t {
-                Twist::CityBuild { amount } => Some(*amount),
-                _ => None,
+            .map_or(0, |i| {
+                content.adversary[i]
+                    .twists
+                    .iter()
+                    .filter_map(|t| match t {
+                        Twist::CorruptSooner { amount } => Some(*amount),
+                        _ => None,
+                    })
+                    .sum()
             });
-        if adversary::at(&world, g, 4) {
-            city += self.build_bonus;
-        }
-        let clean = twist(&|t| match t {
-            Twist::CleanFactories { amount } => Some(*amount),
-            _ => None,
-        });
-        let stations = twist(&|t| match t {
-            Twist::Stations { amount } => Some(*amount),
-            _ => None,
-        });
-        let sooner = twist(&|t| match t {
-            Twist::CorruptSooner { amount } => Some(*amount),
-            _ => None,
-        });
-        let mut placements = 0;
-        for h in 0..g.hexes.len() {
-            let city_here = common::is_city(&world, h);
-            if city_here && common::corrupted(g, h) {
-                placements += city;
-            }
-            if g.tokens(h, FACTORY) > 0 {
-                let nb = &world.map.hexes[h].neighbours;
-                if nb.iter().any(|&x| common::is_city(&world, x) && common::corrupted(g, x)) {
-                    placements += self.factory_build;
-                }
-                if nb.iter().any(|&x| common::clean_city(&world, g, x)) {
-                    placements += clean;
-                }
-            }
-            if g.tokens(h, STATION) > 0 && common::corrupted(g, h) {
-                placements += stations;
-            }
-            if next.is_some_and(|c| c.escalation) && common::is_base(&world, h) {
-                placements += self.escalation_ambassadors;
-            }
-        }
         Forecast {
-            placements,
+            placements: plan::next_build(&world, g).iter().map(|&(_, n)| n).sum(),
             corrupt_at: (self.corrupt_at - sooner).max(1),
         }
     }
@@ -421,7 +395,9 @@ impl Eval {
             if city {
                 if bad {
                     corrupted += 1;
-                    let mine: i64 = (0..g.seats.len()).map(|s| g.tokens(h, &common::ambassador(s))).sum();
+                    let mine: i64 = (0..g.seats.len())
+                        .map(|s| g.tokens(h, &common::ambassador(s)))
+                        .sum();
                     let share = (mine as f64 / self.free_at as f64).min(1.0);
                     v += w.corrupted * w.freeing * share;
                 } else {
@@ -455,7 +431,15 @@ impl Eval {
                 }
             }
             v += w.factory * g.tokens(h, FACTORY) as f64 + w.harden * g.tokens(h, HARDEN) as f64;
-            if common::dc_owner(g, h).is_some() {
+            if g.tokens(h, FACTORY) > 0 {
+                if bad {
+                    v -= w.owned_factory;
+                } else if common::cube_owner(g, h).is_some() {
+                    v += w.owned_factory;
+                }
+            }
+            v -= w.node * g.tokens(h, common::NODE) as f64;
+            if common::presence_owner(g, h).is_some() {
                 v += w.data_centre;
             }
             for s in 0..self.seats {
@@ -477,16 +461,19 @@ impl Eval {
             if g.var(&board::project_done(c)) > 0 {
                 continue;
             }
-            let mine: i64 = (0..self.seats).map(|s| g.var(&board::project_key(c, Some(s)))).sum();
+            let mine: i64 = (0..self.seats)
+                .map(|s| g.var(&board::project_key(c, Some(s))))
+                .sum();
             let theirs = g.var(&board::project_key(c, None));
             v += w.project_cube * (mine as f64 - 0.5 * theirs as f64);
         }
         for s in 0..self.seats {
             v += w.ambassador * g.resource(s, AMBASSADORS) as f64;
+            v += w.hardware * g.resource(s, common::HARDWARE) as f64;
         }
         // The win bar: what still stands between the team and a clear board.
         let level = alignment::bar_level(&world, g);
-        v -= w.blocker * adversary::presence(&world, g, level) as f64;
+        v -= w.blocker * adversary::purge_count(&world, g, level) as f64;
         // Alignment: tips made, and each bucket's share of its next tip.
         for (side, weight) in [(Side::Unity, w.unity_tip), (Side::Discord, -w.discord_tip)] {
             let cap = alignment::capacity(&world, g, side).max(1) as f64;
@@ -539,7 +526,14 @@ impl Eval {
     /// plus `win_lag`), then the expected rounds survived at a per-round
     /// loss chance of `risk` per unit of danger (unpaid threats per
     /// country, the supply or the cities at their edge).
-    fn rounds_left(&self, rules: &Rules, g: &GameState, unpaid: &[f64], safe_cities: i64, slack: i64) -> f64 {
+    fn rounds_left(
+        &self,
+        rules: &Rules,
+        g: &GameState,
+        unpaid: &[f64],
+        safe_cities: i64,
+        slack: i64,
+    ) -> f64 {
         let w = &self.w;
         let clock = Self::cards_left(g) as f64;
         let (points, bar) = self.unity_progress(rules, g);
@@ -641,7 +635,7 @@ impl Eval {
 
     /// What the board makes each seat a round if production came now, in
     /// `RESOURCES` order: the energy of its aligned cities and the compute
-    /// of its data centres, less what adversary ambassadors there divert.
+    /// of its presence, less what adversary ambassadors there divert.
     fn board_production(&self, rules: &Rules, g: &GameState) -> Vec<[i64; RESOURCES.len()]> {
         let world = rules.world();
         let mut out = vec![[0i64; RESOURCES.len()]; self.seats];
@@ -653,8 +647,6 @@ impl Eval {
                 if let Some(s) = common::cube_owner(g, h).filter(|&s| s < self.seats) {
                     out[s][ENERGY] += self.city_energy + self.aligned_bonus;
                 }
-            } else if let Some(s) = common::dc_owner(g, h).filter(|&s| s < self.seats) {
-                out[s][COMPUTE] += self.dc_compute;
             }
         }
         out
@@ -714,7 +706,9 @@ impl Eval {
                 let pays = d.passives.iter().any(|p| {
                     matches!(
                         p,
-                        Passive::Income { .. } | Passive::IncomePerTag { .. } | Passive::IncomeIfTags { .. }
+                        Passive::Income { .. }
+                            | Passive::IncomePerTag { .. }
+                            | Passive::IncomeIfTags { .. }
                     )
                 });
                 v += w.built + w.built_cost * self.cost(id);
@@ -736,15 +730,25 @@ impl Eval {
                 let mut p = 1.0;
                 let insight = world.amount(&d.insight);
                 insight_queue += insight;
-                let insight_need = if w.insight_wait > 0.0 { insight_queue } else { 0 };
+                let insight_need = if w.insight_wait > 0.0 {
+                    insight_queue
+                } else {
+                    0
+                };
                 for (have, need, earn) in [
                     // The AI's discount: energy or compute spent as credits.
                     (
-                        res("credits") + cards::discount_room(&world, g, s, d).map_or(0, |(_, rate, k)| rate * k),
+                        res("credits")
+                            + cards::discount_room(&world, g, s, d)
+                                .map_or(0, |(_, rate, k)| rate * k),
                         cards::discounted_cost(&world, d, discount),
                         earn_credits,
                     ),
-                    (res("antimatter"), world.amount(&d.antimatter), income[ANTIMATTER]),
+                    (
+                        res("antimatter"),
+                        world.amount(&d.antimatter),
+                        income[ANTIMATTER],
+                    ),
                     (res("insight"), insight_need, income[INSIGHT]),
                 ] {
                     let short = need - have;

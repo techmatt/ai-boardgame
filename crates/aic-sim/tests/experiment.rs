@@ -73,7 +73,10 @@ fn results_without_timing(dir: &Path) -> Vec<Vec<String>> {
 fn experiment_writes_report_and_records_random() {
     let body = SPEC
         .replace(r#"["random", "greedy"]"#, r#"["random"]"#)
-        .replace(r#""closeness": {"every": 1}"#, r#""closeness": {"every": 4}"#);
+        .replace(
+            r#""closeness": {"every": 1}"#,
+            r#""closeness": {"every": 4}"#,
+        );
     writes_report_and_records("aic-sim-experiment-random", &body, 2);
 }
 
@@ -126,7 +129,7 @@ fn writes_report_and_records(dir: &str, body: &str, cells: usize) {
             serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap())
                 .unwrap();
         assert_eq!(results["cells"].as_array().unwrap().len(), cells);
-        assert_eq!(results["format"], "aic-experiment/1");
+        assert_eq!(results["format"], "aic-experiment/2");
         // 3 games per cell, one row each.
         assert_eq!(
             std::fs::read_to_string(out.join("games.csv"))
@@ -231,7 +234,11 @@ fn experiment_omits_comparisons_that_do_not_apply() {
     std::fs::write(&spec, body).unwrap();
     let out = root.join("out");
     let res = experiment(&spec, &out, &[]);
-    assert!(res.status.success(), "{}", String::from_utf8_lossy(&res.stderr));
+    assert!(
+        res.status.success(),
+        "{}",
+        String::from_utf8_lossy(&res.stderr)
+    );
     let report = std::fs::read_to_string(out.join("report.md")).unwrap();
     assert!(report.contains("## Strategy health"));
     assert!(report.contains("## Variants against the base"));
@@ -261,8 +268,16 @@ fn experiment_filters_variants_and_turns_probes_on() {
 }"#;
     std::fs::write(&spec, body).unwrap();
     let out = root.join("out");
-    let res = experiment(&spec, &out, &["--variants", "keep2", "--winprob", "1", "--closeness", "2"]);
-    assert!(res.status.success(), "{}", String::from_utf8_lossy(&res.stderr));
+    let res = experiment(
+        &spec,
+        &out,
+        &["--variants", "keep2", "--winprob", "1", "--closeness", "2"],
+    );
+    assert!(
+        res.status.success(),
+        "{}",
+        String::from_utf8_lossy(&res.stderr)
+    );
     let results: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(out.join("results.json")).unwrap()).unwrap();
     let names: Vec<&str> = results["spec"]["variants"]
@@ -278,7 +293,8 @@ fn experiment_filters_variants_and_turns_probes_on() {
     let res = experiment(&spec, &root.join("out2"), &[]);
     assert!(res.status.success());
     let results: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(root.join("out2/results.json")).unwrap()).unwrap();
+        serde_json::from_str(&std::fs::read_to_string(root.join("out2/results.json")).unwrap())
+            .unwrap();
     assert_eq!(results["spec"]["winprob"]["games"], 0);
     assert_eq!(results["spec"]["closeness"]["every"], 0);
     let report = std::fs::read_to_string(root.join("out2/report.md")).unwrap();
@@ -331,11 +347,19 @@ fn experiment_streams_games_and_resumes() {
     std::fs::write(&spec, STREAM_SPEC).unwrap();
     let whole = root.join("whole");
     let res = experiment(&spec, &whole, &[]);
-    assert!(res.status.success(), "{}", String::from_utf8_lossy(&res.stderr));
+    assert!(
+        res.status.success(),
+        "{}",
+        String::from_utf8_lossy(&res.stderr)
+    );
     let stream = std::fs::read_to_string(whole.join("games.jsonl")).unwrap();
     let lines: Vec<&str> = stream.lines().collect();
     assert_eq!(lines.len(), 1 + 12, "a header, then one line per game");
-    assert!(lines[0].contains("\"format\":\"aic-games/1\""), "{}", lines[0]);
+    assert!(
+        lines[0].contains("\"format\":\"aic-games/2\""),
+        "{}",
+        lines[0]
+    );
 
     // As a kill leaves it: five games, and half of a sixth.
     let cut = root.join("cut");
@@ -355,7 +379,9 @@ fn experiment_streams_games_and_resumes() {
         serde_json::from_str(&std::fs::read_to_string(cut.join("results.json")).unwrap()).unwrap();
     assert_eq!(json["games_resumed"], 5);
     assert_eq!(json["games_played"], json["games_planned"]);
-    assert!(!std::fs::read_to_string(cut.join("report.md")).unwrap().contains("Partial"));
+    assert!(!std::fs::read_to_string(cut.join("report.md"))
+        .unwrap()
+        .contains("Partial"));
 
     // A different grid is not the same experiment.
     let res = experiment(&spec, &cut, &["--resume", "--games", "7"]);
@@ -368,7 +394,11 @@ fn experiment_streams_games_and_resumes() {
     std::fs::copy(&base, &cfg).unwrap();
     let cfg_path = cfg.to_string_lossy().replace('\\', "/");
     let spec2 = root.join("spec2.json");
-    std::fs::write(&spec2, STREAM_SPEC.replace("configs/baseline.json", &cfg_path)).unwrap();
+    std::fs::write(
+        &spec2,
+        STREAM_SPEC.replace("configs/baseline.json", &cfg_path),
+    )
+    .unwrap();
     let edited = root.join("edited");
     assert!(experiment(&spec2, &edited, &[]).status.success());
     let mut c: serde_json::Value =
@@ -376,7 +406,12 @@ fn experiment_streams_games_and_resumes() {
     c["countries"] = serde_json::json!(3);
     std::fs::write(&cfg, c.to_string()).unwrap();
     let res = experiment(&spec2, &edited, &["--resume"]);
-    assert_eq!(res.status.code(), Some(2), "{}", String::from_utf8_lossy(&res.stderr));
+    assert_eq!(
+        res.status.code(),
+        Some(2),
+        "{}",
+        String::from_utf8_lossy(&res.stderr)
+    );
     // A fresh run keeps the earlier stream aside.
     assert!(experiment(&spec2, &edited, &[]).status.success());
     assert!(edited.join("games.jsonl.bak").exists());
@@ -393,7 +428,10 @@ fn experiment_quick_keeps_shallow_agents() {
             r#""agents": ["random"]"#,
             r#""agents": ["random", "beam:width=2", "greedy:samples=2", "engine:width=2"]"#,
         )
-        .replace(r#""games": 6"#, r#""games": 40, "winprob": {"games": 2}, "closeness": {"every": 1}"#)
+        .replace(
+            r#""games": 6"#,
+            r#""games": 40, "winprob": {"games": 2}, "closeness": {"every": 1}"#,
+        )
         .replace(r#""difficulties": [0, 4]"#, r#""difficulties": [0]"#);
     std::fs::write(&spec, body).unwrap();
     let out = root.join("out");
@@ -443,9 +481,19 @@ fn experiment_killed_partway_leaves_a_partial_report() {
     child.kill().unwrap();
     child.wait().unwrap();
     let text = std::fs::read_to_string(&report).unwrap();
-    assert!(text.contains("**Partial: "), "{}", &text[..300.min(text.len())]);
+    assert!(
+        text.contains("**Partial: "),
+        "{}",
+        &text[..300.min(text.len())]
+    );
     assert!(text.contains("of 400 games.**"));
     let games = std::fs::read_to_string(out.join("games.jsonl")).unwrap();
     assert!(games.lines().count() >= 2, "games streamed");
-    assert!(std::fs::read_to_string(out.join("games.csv")).unwrap().lines().count() >= 2);
+    assert!(
+        std::fs::read_to_string(out.join("games.csv"))
+            .unwrap()
+            .lines()
+            .count()
+            >= 2
+    );
 }

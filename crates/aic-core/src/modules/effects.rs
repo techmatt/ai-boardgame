@@ -15,21 +15,35 @@ pub struct Ctx {
     pub other: Option<usize>,
 }
 
-/// Hexes a removal effect of seat `s` may target.
+/// Hexes a removal effect of seat `s` may target: every card's map target
+/// is within the seat's reach (016), and the card may narrow it further.
 pub fn damage_hexes(w: &World, g: &GameState, seat: usize, at: DamageAt) -> Vec<usize> {
     (0..g.hexes.len())
-        .filter(|&h| has_adversary(g, h))
+        .filter(|&h| has_adversary(g, h) && in_reach(w, g, seat, h))
         .filter(|&h| match at {
             DamageAt::Any => true,
             DamageAt::Reach => in_reach(w, g, seat, h),
-            DamageAt::DataCentreCountry => has_dc_in(w, g, seat, w.map.hexes[h].country as usize),
+            DamageAt::PresenceCountry => {
+                has_presence_in(w, g, seat, w.map.hexes[h].country as usize)
+            }
         })
         .collect()
 }
 
-/// A corrupted city or research station (a cleanse target).
+/// A corrupted city, research station or factory (a cleanse target).
 fn cleansable(w: &World, g: &GameState, h: usize) -> bool {
-    corrupted(g, h) && (w.map.hexes[h].kind == HexKind::City || g.tokens(h, STATION) > 0)
+    corrupted(g, h)
+        && (w.map.hexes[h].kind == HexKind::City
+            || g.tokens(h, STATION) > 0
+            || g.tokens(h, FACTORY) > 0)
+}
+
+/// Free industrial zones in seat `s`'s reach (a card's factory site).
+fn factory_sites(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
+    factory_hexes(w, g)
+        .into_iter()
+        .filter(|&h| in_reach(w, g, seat, h))
+        .collect()
 }
 
 fn countries_where(w: &World, f: impl Fn(usize) -> bool) -> Vec<usize> {
@@ -54,11 +68,13 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
         Effect::Damage { at, .. } => !damage_hexes(w, g, seat, *at).is_empty(),
         Effect::DamageCountry { .. } | Effect::DestroyAll => any_hex(g, |h| has_adversary(g, h)),
         Effect::RemoveAmbassadorsCountry { .. } => any_hex(g, |h| g.tokens(h, ADV_AMBASSADOR) > 0),
-        Effect::BuildFactory => !factory_hexes(w, g).is_empty(),
-        Effect::Cleanse { .. } => any_hex(g, |h| cleansable(w, g, h)),
+        Effect::BuildFactory => !factory_sites(w, g, seat).is_empty(),
+        Effect::Cleanse { .. } => any_hex(g, |h| cleansable(w, g, h) && in_reach(w, g, seat, h)),
         Effect::Jam { .. } | Effect::CounterThreat => !threats::active(g).is_empty(),
         Effect::MoveAmbassadors { .. } => movable_ambassadors(g, seat) > 0,
-        Effect::PlaceDataCentre { .. } => ai::can_place(w, g, seat) && !ai::dc_hexes(w, g, seat).is_empty(),
+        Effect::PlacePresence { .. } => {
+            ai::can_place(w, g, seat) && !board::presence_hexes(w, g, seat).is_empty()
+        }
         // Giving needs someone to give to (Grant and Venture Capital still pay you).
         Effect::Transfer { .. } => g.seats.len() > 1,
         _ => true,
@@ -68,7 +84,9 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
 fn cond(w: &World, g: &GameState, seat: usize, c: Cond) -> bool {
     match c {
         Cond::RemovedTroop => g.var(&adversary::removed_troop(seat)) > 0,
-        Cond::CityWithAmbassador => any_hex(g, |h| g.tokens(h, ADV_AMBASSADOR) > 0 && clean_city(w, g, h)),
+        Cond::CityWithAmbassador => any_hex(g, |h| {
+            g.tokens(h, ADV_AMBASSADOR) > 0 && clean_city(w, g, h)
+        }),
     }
 }
 
@@ -87,8 +105,8 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
     let w = cx.world;
     match e {
         Effect::Gain { resource, amount } => cx.add_resource(g, seat, resource, *amount),
-        Effect::GainPerDataCentre { resource, max } => {
-            let n = dc_count(g, seat).min(*max);
+        Effect::GainPerPresence { resource, max } => {
+            let n = presence_count(g, seat).min(*max);
             cx.add_resource(g, seat, resource, n);
         }
         Effect::ChoosePlayer => {
@@ -102,10 +120,16 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 cx.add_resource(g, o, resource, *amount);
             }
         }
-        Effect::Transfer { resource, max, bonus } => {
+        Effect::Transfer {
+            resource,
+            max,
+            bonus,
+        } => {
             if let Some(o) = ctx.other {
                 let most = (*max).min(g.resource(seat, resource)).max(0);
-                let opts = (0..=most).map(|k| opt(format!("give {k} {resource}"))).collect();
+                let opts = (0..=most)
+                    .map(|k| opt(format!("give {k} {resource}")))
+                    .collect();
                 let prompt = format!("Seat {seat}: give how much {resource} to seat {o}?");
                 let k = cx.choose(seat, &prompt, opts)?.unwrap_or(0) as i64;
                 if k > 0 {
@@ -114,9 +138,16 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::Convert { from, to, max, rate } => {
+        Effect::Convert {
+            from,
+            to,
+            max,
+            rate,
+        } => {
             let most = (*max).min(g.resource(seat, from)).max(0);
-            let opts = (0..=most).map(|k| opt(format!("convert {k} {from}"))).collect();
+            let opts = (0..=most)
+                .map(|k| opt(format!("convert {k} {from}")))
+                .collect();
             let prompt = format!("Seat {seat}: convert how much {from} into {to}?");
             let k = cx.choose(seat, &prompt, opts)?.unwrap_or(0) as i64;
             if k > 0 {
@@ -124,9 +155,9 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 cx.add_resource(g, seat, to, k * rate);
             }
         }
-        Effect::PlaceDataCentre { count } => {
+        Effect::PlacePresence { count } => {
             for _ in 0..*count {
-                if !ai::place_data_centre(g, cx, seat)? {
+                if !board::place_presence(g, cx, seat)? {
                     break;
                 }
             }
@@ -134,7 +165,8 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         Effect::Damage { amount, at } => {
             let hexes = damage_hexes(&w, g, seat, *at);
             let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
-            let prompt = format!("Seat {seat}: remove {amount} worth of adversary pieces in which hex?");
+            let prompt =
+                format!("Seat {seat}: remove {amount} worth of adversary pieces in which hex?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 adversary::damage(g, cx, seat, hexes[i], *amount)?;
             }
@@ -142,7 +174,9 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         Effect::DamageCountry { amount } => {
             let cs = countries_where(&w, |h| has_adversary(g, h));
             let opts = cs.iter().map(|&c| country_opt(c)).collect();
-            let prompt = format!("Seat {seat}: remove {amount} worth in each adversary hex of which country?");
+            let prompt = format!(
+                "Seat {seat}: remove {amount} worth in each adversary hex of which country?"
+            );
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 let hexes: Vec<usize> = w.map.countries[cs[i]]
                     .hexes
@@ -156,9 +190,12 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             }
         }
         Effect::DestroyAll => {
-            let hexes: Vec<usize> = (0..g.hexes.len()).filter(|&h| has_adversary(g, h)).collect();
+            let hexes: Vec<usize> = (0..g.hexes.len())
+                .filter(|&h| has_adversary(g, h))
+                .collect();
             let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
-            let prompt = format!("Seat {seat}: remove every adversary ambassador and troop in which hex?");
+            let prompt =
+                format!("Seat {seat}: remove every adversary ambassador and troop in which hex?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 adversary::destroy_all(g, cx, seat, hexes[i]);
             }
@@ -166,7 +203,8 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         Effect::RemoveAmbassadorsCountry { unity_per } => {
             let cs = countries_where(&w, |h| g.tokens(h, ADV_AMBASSADOR) > 0);
             let opts = cs.iter().map(|&c| country_opt(c)).collect();
-            let prompt = format!("Seat {seat}: remove every adversary ambassador in which country?");
+            let prompt =
+                format!("Seat {seat}: remove every adversary ambassador in which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 let removed = adversary::remove_all_in_country(g, cx, cs[i]);
                 if *unity_per > 0 {
@@ -175,18 +213,23 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             }
         }
         Effect::BuildFactory => {
-            let hexes = factory_hexes(&w, g);
+            let hexes = factory_sites(&w, g, seat);
             let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
-            let prompt = format!("Seat {seat}: build a factory on which hex?");
+            let prompt = format!("Seat {seat}: build a factory on which zone?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 cx.add_tokens(g, hexes[i], FACTORY, 1);
+                cx.add_tokens(g, hexes[i], &cube(seat), 1);
+                cx.tally(g, "board.factories_built.player", 1);
             }
         }
-        Effect::Cleanse { amount, one_country } => {
+        Effect::Cleanse {
+            amount,
+            one_country,
+        } => {
             let mut country: Option<u8> = None;
             for k in 0..*amount {
                 let hexes: Vec<usize> = (0..g.hexes.len())
-                    .filter(|&h| cleansable(&w, g, h))
+                    .filter(|&h| cleansable(&w, g, h) && in_reach(&w, g, seat, h))
                     .filter(|&h| country.is_none_or(|c| w.map.hexes[h].country == c))
                     .collect();
                 if hexes.is_empty() {
@@ -214,18 +257,30 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             let cs: Vec<usize> = (0..w.map.countries.len())
                 .filter(|&c| match in_country {
                     CountryRule::Any => true,
-                    CountryRule::DataCentreCountry => has_dc_in(&w, g, seat, c),
+                    CountryRule::PresenceCountry => has_presence_in(&w, g, seat, c),
                 })
-                .filter(|&c| w.map.countries[c].hexes.iter().any(|&h| has_building(g, h)))
+                .filter(|&c| {
+                    w.map.countries[c]
+                        .hexes
+                        .iter()
+                        .any(|&h| has_building(g, h) && in_reach(&w, g, seat, h))
+                })
                 .collect();
             let opts = cs.iter().map(|&c| country_opt(c)).collect();
             let prompt = format!("Seat {seat}: harden {count} buildings in which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
-                let hexes: Vec<usize> =
-                    w.map.countries[cs[i]].hexes.iter().copied().filter(|&h| has_building(g, h)).collect();
+                let hexes: Vec<usize> = w.map.countries[cs[i]]
+                    .hexes
+                    .iter()
+                    .copied()
+                    .filter(|&h| has_building(g, h) && in_reach(&w, g, seat, h))
+                    .collect();
                 for k in 0..*count {
                     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
-                    let prompt = format!("Seat {seat}: hardening {} of {count} on which building?", k + 1);
+                    let prompt = format!(
+                        "Seat {seat}: hardening {} of {count} on which building?",
+                        k + 1
+                    );
                     if let Some(j) = cx.choose(seat, &prompt, opts)? {
                         cx.add_tokens(g, hexes[j], HARDEN, 1);
                     }
@@ -237,11 +292,15 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 if movable_ambassadors(g, seat) == 0 {
                     break;
                 }
-                let dest: Vec<usize> =
-                    (0..g.hexes.len()).filter(|&h| in_reach(&w, g, seat, h) && has_piece(&w, g, h)).collect();
+                let dest: Vec<usize> = (0..g.hexes.len())
+                    .filter(|&h| in_reach(&w, g, seat, h) && has_piece(&w, g, h))
+                    .collect();
                 let mut opts: Vec<_> = dest.iter().map(|&h| hex_opt(&w, h)).collect();
                 opts.push(opt("stop"));
-                let prompt = format!("Seat {seat}: move ambassador {} of up to {max} to which piece?", k + 1);
+                let prompt = format!(
+                    "Seat {seat}: move ambassador {} of up to {max} to which piece?",
+                    k + 1
+                );
                 let Some(i) = cx.choose(seat, &prompt, opts)? else {
                     break;
                 };
@@ -279,13 +338,19 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         }
         Effect::Unity { amount } => alignment::sway(g, cx, Side::Unity, *amount),
         Effect::NextRoundInsight { amount } => economy::add_bonus_insight(g, cx, *amount),
-        Effect::NextBuildingDiscount { amount } => cx.add_key(g, cards::next_discount(seat), *amount),
+        Effect::NextBuildingDiscount { amount } => {
+            cx.add_key(g, cards::next_discount(seat), *amount)
+        }
         Effect::If {
             cond: c,
             then,
             otherwise,
         } => {
-            let branch = if cond(&w, g, seat, *c) { then } else { otherwise };
+            let branch = if cond(&w, g, seat, *c) {
+                then
+            } else {
+                otherwise
+            };
             run(g, cx, seat, branch, ctx)?;
         }
     }

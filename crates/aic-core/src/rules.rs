@@ -12,7 +12,10 @@ use crate::content::{content, Content};
 use crate::event::Event;
 use crate::hash::fnv1a64;
 use crate::map::Map;
-use crate::module::{end_game, Build, Choices, Cx, Halt, Module, ModuleDef, ParamKind, PhaseKind, Res, VariantDef, World};
+use crate::module::{
+    end_game, Build, Choices, Cx, Halt, Module, ModuleDef, ParamKind, PhaseKind, Res, VariantDef,
+    World,
+};
 use crate::modules;
 use crate::rng::Stream;
 use crate::state::{GameState, HexState, Pending, Pick, Seat, Stats, Trigger};
@@ -99,7 +102,10 @@ impl Rules {
                     known.join(", ")
                 )
             })?;
-            if to_build.iter().any(|(d, ..): &(&ModuleDef, _, _, _)| d.id == def.id) {
+            if to_build
+                .iter()
+                .any(|(d, ..): &(&ModuleDef, _, _, _)| d.id == def.id)
+            {
                 return Err(format!("module {:?} appears twice", def.id));
             }
             let variant = def
@@ -295,10 +301,7 @@ impl Rules {
             }
         }
         let n = self.config.countries as usize;
-        let seat = Seat {
-            slots: vec![None; self.content.map.piece.card_slots as usize],
-            ..Seat::default()
-        };
+        let seat = Seat::default();
         let mut g = GameState {
             seed,
             config: self.config.clone(),
@@ -447,9 +450,11 @@ impl Rules {
     }
 
     fn can_pass(&self, p: &PhaseRef, g: &GameState, seat: u8) -> bool {
-        p.parts
-            .iter()
-            .all(|part| self.modules[part.module].module.can_pass(part.phase, g, seat))
+        p.parts.iter().all(|part| {
+            self.modules[part.module]
+                .module
+                .can_pass(part.phase, g, seat)
+        })
     }
 
     /// Applies an action in place. On error the state is unchanged. Pass
@@ -479,7 +484,13 @@ impl Rules {
             Step::Act => {
                 let snapshot = Arc::new(g.clone());
                 let trigger = Trigger::Action { action: a.clone() };
-                let r = self.resolve(g, Snap::Shared(snapshot.clone()), trigger, Vec::new(), events);
+                let r = self.resolve(
+                    g,
+                    Snap::Shared(snapshot.clone()),
+                    trigger,
+                    Vec::new(),
+                    events,
+                );
                 if r.is_err() {
                     *g = Arc::unwrap_or_clone(snapshot);
                 }

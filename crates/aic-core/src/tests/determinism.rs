@@ -106,9 +106,23 @@ fn spread_choice() -> (Rules, GameState) {
     let (rules, mut g) = lab(&["adversary.spread"]);
     let m = &rules.map;
     let city = m.numbered(0, piece(0).corrupted[0]);
-    let far = cities(m).into_iter().find(|&h| m.distance(h, city) > 2).unwrap();
+    let far = cities(m)
+        .into_iter()
+        .find(|&h| m.distance(h, city) > 2)
+        .unwrap();
     corrupt_cities_except(m, &mut g, &[far]);
     put(&mut g, city, ADV_AMBASSADOR, 2);
+    // Two presence next to it: equals, so the players choose.
+    let next: Vec<usize> = m.hexes[city]
+        .neighbours
+        .iter()
+        .copied()
+        .filter(|&h| kind(m, h) == HexKind::Open)
+        .take(2)
+        .collect();
+    for h in next {
+        put(&mut g, h, &presence(0), 1);
+    }
     run(&rules, &mut g);
     assert!(g.pending.is_some());
     (rules, g)
@@ -121,10 +135,17 @@ fn malformed_and_mismatched_states_are_errors_not_panics() {
     // Mid-choice states survive JSON, and only answers are legal.
     let back: GameState = serde_json::from_str(&g.to_json()).unwrap();
     assert_eq!(back, g);
-    assert!(rules.legal_actions(&g).iter().all(|a| matches!(a, Action::Choose { .. })));
-    assert!(rules.apply_mut(&mut g.clone(), &Action::Pass { seat: 0 }, None).is_err());
+    assert!(rules
+        .legal_actions(&g)
+        .iter()
+        .all(|a| matches!(a, Action::Choose { .. })));
+    assert!(rules
+        .apply_mut(&mut g.clone(), &Action::Pass { seat: 0 }, None)
+        .is_err());
     let mut bad = g.clone();
-    std::sync::Arc::make_mut(&mut bad.pending.as_mut().unwrap().snapshot).seats.pop();
+    std::sync::Arc::make_mut(&mut bad.pending.as_mut().unwrap().snapshot)
+        .seats
+        .pop();
     assert!(rules.check_state(&bad).is_err());
     let mut bad = g.clone();
     bad.pending.as_mut().unwrap().ask.seat = 9;
@@ -165,7 +186,10 @@ fn saved_games_round_trip_and_replay_to_the_saved_state() {
         let minimal = serde_json::json!({
             "config": config, "seed": seed, "actions": actions,
         });
-        let (h, warnings) = SavedGame::from_json(&minimal.to_string()).unwrap().replay().unwrap();
+        let (h, warnings) = SavedGame::from_json(&minimal.to_string())
+            .unwrap()
+            .replay()
+            .unwrap();
         assert_eq!((h, warnings), (g.clone(), vec![]));
     }
 
@@ -177,7 +201,10 @@ fn saved_games_round_trip_and_replay_to_the_saved_state() {
     bad.actions.insert(0, Action::Pass { seat: 9 });
     assert!(bad.replay().err().unwrap().contains("action 0"));
     let other = text.replace("aic-game-record/1", "aic-game-record/9");
-    assert!(SavedGame::from_json(&other).err().unwrap().contains("format"));
+    assert!(SavedGame::from_json(&other)
+        .err()
+        .unwrap()
+        .contains("format"));
     let empty = SavedGame::new(&rules, 1, vec![], &rules.new_game(1), "");
     assert_eq!(SavedGame::from_json(&empty.to_text()).unwrap(), empty);
 }

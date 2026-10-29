@@ -5,10 +5,10 @@ use std::fmt::Write as _;
 
 use super::markdown::{p_value, pct, pts};
 use super::stats::{
-    agent_order, head_to_head, mean, top_agent, variant_diffs, CellSummary, HeadToHead,
-    VariantDiff,
+    agent_order, head_to_head, mean, top_agent, variant_diffs, CellSummary, HeadToHead, VariantDiff,
 };
 use super::Run;
+use crate::experiment::CardCounts;
 
 /// Plain statements read off the tables, against the targets in
 /// `docs/principles.md`.
@@ -147,9 +147,9 @@ pub(super) fn findings(run: &Run) -> Vec<String> {
         .find(|(l, _)| sums.iter().any(|s| s.agent == **l && strongest(s)))
     {
         // Every dealt card is drafted by someone, so keeping is the choice.
-        let rate = |n: &[u32; 6]| {
-            if n[0] >= 10 {
-                Some(n[2] as f64 / n[0] as f64)
+        let rate = |n: &CardCounts| {
+            if n.offered >= 10 {
+                Some(n.kept as f64 / n.offered as f64)
             } else {
                 None
             }
@@ -242,10 +242,9 @@ fn comparison_findings(run: &Run) -> Vec<String> {
             let mut top: Option<&CellSummary> = None;
             for a in &order {
                 let l = a.label();
-                if let Some(s) = sums
-                    .iter()
-                    .find(|s| s.config == *c && s.variant == base && s.difficulty == d && s.agent == l)
-                {
+                if let Some(s) = sums.iter().find(|s| {
+                    s.config == *c && s.variant == base && s.difficulty == d && s.agent == l
+                }) {
                     // Ties go to the later agent.
                     match top {
                         Some(t) if t.win_rate > s.win_rate => {}
@@ -308,15 +307,23 @@ fn comparison_findings(run: &Run) -> Vec<String> {
                 .iter()
                 .filter(|h| h.difficulty == hi && h.variant == base)
                 .collect();
-            let best = rest.iter().copied().fold(None::<&HeadToHead>, |b, h| match b {
-                Some(b) if h.paired.diff < b.paired.diff => Some(b),
-                _ => Some(h),
-            });
+            let best = rest
+                .iter()
+                .copied()
+                .fold(None::<&HeadToHead>, |b, h| match b {
+                    Some(b) if h.paired.diff < b.paired.diff => Some(b),
+                    _ => Some(h),
+                });
             let mut s = format!(
                 "Top agent ({top}: highest win rate at difficulty {hi}, ties to the later agent) is greedy itself"
             );
             if let Some(b) = best {
-                let _ = write!(s, "; the closest other agent at difficulty {hi}{}: {}", where_(&b.config), line(b));
+                let _ = write!(
+                    s,
+                    "; the closest other agent at difficulty {hi}{}: {}",
+                    where_(&b.config),
+                    line(b)
+                );
             }
             f.push(format!("{s}."));
         } else {

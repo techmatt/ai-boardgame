@@ -19,6 +19,7 @@ pub mod cards;
 pub mod common;
 pub mod economy;
 pub mod effects;
+pub mod plan;
 pub mod threats;
 
 pub static REGISTRY: &[&ModuleDef] = &[

@@ -47,17 +47,20 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   base khaki, open land pale green, ocean blue; key at the bottom left), with a band in
   the country's colour along each country border and the printed hex number on top.
   A military base carries a pennant in the colour of the country across its front
-  (`facing`). Fronts are drawn in dark red: a dashed line along each land border
-  between two countries and a dashed link between the two bases facing each other; on
-  a war round (`board.war` = 1) they turn solid bright red and pulse, and the adversary row
+  (`facing`). Industrial zones carry a dashed brown ring low on the hex. Fronts are
+  drawn in dark red: a dashed line along each printed front (the land edges between two
+  countries whose bases face each other; pieces touching only at the centre get none)
+  and a dashed link between the two bases; on a war step (`board.war` = 1) they turn
+  solid bright red and pulse, and the adversary row
   shows a **war round** badge. Each seat's colour is its country's.
   Players' pieces sit on the upper row of a hex: owner cube in the seat's colour (an
   aligned city or owned station), research station (teal dome), factory (brown),
-  data centre (server rack in the seat's colour), hardening token (grey shield), corp
-  units at a base (chevrons in the base country's colour) and player ambassadors (pawn
+  presence (server rack in the seat's colour), hardening token (grey shield), corp
+  troops at a base (chevrons in the base country's colour) and player ambassadors (pawn
   in the seat's colour). The adversary's sit on the lower row, in purple: its owner cube
-  (a corrupted city or station), its ambassadors (pawn) and its troops (dark
-  spearhead). A number by a glyph is its count.
+  (a corrupted city, station or factory), its ambassadors (pawn), its nodes (diamond)
+  and its troops (dark spearhead). The clock's step (`board.clock`), adversary compute
+  and each seat's hardware show as values. A number by a glyph is its count.
 - **Around the board:** the Alignment track (the Unity bucket, blue, filling leftward
   and the Discord bucket, red, filling rightward on either side of the Undecided; each
   side's tip count with its next threshold; the Unity tips that win outright; the
@@ -75,16 +78,17 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   (the printed pieces', from the view's `countries[].name`) also label the board and the
   hover text.
 - **Actions:** besides cards, threats and gifts, each seat panel offers the board's
-  standard actions (`standard`: place a data centre, build a factory or research
-  station, remove an adversary ambassador, move an ambassador, gain an ambassador,
-  align a city, harden a building) with their costs from the config, and one *sell*
+  standard actions (`standard`: place presence, build a research station, remove an
+  adversary ambassador or a node, move an ambassador, gain an ambassador, align a city,
+  harden a building, buy hardware) labelled with the words and costs the rules publish
+  in the view (`standard`), and one *sell*
   button per card in hand. A standard action that needs a hex asks for it next, as a
   hex pick.
 - **Seat panels:** the AI board's name (hover it for its text, innate rule, slots and
-  unique cards), resources with income, then the board's two tracks with every printed
-  step: solid steps are uncovered, dashed ones still under data centres, the boxed one
-  is the value in effect, and green **T2** / pink **+n AM** marks are the tier-2 unlock
-  and antimatter income. Hover a step for its details. This is drawn from the generic
+  unique cards), resources with income, then the board's presence track with every
+  printed space: solid spaces are uncovered, dashed ones still under presence, the boxed
+  one is the last uncovered, and each space's marks say what it adds (**+1 compute**,
+  green **T2** for the tier-2 unlock). Hover a step for its details. This is drawn from the generic
   `seats[].board` shape, not from AI-specific keys.
 - **Globals** hold only game-wide tracks: modules keep per-seat and per-card
   bookkeeping out of them (`ViewOut::bookkeeping`). A `vars` track no module labels is

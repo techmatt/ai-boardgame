@@ -8,7 +8,7 @@ use aic_core::content_hash;
 
 use super::stats::{head_to_head, plays, standing, top_agent, variant_diffs};
 use super::Run;
-use crate::experiment::{Cell, GameResult};
+use crate::experiment::{CardCounts, Cell, GameResult};
 
 /// A CSV text field, quoted (with `"` doubled).
 fn q(s: &str) -> String {
@@ -17,7 +17,7 @@ fn q(s: &str) -> String {
 
 pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
     let mut s = String::from(
-        "config,variant,difficulty,agent,seed,won,reason,rounds,decisions,options,forced,probed,close,gap_mean,deck_left,supply_left,supply_start,cities_corrupted_end,cities_aligned_end,blockers,level,points,adversary_ops,adversary_ops_max,setup_ops,gives,pays,withdraws,threats_dealt,threats_countered,corruptions,first_corruption_round,std_actions,war_destroyed,cards_played,buildings_played,tier2_played,buildings_standing,build,winprob,ms,replay_ok\n",
+        "config,variant,difficulty,agent,seed,won,reason,rounds,decisions,options,forced,probed,close,gap_mean,deck_left,supply_left,supply_start,cities_corrupted_end,cities_aligned_end,blockers,level,unity_tips,adversary_ops,adversary_ops_max,setup_ops,gives,pays,withdraws,threats_dealt,threats_countered,corruptions,first_corruption_round,std_actions,war_destroyed,cards_played,buildings_played,tier2_played,buildings_standing,build,winprob,ms,replay_ok\n",
     );
     for g in games {
         let c = &cells[g.cell];
@@ -49,7 +49,7 @@ pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
             g.margin.cities_aligned_end,
             g.margin.blockers,
             g.margin.level,
-            g.margin.points,
+            g.margin.unity_tips,
             ops,
             g.adversary_ops.iter().max().unwrap_or(&0),
             g.setup_ops,
@@ -76,16 +76,12 @@ pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
 }
 
 pub fn cards_csv(cells: &[Cell], games: &[GameResult]) -> String {
-    let mut per: BTreeMap<(String, i64, String), [u32; 6]> = BTreeMap::new();
+    let mut per: BTreeMap<(String, i64, String), CardCounts> = BTreeMap::new();
     for g in games {
         let c = &cells[g.cell];
         for (card, n) in &g.cards {
-            let e = per
-                .entry((c.agent.label(), c.difficulty, card.clone()))
-                .or_default();
-            for k in 0..6 {
-                e[k] += n[k];
-            }
+            *per.entry((c.agent.label(), c.difficulty, card.clone()))
+                .or_default() += *n;
         }
     }
     let mut s =
@@ -95,12 +91,12 @@ pub fn cards_csv(cells: &[Cell], games: &[GameResult]) -> String {
             s,
             "{},{d},{card},{},{},{},{},{},{}",
             q(&a),
-            n[0],
-            n[1],
-            n[2],
-            n[3],
-            n[4],
-            n[5]
+            n.offered,
+            n.drafted,
+            n.kept,
+            n.played,
+            n.pick_sum,
+            n.drawn
         );
     }
     s
@@ -129,7 +125,7 @@ pub fn results_json(run: &Run) -> String {
         })
         .collect();
     let v = serde_json::json!({
-        "format": "aic-experiment/1",
+        "format": "aic-experiment/2",
         "spec": run.spec,
         "wall_seconds": run.wall_s,
         "games_played": run.games.len(),

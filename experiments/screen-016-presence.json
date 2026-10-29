@@ -1,0 +1,29 @@
+{
+  "name": "screen-016-presence",
+  "note": "016 quick screen of rules r7 (presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the Unity-eased purge): win rates and length, the strategy-health gate, and per game presence placed, node peaks per board, factories built, destroyed and owned per side, hardware made and spent, adversary compute made. 2 and 3 countries, d0 and d4, greedy and engine. No tuning.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 32,
+  "records": 2
+}

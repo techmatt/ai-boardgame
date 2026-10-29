@@ -35,6 +35,8 @@ pub struct Cell {
     pub kind: HexKind,
     /// For a military base: the country across its front.
     pub facing: Option<u8>,
+    /// A printed industrial zone: where cities build factories.
+    pub industrial: bool,
 }
 
 /// A front: a land border between two countries (an ocean edge is not one).
@@ -49,7 +51,6 @@ pub struct Front {
 pub struct CountryGeo {
     /// Hex indices of this country, in piece order.
     pub hexes: Vec<usize>,
-    pub card_slots: u8,
     pub colour: String,
 }
 
@@ -63,11 +64,10 @@ impl Map {
         let mut index = BTreeMap::new();
         let mut geo = Vec::new();
         for (c, p) in layout.pieces.iter().enumerate() {
-            let design = content
-                .map
-                .countries
-                .get(c)
-                .ok_or_else(|| format!("no country piece for country {c} (content/map.json)"))?;
+            let design =
+                content.map.countries.get(c).ok_or_else(|| {
+                    format!("no country piece for country {c} (content/map.json)")
+                })?;
             let (a, b) = (p.axes[0].offset(), p.axes[1].offset());
             let mut mine = Vec::new();
             for i in 0..size {
@@ -88,12 +88,12 @@ impl Map {
                         number,
                         kind: design.kind_at(number),
                         facing: None,
+                        industrial: design.industry.contains(&number),
                     });
                 }
             }
             geo.push(CountryGeo {
                 hexes: mine,
-                card_slots: content.map.piece.card_slots,
                 colour: p.colour.clone(),
             });
         }
@@ -105,7 +105,7 @@ impl Map {
                 .filter_map(|n| index.get(n).copied())
                 .collect();
         }
-        let fronts = place_bases(content, &mut hexes, &geo)?;
+        let fronts = place_bases(content, &layout.fronts, &mut hexes, &geo)?;
         Ok(Map {
             hexes,
             countries: geo,
@@ -134,27 +134,33 @@ impl Map {
     }
 }
 
-/// Finds the fronts and puts a military base on each side of each: on an
-/// open hex of that country, touching land of the other, holding no setup
-/// building. A country's fronts with the fewest candidates choose first;
-/// each takes its lowest-numbered free candidate.
-fn place_bases(content: &Content, hexes: &mut [Cell], geo: &[CountryGeo]) -> Result<Vec<Front>, String> {
+/// Puts a military base on each side of each printed front (the layout's
+/// `fronts`): on an open hex of that country, touching land of the other,
+/// holding no setup piece or industrial zone. A country's fronts with the
+/// fewest candidates choose first; each takes its lowest-numbered free
+/// candidate.
+fn place_bases(
+    content: &Content,
+    printed: &[[u8; 2]],
+    hexes: &mut [Cell],
+    geo: &[CountryGeo],
+) -> Result<Vec<Front>, String> {
     let n = geo.len();
     let land = |h: usize| hexes[h].kind != HexKind::Ocean;
     let mut touching = vec![vec![false; n]; n];
-    for h in 0..hexes.len() {
-        for &x in &hexes[h].neighbours {
-            let (a, b) = (hexes[h].country as usize, hexes[x].country as usize);
-            if a != b && land(h) && land(x) {
-                touching[a][b] = true;
-            }
+    for &[a, b] in printed {
+        let (a, b) = (a as usize, b as usize);
+        if a >= n || b >= n || a == b {
+            return Err(format!("layout for {n} countries: bad front {a}-{b}"));
         }
+        touching[a][b] = true;
+        touching[b][a] = true;
     }
     let mut base = vec![vec![usize::MAX; n]; n];
     for c in 0..n {
         let piece = &content.map.countries[c];
         let busy = |num: u8| {
-            piece.stations.contains(&num) || piece.factories.contains(&num) || piece.data_centres.contains(&num)
+            piece.stations.contains(&num) || piece.industry.contains(&num) || piece.presence == num
         };
         let candidates = |o: usize| -> Vec<usize> {
             geo[c]
@@ -162,7 +168,12 @@ fn place_bases(content: &Content, hexes: &mut [Cell], geo: &[CountryGeo]) -> Res
                 .iter()
                 .copied()
                 .filter(|&h| hexes[h].kind == HexKind::Open && !busy(hexes[h].number))
-                .filter(|&h| hexes[h].neighbours.iter().any(|&x| hexes[x].country as usize == o && land(x)))
+                .filter(|&h| {
+                    hexes[h]
+                        .neighbours
+                        .iter()
+                        .any(|&x| hexes[x].country as usize == o && land(x))
+                })
                 .collect()
         };
         let mut others: Vec<usize> = (0..n).filter(|&o| touching[c][o]).collect();
@@ -172,7 +183,9 @@ fn place_bases(content: &Content, hexes: &mut [Cell], geo: &[CountryGeo]) -> Res
             let h = candidates(o)
                 .into_iter()
                 .find(|h| !used.contains(h))
-                .ok_or_else(|| format!("country {c}: no free hex for a military base facing country {o}"))?;
+                .ok_or_else(|| {
+                    format!("country {c}: no free hex for a military base facing country {o}")
+                })?;
             used.push(h);
             base[c][o] = h;
         }

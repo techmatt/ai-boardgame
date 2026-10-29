@@ -76,6 +76,8 @@ export interface HexView {
   kind: string;
   /** For a military base: the country across its front. */
   facing?: number;
+  /** A printed industrial zone: cities build factories here. */
+  industrial?: boolean;
   tokens: Token[];
 }
 export interface CountryView {
@@ -85,7 +87,6 @@ export interface CountryView {
   seat: number;
   colour: string;
   hexes: number[];
-  slots: (CardView | null)[];
   values: Value[];
   cards: CardGroup[];
 }
@@ -111,6 +112,14 @@ export interface SeatView { index: number; country: number; passed: boolean; val
 export interface PhaseInfo { name: string; kind: 'auto' | 'decision' }
 export interface PhaseView { index: number; name: string; kind: 'auto' | 'decision'; waiting: number[] }
 export interface ChoiceView { seat: number; prompt: string }
+export interface StandardView {
+  act: string;
+  energy: number;
+  credits: number;
+  hardware: number;
+  doc: string;
+}
+
 export interface View {
   round: number;
   phase: PhaseView | null;
@@ -121,6 +130,8 @@ export interface View {
   seats: SeatView[];
   globals: Value[];
   piles: PileView[];
+  /** The standard actions and their costs, as the rules publish them. */
+  standard: StandardView[];
   /** The open choice, if the rules are waiting for one. */
   choice: ChoiceView | null;
 }

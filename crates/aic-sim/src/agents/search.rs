@@ -332,7 +332,8 @@ impl Beam {
                     // so an action is not judged by its first open question.
                     let mut seq = node.seq.clone();
                     seq.push(a.clone());
-                    let v = settled(rules, &self.ev, &c, self.choices, &mut scratch) - moves_cost(&seq);
+                    let v =
+                        settled(rules, &self.ev, &c, self.choices, &mut scratch) - moves_cost(&seq);
                     let key = node.key.wrapping_add(action_hash(a));
                     kids.push((v, Node { g: c, seq, key }));
                 }
@@ -342,7 +343,7 @@ impl Beam {
                 }
                 for (v, kid) in kids {
                     if kid.g.is_over() || kid.g.round > round {
-                        let v = value(rules, &self.ev,&kid.g) - moves_cost(&kid.seq);
+                        let v = value(rules, &self.ev, &kid.g) - moves_cost(&kid.seq);
                         finished.push((v, kid));
                     } else {
                         children.push((v, kid));
@@ -366,7 +367,7 @@ impl Beam {
             // The round did not end within `depth` steps: plan what was searched.
             finished = beam
                 .into_iter()
-                .map(|n| (value(rules, &self.ev,&n.g) - moves_cost(&n.seq), n))
+                .map(|n| (value(rules, &self.ev, &n.g) - moves_cost(&n.seq), n))
                 .collect();
         }
         finished.sort_by(|x, y| y.0.total_cmp(&x.0));
@@ -400,7 +401,7 @@ impl Beam {
                 }
                 guard += 1;
             }
-            total += value(rules, &self.ev,&s);
+            total += value(rules, &self.ev, &s);
         }
         total / cfg.rollouts as f64
     }

@@ -1,12 +1,16 @@
-//! The board (014): the printed country pieces (cities, open land, ocean;
-//! military bases on the land borders), the setup, production (bases and
-//! factories, front battles on war rounds, adversary troops, cities,
-//! stations and data centres, megaprojects), player ambassadors, the
+//! The board (014, 016): the printed country pieces (cities, open land,
+//! ocean, industrial zones; military bases on the fronts), player presence
+//! (owned here; AI boards read the track through `track_taken`), the setup,
+//! the production/war clock, production (factories grow from cities and
+//! make troops and hardware, front battles on war steps, adversary troops,
+//! cities, stations, megaprojects), player ambassadors and site claims, the
 //! standard actions and the round-end cleanup.
 
 use crate::action::Action;
 use crate::content::{Passive, RoundFlag, Side};
-use crate::module::{scheduled, Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
+use crate::module::{
+    scheduled, Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
+};
 use crate::state::GameState;
 use crate::view::ViewOut;
 
@@ -16,7 +20,7 @@ use super::{adversary, ai, alignment, cards};
 pub static DEF: ModuleDef = ModuleDef {
     id: "board",
     summary: "Country pieces, cities, buildings, bases and fronts; production, war, ambassadors, standard actions",
-    requires: &["adversary", "ai", "cards", "alignment"],
+    requires: &["adversary", "ai", "alignment"],
     variants: &[VariantDef {
         name: "corps",
         summary: "Each country is a printed piece with cities, a research station, factories and a corp's bases",
@@ -25,11 +29,10 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("start_ambassadors", 0, 10, "player ambassadors each player starts with"),
             ParamSpec::int("troop_health", 0, 10, "removal a card must spend on an adversary troop (an ambassador takes 1)"),
             ParamSpec::int("unit_cap", 0, 20, "corp units a base holds at most"),
-            ParamSpec::int("factory_units", 0, 5, "units each factory builds a round for its corp's nearest base"),
-            ParamSpec::list("war", 0, 1, "per round, 1 for a war round (the last entry repeats)"),
+            ParamSpec::int("factory_units", 0, 5, "troops each factory makes on a production step at each of its corp's bases"),
+            ParamSpec::list("clock", 0, 3, "the printed round track, per round: 1 production, 2 war, 3 both (the last entry repeats)"),
             ParamSpec::int("city_energy", 0, 10, "energy a city makes a round"),
             ParamSpec::int("aligned_bonus", 0, 10, "extra energy an aligned city gives its owner"),
-            ParamSpec::int("dc_compute", 0, 10, "compute a data centre makes a round"),
             ParamSpec::int("station_cubes", 0, 5, "megaproject cubes a research station makes a round"),
             ParamSpec::int("project_credits", 0, 50, "credits each player cube pays when a megaproject completes"),
             ParamSpec::int("project_discord_per", 0, 10, "adversary cubes per Discord when a megaproject completes"),
@@ -39,23 +42,25 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("factory_unity", 0, 10, "Unity a player ambassador on a producing factory sways"),
             ParamSpec::int("free_city_at", 0, 10, "player ambassadors on a corrupted city that free it"),
             ParamSpec::int("destruction_discord", 0, 5, "Discord each destroyed building sways"),
-            ParamSpec::int("dc_energy", 0, 20, "standard action: energy to place a data centre"),
-            ParamSpec::int("dc_credits", 0, 50, "standard action: credits to place a data centre"),
-            ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a factory or research station"),
-            ParamSpec::int("build_credits", 0, 50, "standard action: credits to build a factory or research station"),
+            ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence"),
+            ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
+            ParamSpec::int("station_hardware", 0, 20, "standard action: hardware to build a research station"),
+            ParamSpec::int("factory_hardware", 0, 5, "hardware a player-owned factory makes its owner on a production step"),
+            ParamSpec::int("hardware_credits", 0, 50, "standard action: credits for 1 hardware"),
+            ParamSpec::int("node_energy", 0, 20, "standard action: energy to remove a node within reach"),
             ParamSpec::int("remove_energy", 0, 20, "standard action: energy to remove an adversary ambassador within reach"),
             ParamSpec::int("move_energy", 0, 20, "standard action: energy to move a player ambassador"),
             ParamSpec::int("ambassador_credits", 0, 50, "standard action: credits to gain a player ambassador"),
-            ParamSpec::int("harden_credits", 0, 50, "standard action (Harden passive): credits a hardening token"),
+            ParamSpec::int("harden_hardware", 0, 20, "standard action (Harden passive): hardware a hardening token"),
             ParamSpec::int("sell_credits", 0, 20, "standard action: credits for selling a card from hand"),
             ParamSpec::int("align_energy", 0, 20, "standard action: energy (and 1 ambassador) to align a clean city"),
         ],
         phases: &[
-            PhaseSpec::decision("act", "standard actions: build, place, remove, move, align, harden, sell"),
-            PhaseSpec::auto("bases", "bases and factories produce corp units (ambassadors divert them)"),
-            PhaseSpec::auto("war", "on a war round, the units on either side of each front fight"),
+            PhaseSpec::decision("act", "standard actions: presence, station, remove, node, move, align, harden, hardware, sell"),
+            PhaseSpec::auto("bases", "on a production step: bases and factories make troops and hardware, cities grow factories"),
+            PhaseSpec::auto("war", "on a war step, the troops on either side of each front fight"),
             PhaseSpec::auto("strike", "each adversary troop destroys an adjacent building"),
-            PhaseSpec::auto("produce", "cities, research stations and data centres produce (ambassadors divert)"),
+            PhaseSpec::auto("produce", "cities and research stations produce; ambassadors divert them and leak presence compute"),
             PhaseSpec::auto("cleanup", "remove the round's country flags"),
         ],
         rng: &[],
@@ -96,11 +101,99 @@ pub fn project_done(c: usize) -> String {
 }
 
 /// The standard actions, by name.
-pub const STANDARD: [&str; 8] = ["data_centre", "factory", "station", "remove", "move", "ambassador", "align", "harden"];
+pub const STANDARD: [&str; 9] = [
+    "presence",
+    "station",
+    "remove",
+    "node",
+    "move",
+    "ambassador",
+    "align",
+    "harden",
+    "hardware",
+];
 
-/// Whether round `round` is a war round (the schedule, or this round's adversary card).
+/// The clock's step for round `round`: 1 production, 2 war, 3 both.
+pub fn clock_step(w: &World, round: u32) -> i64 {
+    scheduled(w.list("board.clock"), round)
+}
+
+/// Whether this round has a production step (factories, troops, hardware).
+pub fn production_round(w: &World, g: &GameState) -> bool {
+    clock_step(w, g.round) & 1 != 0
+}
+
+/// Whether this round is a war step (the clock, or this round's adversary card).
 pub fn war_round(w: &World, g: &GameState) -> bool {
-    scheduled(w.list("board.war"), g.round) > 0 || adversary::war_twist(w, g)
+    clock_step(w, g.round) & 2 != 0 || adversary::war_twist(w, g)
+}
+
+/// Presence tokens seat `s` has taken off its AI board's track (the
+/// starting one included); AI boards read their uncovered spaces from it.
+pub fn track_key(seat: usize) -> String {
+    format!("board.track.{seat}")
+}
+
+pub fn track_taken(g: &GameState, seat: usize) -> usize {
+    g.var(&track_key(seat)).max(0) as usize
+}
+
+/// Where seat `s` may place presence: a land hex holding no presence,
+/// adjacent to one of its own (with none left, any such hex in its home
+/// country).
+pub fn presence_hexes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
+    let mine = presence(seat);
+    let free = |h: usize| !is_ocean(w, h) && presence_owner(g, h).is_none();
+    if presence_count(g, seat) == 0 {
+        let c = home_country(w, seat);
+        return w.map.countries[c]
+            .hexes
+            .iter()
+            .copied()
+            .filter(|&h| free(h))
+            .collect();
+    }
+    (0..g.hexes.len())
+        .filter(|&h| {
+            free(h)
+                && w.map.hexes[h]
+                    .neighbours
+                    .iter()
+                    .any(|&x| g.tokens(x, &mine) > 0)
+        })
+        .collect()
+}
+
+/// Places one presence for `seat`: the next token off its track (uncovering
+/// the space under it) onto a hex next to its presence. Returns whether placed.
+pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> {
+    let w = cx.world;
+    if !ai::can_place(&w, g, seat) {
+        return Ok(false);
+    }
+    let hexes = presence_hexes(&w, g, seat);
+    let next = &ai::board(&w, seat).presence[track_taken(g, seat)];
+    let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+    let prompt = format!(
+        "Seat {seat}: place presence (uncovers {}) on which hex?",
+        ai::uncover_label(next)
+    );
+    let Some(j) = cx.choose(seat, &prompt, opts)? else {
+        return Ok(false);
+    };
+    cx.add_key(g, track_key(seat), 1);
+    cx.add_tokens(g, hexes[j], &presence(seat), 1);
+    cx.tally(g, "board.presence_placed", 1);
+    Ok(true)
+}
+
+/// Whether seat `s` can claim the site on hex `h` (align a city, take a
+/// station or factory): one of its presence on or next to `h` that is not
+/// contested, i.e. not on or next to a node.
+pub fn can_claim(w: &World, g: &GameState, seat: usize, h: usize) -> bool {
+    let k = presence(seat);
+    let ok = |x: usize| g.tokens(x, &k) > 0 && !next_to(w, x, |y| g.tokens(y, NODE) > 0);
+    next_to(w, h, ok)
 }
 
 #[derive(Debug)]
@@ -110,18 +203,41 @@ fn build(_b: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Board))
 }
 
-/// A standard action's cost: (energy, credits).
-fn std_cost(w: &World, act: &str) -> (i64, i64) {
+/// A standard action's cost: (energy, credits, hardware).
+pub fn std_cost(w: &World, act: &str) -> (i64, i64, i64) {
     let i = |k: &str| w.int(&format!("board.{k}"));
     match act {
-        "data_centre" => (i("dc_energy"), i("dc_credits")),
-        "factory" | "station" => (i("build_energy"), i("build_credits")),
-        "remove" => (i("remove_energy"), 0),
-        "move" => (i("move_energy"), 0),
-        "ambassador" => (0, i("ambassador_credits")),
-        "align" => (i("align_energy"), 0),
-        _ => (0, i("harden_credits")),
+        "presence" => (i("presence_energy"), 0, 0),
+        "station" => (i("build_energy"), 0, i("station_hardware")),
+        "remove" => (i("remove_energy"), 0, 0),
+        "node" => (i("node_energy"), 0, 0),
+        "move" => (i("move_energy"), 0, 0),
+        "ambassador" => (0, i("ambassador_credits"), 0),
+        "align" => (i("align_energy"), 0, 0),
+        "hardware" => (0, i("hardware_credits"), 0),
+        _ => (0, 0, i("harden_hardware")),
     }
+}
+
+/// What a standard action does, for the view.
+pub fn std_text(act: &str) -> &'static str {
+    match act {
+        "presence" => "place a presence next to yours (uncovers your track's next space)",
+        "station" => "build a research station in reach (yours)",
+        "remove" => "remove an adversary ambassador in reach",
+        "node" => "remove a node in reach",
+        "move" => "move a player ambassador onto a piece in reach",
+        "ambassador" => "gain a player ambassador",
+        "align" => "align a clean city you can claim (1 ambassador)",
+        "hardware" => "buy 1 hardware",
+        _ => "harden a building in reach (Harden passive)",
+    }
+}
+
+fn can_afford(g: &GameState, seat: usize, (e, cr, hw): (i64, i64, i64)) -> bool {
+    g.resource(seat, "energy") >= e
+        && g.resource(seat, "credits") >= cr
+        && g.resource(seat, HARDWARE) >= hw
 }
 
 /// The hexes a standard action of `seat` may target (empty: not offered).
@@ -129,16 +245,20 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
     let reach = |h: usize| in_reach(w, g, seat, h);
     let all = 0..g.hexes.len();
     match act {
-        "data_centre" => {
+        "presence" => {
             if ai::can_place(w, g, seat) {
-                ai::dc_hexes(w, g, seat)
+                presence_hexes(w, g, seat)
             } else {
                 Vec::new()
             }
         }
-        "factory" => factory_hexes(w, g).into_iter().filter(|&h| reach(h)).collect(),
-        "station" => all.filter(|&h| buildable(w, g, h) && reach(h)).collect(),
-        "remove" => all.filter(|&h| reach(h) && g.tokens(h, ADV_AMBASSADOR) > 0).collect(),
+        "station" => all
+            .filter(|&h| buildable(w, g, h) && !w.map.hexes[h].industrial && reach(h))
+            .collect(),
+        "remove" => all
+            .filter(|&h| reach(h) && g.tokens(h, ADV_AMBASSADOR) > 0)
+            .collect(),
+        "node" => all.filter(|&h| reach(h) && g.tokens(h, NODE) > 0).collect(),
         "move" => {
             if g.resource(seat, AMBASSADORS) > 0 || ambassadors_on_board(g, seat) > 0 {
                 all.filter(|&h| reach(h) && has_piece(w, g, h)).collect()
@@ -148,7 +268,8 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
         }
         "align" => {
             if g.resource(seat, AMBASSADORS) > 0 {
-                all.filter(|&h| reach(h) && clean_city(w, g, h)).collect()
+                all.filter(|&h| reach(h) && clean_city(w, g, h) && can_claim(w, g, seat, h))
+                    .collect()
             } else {
                 Vec::new()
             }
@@ -160,7 +281,7 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
                 Vec::new()
             }
         }
-        // Gaining an ambassador needs no target.
+        // Gaining an ambassador or hardware needs no target.
         _ => vec![usize::MAX],
     }
 }
@@ -172,8 +293,8 @@ pub fn ambassadors_on_board(g: &GameState, seat: usize) -> i64 {
 
 /// Seat `s`'s player ambassador arrives on hex `h`: it cancels an
 /// adversary ambassador there (both removed, no Unity); on a neutral
-/// station it makes the station the seat's; on a corrupted city, enough of
-/// them free it. Otherwise it waits on the piece.
+/// station or factory the seat can claim it makes the site the seat's; on a
+/// corrupted city, enough of them free it. Otherwise it waits on the piece.
 pub fn place_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
     let w = cx.world;
     if g.tokens(h, ADV_AMBASSADOR) > 0 {
@@ -181,15 +302,36 @@ pub fn place_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
         cx.tally(g, "board.cancelled", 1);
         return;
     }
-    if g.tokens(h, STATION) > 0 && !corrupted(g, h) && cube_owner(g, h).is_none() {
+    let site = g.tokens(h, STATION) > 0 || g.tokens(h, FACTORY) > 0;
+    if site && !corrupted(g, h) && cube_owner(g, h).is_none() && can_claim(&w, g, seat, h) {
         cx.add_tokens(g, h, &cube(seat), 1);
-        cx.tally(g, "board.stations_owned", 1);
-        cx.note(Some(h), || format!("Seat {seat} takes the station at {}", hex_name(&w, h)));
+        let what = if g.tokens(h, STATION) > 0 {
+            "station"
+        } else {
+            "factory"
+        };
+        cx.tally(
+            g,
+            &format!(
+                "board.{}_owned",
+                if what == "station" {
+                    "stations"
+                } else {
+                    "factories"
+                }
+            ),
+            1,
+        );
+        cx.note(Some(h), || {
+            format!("Seat {seat} takes the {what} at {}", hex_name(&w, h))
+        });
         return;
     }
     cx.add_tokens(g, h, &ambassador(seat), 1);
     if is_city(&w, h) && corrupted(g, h) {
-        let here: i64 = (0..g.seats.len()).map(|s| g.tokens(h, &ambassador(s))).sum();
+        let here: i64 = (0..g.seats.len())
+            .map(|s| g.tokens(h, &ambassador(s)))
+            .sum();
         if here >= w.int("board.free_city_at") {
             for s in 0..g.seats.len() {
                 let n = g.tokens(h, &ambassador(s));
@@ -207,14 +349,19 @@ pub fn place_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
 pub fn move_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, to: usize) -> Res {
     let w = cx.world;
     let k = ambassador(seat);
-    let from: Vec<usize> = (0..g.hexes.len()).filter(|&h| h != to && g.tokens(h, &k) > 0).collect();
+    let from: Vec<usize> = (0..g.hexes.len())
+        .filter(|&h| h != to && g.tokens(h, &k) > 0)
+        .collect();
     let mut opts = Vec::new();
     if g.resource(seat, AMBASSADORS) > 0 {
         opts.push(opt("from your supply"));
     }
     let off = opts.len();
     opts.extend(from.iter().map(|&h| hex_opt(&w, h)));
-    let prompt = format!("Seat {seat}: move which ambassador to {}?", hex_name(&w, to));
+    let prompt = format!(
+        "Seat {seat}: move which ambassador to {}?",
+        hex_name(&w, to)
+    );
     let Some(i) = cx.choose(seat, &prompt, opts)? else {
         return Ok(());
     };
@@ -230,27 +377,44 @@ pub fn move_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, to: usize) -
 /// The building kinds on hex `h` a destruction can take, as token keys.
 fn buildings_on(g: &GameState, h: usize) -> Vec<String> {
     let mut out = Vec::new();
-    if g.tokens(h, FACTORY) > 0 {
+    if g.tokens(h, FACTORY) > 0 && !corrupted(g, h) {
         out.push(FACTORY.to_string());
     }
     if g.tokens(h, STATION) > 0 && !corrupted(g, h) {
         out.push(STATION.to_string());
     }
-    if let Some(s) = dc_owner(g, h) {
-        out.push(dc(s));
+    if let Some(s) = presence_owner(g, h) {
+        out.push(presence(s));
     }
     out
 }
 
 /// A building of `kind` on hex `h` would be destroyed. A Shelter Order in
-/// its country, a hardening token, a player ambassador on the hex, or a
+/// its country, a corp troop at a base next to it (adversary strikes only,
+/// `by_troop`), a hardening token, a player ambassador on the hex, or a
 /// Civic Shelter absorbs it (in that order); otherwise it goes and sways
 /// toward Discord. Returns whether it was destroyed.
-pub fn destroy_building(g: &mut GameState, cx: &mut Cx, h: usize, kind: &str) -> bool {
+pub fn destroy_building(
+    g: &mut GameState,
+    cx: &mut Cx,
+    h: usize,
+    kind: &str,
+    by_troop: bool,
+) -> bool {
     let w = cx.world;
     let c = w.map.hexes[h].country as usize;
     if flagged(g, RoundFlag::Shelter.name(), c) {
         return false;
+    }
+    if by_troop {
+        let guard = std::iter::once(h)
+            .chain(w.map.hexes[h].neighbours.iter().copied())
+            .find(|&b| is_base(&w, b) && g.tokens(b, UNIT) > 0);
+        if let Some(b) = guard {
+            cx.add_tokens(g, b, UNIT, -1);
+            cx.tally(g, "board.base_absorbed", 1);
+            return false;
+        }
     }
     if g.tokens(h, HARDEN) > 0 {
         cx.add_tokens(g, h, HARDEN, -1);
@@ -266,13 +430,18 @@ pub fn destroy_building(g: &mut GameState, cx: &mut Cx, h: usize, kind: &str) ->
         return false;
     }
     cx.add_tokens(g, h, kind, -1);
-    if kind == STATION {
+    if kind == STATION || kind == FACTORY {
         if let Some(s) = cube_owner(g, h) {
             cx.add_tokens(g, h, &cube(s), -1);
         }
     }
+    if kind == FACTORY {
+        cx.tally(g, "board.factories_destroyed", 1);
+    }
     cx.tally(g, "board.destroyed", 1);
-    cx.note(Some(h), || format!("{kind} at {} destroyed", hex_name(&w, h)));
+    cx.note(Some(h), || {
+        format!("{kind} at {} destroyed", hex_name(&w, h))
+    });
     alignment::sway(g, cx, Side::Discord, w.int("board.destruction_discord"));
     true
 }
@@ -282,7 +451,7 @@ fn civic_shelter(g: &mut GameState, cx: &mut Cx, country: usize) -> bool {
     let w = cx.world;
     for s in 0..g.seats.len() {
         if g.var(&cards::civic_used(s)) == 0
-            && has_dc_in(&w, g, s, country)
+            && has_presence_in(&w, g, s, country)
             && cards::has_passive(&w, g, s, |p| matches!(p, Passive::CivicShelter))
         {
             cx.set_key(g, cards::civic_used(s), 1);
@@ -294,7 +463,13 @@ fn civic_shelter(g: &mut GameState, cx: &mut Cx, country: usize) -> bool {
 
 /// The nearest hex to `from` among `hexes` (ties: country, then lower hex number).
 fn nearest(w: &World, from: usize, hexes: impl Iterator<Item = usize>) -> Option<usize> {
-    hexes.min_by_key(|&h| (w.map.distance(from, h), w.map.hexes[h].country, w.map.hexes[h].number))
+    hexes.min_by_key(|&h| {
+        (
+            w.map.distance(from, h),
+            w.map.hexes[h].country,
+            w.map.hexes[h].number,
+        )
+    })
 }
 
 fn add_unit(g: &mut GameState, cx: &mut Cx, base: usize) {
@@ -305,10 +480,16 @@ fn add_unit(g: &mut GameState, cx: &mut Cx, base: usize) {
     }
 }
 
-/// Production step 1: bases, then factories, build their corp's units; an
-/// ambassador on the piece diverts it and is removed.
-fn produce_units(g: &mut GameState, cx: &mut Cx) {
+/// Production step 1, on a production step of the clock: bases, then
+/// factories, make their corp's troops (a factory 1 at each of its corp's
+/// bases); an ambassador on the piece diverts it and is removed; an
+/// adversary-owned factory makes an adversary troop. Player-owned factories
+/// make hardware. Then the cities grow factories.
+fn produce_units(g: &mut GameState, cx: &mut Cx) -> Res {
     let w = cx.world;
+    if !production_round(&w, g) {
+        return Ok(());
+    }
     for h in 0..g.hexes.len() {
         if !is_base(&w, h) {
             continue;
@@ -326,33 +507,123 @@ fn produce_units(g: &mut GameState, cx: &mut Cx) {
         }
     }
     let per = w.int("board.factory_units");
+    let hw = w.int("board.factory_hardware");
     for h in 0..g.hexes.len() {
-        if g.tokens(h, FACTORY) == 0 || per == 0 {
+        if g.tokens(h, FACTORY) == 0 {
             continue;
         }
-        if g.tokens(h, ADV_AMBASSADOR) > 0 {
-            adversary::remove(g, cx, h, 1);
-            adversary::place_troop(g, cx, h);
-            cx.tally(g, "board.troops_built", 1);
-            cx.note(Some(h), || format!("The factory at {} builds an adversary troop", hex_name(&w, h)));
+        if let Some(s) = cube_owner(g, h) {
+            cx.add_resource(g, s, HARDWARE, hw);
+            cx.tally(g, "board.hardware_made", hw);
+        }
+        if per == 0 {
+            continue;
+        }
+        if g.tokens(h, ADV_AMBASSADOR) > 0 || corrupted(g, h) {
+            if !corrupted(g, h) {
+                adversary::remove(g, cx, h, 1);
+            }
+            for _ in 0..per {
+                adversary::place_troop(g, cx, h);
+            }
+            cx.tally(g, "board.troops_built", per);
+            cx.note(Some(h), || {
+                format!(
+                    "The factory at {} makes an adversary troop",
+                    hex_name(&w, h)
+                )
+            });
         } else if let Some(s) = player_ambassador(g, h) {
             cx.add_tokens(g, h, &ambassador(s), -1);
             alignment::sway(g, cx, Side::Unity, w.int("board.factory_unity"));
         } else {
             let c = w.map.hexes[h].country;
-            let bases = (0..g.hexes.len()).filter(|&b| is_base(&w, b) && w.map.hexes[b].country == c);
-            if let Some(b) = nearest(&w, h, bases) {
+            let bases: Vec<usize> = (0..g.hexes.len())
+                .filter(|&b| is_base(&w, b) && w.map.hexes[b].country == c)
+                .collect();
+            for b in bases {
                 for _ in 0..per {
                     add_unit(g, cx, b);
                 }
             }
         }
     }
+    grow_factories(g, cx)
+}
+
+/// Free industrial zones: printed zones holding no building.
+pub fn free_zones(w: &World, g: &GameState) -> Vec<usize> {
+    (0..g.hexes.len())
+        .filter(|&h| w.map.hexes[h].industrial && !has_building(g, h))
+        .collect()
+}
+
+/// Each city builds one factory: a corrupted city at the free zone in its
+/// country holding no player ambassador if it can, then holding an
+/// adversary ambassador, then nearest, then lowest number; any other city on
+/// a free zone next to it, where the players choose (an aligned city's
+/// owner, else seat 0). The factory takes the city's owner.
+fn grow_factories(g: &mut GameState, cx: &mut Cx) -> Res {
+    let w = cx.world;
+    for city in 0..g.hexes.len() {
+        if !is_city(&w, city) {
+            continue;
+        }
+        let zones = free_zones(&w, g);
+        let at = if corrupted(g, city) {
+            let c = w.map.hexes[city].country;
+            zones
+                .into_iter()
+                .filter(|&z| w.map.hexes[z].country == c)
+                .min_by_key(|&z| {
+                    (
+                        player_ambassador(g, z).is_some(),
+                        g.tokens(z, ADV_AMBASSADOR) == 0,
+                        w.map.distance(city, z),
+                        w.map.hexes[z].number,
+                    )
+                })
+        } else {
+            let near: Vec<usize> = zones
+                .into_iter()
+                .filter(|&z| w.map.adjacent(city, z))
+                .collect();
+            if near.is_empty() {
+                None
+            } else {
+                let who = cube_owner(g, city).unwrap_or(0);
+                let opts = near.iter().map(|&z| hex_opt(&w, z)).collect();
+                let prompt = format!("{} builds a factory on which zone?", hex_name(&w, city));
+                cx.choose(who, &prompt, opts)?.map(|i| near[i])
+            }
+        };
+        let Some(z) = at else {
+            continue;
+        };
+        cx.add_tokens(g, z, FACTORY, 1);
+        if corrupted(g, city) {
+            cx.add_tokens(g, z, ADV_CUBE, 1);
+            cx.tally(g, "board.factories_built.adversary", 1);
+        } else if let Some(s) = cube_owner(g, city) {
+            cx.add_tokens(g, z, &cube(s), 1);
+            cx.tally(g, "board.factories_built.player", 1);
+        } else {
+            cx.tally(g, "board.factories_built.neutral", 1);
+        }
+        cx.note(Some(z), || {
+            format!(
+                "{} builds a factory at {}",
+                hex_name(&w, city),
+                hex_name(&w, z)
+            )
+        });
+    }
+    Ok(())
 }
 
 /// Production step 2, on a war round: on each front the units cancel 1 for
 /// 1; each surplus unit crosses and destroys the rival factory nearest its
-/// base, or with none a data centre. All units at the front are used up.
+/// base, or with none a presence. All units at the front are used up.
 fn battle(g: &mut GameState, cx: &mut Cx) {
     let w = cx.world;
     if !war_round(&w, g) {
@@ -372,16 +643,30 @@ fn battle(g: &mut GameState, cx: &mut Cx) {
         };
         for _ in 0..n {
             let hexes = &w.map.countries[rival as usize].hexes;
-            let target = nearest(&w, from, hexes.iter().copied().filter(|&h| g.tokens(h, FACTORY) > 0))
-                .map(|h| (h, FACTORY.to_string()))
-                .or_else(|| {
-                    nearest(&w, from, hexes.iter().copied().filter(|&h| dc_owner(g, h).is_some()))
-                        .map(|h| (h, dc(dc_owner(g, h).unwrap())))
-                });
+            let target = nearest(
+                &w,
+                from,
+                hexes
+                    .iter()
+                    .copied()
+                    .filter(|&h| g.tokens(h, FACTORY) > 0 && !corrupted(g, h)),
+            )
+            .map(|h| (h, FACTORY.to_string()))
+            .or_else(|| {
+                nearest(
+                    &w,
+                    from,
+                    hexes
+                        .iter()
+                        .copied()
+                        .filter(|&h| presence_owner(g, h).is_some()),
+                )
+                .map(|h| (h, presence(presence_owner(g, h).unwrap())))
+            });
             let Some((h, kind)) = target else {
                 break;
             };
-            if destroy_building(g, cx, h, &kind) {
+            if destroy_building(g, cx, h, &kind, false) {
                 destroyed += 1;
             }
         }
@@ -394,7 +679,10 @@ fn battle(g: &mut GameState, cx: &mut Cx) {
 /// next to its hex (players choose).
 fn strike(g: &mut GameState, cx: &mut Cx) -> Res {
     let w = cx.world;
-    let troops: Vec<(usize, i64)> = (0..g.hexes.len()).map(|h| (h, g.tokens(h, TROOP))).filter(|&(_, n)| n > 0).collect();
+    let troops: Vec<(usize, i64)> = (0..g.hexes.len())
+        .map(|h| (h, g.tokens(h, TROOP)))
+        .filter(|&(_, n)| n > 0)
+        .collect();
     for (h, n) in troops {
         for _ in 0..n {
             let mut targets: Vec<(usize, String)> = Vec::new();
@@ -405,13 +693,19 @@ fn strike(g: &mut GameState, cx: &mut Cx) -> Res {
                     targets.push((x, k));
                 }
             }
-            let opts = targets.iter().map(|(x, k)| opt(format!("{k} at {}", hex_name(&w, *x)))).collect();
-            let prompt = format!("Adversary troop at {}: which building does it destroy?", hex_name(&w, h));
+            let opts = targets
+                .iter()
+                .map(|(x, k)| opt(format!("{k} at {}", hex_name(&w, *x))))
+                .collect();
+            let prompt = format!(
+                "Adversary troop at {}: which building does it destroy?",
+                hex_name(&w, h)
+            );
             let Some(i) = cx.choose(0, &prompt, opts)? else {
                 break;
             };
             let (x, k) = targets[i].clone();
-            if destroy_building(g, cx, x, &k) {
+            if destroy_building(g, cx, x, &k, true) {
                 cx.tally(g, "board.troop_destroyed", 1);
             }
         }
@@ -444,9 +738,14 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
         } else if let Some(s) = cube_owner(g, h) {
             cx.add_resource(g, s, "energy", energy + w.int("board.aligned_bonus"));
         } else {
-            // The player with the most data centres next to it; players choose on a tie.
+            // The player with the most presence next to it; players choose on a tie.
             let near: Vec<i64> = (0..g.seats.len())
-                .map(|s| w.map.hexes[h].neighbours.iter().filter(|&&x| g.tokens(x, &dc(s)) > 0).count() as i64)
+                .map(|s| {
+                    std::iter::once(h)
+                        .chain(w.map.hexes[h].neighbours.iter().copied())
+                        .filter(|&x| g.tokens(x, &presence(s)) > 0)
+                        .count() as i64
+                })
                 .collect();
             let most = near.iter().copied().max().unwrap_or(0);
             if most == 0 {
@@ -489,22 +788,25 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
         cx.add_key(g, project_key(c, to), cubes);
         complete_project(g, cx, c);
     }
+    // An adversary ambassador on a presence (with no other piece to divert)
+    // leaks 1 of its owner's compute.
     for h in 0..g.hexes.len() {
-        let Some(s) = dc_owner(g, h) else {
+        let Some(s) = presence_owner(g, h) else {
             continue;
         };
+        if g.tokens(h, ADV_AMBASSADOR) == 0 {
+            continue;
+        }
         let c = w.map.hexes[h].country as usize;
         if flagged(g, RoundFlag::Sabotage.name(), c) {
             continue;
         }
-        let n = w.int("board.dc_compute");
-        if g.tokens(h, ADV_AMBASSADOR) > 0 {
-            adversary::remove(g, cx, h, 1);
-            alignment::sway(g, cx, Side::Discord, n * divert);
-            cx.tally(g, "board.compute_diverted", n);
-        } else {
-            cx.add_resource(g, s, "compute", n);
+        adversary::remove(g, cx, h, 1);
+        if g.resource(s, "compute") > 0 {
+            cx.add_resource(g, s, "compute", -1);
         }
+        alignment::sway(g, cx, Side::Discord, divert);
+        cx.tally(g, "board.compute_diverted", 1);
     }
     Ok(())
 }
@@ -515,7 +817,9 @@ fn complete_project(g: &mut GameState, cx: &mut Cx, c: usize) {
     let w = cx.world;
     let p = &w.content.map.countries[c].project;
     let adv = g.var(&project_key(c, None));
-    let mine: Vec<i64> = (0..g.seats.len()).map(|s| g.var(&project_key(c, Some(s)))).collect();
+    let mine: Vec<i64> = (0..g.seats.len())
+        .map(|s| g.var(&project_key(c, Some(s))))
+        .collect();
     if adv + mine.iter().sum::<i64>() < p.cubes {
         return;
     }
@@ -554,9 +858,9 @@ impl Module for Board {
         }
         for s in 0..g.seats.len() {
             let c = home_country(&w, s);
-            for &n in &w.content.map.countries[c].data_centres {
-                cx.add_tokens(g, w.map.numbered(c, n), &dc(s), 1);
-            }
+            let n = w.content.map.countries[c].presence;
+            cx.add_tokens(g, w.map.numbered(c, n), &presence(s), 1);
+            cx.set_key(g, track_key(s), 1);
             cx.add_resource(g, s, AMBASSADORS, w.int("board.start_ambassadors"));
         }
     }
@@ -564,8 +868,7 @@ impl Module for Board {
     fn legal(&self, _phase: usize, g: &GameState, w: &World, seat: u8, out: &mut Vec<Action>) {
         let s = seat as usize;
         for act in STANDARD {
-            let (e, cr) = std_cost(w, act);
-            if g.resource(s, "energy") < e || g.resource(s, "credits") < cr {
+            if !can_afford(g, s, std_cost(w, act)) {
                 continue;
             }
             if act == "align" && g.resource(s, AMBASSADORS) < 1 {
@@ -579,7 +882,10 @@ impl Module for Board {
             }
         }
         for id in g.pile(&cards::hand(s)) {
-            out.push(Action::Sell { seat, card: id.clone() });
+            out.push(Action::Sell {
+                seat,
+                card: id.clone(),
+            });
         }
     }
 
@@ -607,21 +913,29 @@ impl Module for Board {
                 if !STANDARD.contains(&act) {
                     return Err(Halt::Illegal("no such standard action".into()));
                 }
-                let (e, cr) = std_cost(&w, act);
+                let cost = std_cost(&w, act);
                 let targets = std_targets(&w, g, s, act);
-                if g.resource(s, "energy") < e || g.resource(s, "credits") < cr || targets.is_empty() {
+                if !can_afford(g, s, cost) || targets.is_empty() {
                     return Err("can't take that standard action now".into());
                 }
+                let (e, cr, hw) = cost;
                 cx.add_resource(g, s, "energy", -e);
                 cx.add_resource(g, s, "credits", -cr);
+                cx.add_resource(g, s, HARDWARE, -hw);
+                cx.tally(g, "board.hardware_spent", hw);
                 cx.tally(g, &format!("board.std.{act}"), 1);
                 cx.tally(g, "board.std_actions", 1);
                 if act == "ambassador" {
                     cx.add_resource(g, s, AMBASSADORS, 1);
                     return Ok(());
                 }
-                if act == "data_centre" {
-                    ai::place_data_centre(g, cx, s)?;
+                if act == "hardware" {
+                    cx.add_resource(g, s, HARDWARE, 1);
+                    cx.tally(g, "board.hardware_bought", 1);
+                    return Ok(());
+                }
+                if act == "presence" {
+                    place_presence(g, cx, s)?;
                     return Ok(());
                 }
                 let opts = targets.iter().map(|&h| hex_opt(&w, h)).collect();
@@ -631,8 +945,8 @@ impl Module for Board {
                 };
                 let h = targets[i];
                 match act {
-                    "factory" => {
-                        cx.add_tokens(g, h, FACTORY, 1);
+                    "node" => {
+                        adversary::remove_node(g, cx, h);
                     }
                     "station" => {
                         cx.add_tokens(g, h, STATION, 1);
@@ -660,7 +974,7 @@ impl Module for Board {
     fn run(&self, phase: usize, g: &mut GameState, cx: &mut Cx) -> Res {
         let w = cx.world;
         match phase {
-            1 => produce_units(g, cx),
+            1 => produce_units(g, cx)?,
             2 => battle(g, cx),
             3 => strike(g, cx)?,
             4 => produce(g, cx)?,
@@ -670,15 +984,35 @@ impl Module for Board {
                         cx.set_key(g, flag(f, c), 0);
                     }
                 }
+                // Factories per side, as the game ends (the last round's level).
+                let mut sides = [0i64; 3];
+                for h in 0..g.hexes.len() {
+                    if g.tokens(h, FACTORY) > 0 {
+                        let i = if corrupted(g, h) {
+                            1
+                        } else if cube_owner(g, h).is_some() {
+                            0
+                        } else {
+                            2
+                        };
+                        sides[i] += 1;
+                    }
+                }
+                for (i, side) in ["player", "adversary", "neutral"].iter().enumerate() {
+                    cx.level(g, &format!("board.factories_end.{side}"), sides[i]);
+                }
             }
         }
         Ok(())
     }
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
-        let flags: Vec<String> = FLAGS.iter().map(|f| format!("board.{}.", f.name())).collect();
+        let flags: Vec<String> = FLAGS
+            .iter()
+            .map(|f| format!("board.{}.", f.name()))
+            .collect();
         let mut keys: Vec<&str> = flags.iter().map(String::as_str).collect();
-        keys.extend(["board.project.", "board.project_done."]);
+        keys.extend(["board.project.", "board.project_done.", "board.track."]);
         out.bookkeeping(&keys);
         for c in 0..w.map.countries.len() {
             for f in FLAGS {
@@ -688,7 +1022,10 @@ impl Module for Board {
             }
             let p = &w.content.map.countries[c].project;
             let done = g.var(&project_done(c)) > 0;
-            let total: i64 = g.var(&project_key(c, None)) + (0..g.seats.len()).map(|s| g.var(&project_key(c, Some(s)))).sum::<i64>();
+            let total: i64 = g.var(&project_key(c, None))
+                + (0..g.seats.len())
+                    .map(|s| g.var(&project_key(c, Some(s))))
+                    .sum::<i64>();
             let doc = format!(
                 "{}: {} ({} cubes; each player cube pays {} credits, every {} adversary cubes 1 Discord)",
                 p.name,
@@ -697,9 +1034,23 @@ impl Module for Board {
                 w.int("board.project_credits"),
                 w.int("board.project_discord_per")
             );
-            out.country(c, "project", &format!("megaproject: {}", p.name), if done { p.cubes } else { total }, Some(p.cubes), &doc);
+            out.country(
+                c,
+                "project",
+                &format!("megaproject: {}", p.name),
+                if done { p.cubes } else { total },
+                Some(p.cubes),
+                &doc,
+            );
             if !done {
-                out.country(c, "project.adversary", "adversary cubes", g.var(&project_key(c, None)), None, "adversary cubes on the megaproject");
+                out.country(
+                    c,
+                    "project.adversary",
+                    "adversary cubes",
+                    g.var(&project_key(c, None)),
+                    None,
+                    "adversary cubes on the megaproject",
+                );
                 for s in 0..g.seats.len() {
                     out.country(
                         c,
@@ -711,22 +1062,95 @@ impl Module for Board {
                     );
                 }
             } else {
-                out.country(c, "project.done", "completed", 1, None, "owned stations here produce the project's benefit");
+                out.country(
+                    c,
+                    "project.done",
+                    "completed",
+                    1,
+                    None,
+                    "owned stations here produce the project's benefit",
+                );
             }
         }
+        let step = clock_step(w, g.round);
+        let name = |k: i64| match k & 3 {
+            1 => "production",
+            2 => "war",
+            3 => "production + war",
+            _ => "—",
+        };
+        let track: Vec<String> = (1..=8u32)
+            .map(|r| format!("{r}: {}", name(clock_step(w, r))))
+            .collect();
+        out.global(
+            "clock",
+            name(step),
+            step,
+            None,
+            &format!("the production/war clock (1 production, 2 war, 3 both); this round's step; track {}…", track.join(", ")),
+        );
         let war = war_round(w, g) as i64;
-        out.global("war", "war round", war, None, "1 on a war round: in production the fronts fight");
-        let rounds: Vec<String> = (1..=12u32).filter(|&r| scheduled(w.list("board.war"), r) > 0).map(|r| r.to_string()).collect();
+        out.global(
+            "war",
+            "war step",
+            war,
+            None,
+            "1 on a war step (the clock or a War card): in production the fronts fight",
+        );
         out.global(
             "fronts",
             "fronts",
             w.map.fronts.len() as i64,
             None,
-            &format!("land borders between countries, each with a base on either side; war rounds {}…", rounds.join(", ")),
+            "printed borders between countries, each with a base on either side",
         );
+        for act in STANDARD {
+            let (e, cr, hw) = std_cost(w, act);
+            let cost: Vec<String> = [(e, "energy"), (cr, "credits"), (hw, "hardware")]
+                .iter()
+                .filter(|(n, _)| *n > 0)
+                .map(|(n, r)| format!("{n} {r}"))
+                .collect();
+            let doc = format!(
+                "{}; costs {}",
+                std_text(act),
+                if cost.is_empty() {
+                    "nothing".into()
+                } else {
+                    cost.join(" + ")
+                }
+            );
+            out.standard(act, e, cr, hw, &doc);
+        }
         for s in 0..g.seats.len() {
-            out.seat(s, "ambassadors_board", "ambassadors on the board", ambassadors_on_board(g, s), None, "your player ambassadors on pieces");
-            out.seat(s, "data_centres", "data centres", dc_count(g, s), None, "your data centres: you act within 1 of them");
+            out.seat(
+                s,
+                "ambassadors_board",
+                "ambassadors on the board",
+                ambassadors_on_board(g, s),
+                None,
+                "your player ambassadors on pieces",
+            );
+            out.seat(
+                s,
+                "presence",
+                "presence on the board",
+                presence_count(g, s),
+                None,
+                "your presence: you act within 1 of it, and claim sites on or next to it",
+            );
+            let left = ai::board(w, s)
+                .presence
+                .len()
+                .saturating_sub(track_taken(g, s));
+            out.seat(
+                s,
+                "presence_track",
+                "presence left on the track",
+                left as i64,
+                None,
+                "presence tokens still on your AI board's track",
+            );
         }
     }
 }
@@ -734,7 +1158,7 @@ impl Module for Board {
 fn flag_doc(f: RoundFlag) -> &'static str {
     match f {
         RoundFlag::Blackout => "Blackout: cities here make no energy this round",
-        RoundFlag::Sabotage => "Sabotage: data centres here make no compute this round",
+        RoundFlag::Sabotage => "Sabotage: presence here leaks no compute this round",
         RoundFlag::Shelter => "Shelter Order: buildings here can't be destroyed this round",
     }
 }

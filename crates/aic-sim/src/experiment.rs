@@ -169,7 +169,10 @@ pub fn keep_variants(spec: &mut Spec, keep: &[String]) -> Result<(), String> {
     for k in keep {
         if !spec.variants.iter().any(|v| &v.name == k) {
             let names: Vec<&str> = spec.variants.iter().map(|v| v.name.as_str()).collect();
-            return Err(format!("no variant {k:?} in the spec ({})", names.join(", ")));
+            return Err(format!(
+                "no variant {k:?} in the spec ({})",
+                names.join(", ")
+            ));
         }
     }
     let mut i = 0;
@@ -265,12 +268,8 @@ pub struct GameResult {
     pub adversary_ops: Vec<u32>,
     pub setup_ops: u32,
     pub counters: BTreeMap<String, i64>,
-    /// Per card: times offered in a draft packet, drafted, kept, played,
-    /// the sum of its pick positions (1 = a seat's first pick of the
-    /// round), and times drawn (paid compute for). Every dealt card is
-    /// drafted by someone (packets are passed until empty), so how early it
-    /// goes is the draft's signal.
-    pub cards: BTreeMap<String, [u32; 6]>,
+    /// Per card: how it was offered, drafted, kept, played and drawn.
+    pub cards: BTreeMap<String, CardCounts>,
     pub gives: u32,
     pub pays: u32,
     pub withdraws: u32,
@@ -297,6 +296,33 @@ pub struct GameResult {
     pub final_state: Option<Box<GameState>>,
 }
 
+/// One card's counts, in one game or summed over games. Every dealt card is
+/// drafted by someone (packets are passed until empty), so how early it goes
+/// is the draft's signal.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CardCounts {
+    /// Times offered in a draft packet.
+    pub offered: u32,
+    pub drafted: u32,
+    pub kept: u32,
+    pub played: u32,
+    /// The sum of its pick positions (1 = a seat's first pick of the round).
+    pub pick_sum: u32,
+    /// Times drawn (paid compute for).
+    pub drawn: u32,
+}
+
+impl std::ops::AddAssign for CardCounts {
+    fn add_assign(&mut self, o: Self) {
+        self.offered += o.offered;
+        self.drafted += o.drafted;
+        self.kept += o.kept;
+        self.played += o.played;
+        self.pick_sum += o.pick_sum;
+        self.drawn += o.drawn;
+    }
+}
+
 /// How a game ended, measured on the final table.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Margin {
@@ -316,7 +342,7 @@ pub struct Margin {
     pub blockers: i64,
     pub level: i64,
     /// Unity tips.
-    pub points: i64,
+    pub unity_tips: i64,
 }
 
 fn margin(rules: &Rules, g: &GameState) -> Margin {
@@ -325,18 +351,23 @@ fn margin(rules: &Rules, g: &GameState) -> Margin {
     let blockers = if g.outcome.as_ref().is_some_and(|o| o.won) {
         0
     } else {
-        adversary::presence(&w, g, level)
+        adversary::purge_count(&w, g, level)
     };
-    let cities: Vec<usize> = (0..g.hexes.len()).filter(|&h| common::is_city(&w, h)).collect();
+    let cities: Vec<usize> = (0..g.hexes.len())
+        .filter(|&h| common::is_city(&w, h))
+        .collect();
     Margin {
         deck_left: (g.pile(adversary::DECK).len() + g.pile(adversary::NEXT).len()) as u32,
         supply_left: g.var(adversary::SUPPLY),
         supply_start: adversary::start_supply(&w),
         cities_corrupted_end: cities.iter().filter(|&&h| common::corrupted(g, h)).count() as i64,
-        cities_aligned_end: cities.iter().filter(|&&h| common::cube_owner(g, h).is_some()).count() as i64,
+        cities_aligned_end: cities
+            .iter()
+            .filter(|&&h| common::cube_owner(g, h).is_some())
+            .count() as i64,
         blockers,
         level,
-        points: g.var(alignment::tips_key(Side::Unity)),
+        unity_tips: g.var(alignment::tips_key(Side::Unity)),
     }
 }
 
@@ -476,7 +507,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
                     break;
                 }
                 for c in pile {
-                    r.cards.entry(c.clone()).or_default()[0] += 1;
+                    r.cards.entry(c.clone()).or_default().offered += 1;
                 }
             }
         }
@@ -512,11 +543,11 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
                 let s = *seat as usize;
                 picks[s] += 1;
                 let e = r.cards.entry(card.clone()).or_default();
-                e[1] += 1;
-                e[4] += picks[s];
+                e.drafted += 1;
+                e.pick_sum += picks[s];
             }
-            Action::Keep { card, .. } => r.cards.entry(card.clone()).or_default()[2] += 1,
-            Action::Play { card, .. } => r.cards.entry(card.clone()).or_default()[3] += 1,
+            Action::Keep { card, .. } => r.cards.entry(card.clone()).or_default().kept += 1,
+            Action::Play { card, .. } => r.cards.entry(card.clone()).or_default().played += 1,
             Action::Give { .. } => r.gives += 1,
             Action::Pay { .. } => r.pays += 1,
             Action::Withdraw { .. } => r.withdraws += 1,
@@ -538,7 +569,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
                     Some(k) => {
                         before.swap_remove(k);
                     }
-                    None => r.cards.entry(c.clone()).or_default()[5] += 1,
+                    None => r.cards.entry(c.clone()).or_default().drawn += 1,
                 }
             }
         }
@@ -646,7 +677,9 @@ impl StreamHeader {
     }
 }
 
-pub const STREAM_FORMAT: &str = "aic-games/1";
+/// 2 (016): `margin.points` became `margin.unity_tips`, and each card's
+/// counts an object (`CardCounts`) instead of a 6-number array.
+pub const STREAM_FORMAT: &str = "aic-games/2";
 
 /// Reads a `games.jsonl` written for `spec` and `cells`: the games in it,
 /// each replayed from its seed and actions to rebuild its final table (and
@@ -661,7 +694,10 @@ pub fn read_stream(path: &str, spec: &Spec, cells: &[Cell]) -> Result<Vec<GameRe
         .and_then(|l| serde_json::from_str(l).map_err(|e| format!("{path}: header: {e}")))?;
     let want = StreamHeader::new(spec, cells);
     if head.format != want.format {
-        return Err(format!("{path}: format {:?}, expected {:?}", head.format, want.format));
+        return Err(format!(
+            "{path}: format {:?}, expected {:?}",
+            head.format, want.format
+        ));
     }
     if head != want {
         return Err(format!(

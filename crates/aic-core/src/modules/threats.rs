@@ -5,7 +5,9 @@
 
 use crate::action::Action;
 use crate::content::{Passive, Side, Spot, ThreatDef, ThreatOp};
-use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
+use crate::module::{
+    Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
+};
 use crate::rng::shuffle;
 use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
@@ -13,22 +15,36 @@ use crate::view::{CardView, ViewOut};
 use super::common::*;
 use super::{adversary, alignment, board, cards};
 
-const PARAMS: &[ParamSpec] = &[ParamSpec::int("per_country", 0, 5, "threats dealt each round per country")];
+const PARAMS: &[ParamSpec] = &[ParamSpec::int(
+    "per_country",
+    0,
+    5,
+    "threats dealt each round per country",
+)];
 
 const PHASES: &[PhaseSpec] = &[
-    PhaseSpec::auto("deal", "deal threats face up (tier 1 until stage II begins, then tier 2)"),
-    PhaseSpec::decision("counter", "pay toward threat counters (pooled; withdraw until the phase ends)"),
-    PhaseSpec::auto("execute", "refund partial payments, then uncountered threats execute in order"),
+    PhaseSpec::auto(
+        "deal",
+        "deal threats face up (tier 1 until stage II begins, then tier 2)",
+    ),
+    PhaseSpec::decision(
+        "counter",
+        "pay toward threat counters (pooled; withdraw until the phase ends)",
+    ),
+    PhaseSpec::auto(
+        "execute",
+        "refund partial payments, then uncountered threats execute in order",
+    ),
 ];
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "threats",
     summary: "Threats: dealt each round, countered by pooled payments, executed if not",
-    requires: &["adversary", "alignment", "board", "cards"],
+    requires: &["adversary", "alignment"],
     variants: &[
         VariantDef {
             name: "countries",
-            summary: "Each threat sits on one country; only players with a data centre there may pay",
+            summary: "Each threat sits on one country; only players with a presence there may pay",
             params: PARAMS,
             phases: PHASES,
             rng: &["threats"],
@@ -100,7 +116,8 @@ fn def<'w>(w: &World<'w>, id: &str) -> &'w ThreatDef {
 /// Active threats in execution order, each with its scope (its country, or
 /// `None` for a shared-row threat).
 pub fn active(g: &GameState) -> Vec<(String, Option<usize>)> {
-    let mut out: Vec<(String, Option<usize>)> = g.pile(ROW).iter().map(|t| (t.clone(), None)).collect();
+    let mut out: Vec<(String, Option<usize>)> =
+        g.pile(ROW).iter().map(|t| (t.clone(), None)).collect();
     let mut on: Vec<(usize, &Vec<String>)> = g
         .piles
         .iter()
@@ -119,7 +136,11 @@ fn pile_of(scope: Option<usize>) -> String {
 
 /// Where a threat dealt for country `c` goes: the shared row, or on `c`.
 fn deal_pile(shared: bool, c: usize) -> String {
-    if shared { ROW.to_string() } else { on(c) }
+    if shared {
+        ROW.to_string()
+    } else {
+        on(c)
+    }
 }
 
 /// Deals the top threat of the `tier` deck onto `to`, counted under
@@ -149,7 +170,10 @@ fn shared_row(w: &World) -> Option<bool> {
 pub fn requirement(w: &World, g: &GameState, threat: &str) -> Vec<(String, i64)> {
     let jam = g.var(&jam_key(threat));
     let (bonus, all) = if adversary::at(w, g, 1) {
-        (w.int("adversary.counter_bonus"), w.int("adversary.counter_bonus_all"))
+        (
+            w.int("adversary.counter_bonus"),
+            w.int("adversary.counter_bonus_all"),
+        )
     } else {
         (0, 0)
     };
@@ -166,7 +190,9 @@ pub fn requirement(w: &World, g: &GameState, threat: &str) -> Vec<(String, i64)>
 
 /// Paid so far toward `threat` in `resource`, by all seats.
 fn paid(g: &GameState, threat: &str, resource: &str) -> i64 {
-    (0..g.seats.len()).map(|s| g.var(&paid_key(threat, s, resource))).sum()
+    (0..g.seats.len())
+        .map(|s| g.var(&paid_key(threat, s, resource)))
+        .sum()
 }
 
 /// Returns every contribution on `threat` to its payers.
@@ -290,7 +316,7 @@ fn build_shared(b: &Build) -> Result<Box<dyn Module>, String> {
 impl Threats {
     fn can_pay(&self, w: &World, g: &GameState, seat: usize, scope: Option<usize>) -> bool {
         match scope {
-            Some(c) if !self.shared => has_dc_in(w, g, seat, c),
+            Some(c) if !self.shared => has_presence_in(w, g, seat, c),
             _ => true,
         }
     }
@@ -373,7 +399,14 @@ impl Module for Threats {
         Ok(())
     }
 
-    fn legal(&self, _phase: usize, g: &GameState, w: &World, seat: u8, out: &mut Vec<crate::Action>) {
+    fn legal(
+        &self,
+        _phase: usize,
+        g: &GameState,
+        w: &World,
+        seat: u8,
+        out: &mut Vec<crate::Action>,
+    ) {
         let s = seat as usize;
         for (t, scope) in active(g) {
             if !self.can_pay(w, g, s, scope) {
@@ -425,7 +458,7 @@ impl Module for Threats {
                     return Err(Halt::Illegal(format!("no active threat {threat}")));
                 };
                 if !self.can_pay(&w, g, s, scope) {
-                    return Err("only players with a data centre in its country can pay".into());
+                    return Err("only players with a presence in its country can pay".into());
                 }
                 let req = requirement(&w, g, threat);
                 let need = req.iter().find(|(r, _)| r == resource).map(|(_, n)| *n);
@@ -533,7 +566,12 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
                     })
                     .collect();
                 let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
-                let Some(i) = cx.choose(0, "Threat: an adversary ambassador goes on which piece?", opts)? else {
+                let Some(i) = cx.choose(
+                    0,
+                    "Threat: an adversary ambassador goes on which piece?",
+                    opts,
+                )?
+                else {
                     break;
                 };
                 adversary::place(g, cx, spots[i], 1);
@@ -541,12 +579,18 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
         }
         ThreatOp::Troop { count } => {
             for _ in 0..*count {
-                let mut spots: Vec<usize> = hexes.iter().copied().filter(|&h| g.tokens(h, FACTORY) > 0).collect();
+                let mut spots: Vec<usize> = hexes
+                    .iter()
+                    .copied()
+                    .filter(|&h| g.tokens(h, FACTORY) > 0)
+                    .collect();
                 if spots.is_empty() {
                     spots = hexes.iter().copied().filter(|&h| is_city(&w, h)).collect();
                 }
                 let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
-                let Some(i) = cx.choose(0, "Threat: an adversary troop lands on which hex?", opts)? else {
+                let Some(i) =
+                    cx.choose(0, "Threat: an adversary troop lands on which hex?", opts)?
+                else {
                     break;
                 };
                 adversary::place_troop(g, cx, spots[i]);
@@ -555,16 +599,25 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
             }
         }
         ThreatOp::FlipStation => {
-            let spots: Vec<usize> =
-                hexes.iter().copied().filter(|&h| g.tokens(h, STATION) > 0 && !corrupted(g, h)).collect();
+            let spots: Vec<usize> = hexes
+                .iter()
+                .copied()
+                .filter(|&h| g.tokens(h, STATION) > 0 && !corrupted(g, h))
+                .collect();
             let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
-            if let Some(i) = cx.choose(0, "Threat: which research station flips to the adversary?", opts)? {
+            if let Some(i) = cx.choose(
+                0,
+                "Threat: which research station flips to the adversary?",
+                opts,
+            )? {
                 adversary::corrupt_station(g, cx, spots[i]);
             }
         }
         ThreatOp::CorruptCity => {
             for c in scope_countries(&w, scope) {
-                if let Some(h) = adversary::most_infiltrated_city(&w, g, c, |h| is_city(&w, h) && !corrupted(g, h)) {
+                if let Some(h) = adversary::most_infiltrated_city(&w, g, c, |h| {
+                    is_city(&w, h) && !corrupted(g, h)
+                }) {
                     adversary::corrupt_city(g, cx, h);
                 }
             }
@@ -602,7 +655,8 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
                         for k in 0..*n {
                             let hand = g.pile(&cards::hand(s)).to_vec();
                             let opts = hand.iter().map(|c| opt(c.clone())).collect();
-                            let prompt = format!("Seat {s}: discard which card ({} of {n})?", k + 1);
+                            let prompt =
+                                format!("Seat {s}: discard which card ({} of {n})?", k + 1);
                             if let Some(j) = cx.choose(s, &prompt, opts)? {
                                 cards::discard(g, cx, &hand[j], &cards::hand(s));
                             }
@@ -626,7 +680,9 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
                     continue;
                 }
                 let k = ambassador(s);
-                let on: Vec<usize> = (0..g.hexes.len()).filter(|&h| g.tokens(h, &k) > 0).collect();
+                let on: Vec<usize> = (0..g.hexes.len())
+                    .filter(|&h| g.tokens(h, &k) > 0)
+                    .collect();
                 let opts = on.iter().map(|&h| hex_opt(&w, h)).collect();
                 let prompt = format!("Seat {s}: lose the ambassador on which hex?");
                 if let Some(i) = cx.choose(s, &prompt, opts)? {

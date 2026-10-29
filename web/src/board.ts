@@ -1,9 +1,10 @@
 // The SVG board, drawn from the engine's generic view: every hex of every country piece
 // (pointy-top axial, `data-hex="q,r"`), filled by what it is (city, military base, open
 // land, ocean), with a band in the country's colour along each country border, the
-// printed hex number, a pennant in the facing country's colour on each military base,
-// the fronts (land borders between countries, and a dashed link between the two bases
-// on either side), and each token stack drawn as a small glyph with its count. Knows no
+// printed hex number, an industrial-zone mark, a pennant in the facing country's colour
+// on each military base, the printed fronts (the land edges between two countries with
+// bases facing each other, and a dashed link between the two bases), and each token
+// stack drawn as a small glyph with its count. Knows no
 // rules: what to highlight is handed in. Token kinds it has no glyph for are drawn as
 // plain counters.
 
@@ -89,8 +90,8 @@ function glyph(kind: string, s: number, paint: Paint): SVGElement {
         el('circle', { cx: f(0.62 * s), cy: f(-s), r: f(0.12 * s), fill: '#e0f2f1' }),
       );
       break;
-    case 'dc': {
-      // A player's data centre: a server rack in the seat's colour.
+    case 'presence': {
+      // A player's presence: a server rack in the seat's colour.
       const col = ownerColour(arg, paint, c);
       g.append(el('rect', { x: f(-0.7 * s), y: f(-0.95 * s), width: f(1.4 * s), height: f(1.9 * s), rx: f(0.15 * s), fill: col, class: 'glyph' }));
       for (const yy of [-0.5, 0, 0.5]) {
@@ -99,6 +100,13 @@ function glyph(kind: string, s: number, paint: Paint): SVGElement {
       }
       break;
     }
+    case 'node':
+      // An adversary node: a diamond with a core.
+      g.append(
+        p(`M0,${f(-s)} L${f(0.8 * s)},0 L0,${f(s)} L${f(-0.8 * s)},0 Z`, ADVERSARY_COLOUR),
+        el('circle', { cx: 0, cy: 0, r: f(0.28 * s), fill: '#ffcdd2' }),
+      );
+      break;
     case 'troop':
       // An adversary troop: a spearhead.
       g.append(p(`M0,${f(-s)} L${f(0.85 * s)},${f(0.8 * s)} L0,${f(0.35 * s)} L${f(-0.85 * s)},${f(0.8 * s)} Z`, c));
@@ -122,10 +130,10 @@ function glyph(kind: string, s: number, paint: Paint): SVGElement {
 }
 
 /** Glyph scale per kind: owner cubes and buildings a little larger than pawns. */
-const SCALE: Record<string, number> = { cube: 1.05, station: 1.1, factory: 1, dc: 1, ambassador: 0.9, troop: 0.95, unit: 0.95, harden: 0.85 };
-/** The adversary's tokens: its owner cube, its ambassadors, its troops. */
-const isAdversary = (kind: string) => kind === 'troop' || kind.endsWith(':adversary');
-const ORDER = ['cube', 'station', 'factory', 'dc', 'harden', 'unit', 'ambassador', 'troop'];
+const SCALE: Record<string, number> = { cube: 1.05, station: 1.1, factory: 1, presence: 1, ambassador: 0.9, troop: 0.95, unit: 0.95, harden: 0.85, node: 1 };
+/** The adversary's tokens: its owner cube, its ambassadors, its troops, its nodes. */
+const isAdversary = (kind: string) => kind === 'troop' || kind === 'node' || kind.endsWith(':adversary');
+const ORDER = ['cube', 'station', 'factory', 'presence', 'harden', 'unit', 'ambassador', 'node', 'troop'];
 const rank = (k: string) => {
   const i = ORDER.indexOf(k.split(':')[0]);
   return i < 0 ? ORDER.length : i;
@@ -188,6 +196,8 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
   const countryColour = (c: number) => strong(view.countries[c]?.colour ?? '#888888');
   const seatColour = (seat: number) => countryColour(view.seats[seat]?.country ?? seat);
   const war = view.globals.find((g) => g.key === 'board.war')?.value === 1;
+  // The printed fronts: pairs of countries with a base facing each other.
+  const fronts = new Set(view.hexes.filter((h) => h.kind === 'base' && h.facing !== undefined).map((h) => `${h.country}-${h.facing}`));
 
   const hexLayer = el('g', { class: 'hexes' });
   const borderLayer = el('g', { class: 'borders' });
@@ -206,6 +216,11 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
     const g = el('g', { class: cls.join(' '), 'data-hex': key, 'data-index': h.index, 'data-country': h.country });
     g.append(el('polygon', { points: corners(x, y), fill: kindFill(h.kind), class: 'cell' }));
     g.append(el('text', { x: f(x), y: f(y - 0.66), class: 'num' }, String(h.number)));
+    // A printed industrial zone: a cog outline low on the hex.
+    if (h.industrial) {
+      g.append(el('circle', { cx: f(x), cy: f(y + 0.62), r: 0.13, class: 'zone-mark' }));
+      g.append(el('title', {}, 'industrial zone: cities build factories here'));
+    }
     if (h.kind === 'base' && h.facing !== undefined) g.append(pennant(x + 0.42, y - 0.42, countryColour(h.facing)));
     hexLayer.append(g);
 
@@ -218,7 +233,7 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
       const [ax, ay] = corner(x, y, k, 0.9);
       const [bx, by] = corner(x, y, (k + 1) % 6, 0.9);
       borderLayer.append(el('line', { x1: f(ax), y1: f(ay), x2: f(bx), y2: f(by), stroke: band, class: 'border' }));
-      if (n && h.kind !== 'ocean' && n.kind !== 'ocean' && h.country < n.country) {
+      if (n && h.kind !== 'ocean' && n.kind !== 'ocean' && h.country < n.country && fronts.has(`${h.country}-${n.country}`)) {
         const [cx, cy] = corner(x, y, k, 1);
         const [dx, dy] = corner(x, y, (k + 1) % 6, 1);
         frontLayer.append(el('line', { x1: f(cx), y1: f(cy), x2: f(dx), y2: f(dy), class: 'front-edge', 'data-front': `${h.country}-${n.country}` }));

@@ -10,26 +10,60 @@ fn every_layout_builds_and_every_piece_follows_the_design() {
             let p = &content.map.countries[c];
             let at = |num: u8| map.numbered(c, num);
             assert_eq!(p.cities.len(), 3, "country {c}");
-            assert!(p.corrupted.len() >= 2, "country {c}: two cities to corrupt at difficulty 4");
+            assert!(
+                p.corrupted.len() >= 2,
+                "country {c}: two cities to corrupt at difficulty 4"
+            );
             assert_eq!(p.stations.len(), 1, "country {c}");
             assert_eq!(p.factories.len(), 2, "country {c}");
-            assert_eq!(p.data_centres.len(), 2, "country {c}");
+            assert_eq!(p.industry.len(), 4, "country {c}: about 4 industrial zones");
             assert!(p.ocean.len() <= 2, "country {c}");
-            let count = |k: HexKind| map.countries[c].hexes.iter().filter(|&&h| kind(&map, h) == k).count();
+            let count = |k: HexKind| {
+                map.countries[c]
+                    .hexes
+                    .iter()
+                    .filter(|&&h| kind(&map, h) == k)
+                    .count()
+            };
             assert_eq!(count(HexKind::City), 3);
             assert_eq!(count(HexKind::Ocean), p.ocean.len());
-            for &f in &p.factories {
+            for &f in &p.industry {
                 let h = at(f);
+                assert!(map.hexes[h].industrial);
                 assert!(
-                    map.hexes[h].neighbours.iter().any(|&x| map.hexes[x].country as usize == c && kind(&map, x) == HexKind::City),
-                    "country {c}: factory #{f} touches no city of its piece"
+                    map.hexes[h]
+                        .neighbours
+                        .iter()
+                        .any(|&x| map.hexes[x].country as usize == c
+                            && kind(&map, x) == HexKind::City),
+                    "country {c}: zone #{f} touches no city of its piece"
+                );
+            }
+            for &city in &p.cities {
+                let zones = p
+                    .industry
+                    .iter()
+                    .filter(|&&z| map.adjacent(at(z), at(city)))
+                    .count();
+                assert!(
+                    (1..=3).contains(&zones),
+                    "country {c}: city #{city} has {zones} zones next to it"
                 );
             }
             for &o in &p.ocean {
-                assert!(map.hexes[at(o)].neighbours.len() < 6, "country {c}: ocean #{o} is inland with {n} countries");
+                assert!(
+                    map.hexes[at(o)].neighbours.len() < 6,
+                    "country {c}: ocean #{o} is inland with {n} countries"
+                );
             }
-            let [a, b] = [at(p.data_centres[0]), at(p.data_centres[1])];
-            assert!(map.adjacent(a, b), "country {c}: the starting data centres are apart");
+            let start = at(p.presence);
+            assert!(
+                map.hexes[start]
+                    .neighbours
+                    .iter()
+                    .any(|&x| kind(&map, x) == HexKind::City),
+                "country {c}: the starting presence touches no city"
+            );
         }
     }
 }
@@ -46,36 +80,72 @@ fn every_front_has_a_base_on_each_side_and_every_country_a_front() {
                 let (b, me, other) = (f.bases[i], f.countries[i], f.countries[1 - i]);
                 let cell = &map.hexes[b];
                 let p = &content.map.countries[me as usize];
-                assert_eq!((cell.country, cell.kind, cell.facing), (me, HexKind::Base, Some(other)));
-                assert_eq!(p.kind_at(cell.number), HexKind::Open, "{n} countries: base on a printed city or ocean");
-                for list in [&p.stations, &p.factories, &p.data_centres] {
-                    assert!(!list.contains(&cell.number), "{n} countries: base on a setup building");
+                assert_eq!(
+                    (cell.country, cell.kind, cell.facing),
+                    (me, HexKind::Base, Some(other))
+                );
+                assert_eq!(
+                    p.kind_at(cell.number),
+                    HexKind::Open,
+                    "{n} countries: base on a printed city or ocean"
+                );
+                for list in [&p.stations, &p.industry, &vec![p.presence]] {
+                    assert!(
+                        !list.contains(&cell.number),
+                        "{n} countries: base on a setup piece or zone"
+                    );
                 }
-                assert!(cell.neighbours.iter().any(|&x| map.hexes[x].country == other && land(x)));
+                assert!(cell
+                    .neighbours
+                    .iter()
+                    .any(|&x| map.hexes[x].country == other && land(x)));
             }
         }
-        // Exactly the pairs of countries that touch by land have a front.
-        for a in 0..n {
-            for b in a + 1..n {
-                let touch = (0..map.hexes.len()).any(|h| {
-                    map.hexes[h].country == a
-                        && land(h)
-                        && map.hexes[h].neighbours.iter().any(|&x| map.hexes[x].country == b && land(x))
-                });
-                let front = map.fronts.iter().any(|f| f.countries == [a, b]);
-                assert_eq!(touch, front, "{n} countries: {a}-{b}");
-            }
+        // Fronts are printed per layout and every printed front touches by
+        // land; at 3 and 4 countries every country has exactly two (a ring).
+        for f in &map.fronts {
+            let [a, b] = f.countries;
+            let touch = (0..map.hexes.len()).any(|h| {
+                map.hexes[h].country == a
+                    && land(h)
+                    && map.hexes[h]
+                        .neighbours
+                        .iter()
+                        .any(|&x| map.hexes[x].country == b && land(x))
+            });
+            assert!(touch, "{n} countries: front {a}-{b} does not touch by land");
         }
-        assert_eq!(map.hexes.iter().filter(|c| c.kind == HexKind::Base).count(), 2 * map.fronts.len());
-        if n == 1 {
-            assert!(map.fronts.is_empty());
-        }
-        if n == 2 || n == 3 {
-            for c in 0..n {
-                assert!(map.fronts.iter().any(|f| f.countries.contains(&c)), "{n} countries: country {c} has no front");
-            }
+        assert_eq!(
+            map.hexes.iter().filter(|c| c.kind == HexKind::Base).count(),
+            2 * map.fronts.len()
+        );
+        let fronts_of = |c: u8| {
+            map.fronts
+                .iter()
+                .filter(|f| f.countries.contains(&c))
+                .count()
+        };
+        for c in 0..n {
+            let want = match n {
+                1 => 0,
+                2 => 1,
+                _ => 2,
+            };
+            assert_eq!(fronts_of(c), want, "{n} countries: country {c}");
         }
     }
+}
+
+#[test]
+fn four_countries_make_a_ring_without_the_centre_pairs() {
+    let map = Map::build(crate::content(), 4).unwrap();
+    let pairs: Vec<[u8; 2]> = map.fronts.iter().map(|f| f.countries).collect();
+    // Bottom 0, right 1, top 2, left 3: top-bottom and left-right only touch at the centre.
+    assert!(
+        !pairs.contains(&[0, 2]) && !pairs.contains(&[1, 3]),
+        "{pairs:?}"
+    );
+    assert_eq!(pairs.len(), 4);
 }
 
 #[test]
@@ -87,13 +157,17 @@ fn an_ocean_edge_is_not_a_front() {
     let border: Vec<u8> = map.countries[1]
         .hexes
         .iter()
-        .filter(|&&h| map.hexes[h].neighbours.iter().any(|&x| map.hexes[x].country == 0))
+        .filter(|&&h| {
+            map.hexes[h]
+                .neighbours
+                .iter()
+                .any(|&x| map.hexes[x].country == 0)
+        })
         .map(|&h| map.hexes[h].number)
         .collect();
     let p = &mut content.map.countries[1];
     p.cities.retain(|n| !border.contains(n));
     p.ocean.extend(border);
-    let flooded = Map::build(&content, 2).unwrap();
-    assert!(flooded.fronts.is_empty());
-    assert!(flooded.hexes.iter().all(|c| c.kind != HexKind::Base && c.facing.is_none()));
+    // A printed front with no land border has nowhere to put its bases.
+    assert!(Map::build(&content, 2).is_err());
 }

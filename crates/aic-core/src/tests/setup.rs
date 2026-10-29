@@ -23,18 +23,41 @@ fn setup_places_the_printed_pieces() {
         for c in 0..2 {
             let p = piece(c);
             let nums = |f: &dyn Fn(usize) -> bool| -> BTreeSet<u8> {
-                m.countries[c].hexes.iter().filter(|&&h| f(h)).map(|&h| m.hexes[h].number).collect()
+                m.countries[c]
+                    .hexes
+                    .iter()
+                    .filter(|&&h| f(h))
+                    .map(|&h| m.hexes[h].number)
+                    .collect()
             };
             let corrupted = nums(&|h| kind(m, h) == HexKind::City && g.tokens(h, ADV_CUBE) > 0);
-            assert_eq!(corrupted, p.corrupted[..corrupt].iter().copied().collect(), "d{d} country {c}");
+            assert_eq!(
+                corrupted,
+                p.corrupted[..corrupt].iter().copied().collect(),
+                "d{d} country {c}"
+            );
             let stations = nums(&|h| g.tokens(h, STATION) > 0);
             assert_eq!(stations, p.stations.iter().copied().collect());
-            assert!(nums(&|h| g.tokens(h, STATION) > 0 && g.tokens(h, ADV_CUBE) == 0).is_empty(), "stations start corrupted");
-            assert_eq!(nums(&|h| g.tokens(h, FACTORY) > 0), p.factories.iter().copied().collect());
+            assert!(
+                nums(&|h| g.tokens(h, STATION) > 0 && g.tokens(h, ADV_CUBE) == 0).is_empty(),
+                "stations start corrupted"
+            );
+            assert_eq!(
+                nums(&|h| g.tokens(h, FACTORY) > 0),
+                p.factories.iter().copied().collect()
+            );
+            // Setup factories are neutral; each country's station holds a node.
+            assert!(nums(&|h| g.tokens(h, FACTORY) > 0
+                && g.hexes[h].tokens.keys().any(|k| k.starts_with("cube:")))
+            .is_empty());
+            assert_eq!(
+                nums(&|h| g.tokens(h, crate::modules::common::NODE) > 0),
+                p.stations.iter().copied().collect()
+            );
         }
         for s in 0..2 {
-            let want: Vec<usize> = piece(s).data_centres.iter().map(|&n| m.numbered(s, n)).collect();
-            let mut have = dcs_of(&g, s);
+            let want: Vec<usize> = vec![m.numbered(s, piece(s).presence)];
+            let mut have = presence_of(&g, s);
             have.sort();
             let mut want = want;
             want.sort();
@@ -42,7 +65,10 @@ fn setup_places_the_printed_pieces() {
             assert_eq!(g.resource(s, AMBASSADORS), 1);
             assert_eq!(g.resource(s, "credits"), 25);
         }
-        assert_eq!(total(&g, ADV_AMBASSADOR) + total(&g, TROOP) + total(&g, UNIT), 0);
+        assert_eq!(
+            total(&g, ADV_AMBASSADOR) + total(&g, TROOP) + total(&g, UNIT),
+            0
+        );
         assert_eq!(g.var(SUPPLY), supply, "d{d}");
         // The next adversary card is face up, from stage I.
         let next = g.pile(NEXT);

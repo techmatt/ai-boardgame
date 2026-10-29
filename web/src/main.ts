@@ -12,7 +12,7 @@ import {
   type LabelContext,
 } from './format';
 import {
-  boardDetails, cardChip, countriesHtml, countryName, legendHtml, pilesHtml, pipelineHtml, seatCardsHtml, seatValuesHtml,
+  boardDetails, countriesHtml, countryName, legendHtml, pilesHtml, pipelineHtml, seatCardsHtml, seatValuesHtml,
   statusHtml, trackStepDetails, varsHtml,
 } from './panels';
 import { Timeline, parseSeed, randomSeed, readRecord } from './session';
@@ -236,15 +236,11 @@ function renderSeats() {
     // The board the engine shows for this seat; content's board by config as a fallback.
     const fallback = aiBoard(config, seat.index);
     const ai = seat.board ?? (fallback && { name: fallback.name, text: fallback.text, innate: fallback.innate });
-    const slots = country?.slots.length
-      ? `<div class="row"><span class="what">card strip</span>${country.slots.map((s, i) => (s ? cardChip(s, `slot:${seat.country}:${i}`) : '<span class="slot">—</span>')).join('')}</div>`
-      : '';
     box.innerHTML = `
       <h3><span class="swatch"></span>Seat ${seat.index}${ai ? ` · <span class="board-name" data-board-seat="${seat.index}">${escapeHtml(ai.name)}</span>` : ''} <small title="country ${seat.country}">${escapeHtml(countryName(v, seat.country))}</small><span class="status">${status}</span></h3>
       ${ai?.innate ? `<div class="innate" title="${escapeHtml(ai.text ?? '')}"><b>${escapeHtml(ai.innate.name)}:</b> ${escapeHtml(ai.innate.text ?? '')}</div>` : ''}
       ${seatValuesHtml(v, seat.index)}
-      ${seatCardsHtml(v, seat.index)}
-      ${slots}`;
+      ${seatCardsHtml(v, seat.index)}`;
     if (mine.length) box.append(actionButtons(seat.index, mine));
     ui.seats.append(box);
   }
@@ -405,7 +401,6 @@ function details(t: HTMLElement | SVGElement): string | null {
     const key = rest.join(':');
     const pool: (CardView | null)[] =
       kind === 'seat' ? shown.seats[Number(a)]?.cards.find((g) => g.key === key)?.cards ?? []
-      : kind === 'slot' ? [shown.countries[Number(a)]?.slots[Number(key)] ?? null]
       : kind === 'country' ? shown.countries[Number(a)]?.cards.find((g) => g.key === key)?.cards ?? []
       : kind === 'pile' ? shown.piles.find((p) => p.key === [a, ...rest].join(':'))?.visible ?? []
       : [];

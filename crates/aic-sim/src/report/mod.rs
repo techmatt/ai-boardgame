@@ -17,7 +17,7 @@ mod tables;
 
 use std::collections::BTreeMap;
 
-use crate::experiment::{Cell, GameResult, Spec};
+use crate::experiment::{CardCounts, Cell, GameResult, Spec};
 
 pub use markdown::markdown;
 pub use records::{file_stem, prune_records, save_records, write_whole, SavedRecord};
@@ -32,7 +32,7 @@ pub struct Run<'a> {
     pub games: &'a [GameResult],
     pub sums: &'a [CellSummary],
     pub groups: &'a [GroupSummary],
-    pub cards: &'a BTreeMap<String, BTreeMap<String, [u32; 6]>>,
+    pub cards: &'a BTreeMap<String, BTreeMap<String, CardCounts>>,
     pub records: &'a [SavedRecord],
     pub wall_s: f64,
     pub threads: usize,

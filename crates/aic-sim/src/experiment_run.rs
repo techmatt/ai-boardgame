@@ -32,7 +32,8 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
         spec.closeness.every = n;
     }
     if let Some(keep) = &o.variants {
-        experiment::keep_variants(&mut spec, keep).unwrap_or_else(|e| die(&format!("--variants: {e}")));
+        experiment::keep_variants(&mut spec, keep)
+            .unwrap_or_else(|e| die(&format!("--variants: {e}")));
     }
     if o.quick {
         quick(&mut spec, o);
@@ -50,7 +51,8 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
     // --resume reads it back and plays only the rest.
     let stream_path = format!("{dir}/games.jsonl");
     let prior = if o.resume && std::path::Path::new(&stream_path).exists() {
-        experiment::read_stream(&stream_path, &spec, &cells).unwrap_or_else(|e| die(&format!("--resume: {e}")))
+        experiment::read_stream(&stream_path, &spec, &cells)
+            .unwrap_or_else(|e| die(&format!("--resume: {e}")))
     } else {
         Vec::new()
     };
@@ -94,7 +96,9 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
     let reports = |games: &mut Vec<experiment::GameResult>| {
         experiment::sort(games);
         let wall_s = start.elapsed().as_secs_f64();
-        write_reports(&dir, &spec, &cells, games, wall_s, o.threads, total, resumed)
+        write_reports(
+            &dir, &spec, &cells, games, wall_s, o.threads, total, resumed,
+        )
     };
     std::thread::scope(|s| {
         // Meanwhile, the report of the games finished so far, every
@@ -291,7 +295,11 @@ fn print_timing(games: &[experiment::GameResult], wall_s: f64, report_s: f64) {
         let line: Vec<String> = t
             .iter()
             .map(|(n, ms, calls)| {
-                format!("{n} {:.1}% ({calls} calls, {:.2} us each)", 100.0 * ms / agent, 1000.0 * ms / (*calls).max(1) as f64)
+                format!(
+                    "{n} {:.1}% ({calls} calls, {:.2} us each)",
+                    100.0 * ms / agent,
+                    1000.0 * ms / (*calls).max(1) as f64
+                )
             })
             .collect();
         eprintln!("search (of agents + probes): {}", line.join(", "));

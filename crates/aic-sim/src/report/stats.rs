@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 
 use crate::agents::AgentSpec;
-use crate::experiment::{Cell, GameResult, Spec};
+use crate::experiment::{CardCounts, Cell, GameResult, Spec};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CellSummary {
@@ -157,16 +157,16 @@ pub fn plays(g: &GameResult) -> [u32; 3] {
     let content = aic_core::content();
     let mut out = [0u32; 3];
     for (id, n) in &g.cards {
-        if n[3] == 0 {
+        if n.played == 0 {
             continue;
         }
-        out[0] += n[3];
+        out[0] += n.played;
         if let Some(d) = content.cards.iter().find(|d| d.id == *id) {
             if d.is_building() {
-                out[1] += n[3];
+                out[1] += n.played;
             }
             if d.tier == 2 {
-                out[2] += n[3];
+                out[2] += n.played;
             }
         }
     }
@@ -432,7 +432,11 @@ pub fn variant_diffs(spec: &Spec, cells: &[Cell], games: &[GameResult]) -> Vec<V
     };
     let mut out = Vec::new();
     for v in spec.variants.iter().skip(1) {
-        for (i, c) in cells.iter().enumerate().filter(|(_, c)| c.variant == v.name) {
+        for (i, c) in cells
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.variant == v.name)
+        {
             let l = c.agent.label();
             let Some(j) = find_cell(cells, &c.config_path, &base.name, c.difficulty, &l) else {
                 continue;
@@ -585,9 +589,12 @@ pub fn summarize(cells: &[Cell], games: &[GameResult]) -> Vec<CellSummary> {
                 win_supply_left: mean(won.iter().map(|g| g.margin.supply_left as f64)),
                 loss_blockers: mean(lost.iter().map(|g| g.margin.blockers as f64)),
                 loss_level: mean(lost.iter().map(|g| g.margin.level as f64)),
-                supply_left_mean: mean(gs.iter().map(|g| g.margin.supply_left as f64)).unwrap_or(0.0),
-                cities_corrupted_mean: mean(gs.iter().map(|g| g.margin.cities_corrupted_end as f64))
+                supply_left_mean: mean(gs.iter().map(|g| g.margin.supply_left as f64))
                     .unwrap_or(0.0),
+                cities_corrupted_mean: mean(
+                    gs.iter().map(|g| g.margin.cities_corrupted_end as f64),
+                )
+                .unwrap_or(0.0),
                 cities_aligned_mean: mean(gs.iter().map(|g| g.margin.cities_aligned_end as f64))
                     .unwrap_or(0.0),
                 winprob_by_round,
@@ -608,8 +615,7 @@ pub fn summarize(cells: &[Cell], games: &[GameResult]) -> Vec<CellSummary> {
                 build_distance: jaccard_mean(&sigs).unwrap_or(0.0),
                 build_distance_wins: jaccard_mean(&win_sigs),
                 cards_played_per_game: gs.iter().map(|g| plays(g)[0] as f64).sum::<f64>() / n,
-                buildings_played_per_game: gs.iter().map(|g| plays(g)[1] as f64).sum::<f64>()
-                    / n,
+                buildings_played_per_game: gs.iter().map(|g| plays(g)[1] as f64).sum::<f64>() / n,
                 tier2_played_per_game: gs.iter().map(|g| plays(g)[2] as f64).sum::<f64>() / n,
                 buildings_standing_per_game: gs
                     .iter()
@@ -745,19 +751,16 @@ pub fn groups(cells: &[Cell], sums: &[CellSummary], games: &[GameResult]) -> Vec
         .collect()
 }
 
-/// Per agent: card → [offered, drafted, kept, played], summed over cells.
+/// Per agent: card → its counts, summed over cells.
 pub fn card_table(
     cells: &[Cell],
     games: &[GameResult],
-) -> BTreeMap<String, BTreeMap<String, [u32; 6]>> {
-    let mut out: BTreeMap<String, BTreeMap<String, [u32; 6]>> = BTreeMap::new();
+) -> BTreeMap<String, BTreeMap<String, CardCounts>> {
+    let mut out: BTreeMap<String, BTreeMap<String, CardCounts>> = BTreeMap::new();
     for g in games {
         let t = out.entry(cells[g.cell].agent.label()).or_default();
         for (card, n) in &g.cards {
-            let e = t.entry(card.clone()).or_default();
-            for k in 0..6 {
-                e[k] += n[k];
-            }
+            *t.entry(card.clone()).or_default() += *n;
         }
     }
     out

@@ -1,10 +1,14 @@
 use super::*;
+use crate::modules::common::NODE;
 use crate::modules::{adversary, alignment};
 
 /// Stacks the Unity deck: `card` is drawn next, whatever the tier.
 fn next_unity(g: &mut GameState, card: &str) {
     for tier in [1, 2] {
-        g.piles.insert(format!("alignment.deck.unity.{tier}"), vec![card.to_string()]);
+        g.piles.insert(
+            format!("alignment.deck.unity.{tier}"),
+            vec![card.to_string()],
+        );
     }
 }
 
@@ -23,9 +27,13 @@ pub(super) fn give(rules: &Rules, g: &mut GameState) {
     act(rules, g, Action::Give { seat: 0, to: 1 });
 }
 
+/// No corrupted city and no node left (ambassadors and troops stay).
 fn uncorrupt_cities(rules: &Rules, g: &mut GameState) {
     for h in cities(&rules.map) {
         put(g, h, ADV_CUBE, 0);
+    }
+    for h in 0..rules.map.hexes.len() {
+        put(g, h, NODE, 0);
     }
 }
 
@@ -68,9 +76,9 @@ fn bar_levels_follow_the_unity_tips() {
         g.vars.insert("alignment.unity_tips".into(), tips);
         assert_eq!(alignment::bar_level(&w, &g), level, "{tips} tips");
     }
-    assert!(adversary::win_text(&w, 0).contains("no adversary ambassador or troop"));
-    assert!(adversary::win_text(&w, 1).contains("no adversary troop"));
-    assert_eq!(adversary::win_text(&w, 2), "win when no city is corrupted");
+    assert!(adversary::win_text(&w, 0).contains("node, adversary troop or adversary ambassador"));
+    assert!(adversary::win_text(&w, 1).contains("ambassadors no longer count"));
+    assert!(adversary::win_text(&w, 2).contains("no corrupted city or node"));
 }
 
 #[test]
@@ -86,6 +94,8 @@ fn the_board_clear_win_and_the_bar_easing() {
         (2, 1, 1, Some(TROOP), false),
         (5, 1, 1, Some(TROOP), true),
         (5, 1, 1, Some(ADV_CUBE), false),
+        (0, 1, 1, Some(NODE), false),
+        (5, 1, 1, Some(NODE), false),
     ];
     for &(tips, rule, stage, piece_left, wins) in cases {
         let (rules, mut g) = action_only(&[&format!("alignment.clear_win_stage={rule}")]);
@@ -96,12 +106,28 @@ fn the_board_clear_win_and_the_bar_easing() {
             put(&mut g, cities(&rules.map)[0], p, 1);
         }
         give(&rules, &mut g);
-        let won = g.outcome.as_ref().is_some_and(|o| o.won && o.reason == "purge");
-        assert_eq!(won, wins, "{tips} tips, rule {rule}, stage {stage}, {piece_left:?}");
+        let won = g
+            .outcome
+            .as_ref()
+            .is_some_and(|o| o.won && o.reason == "purge");
+        assert_eq!(
+            won, wins,
+            "{tips} tips, rule {rule}, stage {stage}, {piece_left:?}"
+        );
         if !wins {
             // The view says when the clear-board win starts to count.
-            let bar = rules.view(&g).globals.into_iter().find(|v| v.key == "alignment.bar").unwrap();
-            assert_eq!(bar.doc.contains("from adversary stage"), tips < 2 && stage < rule, "{}", bar.doc);
+            let bar = rules
+                .view(&g)
+                .globals
+                .into_iter()
+                .find(|v| v.key == "alignment.bar")
+                .unwrap();
+            assert_eq!(
+                bar.doc.contains("from adversary stage"),
+                tips < 2 && stage < rule,
+                "{}",
+                bar.doc
+            );
         }
     }
 }
@@ -140,14 +166,23 @@ fn the_antimatter_action_and_the_empty_undecided() {
         rules.apply_mut(&mut g, &a, None).unwrap();
         assert_eq!(g.resource(0, "antimatter"), am + 1);
         let moved = i64::from(from_unity);
-        assert_eq!((g.var("alignment.unity"), g.var("alignment.discord")), (2 - moved, moved), "{variant}");
+        assert_eq!(
+            (g.var("alignment.unity"), g.var("alignment.discord")),
+            (2 - moved, moved),
+            "{variant}"
+        );
         // Once a round per player.
         assert!(!rules.legal_actions(&g).contains(&a));
         assert!(rules.apply_mut(&mut g, &a, None).is_err());
-        assert!(rules.legal_actions(&g).contains(&Action::Antimatter { seat: 1 }));
+        assert!(rules
+            .legal_actions(&g)
+            .contains(&Action::Antimatter { seat: 1 }));
     }
     let (rules, g) = action_only(&["alignment.antimatter_discord=0"]);
-    assert!(rules.legal_actions(&g).iter().all(|a| !matches!(a, Action::Antimatter { .. })));
+    assert!(rules
+        .legal_actions(&g)
+        .iter()
+        .all(|a| !matches!(a, Action::Antimatter { .. })));
 }
 
 /// Discord tips escalate the adversary at 2 and 5; Momentum shrinks a
@@ -164,8 +199,16 @@ fn discord_tips_escalate_and_momentum_shrinks_buckets() {
     assert_eq!(g.var("adversary.escalation"), 1);
     let w = rules.world();
     assert!(adversary::at(&w, &g, 1) && !adversary::level(&w, 1));
-    assert_eq!(g.pile("alignment.resolved.discord").len() + g.pile("alignment.ongoing").len(), 1);
-    let d = rules.view(&g).globals.into_iter().find(|v| v.key == "adversary.difficulty").unwrap();
+    assert_eq!(
+        g.pile("alignment.resolved.discord").len() + g.pile("alignment.ongoing").len(),
+        1
+    );
+    let d = rules
+        .view(&g)
+        .globals
+        .into_iter()
+        .find(|v| v.key == "adversary.difficulty")
+        .unwrap();
     assert_eq!(d.value, 1);
 
     use crate::content::Side;

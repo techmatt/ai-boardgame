@@ -264,7 +264,10 @@ mod tests {
                         // Until the round ends or a bucket tips (a tip
                         // draws from a hidden Unity or Discord deck).
                         let tips = |s: &GameState| {
-                            (s.var("alignment.unity_tips"), s.var("alignment.discord_tips"))
+                            (
+                                s.var("alignment.unity_tips"),
+                                s.var("alignment.discord_tips"),
+                            )
                         };
                         if x.round == g.round && tips(&x) == tips(&g) && tips(&y) == tips(&g) {
                             assert_eq!(

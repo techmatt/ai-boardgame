@@ -1,20 +1,21 @@
-//! AI boards: which AI each seat plays, its two data-centre tracks, data
-//! centre placement, tier-2 unlock, credit production, starting resources
-//! and growth.
+//! AI boards: which AI each seat plays, its presence track (read from the
+//! board module, which owns presence), tier-2 unlock, income, credit
+//! production, starting resources and growth.
 
 use crate::action::Action;
-use crate::content::{AiBoard, Track};
-use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
+use crate::content::{AiBoard, Uncover};
+use crate::module::{
+    Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
+};
 use crate::state::GameState;
 use crate::view::{BoardView, CardView, InnateView, TrackMark, TrackStep, TrackView, ViewOut};
 
-use super::common::*;
-use super::{cards, effects};
+use super::{board, cards, effects};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "ai",
-    summary: "AI boards: tracks, data centres, growth, credit production, starting resources",
-    requires: &["cards", "adversary", "alignment", "threats"],
+    summary: "AI boards: the presence track, growth, income, credit production, starting resources",
+    requires: &["board"],
     variants: &[VariantDef {
         name: "boards",
         summary: "Each seat plays an AI board from content/ais.json",
@@ -35,93 +36,42 @@ pub fn board<'w>(w: &World<'w>, seat: usize) -> &'w AiBoard {
     &w.content.ais[list[seat % list.len()] as usize]
 }
 
-fn track_key(seat: usize, t: usize) -> String {
-    format!("ai.track.{seat}.{t}")
+/// Spaces uncovered on seat `s`'s presence track (the board module counts
+/// the tokens taken off it, the starting one included).
+pub fn uncovered(w: &World, g: &GameState, seat: usize) -> usize {
+    board::track_taken(g, seat).clamp(1, board(w, seat).presence.len())
 }
 
-/// Data centres taken off track `t` of seat `s` so far.
-pub fn track_pos(g: &GameState, seat: usize, t: usize) -> usize {
-    g.var(&track_key(seat, t)) as usize
-}
-
-/// A track's current value: its highest uncovered entry.
-pub fn track_value<'w>(w: &World<'w>, g: &GameState, seat: usize, t: usize) -> (&'w Track, usize) {
-    let tr = &board(w, seat).tracks[t];
-    (tr, track_pos(g, seat, t).min(tr.values.len() - 1))
-}
-
-/// Income from the AI tracks: `(resource, amount)` pairs, antimatter included.
+/// Income from the AI board and its presence track: `(resource, amount)`
+/// pairs (insight sets the round's insight; the rest arrive in upkeep).
 pub fn track_income(w: &World, g: &GameState, seat: usize) -> Vec<(String, i64)> {
-    let mut out = Vec::new();
-    for t in 0..2 {
-        let (tr, p) = track_value(w, g, seat, t);
-        out.push((tr.resource.clone(), tr.values[p].value));
-        if tr.values[p].antimatter > 0 {
-            out.push(("antimatter".to_string(), tr.values[p].antimatter));
-        }
+    let b = board(w, seat);
+    let mut out: Vec<(String, i64)> = b.income.clone();
+    for u in &b.presence[..uncovered(w, g, seat)] {
+        out.extend(u.income.iter().cloned());
     }
     out
 }
 
 /// Whether seat `s` has unlocked tier 2.
 pub fn tier2(w: &World, g: &GameState, seat: usize) -> bool {
-    (0..2).any(|t| {
-        let (tr, p) = track_value(w, g, seat, t);
-        tr.values[..=p].iter().any(|v| v.tier2)
-    })
-}
-
-/// Places one data centre for `seat`: off the left end of a track (players
-/// choose which), onto an empty open hex touching one of its data centres.
-/// Returns whether placed.
-pub fn place_data_centre(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> {
-    let w = cx.world;
-    let b = board(&w, seat);
-    let tracks: Vec<usize> = (0..2)
-        .filter(|&t| track_pos(g, seat, t) + 1 < b.tracks[t].values.len())
-        .collect();
-    let opts = tracks
+    board(w, seat).presence[..uncovered(w, g, seat)]
         .iter()
-        .map(|&t| {
-            let tr = &b.tracks[t];
-            let next = &tr.values[track_pos(g, seat, t) + 1];
-            opt(format!("{} track -> {}", tr.resource, next.value))
-        })
-        .collect();
-    let prompt = format!("Seat {seat}: take a data centre from which track?");
-    let Some(i) = cx.choose(seat, &prompt, opts)? else {
-        return Ok(false);
-    };
-    let t = tracks[i];
-    let hexes = dc_hexes(&w, g, seat);
-    let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
-    let prompt = format!("Seat {seat}: place the data centre on which hex?");
-    let Some(j) = cx.choose(seat, &prompt, opts)? else {
-        return Ok(false);
-    };
-    cx.add_key(g, track_key(seat, t), 1);
-    cx.add_tokens(g, hexes[j], &dc(seat), 1);
-    cx.tally(g, "ai.data_centres_placed", 1);
-    Ok(true)
+        .any(|u| u.tier2)
 }
 
-/// Where seat `s` may place a data centre: an empty open hex touching one
-/// of its own (with none left, any empty open hex in its starting country).
-pub fn dc_hexes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
-    let mine = dc(seat);
-    if dc_count(g, seat) == 0 {
-        let c = home_country(w, seat);
-        return w.map.countries[c].hexes.iter().copied().filter(|&h| buildable(w, g, h)).collect();
-    }
-    (0..g.hexes.len())
-        .filter(|&h| buildable(w, g, h) && w.map.hexes[h].neighbours.iter().any(|&x| g.tokens(x, &mine) > 0))
-        .collect()
-}
-
-/// Whether seat `s` has a data centre left on a track.
+/// Whether seat `s` has a presence token left on its track.
 pub fn can_place(w: &World, g: &GameState, seat: usize) -> bool {
-    let b = board(w, seat);
-    (0..2).any(|t| track_pos(g, seat, t) + 1 < b.tracks[t].values.len())
+    board::track_taken(g, seat) < board(w, seat).presence.len()
+}
+
+/// What uncovering a space gives, as a short label (`+1 compute, T2`).
+pub fn uncover_label(u: &Uncover) -> String {
+    let mut parts: Vec<String> = u.income.iter().map(|(r, n)| format!("+{n} {r}")).collect();
+    if u.tier2 {
+        parts.push("T2".into());
+    }
+    parts.join(", ")
 }
 
 #[derive(Debug)]
@@ -131,8 +81,14 @@ struct Ai {
 
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     let boards = b.list("boards")?;
-    if let Some(&x) = boards.iter().find(|&&x| x as usize >= b.world.content.ais.len()) {
-        return Err(format!("boards: no AI board {x} (content/ais.json has {})", b.world.content.ais.len()));
+    if let Some(&x) = boards
+        .iter()
+        .find(|&&x| x as usize >= b.world.content.ais.len())
+    {
+        return Err(format!(
+            "boards: no AI board {x} (content/ais.json has {})",
+            b.world.content.ais.len()
+        ));
     }
     Ok(Box::new(Ai {
         start_credits: b.int("start_credits")?,
@@ -184,39 +140,40 @@ impl Module for Ai {
         out.bookkeeping(&["ai.track."]);
         for s in 0..g.seats.len() {
             let b = board(w, s);
-            let tracks = (0..b.tracks.len().min(2))
-                .map(|t| {
-                    let (tr, p) = track_value(w, g, s, t);
-                    TrackView {
-                        label: format!("{} track", tr.resource),
-                        resource: tr.resource.clone(),
-                        steps: tr
-                            .values
+            let up = uncovered(w, g, s);
+            let tracks = vec![TrackView {
+                label: "presence track".into(),
+                resource: String::new(),
+                steps: b
+                    .presence
+                    .iter()
+                    .enumerate()
+                    .map(|(i, u)| {
+                        let mut marks: Vec<TrackMark> = u
+                            .income
                             .iter()
-                            .map(|v| {
-                                let mut marks = Vec::new();
-                                if v.tier2 {
-                                    marks.push(TrackMark {
-                                        key: "tier2".into(),
-                                        label: "T2".into(),
-                                        doc: "uncovering this unlocks tier 2".into(),
-                                    });
-                                }
-                                if v.antimatter > 0 {
-                                    marks.push(TrackMark {
-                                        key: "antimatter".into(),
-                                        label: format!("+{} AM", v.antimatter),
-                                        doc: format!("{} antimatter income while this is the current value", v.antimatter),
-                                    });
-                                }
-                                TrackStep { value: v.value, marks }
+                            .map(|(r, n)| TrackMark {
+                                key: r.clone(),
+                                label: format!("+{n} {r}"),
+                                doc: format!("+{n} {r} every round once uncovered"),
                             })
-                            .collect(),
-                        uncovered: p + 1,
-                        current: p,
-                    }
-                })
-                .collect();
+                            .collect();
+                        if u.tier2 {
+                            marks.push(TrackMark {
+                                key: "tier2".into(),
+                                label: "T2".into(),
+                                doc: "uncovering this unlocks tier 2".into(),
+                            });
+                        }
+                        TrackStep {
+                            value: i as i64 + 1,
+                            marks,
+                        }
+                    })
+                    .collect(),
+                uncovered: up,
+                current: up - 1,
+            }];
             let (hand, built) = (cards::hand(s), cards::built(s));
             let unique = b
                 .cards
@@ -230,7 +187,10 @@ impl Module for Ai {
                         "gone"
                     };
                     let (name, text) = match w.content.card_index(id) {
-                        Some(i) => (w.content.cards[i].name.clone(), w.content.cards[i].text.clone()),
+                        Some(i) => (
+                            w.content.cards[i].name.clone(),
+                            w.content.cards[i].text.clone(),
+                        ),
                         None => (id.clone(), String::new()),
                     };
                     CardView {
@@ -268,7 +228,14 @@ impl Module for Ai {
                 None,
                 "1 once this AI has unlocked tier 2",
             );
-            out.seat(s, "credit_production", "credit production", b.credits, None, "credits this AI board makes every round");
+            out.seat(
+                s,
+                "credit_production",
+                "credit production",
+                b.credits,
+                None,
+                "credits this AI board makes every round",
+            );
         }
     }
 }

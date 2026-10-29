@@ -71,7 +71,13 @@ pub fn totals() -> Option<Vec<(&'static str, f64, u64)>> {
     #[cfg(feature = "profile")]
     {
         let t = on::TOTAL.lock().expect("profile lock");
-        Some(PARTS.iter().zip(t.iter()).map(|(n, (ms, c))| (*n, *ms, *c)).collect())
+        Some(
+            PARTS
+                .iter()
+                .zip(t.iter())
+                .map(|(n, (ms, c))| (*n, *ms, *c))
+                .collect(),
+        )
     }
     #[cfg(not(feature = "profile"))]
     None

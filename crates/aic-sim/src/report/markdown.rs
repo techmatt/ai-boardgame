@@ -448,7 +448,10 @@ pub fn markdown(run: &Run) -> String {
             gkeys.push(k);
         }
     }
-    let wins2 = |s: &CellSummary| match (s.wins_2plus_buildings_played, s.wins_2plus_buildings_standing) {
+    let wins2 = |s: &CellSummary| match (
+        s.wins_2plus_buildings_played,
+        s.wins_2plus_buildings_standing,
+    ) {
         (Some(a), Some(b)) => format!("{} ({})", pct(a), pct(b)),
         _ => "–".into(),
     };
@@ -474,7 +477,9 @@ pub fn markdown(run: &Run) -> String {
                 }
             }
         } else {
-            let mut head = format!("| difficulty {d}: buildings / tier 2 / cards per game, wins with 2+ buildings |");
+            let mut head = format!(
+                "| difficulty {d}: buildings / tier 2 / cards per game, wins with 2+ buildings |"
+            );
             let mut sep = String::from("|---|");
             for (c, v) in &gkeys {
                 let _ = write!(head, " {}{} |", cfg(c), v);
@@ -541,17 +546,24 @@ pub fn markdown(run: &Run) -> String {
                 }
             };
             // In hand by keeping or drawing; unique AI cards start there.
-            let play = if n[2] + n[5] == 0 && n[0] == 0 {
-                format!("{:.2}/game", n[3] as f64 / games_of as f64)
+            let play = if n.kept + n.drawn == 0 && n.offered == 0 {
+                format!("{:.2}/game", n.played as f64 / games_of as f64)
             } else {
-                r(n[3], n[2] + n[5])
+                r(n.played, n.kept + n.drawn)
             };
-            let pos = if n[1] == 0 {
+            let pos = if n.drafted == 0 {
                 "–".to_string()
             } else {
-                format!("{:.1}", n[4] as f64 / n[1] as f64)
+                format!("{:.1}", n.pick_sum as f64 / n.drafted as f64)
             };
-            let _ = write!(row, " {} ({}) / {} / {} |", pos, n[0], r(n[2], n[0]), play);
+            let _ = write!(
+                row,
+                " {} ({}) / {} / {} |",
+                pos,
+                n.offered,
+                r(n.kept, n.offered),
+                play
+            );
         }
         let _ = writeln!(w, "{row}");
     }

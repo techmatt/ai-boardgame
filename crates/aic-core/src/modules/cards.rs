@@ -5,7 +5,9 @@
 
 use crate::action::Action;
 use crate::content::{CardDef, Passive};
-use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
+use crate::module::{
+    Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
+};
 use crate::rng::shuffle;
 use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
@@ -16,7 +18,7 @@ use super::{ai, alignment, effects};
 pub static DEF: ModuleDef = ModuleDef {
     id: "cards",
     summary: "Card decks, the draft, keeping cards, playing programs and buildings",
-    requires: &["ai", "adversary", "alignment", "threats", "economy", "board"],
+    requires: &["ai", "adversary", "alignment", "board"],
     variants: &[VariantDef {
         name: "draft",
         summary: "Terraforming Mars draft: choose a tier, take one card and pass the rest, then keep any at a price",
@@ -54,11 +56,23 @@ pub static DEF: ModuleDef = ModuleDef {
 };
 
 const PHASES: &[PhaseSpec] = &[
-    PhaseSpec::decision("tier", "players who have unlocked tier 2 choose which tier they are dealt from"),
+    PhaseSpec::decision(
+        "tier",
+        "players who have unlocked tier 2 choose which tier they are dealt from",
+    ),
     PhaseSpec::auto("deal", "deal each player their draft hand"),
-    PhaseSpec::decision("draft", "take one card and pass the rest to the next seat, until the hands are gone"),
-    PhaseSpec::decision("keep", "buy any drafted cards into your hand; the rest are discarded"),
-    PhaseSpec::decision("play", "play cards, use building abilities, draw with compute"),
+    PhaseSpec::decision(
+        "draft",
+        "take one card and pass the rest to the next seat, until the hands are gone",
+    ),
+    PhaseSpec::decision(
+        "keep",
+        "buy any drafted cards into your hand; the rest are discarded",
+    ),
+    PhaseSpec::decision(
+        "play",
+        "play cards, use building abilities, draw with compute",
+    ),
 ];
 
 pub fn hand(seat: usize) -> String {
@@ -129,7 +143,8 @@ pub fn discard(g: &mut GameState, cx: &mut Cx, card: &str, from: &str) {
         0 => String::new(),
         t => discard_pile(t),
     };
-    cx.move_card(g, card, from, &to, true).expect("card to discard is there");
+    cx.move_card(g, card, from, &to, true)
+        .expect("card to discard is there");
 }
 
 /// Standing effects that apply to seat `s`: its AI's innate rule and its
@@ -277,7 +292,8 @@ fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static s
         return Some("needs tags");
     }
     if g.resource(seat, "insight") < w.amount(&d.insight)
-        || g.resource(seat, "credits") + discount_room(w, g, seat, d).map_or(0, |(_, rate, k)| rate * k)
+        || g.resource(seat, "credits")
+            + discount_room(w, g, seat, d).map_or(0, |(_, rate, k)| rate * k)
             < play_cost(w, g, seat, d)
         || g.resource(seat, "antimatter") < w.amount(&d.antimatter)
     {
@@ -292,10 +308,19 @@ fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static s
 /// The AI's resource discount on card `d` for seat `s`: (resource, credits
 /// per unit, most units worth spending), if the AI has one that applies and
 /// the seat holds some of it.
-pub fn discount_room<'w>(w: &World<'w>, g: &GameState, seat: usize, d: &CardDef) -> Option<(&'w str, i64, i64)> {
+pub fn discount_room<'w>(
+    w: &World<'w>,
+    g: &GameState,
+    seat: usize,
+    d: &CardDef,
+) -> Option<(&'w str, i64, i64)> {
     let cost = play_cost(w, g, seat, d);
     ai::board(w, seat).discounts.iter().find_map(|x| {
-        let applies = if x.tag == "building" { d.is_building() } else { d.tags.contains(&x.tag) };
+        let applies = if x.tag == "building" {
+            d.is_building()
+        } else {
+            d.tags.contains(&x.tag)
+        };
         let have = g.resource(seat, &x.resource);
         if !applies || have <= 0 || x.rate <= 0 || cost <= 0 {
             return None;
@@ -373,7 +398,9 @@ impl Cards {
             shuffle(&mut cards, cx.rng(g, "cards"));
             cx.set_pile(g, &discard_pile(tier), Vec::new());
             cx.set_pile(g, &deck(tier), cards);
-            cx.note(None, || format!("Tier-{tier} discards reshuffled into the deck"));
+            cx.note(None, || {
+                format!("Tier-{tier} discards reshuffled into the deck")
+            });
         }
         g.pile(&deck(tier)).first().cloned()
     }
@@ -396,8 +423,11 @@ impl Cards {
             // Spend the AI's resource for credits: at least enough to afford it.
             let short = (credits - g.resource(seat, "credits")).max(0);
             let least = (short + rate - 1) / rate;
-            let opts = (least..=most).map(|k| opt(format!("spend {k} {resource}"))).collect();
-            let prompt = format!("Seat {seat}: spend how much {resource} at {rate} credit each on {id}?");
+            let opts = (least..=most)
+                .map(|k| opt(format!("spend {k} {resource}")))
+                .collect();
+            let prompt =
+                format!("Seat {seat}: spend how much {resource} at {rate} credit each on {id}?");
             let k = least + cx.choose(seat, &prompt, opts)?.unwrap_or(0) as i64;
             if k > 0 {
                 cx.add_resource(g, seat, resource, -k);
@@ -415,7 +445,8 @@ impl Cards {
                 let row = slotted(&w, g, seat);
                 if row.len() as i64 >= capacity(&w, g, seat) {
                     let opts = row.iter().map(|c| opt(c.clone())).collect();
-                    let prompt = format!("Seat {seat}: the building row is full. Discard which building?");
+                    let prompt =
+                        format!("Seat {seat}: the building row is full. Discard which building?");
                     if let Some(k) = cx.choose(seat, &prompt, opts)? {
                         discard(g, cx, &row[k], &built(seat));
                         cx.set_key(g, unpowered(seat, &row[k]), 0);
@@ -446,7 +477,10 @@ impl Module for Cards {
         }
         for s in 0..g.seats.len() {
             for id in &ai::board(&w, s).cards {
-                let selected = w.content.card_index(id).is_some_and(|i| self.cards.contains(&i));
+                let selected = w
+                    .content
+                    .card_index(id)
+                    .is_some_and(|i| self.cards.contains(&i));
                 let taken = (0..s).any(|o| g.pile(&hand(o)).contains(id));
                 if selected && !taken {
                     cx.move_card(g, id, "", &hand(s), false).unwrap();
@@ -536,7 +570,9 @@ impl Module for Cards {
                 }
             }
             3 => {
-                if g.resource(s, "credits") >= self.keep_price(g, s) || alignment::free_purchases(g) > 0 {
+                if g.resource(s, "credits") >= self.keep_price(g, s)
+                    || alignment::free_purchases(g) > 0
+                {
                     for id in g.pile(&drafted(s)) {
                         out.push(Action::Keep {
                             seat,
@@ -582,7 +618,10 @@ impl Module for Cards {
             (0, Action::Tier { .. })
                 | (2, Action::Draft { .. })
                 | (3, Action::Keep { .. })
-                | (4, Action::Play { .. } | Action::Use { .. } | Action::Draw { .. })
+                | (
+                    4,
+                    Action::Play { .. } | Action::Use { .. } | Action::Draw { .. }
+                )
         )
     }
 
@@ -605,7 +644,8 @@ impl Module for Cards {
                 cx.set_key(g, picked_key(s), 1);
                 if self.all_picked(g) {
                     let n = g.seats.len();
-                    let packets: Vec<Vec<String>> = (0..n).map(|p| g.pile(&packet(p)).to_vec()).collect();
+                    let packets: Vec<Vec<String>> =
+                        (0..n).map(|p| g.pile(&packet(p)).to_vec()).collect();
                     // As in Terraforming Mars, the direction alternates by round.
                     let step = if g.round % 2 == 1 { 1 } else { n - 1 };
                     for (p, cards) in packets.into_iter().enumerate() {
@@ -730,7 +770,11 @@ impl Module for Cards {
                 .collect();
             let label = format!("buildings {}/{}", slotted(w, g, s).len(), capacity(w, g, s));
             out.cards(s, "built", &label, row);
-            let pk: Vec<CardView> = g.pile(&packet(s)).iter().map(|id| card(id, "draft", None)).collect();
+            let pk: Vec<CardView> = g
+                .pile(&packet(s))
+                .iter()
+                .map(|id| card(id, "draft", None))
+                .collect();
             if !pk.is_empty() {
                 out.cards(s, "packet", "draft hand", pk);
             }
@@ -742,30 +786,78 @@ impl Module for Cards {
             if !dr.is_empty() {
                 out.cards(s, "drafted", "drafted (keep?)", dr);
             }
-            out.seat(s, "slots", "building slots", capacity(w, g, s), None, "building slots (AI board + expansions)");
+            out.seat(
+                s,
+                "slots",
+                "building slots",
+                capacity(w, g, s),
+                None,
+                "building slots (AI board + expansions)",
+            );
             for tag in crate::content::TAGS {
                 let n = tags(w, g, s, tag);
                 if n > 0 {
-                    out.seat(s, &format!("tag.{tag}"), &format!("{tag} tags"), n, None, "tags on your buildings");
+                    out.seat(
+                        s,
+                        &format!("tag.{tag}"),
+                        &format!("{tag} tags"),
+                        n,
+                        None,
+                        "tags on your buildings",
+                    );
                 }
             }
             let nd = g.var(&next_discount(s));
             if nd > 0 {
-                out.seat(s, "next_discount", "next building -", nd, None, "your next building this round costs this much less");
+                out.seat(
+                    s,
+                    "next_discount",
+                    "next building -",
+                    nd,
+                    None,
+                    "your next building this round costs this much less",
+                );
             }
             let t = g.var(&tier_key(s));
             if t > 0 {
-                out.seat(s, "draft_tier", "drafting tier", t, None, "the tier you are dealt from this round");
+                out.seat(
+                    s,
+                    "draft_tier",
+                    "drafting tier",
+                    t,
+                    None,
+                    "the tier you are dealt from this round",
+                );
             }
             if g.var(&civic_used(s)) > 0 {
-                out.seat(s, "civic_used", "civic shelter used", 1, None, "your Civic Shelter has saved a building this round");
+                out.seat(
+                    s,
+                    "civic_used",
+                    "civic shelter used",
+                    1,
+                    None,
+                    "your Civic Shelter has saved a building this round",
+                );
             }
         }
         // Per-seat markers: shown above as seat values, card status
         // (`unpowered`) or the draft piles (`picked`).
-        out.bookkeeping(&["cards.tier.", "cards.picked.", "cards.next_discount.", "cards.civic_used.", "cards.unpowered.", "cards.kept_round."]);
+        out.bookkeeping(&[
+            "cards.tier.",
+            "cards.picked.",
+            "cards.next_discount.",
+            "cards.civic_used.",
+            "cards.unpowered.",
+            "cards.kept_round.",
+        ]);
         for tier in [1u8, 2] {
-            out.pile(&format!("deck.{tier}"), &format!("Tier-{tier} deck"), None, g.pile(&deck(tier)).len(), Vec::new());
+            out.pile(
+                &format!("deck.{tier}"),
+                &format!("Tier-{tier} deck"),
+                None,
+                g.pile(&deck(tier)).len(),
+                Vec::new(),
+            );
             let d = g.pile(&discard_pile(tier));
             out.pile(
                 &format!("discard.{tier}"),

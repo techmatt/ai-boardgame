@@ -159,10 +159,10 @@
   "tags": [
    "cyber"
   ],
-  "text": "+1 compute each round; place 1 data centre.",
+  "text": "+1 compute each round; place 1 presence.",
   "effects": [
    {
-    "op": "place_data_centre",
+    "op": "place_presence",
     "count": 1
    }
   ],
@@ -210,7 +210,7 @@
    "cyber",
    "discord"
   ],
-  "text": "The adversary's spread places no ambassador on hexes holding your data centre.",
+  "text": "The adversary's spread places no ambassador on hexes holding your presence.",
   "passives": [
    {
     "op": "spread_shield"
@@ -227,7 +227,7 @@
   "tags": [
    "discord"
   ],
-  "text": "Once a round: pay 2 energy to remove 1 worth of adversary pieces (an ambassador) in one hex of a country where you have a data centre.",
+  "text": "Once a round: pay 2 energy to remove 1 worth of adversary pieces (an ambassador) in one hex of a country where you have a presence.",
   "ability": {
    "cost": [
     [
@@ -239,7 +239,7 @@
     {
      "op": "damage",
      "amount": 1,
-     "at": "data_centre_country"
+     "at": "presence_country"
     }
    ]
   }
@@ -273,7 +273,7 @@
   "tags": [
    "unity"
   ],
-  "text": "Once a round, prevent the first building destruction in a country where you have a data centre.",
+  "text": "Once a round, prevent the first building destruction in a country where you have a presence.",
   "passives": [
    {
     "op": "civic_shelter"
@@ -391,10 +391,10 @@
   "tags": [
    "cyber"
   ],
-  "text": "Gain 1 compute per data centre you have (max 4).",
+  "text": "Gain 1 compute per presence you have (max 4).",
   "effects": [
    {
-    "op": "gain_per_data_centre",
+    "op": "gain_per_presence",
     "resource": "compute",
     "max": 4
    }
@@ -410,10 +410,10 @@
   "tags": [
    "cyber"
   ],
-  "text": "Place 1 data centre.",
+  "text": "Place 1 presence.",
   "effects": [
    {
-    "op": "place_data_centre",
+    "op": "place_presence",
     "count": 1
    }
   ]
@@ -949,7 +949,7 @@
   "kind": "building",
   "cost": 6,
   "insight": 1,
-  "text": "Once a round, pay 1 energy to harden 2 buildings in a country where you have a data centre.",
+  "text": "Once a round, pay 1 energy to harden 2 buildings in a country where you have a presence.",
   "ability": {
    "cost": [
     [
@@ -961,7 +961,7 @@
     {
      "op": "harden",
      "count": 2,
-     "where": "data_centre_country"
+     "where": "presence_country"
     }
    ]
   },

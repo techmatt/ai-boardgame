@@ -2,7 +2,7 @@
 //!
 //! A client should not need code for each module. [`Rules::view`] turns a
 //! state into a fixed set of shapes (hexes with tokens, per-seat and
-//! per-country values, card groups, card slots, card piles, global values)
+//! per-country values, card groups, card piles, global values)
 //! and every module may add to them through [`Module::view`]. The engine
 //! fills in the generic parts itself, so a new module's tokens, resources
 //! and tracks show up without any view code; a module adds a `view` hook
@@ -38,8 +38,22 @@ pub struct View {
     pub globals: Vec<Value>,
     /// Ordered card piles (decks, discards, queues) modules show.
     pub piles: Vec<PileView>,
+    /// The standard actions modules publish, with their costs, so clients
+    /// label them without knowing the parameters.
+    pub standard: Vec<StandardView>,
     /// The open choice, if the rules are waiting for one.
     pub choice: Option<ChoiceView>,
+}
+
+/// A standard action (`Action::Standard { act }`) and its cost.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StandardView {
+    pub act: String,
+    pub energy: i64,
+    pub credits: i64,
+    pub hardware: i64,
+    /// What it does and costs, in words.
+    pub doc: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -81,6 +95,9 @@ pub struct HexView {
     /// For a military base, the country across its front.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facing: Option<u8>,
+    /// A printed industrial zone (where cities build factories).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub industrial: bool,
     /// Non-zero token stacks, by kind (sorted).
     pub tokens: Vec<Token>,
 }
@@ -102,8 +119,6 @@ pub struct CountryView {
     /// Display colour from `content/map.json`.
     pub colour: String,
     pub hexes: Vec<usize>,
-    /// The piece's card strip: a card per slot, if any.
-    pub slots: Vec<Option<CardView>>,
     /// Token totals over the country's hexes (`tokens.<kind>`), then what
     /// modules add.
     pub values: Vec<Value>,
@@ -261,6 +276,17 @@ impl ViewOut<'_> {
         }
     }
 
+    /// Publishes a standard action and its cost.
+    pub fn standard(&mut self, act: &str, energy: i64, credits: i64, hardware: i64, doc: &str) {
+        self.view.standard.push(StandardView {
+            act: act.to_string(),
+            energy,
+            credits,
+            hardware,
+            doc: doc.to_string(),
+        });
+    }
+
     /// A value of the whole game. One with the key of a `vars` track
     /// replaces that track's generic entry.
     pub fn global(&mut self, key: &str, label: &str, value: i64, max: Option<i64>, doc: &str) {
@@ -332,8 +358,13 @@ impl ViewOut<'_> {
     /// itself adds under such a key stays.
     pub fn bookkeeping(&mut self, keys: &[&str]) {
         let claimed = |k: &str| {
-            keys.iter()
-                .any(|p| if p.ends_with('.') { k.starts_with(p) } else { k == *p })
+            keys.iter().any(|p| {
+                if p.ends_with('.') {
+                    k.starts_with(p)
+                } else {
+                    k == *p
+                }
+            })
         };
         self.view
             .globals
@@ -369,22 +400,6 @@ fn upsert(values: &mut Vec<Value>, v: Value) {
 /// The parts of the view the engine fills in for every config.
 pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
     let content = crate::content();
-    let card = |id: &str, status: &str| match content.card_index(id) {
-        Some(i) => CardView {
-            id: id.to_string(),
-            name: content.cards[i].name.clone(),
-            text: content.cards[i].text.clone(),
-            status: status.to_string(),
-            cost: None,
-        },
-        None => CardView {
-            id: id.to_string(),
-            name: content.name_of(id).unwrap_or(id).to_string(),
-            text: String::new(),
-            status: status.to_string(),
-            cost: None,
-        },
-    };
     let engine = |key: String, label: &str, value: i64, doc: &str| Value {
         key,
         label: label.to_string(),
@@ -408,6 +423,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             number: cell.number,
             kind: cell.kind.name(),
             facing: cell.facing,
+            industrial: cell.industrial,
             tokens: h
                 .tokens
                 .iter()
@@ -448,11 +464,6 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
                 seat: c as u8,
                 colour: geo.colour.clone(),
                 hexes: geo.hexes.clone(),
-                slots: g.seats[c]
-                    .slots
-                    .iter()
-                    .map(|s| s.as_deref().map(|id| card(id, "slotted")))
-                    .collect(),
                 values: totals
                     .into_iter()
                     .map(|(k, n)| {
@@ -519,6 +530,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
         seats,
         globals,
         piles: Vec::new(),
+        standard: Vec::new(),
         choice: g.pending.as_ref().map(|p| ChoiceView {
             seat: p.ask.seat,
             prompt: p.ask.prompt.clone(),

@@ -235,7 +235,9 @@ pub fn parse_args() -> Options {
             die("--out needs a directory");
         }
     }
-    if (o.winprob.is_some() || o.closeness.is_some() || o.variants.is_some()) && o.command != "experiment" {
+    if (o.winprob.is_some() || o.closeness.is_some() || o.variants.is_some())
+        && o.command != "experiment"
+    {
         die("--winprob, --closeness and --variants need experiment");
     }
     if o.out.is_some() && o.command != "experiment" {

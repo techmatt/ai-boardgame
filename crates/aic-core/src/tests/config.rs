@@ -5,7 +5,33 @@ use crate::modules::board;
 fn the_shared_row_config_differs_only_in_the_threat_variant() {
     let a = Rules::new(&baseline()).unwrap();
     let b = Rules::new(&Config::from_json(SHARED_ROW).unwrap()).unwrap();
-    assert_eq!(a.config.diff(&b.config), ["threats.variant: countries -> shared_row"]);
+    assert_eq!(
+        a.config.diff(&b.config),
+        ["threats.variant: countries -> shared_row"]
+    );
+}
+
+/// `shared_row.json` is derived from the baseline, not tuned on its own: the
+/// file must be the baseline with the threat variant and the name changed,
+/// parameters and all, so a baseline edit can't leave it behind.
+#[test]
+fn the_shared_row_config_is_the_baseline_with_the_shared_row_threats() {
+    let mut derived = baseline();
+    derived.name = "shared_row".into();
+    let threats: Vec<&mut ModuleConfig> = derived
+        .modules
+        .iter_mut()
+        .filter(|m| m.module == "threats")
+        .collect();
+    assert_eq!(threats.len(), 1, "the baseline has one threats module");
+    for m in threats {
+        m.variant = "shared_row".into();
+    }
+    assert!(
+        derived == Config::from_json(SHARED_ROW).unwrap(),
+        "configs/shared_row.json has drifted from configs/baseline.json; regenerate it with \
+         `python scripts/configs/shared_row.py`"
+    );
 }
 
 #[test]
@@ -16,19 +42,38 @@ fn bad_configs_are_rejected_with_a_reason() {
         ("adversary.variant=nope", "unknown variant"),
         ("adversary.dificulty=3", "not a parameter"),
         ("adversary.difficulty=5", "outside"),
-        ("board.war=0,2", "outside"),
+        ("board.clock=0,4", "outside"),
         ("threats.per_country=1,2", "expected an integer"),
         ("ai.boards=7", "no AI board 7"),
         ("adversary.stage_cards=3,4", "give 3 counts"),
         ("adversary.stage_cards=9,4,3", "stage 1 has only"),
         ("alignment.unity_ease=5,2", "give tip counts"),
-        ("threats=off", "needs module threats"),
+        ("alignment=off", "needs module alignment"),
         ("board=off", "needs module board"),
     ];
+    // 016: `requires` lists only the modules whose parameters a module reads,
+    // so the optional ones can be switched off whole.
+    for o in ["threats=off", "cards=off", "economy=off"] {
+        let mut c = baseline();
+        c.apply_override(o).unwrap();
+        let r = Rules::new(&c).unwrap_or_else(|e| panic!("{o}: {e}"));
+        let mut g = r.new_game(3);
+        let mut legal = Vec::new();
+        for _ in 0..400 {
+            if g.is_over() {
+                break;
+            }
+            r.legal_actions_into(&g, &mut legal);
+            let a = legal[0].clone();
+            r.apply_mut(&mut g, &a, None).unwrap();
+        }
+    }
     for (o, want) in cases {
         let mut c = baseline();
         c.apply_override(o).unwrap();
-        let err = Rules::new(&c).err().unwrap_or_else(|| panic!("{o} was accepted"));
+        let err = Rules::new(&c)
+            .err()
+            .unwrap_or_else(|| panic!("{o} was accepted"));
         assert!(err.contains(want), "{o}: {err}");
     }
     fn module<'a>(c: &'a mut Config, id: &str) -> &'a mut ModuleConfig {
@@ -36,7 +81,10 @@ fn bad_configs_are_rejected_with_a_reason() {
     }
     let mut c = baseline();
     module(&mut c, "adversary").params.remove("difficulty");
-    assert!(Rules::new(&c).err().unwrap().contains("adversary.difficulty: missing"));
+    assert!(Rules::new(&c)
+        .err()
+        .unwrap()
+        .contains("adversary.difficulty: missing"));
     let mut c = baseline();
     module(&mut c, "cards").cards.push("nope".into());
     assert!(Rules::new(&c).err().unwrap().contains("unknown card"));
@@ -54,11 +102,11 @@ fn bad_configs_are_rejected_with_a_reason() {
 
 #[test]
 fn list_parameters_accept_a_single_integer() {
-    let rules = Rules::new(&baseline_with(&["ai.boards=1", "board.war=1"])).unwrap();
+    let rules = Rules::new(&baseline_with(&["ai.boards=1", "board.clock=2"])).unwrap();
     let params = |m: &str| rules.config.module(m).unwrap().params.clone();
     assert_eq!(params("ai")["boards"], ParamValue::List(vec![1]));
-    assert_eq!(params("board")["war"], ParamValue::List(vec![1]));
-    // Every seat now plays the Protector, and every round is a war round.
+    assert_eq!(params("board")["clock"], ParamValue::List(vec![2]));
+    // Every seat now plays the Protector, and every round is a war step only.
     let w = rules.world();
     assert_eq!(modules::ai::board(&w, 0).id, "protector");
     assert_eq!(modules::ai::board(&w, 1).id, "protector");
@@ -66,7 +114,10 @@ fn list_parameters_accept_a_single_integer() {
     g.piles.remove(CURRENT);
     for r in 1..=5 {
         g.round = r;
-        assert!(board::war_round(&w, &g), "round {r}");
+        assert!(
+            board::war_round(&w, &g) && !board::production_round(&w, &g),
+            "round {r}"
+        );
     }
 }
 
@@ -84,7 +135,10 @@ fn config_hash_is_stable_and_ignores_the_name() {
     let mut implicit = baseline();
     implicit.round.clear();
     let r = Rules::new(&implicit).unwrap();
-    assert_eq!(&r.config.round[..3], ["board.act", "board.bases", "board.war"]);
+    assert_eq!(
+        &r.config.round[..3],
+        ["board.act", "board.bases", "board.war"]
+    );
     let tuned = baseline_with(&["adversary.difficulty=3"]);
     assert_ne!(Rules::new(&tuned).unwrap().config_hash, rules.config_hash);
 }
@@ -93,7 +147,11 @@ fn config_hash_is_stable_and_ignores_the_name() {
 fn tunables_list_every_module_parameter() {
     let rules = Rules::new(&baseline()).unwrap();
     let t = rules.tunables();
-    let find = |k: &str| t.iter().find(|x| x.key == k).unwrap_or_else(|| panic!("{k} missing"));
+    let find = |k: &str| {
+        t.iter()
+            .find(|x| x.key == k)
+            .unwrap_or_else(|| panic!("{k} missing"))
+    };
     for k in [
         "board.start_corrupted",
         "board.city_energy",
@@ -111,12 +169,17 @@ fn tunables_list_every_module_parameter() {
     ] {
         assert_eq!(find(k).kind, "int", "{k}");
     }
-    for k in ["board.war", "adversary.stage_cards", "alignment.unity_ease", "ai.boards"] {
+    for k in [
+        "board.clock",
+        "adversary.stage_cards",
+        "alignment.unity_ease",
+        "ai.boards",
+    ] {
         assert_eq!(find(k).kind, "list", "{k}");
     }
-    let war = find("board.war");
-    assert_eq!((war.min, war.max), (0, 1));
-    assert_eq!(war.value, ParamValue::List(vec![0, 1, 0, 1, 0, 1, 1, 1]));
+    let clock = find("board.clock");
+    assert_eq!((clock.min, clock.max), (0, 3));
+    assert_eq!(clock.value, ParamValue::List(vec![1, 2, 1, 2, 1, 3]));
     // One per declared parameter: no duplicates.
     let keys: BTreeSet<&str> = t.iter().map(|x| x.key.as_str()).collect();
     assert_eq!(keys.len(), t.len());

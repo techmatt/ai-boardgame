@@ -1,7 +1,6 @@
 {
  "piece": {
-  "size": 4,
-  "card_slots": 3
+  "size": 4
  },
  "layouts": [
   {
@@ -18,7 +17,8 @@
      ],
      "colour": "#efe4b0"
     }
-   ]
+   ],
+   "fronts": []
   },
   {
    "countries": 2,
@@ -45,6 +45,12 @@
      ],
      "colour": "#ffaec9"
     }
+   ],
+   "fronts": [
+    [
+     0,
+     1
+    ]
    ]
   },
   {
@@ -83,6 +89,20 @@
      ],
      "colour": "#99d9ea"
     }
+   ],
+   "fronts": [
+    [
+     0,
+     1
+    ],
+    [
+     0,
+     2
+    ],
+    [
+     1,
+     2
+    ]
    ]
   },
   {
@@ -132,6 +152,24 @@
      ],
      "colour": "#b5e61d"
     }
+   ],
+   "fronts": [
+    [
+     0,
+     1
+    ],
+    [
+     1,
+     2
+    ],
+    [
+     2,
+     3
+    ],
+    [
+     3,
+     0
+    ]
    ]
   }
  ],
@@ -154,14 +192,17 @@
    "stations": [
     4
    ],
+   "industry": [
+    2,
+    8,
+    11,
+    13
+   ],
    "factories": [
     2,
     8
    ],
-   "data_centres": [
-    9,
-    10
-   ],
+   "presence": 9,
    "project": {
     "name": "Tidal Grid",
     "cubes": 7,
@@ -191,14 +232,17 @@
    "stations": [
     12
    ],
+   "industry": [
+    3,
+    14,
+    9,
+    16
+   ],
    "factories": [
     3,
     14
    ],
-   "data_centres": [
-    6,
-    2
-   ],
+   "presence": 6,
    "project": {
     "name": "Polar Compute Array",
     "cubes": 7,
@@ -226,14 +270,17 @@
    "stations": [
     14
    ],
+   "industry": [
+    1,
+    6,
+    9,
+    15
+   ],
    "factories": [
     1,
     6
    ],
-   "data_centres": [
-    11,
-    12
-   ],
+   "presence": 11,
    "project": {
     "name": "Mountain Fusion Works",
     "cubes": 7,
@@ -263,14 +310,17 @@
    "stations": [
     12
    ],
+   "industry": [
+    7,
+    13,
+    3,
+    8
+   ],
    "factories": [
     7,
     13
    ],
-   "data_centres": [
-    5,
-    9
-   ],
+   "presence": 5,
    "project": {
     "name": "Delta Seawall",
     "cubes": 7,

@@ -7,7 +7,9 @@
 
 use crate::action::Action;
 use crate::content::{AlignOp, AlignmentCard, Passive, Side};
-use crate::module::{Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
+use crate::module::{
+    Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
+};
 use crate::rng::shuffle;
 use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
@@ -38,7 +40,7 @@ const PHASES: &[PhaseSpec] = &[
 pub static DEF: ModuleDef = ModuleDef {
     id: "alignment",
     summary: "The Alignment track (Sway, the Undecided, Unity and Discord buckets that tip into cards), and winning and losing",
-    requires: &["adversary", "ai", "board", "cards", "threats"],
+    requires: &["adversary", "ai", "board"],
     variants: &[
         VariantDef {
             name: "tug",
@@ -75,7 +77,9 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     for name in ["unity_ease", "discord_escalate"] {
         let v = b.list(name)?;
         if v.is_empty() || v.iter().any(|&x| x < 1) || v.windows(2).any(|p| p[0] > p[1]) {
-            return Err(format!("alignment.{name}: give tip counts of 1 or more, in order"));
+            return Err(format!(
+                "alignment.{name}: give tip counts of 1 or more, in order"
+            ));
         }
     }
     Ok(Box::new(Alignment))
@@ -150,7 +154,10 @@ fn used_key(seat: usize) -> String {
 }
 
 fn card<'w>(w: &World<'w>, id: &str) -> &'w AlignmentCard {
-    &w.content.alignment[w.content.alignment_index(id).expect("alignment card in content")]
+    &w.content.alignment[w
+        .content
+        .alignment_index(id)
+        .expect("alignment card in content")]
 }
 
 /// Sway a side's bucket holds before it tips (Momentum applied).
@@ -296,11 +303,17 @@ impl Alignment {
                 }
                 cx.set_pile(g, &resolved(side), Vec::new());
                 for tier in [1u8, 2] {
-                    let mut ids: Vec<String> = back.iter().filter(|id| card(&w, id).tier == tier).cloned().collect();
+                    let mut ids: Vec<String> = back
+                        .iter()
+                        .filter(|id| card(&w, id).tier == tier)
+                        .cloned()
+                        .collect();
                     shuffle(&mut ids, cx.rng(g, "alignment"));
                     cx.set_pile(g, &deck(side, tier), ids);
                 }
-                cx.note(None, || format!("The resolved {} cards are shuffled back", side.name()));
+                cx.note(None, || {
+                    format!("The resolved {} cards are shuffled back", side.name())
+                });
             }
         }
         None
@@ -316,10 +329,14 @@ impl Alignment {
             let c = card(&w, &id);
             if c.ongoing {
                 cx.move_card(g, &id, &from, ONGOING, false).unwrap();
-                cx.note(None, || format!("{} ({}) is now in play: {}", c.name, side.name(), c.text));
+                cx.note(None, || {
+                    format!("{} ({}) is now in play: {}", c.name, side.name(), c.text)
+                });
             } else {
                 cx.move_card(g, &id, &from, &resolved(side), true).unwrap();
-                cx.note(None, || format!("{} ({}) resolves: {}", c.name, side.name(), c.text));
+                cx.note(None, || {
+                    format!("{} ({}) resolves: {}", c.name, side.name(), c.text)
+                });
                 for op in &c.effects {
                     resolve(g, cx, op)?;
                 }
@@ -337,7 +354,12 @@ impl Alignment {
             let esc = reached(w.list("alignment.discord_escalate"), tips);
             if esc > g.var(adversary::ESCALATION) {
                 cx.set_key(g, adversary::ESCALATION.into(), esc);
-                cx.note(None, || format!("Discord escalates the adversary (difficulty {})", adversary::difficulty(&w, g)));
+                cx.note(None, || {
+                    format!(
+                        "Discord escalates the adversary (difficulty {})",
+                        adversary::difficulty(&w, g)
+                    )
+                });
             }
         }
         Ok(())
@@ -405,7 +427,10 @@ impl Module for Alignment {
         let w = cx.world;
         let s = a.seat() as usize;
         let n = w.int("alignment.antimatter_discord");
-        if n <= 0 || w.variant("alignment") == Some("off") || g.var(&used_key(s)) >= w.int("alignment.antimatter_uses") {
+        if n <= 0
+            || w.variant("alignment") == Some("off")
+            || g.var(&used_key(s)) >= w.int("alignment.antimatter_uses")
+        {
             return Err(Halt::Illegal("no antimatter action left this round".into()));
         }
         cx.add_key(g, used_key(s), 1);
@@ -418,7 +443,11 @@ impl Module for Alignment {
     fn after(&self, g: &mut GameState, cx: &mut Cx) -> Res {
         let w = cx.world;
         // Full buckets tip, Discord first; a tip's card can fill a bucket again.
-        let tips = if w.variant("alignment") == Some("off") { 0 } else { 64 };
+        let tips = if w.variant("alignment") == Some("off") {
+            0
+        } else {
+            64
+        };
         'tips: for _ in 0..tips {
             for side in [Side::Discord, Side::Unity] {
                 if g.var(bucket(side)) >= capacity(&w, g, side) {
@@ -448,7 +477,10 @@ impl Module for Alignment {
                 g,
                 true,
                 "purge",
-                format!("the adversary fell under the bar for {} Unity tips", g.var(tips_key(Side::Unity))),
+                format!(
+                    "the adversary fell under the bar for {} Unity tips",
+                    g.var(tips_key(Side::Unity))
+                ),
             );
         }
         Ok(())
@@ -457,7 +489,13 @@ impl Module for Alignment {
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
         let seats = g.seats.len() as i64;
         let total = w.int("alignment.undecided_per_player") * seats;
-        out.global("undecided", "the Undecided", g.var(UNDECIDED), Some(total), "Sway not yet in either bucket");
+        out.global(
+            "undecided",
+            "the Undecided",
+            g.var(UNDECIDED),
+            Some(total),
+            "Sway not yet in either bucket",
+        );
         out.global(
             "unity",
             "Unity bucket",
@@ -495,21 +533,59 @@ impl Module for Alignment {
         if level == 0 && g.var(adversary::STAGE) < stage {
             text += &format!(" (from adversary stage {stage})");
         }
-        out.global("bar", "clear-board bar", level, Some(w.list("alignment.unity_ease").len() as i64), &text);
+        out.global(
+            "bar",
+            "clear-board bar",
+            level,
+            Some(w.list("alignment.unity_ease").len() as i64),
+            &text,
+        );
         let cities = (0..g.hexes.len()).filter(|&h| is_city(w, h)).count() as i64;
-        let bad = (0..g.hexes.len()).filter(|&h| is_city(w, h) && corrupted(g, h)).count() as i64;
-        out.global("corrupted_cities", "corrupted cities", bad, Some(cities), "players lose when every city is corrupted");
+        let bad = (0..g.hexes.len())
+            .filter(|&h| is_city(w, h) && corrupted(g, h))
+            .count() as i64;
+        out.global(
+            "corrupted_cities",
+            "corrupted cities",
+            bad,
+            Some(cities),
+            "players lose when every city is corrupted",
+        );
         if w.int("alignment.unity_win") > 0 {
-            out.global("unity_win", "Unity tips to win", w.int("alignment.unity_win"), None, "this many Unity tips win outright");
+            out.global(
+                "unity_win",
+                "Unity tips to win",
+                w.int("alignment.unity_win"),
+                None,
+                "this many Unity tips win outright",
+            );
         }
         if g.var(INCOME_BONUS) > 0 {
-            out.global("income_bonus", "Unity income bonus", g.var(INCOME_BONUS), None, "credit income every player has from Unity cards");
+            out.global(
+                "income_bonus",
+                "Unity income bonus",
+                g.var(INCOME_BONUS),
+                None,
+                "credit income every player has from Unity cards",
+            );
         }
         if g.var(INSIGHT_BONUS) > 0 {
-            out.global("insight_bonus", "Unity insight bonus", g.var(INSIGHT_BONUS), None, "insight every player gains each round from Unity cards");
+            out.global(
+                "insight_bonus",
+                "Unity insight bonus",
+                g.var(INSIGHT_BONUS),
+                None,
+                "insight every player gains each round from Unity cards",
+            );
         }
         if g.var(FREE_LEFT) > 0 {
-            out.global("free_purchases", "free purchases", g.var(FREE_LEFT), None, "card purchases that are free");
+            out.global(
+                "free_purchases",
+                "free purchases",
+                g.var(FREE_LEFT),
+                None,
+                "card purchases that are free",
+            );
         }
         let show = |id: &str, status: &str| {
             let c = card(w, id);
@@ -542,7 +618,13 @@ impl Module for Alignment {
             );
         }
         let on = g.pile(ONGOING);
-        out.pile("ongoing", "Ongoing cards", None, on.len(), on.iter().map(|id| show(id, "ongoing")).collect());
+        out.pile(
+            "ongoing",
+            "Ongoing cards",
+            None,
+            on.len(),
+            on.iter().map(|id| show(id, "ongoing")).collect(),
+        );
         out.bookkeeping(&["alignment.used."]);
         let uses = w.int("alignment.antimatter_uses");
         if w.int("alignment.antimatter_discord") > 0 {

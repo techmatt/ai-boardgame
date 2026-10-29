@@ -24,7 +24,14 @@ const AIS_JSON: &str = include_str!("../../../content/ais.json");
 const ALIGNMENT_JSON: &str = include_str!("../../../content/alignment.json");
 
 /// Every content file, in hashing order.
-const FILES: [&str; 6] = [MAP_JSON, CARDS_JSON, THREATS_JSON, ADVERSARY_JSON, AIS_JSON, ALIGNMENT_JSON];
+const FILES: [&str; 6] = [
+    MAP_JSON,
+    CARDS_JSON,
+    THREATS_JSON,
+    ADVERSARY_JSON,
+    AIS_JSON,
+    ALIGNMENT_JSON,
+];
 
 /// Player resources, in display order.
 pub const RESOURCES: [&str; 5] = ["credits", "compute", "energy", "antimatter", "insight"];
@@ -91,13 +98,11 @@ pub struct MapContent {
     pub countries: Vec<CountryPiece>,
 }
 
-/// The country piece: a `size` x `size` rhombus of hexes with a strip of
-/// `card_slots` slots for per-country cards.
+/// The country piece: a `size` x `size` rhombus of hexes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PieceDef {
     pub size: u8,
-    pub card_slots: u8,
 }
 
 /// Where the pieces go for a given number of countries. Piece `i` is country `i`.
@@ -106,6 +111,10 @@ pub struct PieceDef {
 pub struct LayoutDef {
     pub countries: u8,
     pub pieces: Vec<PiecePlacement>,
+    /// The fronts, printed on the tiles: pairs of countries sharing a long
+    /// edge. Pieces touching only at the middle of the map are not fronts.
+    #[serde(default)]
+    pub fronts: Vec<[u8; 2]>,
 }
 
 /// A placed piece covers `anchor + i*axes[0] + j*axes[1]` for `i, j` in
@@ -158,9 +167,12 @@ pub struct CountryPiece {
     pub ocean: Vec<u8>,
     /// Research stations at setup (they start corrupted).
     pub stations: Vec<u8>,
+    /// Printed industrial zones: open hexes next to a city where factories go.
+    pub industry: Vec<u8>,
+    /// Industrial zones holding a factory at setup (neutral).
     pub factories: Vec<u8>,
-    /// Where the starting data centres of the player who starts here go.
-    pub data_centres: Vec<u8>,
+    /// Where the starting presence of the player who starts here goes.
+    pub presence: u8,
     /// The corp's megaproject card.
     pub project: Project,
 }
@@ -277,10 +289,10 @@ pub struct Ability {
 pub enum DamageAt {
     /// Any hex holding adversary ambassadors or troops.
     Any,
-    /// A hex within your reach (1 of one of your data centres).
+    /// A hex within your reach (1 of one of your presence).
     Reach,
-    /// A hex in a country where you have a data centre.
-    DataCentreCountry,
+    /// A hex in a country where you have a presence.
+    PresenceCountry,
 }
 
 /// Which country a placement may go to.
@@ -288,7 +300,7 @@ pub enum DamageAt {
 #[serde(rename_all = "snake_case")]
 pub enum CountryRule {
     Any,
-    DataCentreCountry,
+    PresenceCountry,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -306,52 +318,100 @@ pub enum Cond {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Effect {
-    Gain { resource: String, amount: i64 },
-    /// 1 of `resource` per data centre you have on the board, up to `max`.
-    GainPerDataCentre { resource: String, max: i64 },
+    Gain {
+        resource: String,
+        amount: i64,
+    },
+    /// 1 of `resource` per presence you have on the board, up to `max`.
+    GainPerPresence {
+        resource: String,
+        max: i64,
+    },
     /// Choose another player for the `other_gain` / `transfer` that follow.
     ChoosePlayer,
-    OtherGain { resource: String, amount: i64 },
+    OtherGain {
+        resource: String,
+        amount: i64,
+    },
     /// Give up to `max` of `resource` to the chosen player; they gain
     /// `bonus` more if you gave any.
-    Transfer { resource: String, max: i64, bonus: i64 },
+    Transfer {
+        resource: String,
+        max: i64,
+        bonus: i64,
+    },
     /// Convert up to `max` of `from` into `rate` of `to` each.
-    Convert { from: String, to: String, max: i64, rate: i64 },
-    PlaceDataCentre { count: i64 },
+    Convert {
+        from: String,
+        to: String,
+        max: i64,
+        rate: i64,
+    },
+    PlacePresence {
+        count: i64,
+    },
     /// Remove adversary pieces in one hex, `amount` worth: an ambassador
     /// costs 1, a troop `board.troop_health`.
-    Damage { amount: i64, at: DamageAt },
+    Damage {
+        amount: i64,
+        at: DamageAt,
+    },
     /// `amount` worth of removal in each hex of one country holding adversary pieces.
-    DamageCountry { amount: i64 },
+    DamageCountry {
+        amount: i64,
+    },
     /// Remove every adversary ambassador and troop in one hex.
     DestroyAll,
     /// Remove every adversary ambassador in one country; sway 1 toward Unity per `unity_per` removed.
-    RemoveAmbassadorsCountry { unity_per: i64 },
+    RemoveAmbassadorsCountry {
+        unity_per: i64,
+    },
     /// Build a factory on an empty open hex touching a city.
     BuildFactory,
     /// Take the adversary cube off up to `amount` corrupted cities or
     /// stations, one at a time (`one_country`: all in the first one's country).
-    Cleanse { amount: i64, one_country: bool },
+    Cleanse {
+        amount: i64,
+        one_country: bool,
+    },
     /// Put `count` hardening tokens on buildings in one country.
-    Harden { count: i64, #[serde(rename = "where")] in_country: CountryRule },
+    Harden {
+        count: i64,
+        #[serde(rename = "where")]
+        in_country: CountryRule,
+    },
     /// Move up to `max` of your ambassadors (from your supply or the board)
     /// onto pieces within your reach, one at a time.
-    MoveAmbassadors { max: i64 },
+    MoveAmbassadors {
+        max: i64,
+    },
     /// Gain `count` player ambassadors into your supply.
-    GainAmbassadors { count: i64 },
+    GainAmbassadors {
+        count: i64,
+    },
     /// In one country, buildings can't be destroyed this round.
     Shelter,
     /// The next `count` adversary cards are shown.
-    Peek { count: i64 },
+    Peek {
+        count: i64,
+    },
     /// One threat needs `amount` less of each resource.
-    Jam { amount: i64 },
+    Jam {
+        amount: i64,
+    },
     CounterThreat,
     /// Sway `amount` toward Unity (module `alignment`).
-    Unity { amount: i64 },
+    Unity {
+        amount: i64,
+    },
     /// Every player gains `amount` insight next round.
-    NextRoundInsight { amount: i64 },
+    NextRoundInsight {
+        amount: i64,
+    },
     /// Your next building this round costs `amount` less.
-    NextBuildingDiscount { amount: i64 },
+    NextBuildingDiscount {
+        amount: i64,
+    },
     If {
         cond: Cond,
         then: Vec<Effect>,
@@ -364,28 +424,58 @@ pub enum Effect {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Passive {
-    Income { resource: String, amount: i64 },
+    Income {
+        resource: String,
+        amount: i64,
+    },
     /// `1` per `per` of your `tag` tags, up to `max`.
-    IncomePerTag { resource: String, tag: String, per: i64, max: i64 },
+    IncomePerTag {
+        resource: String,
+        tag: String,
+        per: i64,
+        max: i64,
+    },
     /// `amount` if you have at least `count` `tag` tags.
-    IncomeIfTags { resource: String, tag: String, count: i64, amount: i64 },
-    BuildingDiscount { amount: i64 },
+    IncomeIfTags {
+        resource: String,
+        tag: String,
+        count: i64,
+        amount: i64,
+    },
+    BuildingDiscount {
+        amount: i64,
+    },
     /// You may use the Harden standard action.
     HardenAction,
-    Slots { amount: i64 },
+    Slots {
+        amount: i64,
+    },
     /// Gain this when a threat you paid toward is countered.
-    Logistics { resource: String, amount: i64 },
+    Logistics {
+        resource: String,
+        amount: i64,
+    },
     /// Extra Sway toward Unity when you remove an adversary troop.
-    UnityBonus { amount: i64 },
+    UnityBonus {
+        amount: i64,
+    },
     /// When you give insight, the receiver also gains this.
-    GiveBonus { resource: String, amount: i64 },
-    /// The adversary's spread places no ambassador on hexes holding your data centre.
+    GiveBonus {
+        resource: String,
+        amount: i64,
+    },
+    /// The adversary's spread places no ambassador on hexes holding your presence.
     SpreadShield,
     /// Once a round, prevent the first building destruction in a country
-    /// where you have a data centre.
+    /// where you have a presence.
     CivicShelter,
     /// In upkeep, convert `amount` `from` into `gain` `to` (if you have it).
-    ConvertUpkeep { from: String, amount: i64, to: String, gain: i64 },
+    ConvertUpkeep {
+        from: String,
+        amount: i64,
+        to: String,
+        gain: i64,
+    },
 }
 
 // ---------- threats ----------
@@ -422,20 +512,30 @@ pub enum Spot {
 pub enum ThreatOp {
     /// `count` adversary ambassadors from the supply, each onto a piece of
     /// kind `at` in scope (players choose each).
-    Ambassadors { at: Spot, count: i64 },
+    Ambassadors {
+        at: Spot,
+        count: i64,
+    },
     /// `count` adversary troops, each onto a factory in scope (players
     /// choose), or with no factory onto a city.
-    Troop { count: i64 },
+    Troop {
+        count: i64,
+    },
     /// One research station in scope that is not corrupted becomes
     /// corrupted (players choose).
     FlipStation,
     /// The clean city in scope with the most adversary ambassadors (ties:
     /// lower hex number) becomes corrupted.
     CorruptCity,
-    /// Each player with a data centre in scope loses `amount` of `resource`.
-    PlayersLose { resource: String, amount: i64 },
+    /// Each player with a presence in scope loses `amount` of `resource`.
+    PlayersLose {
+        resource: String,
+        amount: i64,
+    },
     /// A round marker on the country, read by production.
-    Flag { name: RoundFlag },
+    Flag {
+        name: RoundFlag,
+    },
     /// Each player in scope discards `cards` cards or pays `amount`
     /// `resource` (their choice).
     Requisition {
@@ -448,7 +548,9 @@ pub enum ThreatOp {
     /// else one of theirs on the board).
     LoseAmbassador,
     /// Sway `amount` toward Discord.
-    Discord { amount: i64 },
+    Discord {
+        amount: i64,
+    },
     /// The adversary builds now (everywhere).
     Build,
     DiscardMostExpensive,
@@ -612,8 +714,12 @@ pub struct AiBoard {
     /// Resources this AI may spend as credits on some cards.
     #[serde(default)]
     pub discounts: Vec<Discount>,
-    /// Two tracks, each covered by data centres except the first value.
-    pub tracks: Vec<Track>,
+    /// Income every round before the presence track adds to it.
+    #[serde(default)]
+    pub income: Vec<Cost>,
+    /// The presence track: one space per presence token. The first token
+    /// starts on the board, so the first space is uncovered from setup.
+    pub presence: Vec<Uncover>,
     pub growth: Vec<Growth>,
     /// Unique cards, in hand at the start.
     pub cards: Vec<String>,
@@ -641,24 +747,16 @@ pub struct Innate {
     pub passives: Vec<Passive>,
 }
 
+/// A presence-track space: what placing its token uncovers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Track {
-    /// The income this track sets: `insight`, `credits` or `energy`.
-    pub resource: String,
-    pub values: Vec<TrackValue>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct TrackValue {
-    pub value: i64,
-    /// Uncovering this value unlocks tier 2.
+pub struct Uncover {
+    /// Income every round once uncovered (insight raises the round's insight).
+    #[serde(default)]
+    pub income: Vec<Cost>,
+    /// Uncovering this space unlocks tier 2.
     #[serde(default)]
     pub tier2: bool,
-    /// Antimatter income while this is the track's current value.
-    #[serde(default)]
-    pub antimatter: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -702,7 +800,12 @@ impl Content {
             alignment: p("alignment.json", alignment)?,
             card_ix: BTreeMap::new(),
         };
-        c.card_ix = c.cards.iter().enumerate().map(|(i, d)| (d.id.clone(), i)).collect();
+        c.card_ix = c
+            .cards
+            .iter()
+            .enumerate()
+            .map(|(i, d)| (d.id.clone(), i))
+            .collect();
         c.check()?;
         Ok(c)
     }
@@ -719,7 +822,9 @@ impl Content {
             .chain(self.alignment.iter().map(|a| &a.id));
         for id in all {
             if !ids.insert(id.as_str()) {
-                return Err(format!("content: duplicate id {id:?} (ids are unique across all content)"));
+                return Err(format!(
+                    "content: duplicate id {id:?} (ids are unique across all content)"
+                ));
             }
         }
         for c in &self.cards {
@@ -733,14 +838,27 @@ impl Content {
                 check_effects(&a.effects, &what)?;
             }
             if !c.is_building()
-                && (!c.passives.is_empty() || c.ability.is_some() || !c.upkeep.is_empty() || c.slotless)
+                && (!c.passives.is_empty()
+                    || c.ability.is_some()
+                    || !c.upkeep.is_empty()
+                    || c.slotless)
             {
-                return Err(format!("card {:?}: only buildings have passives, abilities or upkeep", c.id));
+                return Err(format!(
+                    "card {:?}: only buildings have passives, abilities or upkeep",
+                    c.id
+                ));
             }
             if c.tier > 2 || (c.tier == 0) != c.unique.is_some() {
-                return Err(format!("card {:?}: tier 0 exactly for unique cards, else 1 or 2", c.id));
+                return Err(format!(
+                    "card {:?}: tier 0 exactly for unique cards, else 1 or 2",
+                    c.id
+                ));
             }
-            for (r, _) in c.upkeep.iter().chain(c.ability.iter().flat_map(|a| &a.cost)) {
+            for (r, _) in c
+                .upkeep
+                .iter()
+                .chain(c.ability.iter().flat_map(|a| &a.cost))
+            {
                 resource(r, &what)?;
             }
         }
@@ -754,9 +872,8 @@ impl Content {
             }
             for op in &t.effects {
                 match op {
-                    ThreatOp::PlayersLose { resource: r, .. } | ThreatOp::Requisition { resource: r, .. } => {
-                        resource(r, &what)?
-                    }
+                    ThreatOp::PlayersLose { resource: r, .. }
+                    | ThreatOp::Requisition { resource: r, .. } => resource(r, &what)?,
                     _ => {}
                 }
             }
@@ -768,22 +885,34 @@ impl Content {
         }
         for a in &self.alignment {
             if !(1..=2).contains(&a.tier) || a.effects.is_empty() {
-                return Err(format!("alignment card {:?}: tier 1 or 2 and an effect", a.id));
+                return Err(format!(
+                    "alignment card {:?}: tier 1 or 2 and an effect",
+                    a.id
+                ));
             }
         }
         for b in &self.ais {
-            if b.tracks.len() != 2 || b.tracks.iter().any(|t| t.values.is_empty()) {
-                return Err(format!("AI board {:?}: two non-empty tracks", b.id));
+            if b.presence.is_empty() {
+                return Err(format!("AI board {:?}: a presence track", b.id));
             }
             for c in &b.cards {
                 match self.card_index(c) {
                     Some(i) if self.cards[i].unique.as_deref() == Some(b.id.as_str()) => {}
-                    _ => return Err(format!("AI board {:?}: {c:?} is not a card unique to it", b.id)),
+                    _ => {
+                        return Err(format!(
+                            "AI board {:?}: {c:?} is not a card unique to it",
+                            b.id
+                        ))
+                    }
                 }
             }
             let what = format!("AI board {:?}", b.id);
-            for t in &b.tracks {
-                resource(&t.resource, &what)?;
+            for (r, _) in b
+                .income
+                .iter()
+                .chain(b.presence.iter().flat_map(|u| u.income.iter()))
+            {
+                resource(r, &what)?;
             }
             for d in &b.discounts {
                 resource(&d.resource, &what)?;
@@ -799,20 +928,41 @@ impl Content {
         let size = self.map.piece.size;
         let n = size as usize * size as usize;
         for (i, p) in self.map.countries.iter().enumerate() {
-            let lists = [&p.cities, &p.corrupted, &p.ocean, &p.stations, &p.factories, &p.data_centres];
-            if lists.iter().flat_map(|l| l.iter()).any(|&h| h == 0 || h as usize > n) {
+            let start = vec![p.presence];
+            let lists = [
+                &p.cities,
+                &p.corrupted,
+                &p.ocean,
+                &p.stations,
+                &p.industry,
+                &start,
+            ];
+            if lists
+                .iter()
+                .flat_map(|l| l.iter())
+                .any(|&h| h == 0 || h as usize > n)
+            {
                 return Err(format!("country piece {i}: hex numbers are 1-{n}"));
             }
             if p.corrupted.iter().any(|c| !p.cities.contains(c)) {
-                return Err(format!("country piece {i}: corrupted cities must be cities"));
+                return Err(format!(
+                    "country piece {i}: corrupted cities must be cities"
+                ));
             }
-            let built: Vec<u8> = [&p.stations, &p.factories, &p.data_centres]
+            if p.factories.iter().any(|f| !p.industry.contains(f)) {
+                return Err(format!(
+                    "country piece {i}: setup factories go on industrial zones"
+                ));
+            }
+            let built: Vec<u8> = [&p.stations, &p.industry, &start]
                 .iter()
                 .flat_map(|l| l.iter().copied())
                 .collect();
             for (k, &h) in built.iter().enumerate() {
                 if p.kind_at(h) != HexKind::Open || built[..k].contains(&h) {
-                    return Err(format!("country piece {i}: buildings go on open hexes, one per hex (#{h})"));
+                    return Err(format!(
+                        "country piece {i}: buildings go on open hexes, one per hex (#{h})"
+                    ));
                 }
             }
             for (r, _) in &p.project.benefit {
@@ -828,7 +978,10 @@ impl Content {
                 ));
             }
             if l.countries as usize > self.map.countries.len() {
-                return Err(format!("layout for {} countries: not enough country pieces", l.countries));
+                return Err(format!(
+                    "layout for {} countries: not enough country pieces",
+                    l.countries
+                ));
             }
             for p in &l.pieces {
                 let d = (p.axes[0].index() + 6 - p.axes[1].index()) % 6;
@@ -910,14 +1063,16 @@ fn check_effects(effects: &[Effect], what: &str) -> Result<(), String> {
     for e in effects {
         match e {
             Effect::Gain { resource: r, .. }
-            | Effect::GainPerDataCentre { resource: r, .. }
+            | Effect::GainPerPresence { resource: r, .. }
             | Effect::OtherGain { resource: r, .. }
             | Effect::Transfer { resource: r, .. } => seat_resource(r, what)?,
             Effect::Convert { from, to, .. } => {
                 resource(from, what)?;
                 resource(to, what)?;
             }
-            Effect::If { then, otherwise, .. } => {
+            Effect::If {
+                then, otherwise, ..
+            } => {
                 check_effects(then, what)?;
                 check_effects(otherwise, what)?;
             }
@@ -934,7 +1089,16 @@ fn check_passives(passives: &[Passive], what: &str) -> Result<(), String> {
             Passive::Income { resource: r, .. }
             | Passive::Logistics { resource: r, .. }
             | Passive::GiveBonus { resource: r, .. } => resource(r, what)?,
-            Passive::IncomePerTag { resource: r, tag: t, .. } | Passive::IncomeIfTags { resource: r, tag: t, .. } => {
+            Passive::IncomePerTag {
+                resource: r,
+                tag: t,
+                ..
+            }
+            | Passive::IncomeIfTags {
+                resource: r,
+                tag: t,
+                ..
+            } => {
                 resource(r, what)?;
                 tag(t, what)?;
             }
