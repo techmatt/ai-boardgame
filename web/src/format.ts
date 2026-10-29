@@ -1,6 +1,6 @@
 // Labels and colours for engine data. Generic: any action, event or token kind gets a
-// readable label without code here; known action types, card ids, threat ids and
-// growth options get their content names.
+// readable label without code here; known action types, card ids, threat ids, growth
+// options and the board's standard actions get their content names (and costs).
 
 import { aiBoard, cardName, param, threatName, type Action, type Config, type GameEvent, type Hex, type View } from './engine';
 
@@ -71,9 +71,35 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       const n = cx.config ? param(cx.config, 'alignment', 'antimatter_discord') : undefined;
       return `+1 antimatter${typeof n === 'number' ? ` (${n} Sway → Discord)` : ' (Sway → Discord)'}`;
     }
+    case 'standard': {
+      const s = STANDARD[String(a.act)];
+      if (!s) return `standard: ${words(String(a.act))}`;
+      const n = (k: string) => {
+        const v = cx.config ? param(cx.config, 'board', k) : undefined;
+        return typeof v === 'number' ? v : undefined;
+      };
+      const costs = s.cost.map(([k, what]) => [n(k), what] as const).filter(([v]) => v !== undefined && v > 0).map(([v, what]) => `${v} ${what}`);
+      return `${s.label}${costs.length ? ` (${costs.join(', ')})` : ''}`;
+    }
+    case 'sell': {
+      const n = cx.config ? param(cx.config, 'board', 'sell_credits') : undefined;
+      return `sell ${card}${typeof n === 'number' ? ` (+${n} credits)` : ''}`;
+    }
   }
   return null;
 }
+
+/** The board's standard actions (`{"type":"standard","act":...}`): label and cost params. */
+const STANDARD: Record<string, { label: string; cost: [string, string][] }> = {
+  data_centre: { label: 'place a data centre', cost: [['dc_energy', 'energy'], ['dc_credits', 'credits']] },
+  factory: { label: 'build a factory', cost: [['build_energy', 'energy'], ['build_credits', 'credits']] },
+  station: { label: 'build a research station', cost: [['build_energy', 'energy'], ['build_credits', 'credits']] },
+  remove: { label: 'remove an adversary ambassador', cost: [['remove_energy', 'energy']] },
+  move: { label: 'move an ambassador', cost: [['move_energy', 'energy']] },
+  ambassador: { label: 'gain an ambassador', cost: [['ambassador_credits', 'credits']] },
+  align: { label: 'align a city', cost: [['align_energy', 'energy']] },
+  harden: { label: 'harden a building', cost: [['harden_credits', 'credits']] },
+};
 
 /**
  * "seat 1: play Fab Line". The seat is left out with `withSeat` false, and the
@@ -117,14 +143,15 @@ export function choiceKey(a: Action): string {
 
 // ---------- colours ----------
 
-/** Terrain fills: four distinct, light enough for tokens on top. */
-export const TERRAIN: Record<string, { fill: string; label: string }> = {
-  urban: { fill: '#c9cfdc', label: 'urban' },
-  industrial: { fill: '#e2c08f', label: 'industrial' },
-  network: { fill: '#9fd6d2', label: 'network' },
-  frontier: { fill: '#c4dc9a', label: 'frontier' },
+/** Hex fills by what the hex is (`HexView.kind`): distinct, light enough for tokens on top. */
+export const KINDS: Record<string, { fill: string; label: string }> = {
+  city: { fill: '#c3c8d4', label: 'city' },
+  base: { fill: '#d6c49a', label: 'military base' },
+  open: { fill: '#dbe8c6', label: 'open land' },
+  ocean: { fill: '#a9cfea', label: 'ocean' },
 };
-export const terrainFill = (t: string) => TERRAIN[t]?.fill ?? '#e4e0d8';
+export const kindFill = (k: string) => KINDS[k]?.fill ?? '#e4e0d8';
+export const kindName = (k: string) => KINDS[k]?.label ?? words(k);
 
 /** A `#rrggbb` colour mixed toward black by `k` (0..1). */
 export function darken(hex: string, k: number): string {
@@ -151,33 +178,46 @@ export function strong(hex: string): string {
   return `hsl(${Math.round((h * 60 + 360) % 360)} 70% 42%)`;
 }
 
+/** The adversary's colour: its owner cubes, its ambassadors, its cubes on megaprojects. */
+export const ADVERSARY_COLOUR = '#5b1a8c';
+
 // Token colours: chosen colours for the kinds the board draws, every other kind
-// hashed to a hue.
+// hashed to a hue. Seat-owned kinds (`cube:<seat>`, `dc:<seat>`, `ambassador:<seat>`) are
+// drawn in the seat's colour on the board; this is their fallback.
 const KNOWN: Record<string, string> = {
-  population: '#2f4b7c',
+  'cube:adversary': ADVERSARY_COLOUR,
+  'ambassador:adversary': ADVERSARY_COLOUR,
+  troop: '#2a0d3d',
   factory: '#7a5230',
-  data_centre: '#37474f',
-  drone: '#ef5350',
-  outpost: '#c62828',
-  foundry: '#6d0000',
-  corruption: '#4a148c',
-  fortify: '#8d6e63',
-  blight: '#5b2a86',
+  station: '#00796b',
+  unit: '#455a64',
+  harden: '#607d8b',
 };
 
 export function tokenColour(kind: string): string {
   if (KNOWN[kind]) return KNOWN[kind];
-  if (kind.startsWith('processor:')) return '#1f6feb';
-  if (kind.startsWith('defense:')) return '#1565c0';
+  if (/^(cube|dc|ambassador):\d+$/.test(kind)) return '#37474f';
   let h = 0;
   for (const c of kind) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return `hsl(${h % 360} 65% 38%)`;
 }
 
-/** "processor:1" → "processor (seat 1)": a readable token name. */
+const TOKEN_NAMES: Record<string, string> = {
+  cube: 'owner cube',
+  dc: 'data centre',
+  ambassador: 'ambassador',
+  station: 'research station',
+  troop: 'adversary troop',
+  unit: 'corp unit',
+  harden: 'hardening token',
+};
+
+/** "dc:1" → "data centre (seat 1)", "cube:adversary" → "owner cube (adversary)". */
 export function tokenName(kind: string): string {
-  const [base, seat] = kind.split(':');
-  return seat !== undefined ? `${words(base)} (seat ${seat})` : words(base);
+  const [base, owner] = kind.split(':');
+  const name = TOKEN_NAMES[base] ?? words(base);
+  if (owner === undefined) return name;
+  return owner === 'adversary' ? `${name} (adversary${base === 'cube' ? ': corrupted' : ''})` : `${name} (seat ${owner})`;
 }
 
 export function escapeHtml(s: string): string {

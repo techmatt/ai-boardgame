@@ -77,10 +77,11 @@ pub struct HexView {
     pub neighbours: Vec<usize>,
     /// The printed hex number (1-16 on its piece), for tie-breaks.
     pub number: u8,
-    /// `urban`, `industrial`, `network` or `frontier`.
-    pub terrain: &'static str,
-    /// A printed uplink, where the adversary enters.
-    pub uplink: bool,
+    /// What the hex is: `city`, `base`, `open` or `ocean`.
+    pub kind: &'static str,
+    /// For a military base, the country across its front.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub facing: Option<u8>,
     /// Non-zero token stacks, by kind (sorted).
     pub tokens: Vec<Token>,
 }
@@ -413,8 +414,8 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             piece_pos: cell.piece_pos,
             neighbours: cell.neighbours.clone(),
             number: cell.number,
-            terrain: cell.terrain.name(),
-            uplink: cell.uplink,
+            kind: cell.kind.name(),
+            facing: cell.facing,
             tokens: h
                 .tokens
                 .iter()

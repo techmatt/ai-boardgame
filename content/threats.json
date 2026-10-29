@@ -1,25 +1,41 @@
 [
  {
-  "id": "conscription",
-  "name": "Conscription",
+  "id": "requisition",
+  "name": "Requisition",
   "tier": 1,
-  "text": "Each hex with an outpost gains 1 drone.",
+  "text": "Each player here discards 2 cards or pays 4 credits.",
   "counter": [
    [
-    "energy",
-    2
+    "insight",
+    1
    ]
   ],
   "effects": [
    {
-    "op": "add_piece",
-    "piece": "drone",
-    "at": {
-     "has": [
-      "outpost"
-     ]
-    },
-    "amount": 1
+    "op": "requisition",
+    "resource": "credits",
+    "amount": 4,
+    "cards": 2
+   }
+  ]
+ },
+ {
+  "id": "commandeer",
+  "name": "Commandeer",
+  "tier": 1,
+  "text": "Each player here discards 1 card or pays 3 energy.",
+  "counter": [
+   [
+    "credits",
+    3
+   ]
+  ],
+  "effects": [
+   {
+    "op": "requisition",
+    "resource": "energy",
+    "amount": 3,
+    "cards": 1
    }
   ]
  },
@@ -27,7 +43,7 @@
   "id": "supply_raid",
   "name": "Supply raid",
   "tier": 1,
-  "text": "Each player loses 3 credits.",
+  "text": "Each player with a data centre here loses 3 credits.",
   "counter": [
    [
     "credits",
@@ -43,32 +59,10 @@
   ]
  },
  {
-  "id": "drone_surge",
-  "name": "Drone surge",
+  "id": "blackout",
+  "name": "Blackout",
   "tier": 1,
-  "text": "Each uplink gains 1 drone.",
-  "counter": [
-   [
-    "compute",
-    2
-   ]
-  ],
-  "effects": [
-   {
-    "op": "add_piece",
-    "piece": "drone",
-    "at": {
-     "uplink": true
-    },
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "blockade",
-  "name": "Blockade",
-  "tier": 1,
-  "text": "Factories next to adversary pieces produce nothing this round.",
+  "text": "Cities here produce no energy this round.",
   "counter": [
    [
     "compute",
@@ -78,41 +72,7 @@
   "effects": [
    {
     "op": "flag",
-    "name": "blockade"
-   }
-  ]
- },
- {
-  "id": "forward_base",
-  "name": "Forward base",
-  "tier": 1,
-  "text": "One drone on the lowest-numbered occupied uplink becomes an outpost.",
-  "counter": [
-   [
-    "energy",
-    3
-   ]
-  ],
-  "effects": [
-   {
-    "op": "upgrade_uplink"
-   }
-  ]
- },
- {
-  "id": "panic",
-  "name": "Panic",
-  "tier": 1,
-  "text": "1 population next to adversary pieces flees to an adjacent hex without them (players choose); with nowhere to go, it is lost.",
-  "counter": [
-   [
-    "insight",
-    1
-   ]
-  ],
-  "effects": [
-   {
-    "op": "panic"
+    "name": "blackout"
    }
   ]
  },
@@ -120,7 +80,7 @@
   "id": "sabotage",
   "name": "Sabotage",
   "tier": 1,
-  "text": "Processors on data centres next to adversary pieces produce nothing this round.",
+  "text": "Data centres here produce no compute this round.",
   "counter": [
    [
     "compute",
@@ -139,35 +99,74 @@
   ]
  },
  {
-  "id": "fortify",
-  "name": "Fortify",
+  "id": "infiltration",
+  "name": "Infiltration",
   "tier": 1,
-  "text": "Each foundry gains 1 defense this round.",
+  "text": "2 adversary ambassadors land on player buildings here (players choose each).",
   "counter": [
    [
-    "credits",
+    "energy",
     3
    ]
   ],
   "effects": [
    {
-    "op": "add_piece",
-    "piece": "fortify",
-    "at": {
-     "has": [
-      "foundry"
-     ]
-    },
-    "amount": 1,
-    "per": "foundry"
+    "op": "ambassadors",
+    "at": "player_buildings",
+    "count": 2
    }
   ]
  },
  {
-  "id": "requisition",
-  "name": "Requisition",
+  "id": "agitators",
+  "name": "Agitators",
   "tier": 1,
-  "text": "Each player discards 1 card or pays 3 credits.",
+  "text": "2 adversary ambassadors land on clean cities here (players choose each).",
+  "counter": [
+   [
+    "credits",
+    2
+   ],
+   [
+    "compute",
+    1
+   ]
+  ],
+  "effects": [
+   {
+    "op": "ambassadors",
+    "at": "clean_cities",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "id": "orbital_strike",
+  "name": "Orbital strike",
+  "tier": 1,
+  "text": "An adversary troop lands on a factory here (players choose); with no factory, on a city.",
+  "counter": [
+   [
+    "energy",
+    2
+   ],
+   [
+    "credits",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "troop",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "defection",
+  "name": "Defection",
+  "tier": 1,
+  "text": "Each player here loses an ambassador (from supply, else from the board); sway 1 toward Discord.",
   "counter": [
    [
     "insight",
@@ -176,45 +175,36 @@
   ],
   "effects": [
    {
-    "op": "requisition",
-    "resource": "credits",
-    "amount": 3
-   }
-  ]
- },
- {
-  "id": "patrol",
-  "name": "Patrol",
-  "tier": 1,
-  "text": "Each hex with a drone and population loses 1 population.",
-  "counter": [
-   [
-    "energy",
-    2
-   ],
-   [
-    "credits",
-    2
-   ]
-  ],
-  "effects": [
+    "op": "lose_ambassador"
+   },
    {
-    "op": "remove_population",
-    "at": {
-     "has": [
-      "drone",
-      "population"
-     ]
-    },
+    "op": "discord",
     "amount": 1
    }
   ]
  },
  {
-  "id": "total_war",
-  "name": "Total war",
+  "id": "station_seizure",
+  "name": "Station seizure",
   "tier": 2,
-  "text": "Every hex with a foundry ravages, whatever its terrain.",
+  "text": "A research station here that is not corrupted becomes corrupted (players choose).",
+  "counter": [
+   [
+    "antimatter",
+    1
+   ]
+  ],
+  "effects": [
+   {
+    "op": "flip_station"
+   }
+  ]
+ },
+ {
+  "id": "overrun",
+  "name": "Overrun",
+  "tier": 2,
+  "text": "The clean city here with the most adversary ambassadors becomes corrupted (ties: lower hex number).",
   "counter": [
    [
     "antimatter",
@@ -223,53 +213,7 @@
   ],
   "effects": [
    {
-    "op": "ravage",
-    "at": {
-     "has": [
-      "foundry"
-     ]
-    }
-   }
-  ]
- },
- {
-  "id": "cascade",
-  "name": "Cascade",
-  "tier": 2,
-  "text": "Each corrupted hex cascades to one adjacent hex (players choose).",
-  "counter": [
-   [
-    "antimatter",
-    1
-   ],
-   [
-    "energy",
-    3
-   ]
-  ],
-  "effects": [
-   {
-    "op": "cascade",
-    "at": {
-     "corrupted": true
-    }
-   }
-  ]
- },
- {
-  "id": "orbital_strike",
-  "name": "Orbital strike",
-  "tier": 2,
-  "text": "Destroy the factory with the most adjacent population (ties: lower hex number).",
-  "counter": [
-   [
-    "antimatter",
-    1
-   ]
-  ],
-  "effects": [
-   {
-    "op": "destroy_factory"
+    "op": "corrupt_city"
    }
   ]
  },
@@ -277,7 +221,7 @@
   "id": "mass_production",
   "name": "Mass production",
   "tier": 2,
-  "text": "Every hex with an outpost builds.",
+  "text": "The adversary builds now.",
   "counter": [
    [
     "energy",
@@ -286,12 +230,7 @@
   ],
   "effects": [
    {
-    "op": "build",
-    "at": {
-     "has": [
-      "outpost"
-     ]
-    }
+    "op": "build"
    }
   ]
  },
@@ -313,23 +252,29 @@
   ]
  },
  {
-  "id": "overrun",
-  "name": "Overrun",
+  "id": "total_war",
+  "name": "Total war",
   "tier": 2,
-  "text": "Each hex with 3 or more adversary pieces gains 1 corruption.",
+  "text": "2 adversary troops land on factories here (else cities), and 2 adversary ambassadors on military bases.",
   "counter": [
    [
     "antimatter",
-    2
+    1
+   ],
+   [
+    "energy",
+    3
    ]
   ],
   "effects": [
    {
-    "op": "add_corruption",
-    "at": {
-     "adversary_at_least": 3
-    },
-    "amount": 1
+    "op": "troop",
+    "count": 2
+   },
+   {
+    "op": "ambassadors",
+    "at": "bases",
+    "count": 2
    }
   ]
  }

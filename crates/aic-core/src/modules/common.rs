@@ -1,56 +1,102 @@
-//! Shared vocabulary of the v0 ruleset: piece names, board queries and
-//! choice options. Rules live in the modules; this only answers questions
-//! about the board.
+//! Shared vocabulary of the ruleset: piece names, board queries and choice
+//! options. Rules live in the modules; this only answers questions about
+//! the board.
 //!
 //! Terms used throughout (see `docs/rules.md`):
 //! - **adjacent**: a neighbouring hex on the board (across country borders too);
-//! - **next to X**: holding X, or adjacent to a hex holding X.
+//! - **next to X**: holding X, or adjacent to a hex holding X;
+//! - **reach**: a seat's reach is every hex within 1 of one of its data centres.
 
-use crate::content::Terrain;
+use crate::content::HexKind;
 use crate::hex::Hex;
 use crate::module::World;
 use crate::state::{GameState, Opt};
 
-pub const POPULATION: &str = "population";
 pub const FACTORY: &str = "factory";
-pub const DATA_CENTRE: &str = "data_centre";
-pub const DRONE: &str = "drone";
-pub const OUTPOST: &str = "outpost";
-pub const FOUNDRY: &str = "foundry";
-pub const CORRUPTION: &str = "corruption";
-/// Adversary defense from the Fortify threat: prevents player damage.
-pub const FORTIFY: &str = "fortify";
+pub const STATION: &str = "station";
+/// The adversary's owner cube (on a city or research station): corrupted.
+pub const ADV_CUBE: &str = "cube:adversary";
+pub const ADV_AMBASSADOR: &str = "ambassador:adversary";
+/// An adversary troop: stays on the board and strikes in production.
+pub const TROOP: &str = "troop";
+/// Corp units waiting at a military base (the base's country's corp).
+pub const UNIT: &str = "unit";
+/// A hardening token: absorbs one destruction of a building on its hex.
+pub const HARDEN: &str = "harden";
+/// Seat resource: player ambassadors in the seat's supply.
+pub const AMBASSADORS: &str = "ambassadors";
 
-/// The adversary's cluster (adversary variant `clusters`).
-pub const CLUSTER: &str = "cluster";
-/// A factory or data centre corrupted to the adversary's side: the asset's
-/// token flipped over (adversary variant `assets`).
-pub const ROGUE_FACTORY: &str = "rogue_factory";
-pub const ROGUE_DATA_CENTRE: &str = "rogue_data_centre";
-
-/// The Militarist's pieces, weakest first.
-pub const MILITARIST: [&str; 3] = [DRONE, OUTPOST, FOUNDRY];
-/// Corrupted assets (adversary variant `assets`).
-pub const ROGUE: [&str; 2] = [ROGUE_FACTORY, ROGUE_DATA_CENTRE];
-
-/// Adversary pieces of every adversary variant, the Militarist's weakest
-/// first. A game only ever holds the kinds its adversary variant uses.
-pub const ADVERSARY: [&str; 6] = [DRONE, OUTPOST, FOUNDRY, CLUSTER, ROGUE_FACTORY, ROGUE_DATA_CENTRE];
-
-/// Seat `s`'s processors on a hex.
-pub fn processor(seat: usize) -> String {
-    format!("processor:{seat}")
+/// Seat `s`'s data centre on a hex.
+pub fn dc(seat: usize) -> String {
+    format!("dc:{seat}")
 }
 
-/// Seat `s`'s defense tokens on a hex.
-pub fn defense(seat: usize) -> String {
-    format!("defense:{seat}")
+/// Seat `s`'s owner cube (an aligned city or an owned station).
+pub fn cube(seat: usize) -> String {
+    format!("cube:{seat}")
+}
+
+/// Seat `s`'s player ambassador on a piece.
+pub fn ambassador(seat: usize) -> String {
+    format!("ambassador:{seat}")
+}
+
+pub fn is_city(w: &World, h: usize) -> bool {
+    w.map.hexes[h].kind == HexKind::City
+}
+
+pub fn is_ocean(w: &World, h: usize) -> bool {
+    w.map.hexes[h].kind == HexKind::Ocean
+}
+
+pub fn is_base(w: &World, h: usize) -> bool {
+    w.map.hexes[h].kind == HexKind::Base
+}
+
+pub fn corrupted(g: &GameState, h: usize) -> bool {
+    g.tokens(h, ADV_CUBE) > 0
+}
+
+/// The seat whose cube is on hex `h`, if any.
+pub fn cube_owner(g: &GameState, h: usize) -> Option<usize> {
+    (0..g.seats.len()).find(|&s| g.tokens(h, &cube(s)) > 0)
+}
+
+/// A city with no cube.
+pub fn clean_city(w: &World, g: &GameState, h: usize) -> bool {
+    is_city(w, h) && !corrupted(g, h) && cube_owner(g, h).is_none()
+}
+
+/// The seat whose data centre is on hex `h`, if any.
+pub fn dc_owner(g: &GameState, h: usize) -> Option<usize> {
+    (0..g.seats.len()).find(|&s| g.tokens(h, &dc(s)) > 0)
+}
+
+/// Whether hex `h` holds a building (factory, research station, data centre).
+pub fn has_building(g: &GameState, h: usize) -> bool {
+    g.tokens(h, FACTORY) > 0 || g.tokens(h, STATION) > 0 || dc_owner(g, h).is_some()
+}
+
+/// An open hex with no building: where buildings go.
+pub fn buildable(w: &World, g: &GameState, h: usize) -> bool {
+    w.map.hexes[h].kind == HexKind::Open && !has_building(g, h)
+}
+
+/// Whether hex `h` holds a piece an ambassador can sit on.
+pub fn has_piece(w: &World, g: &GameState, h: usize) -> bool {
+    is_city(w, h) || is_base(w, h) || has_building(g, h)
+}
+
+/// Player-owned: a data centre, or an aligned city or owned station.
+pub fn player_owned(g: &GameState, h: usize) -> bool {
+    dc_owner(g, h).is_some() || cube_owner(g, h).is_some()
 }
 
 pub fn adversary_count(g: &GameState, h: usize) -> i64 {
-    ADVERSARY.iter().map(|k| g.tokens(h, k)).sum()
+    g.tokens(h, ADV_AMBASSADOR) + g.tokens(h, TROOP)
 }
 
+/// Adversary ambassadors or troops on the hex.
 pub fn has_adversary(g: &GameState, h: usize) -> bool {
     adversary_count(g, h) > 0
 }
@@ -75,37 +121,39 @@ pub fn scope_countries(w: &World, scope: Option<usize>) -> Vec<usize> {
     }
 }
 
-pub fn processors_of(g: &GameState, seat: usize) -> i64 {
-    let k = processor(seat);
-    (0..g.hexes.len()).map(|h| g.tokens(h, &k)).sum()
+/// Hexes holding seat `s`'s data centres, in board order.
+pub fn dcs_of(g: &GameState, seat: usize) -> Vec<usize> {
+    let k = dc(seat);
+    (0..g.hexes.len()).filter(|&h| g.tokens(h, &k) > 0).collect()
 }
 
-pub fn has_processor_in(w: &World, g: &GameState, seat: usize, country: usize) -> bool {
-    let k = processor(seat);
-    w.map.countries[country]
-        .hexes
-        .iter()
-        .any(|&h| g.tokens(h, &k) > 0)
+pub fn dc_count(g: &GameState, seat: usize) -> i64 {
+    dcs_of(g, seat).len() as i64
 }
 
-/// Seats with a processor in `country`, in seat order.
+/// Whether hex `h` is within seat `s`'s reach (1 of one of its data centres).
+pub fn in_reach(w: &World, g: &GameState, seat: usize, h: usize) -> bool {
+    let k = dc(seat);
+    next_to(w, h, |x| g.tokens(x, &k) > 0)
+}
+
+pub fn has_dc_in(w: &World, g: &GameState, seat: usize, country: usize) -> bool {
+    let k = dc(seat);
+    w.map.countries[country].hexes.iter().any(|&h| g.tokens(h, &k) > 0)
+}
+
+/// Seats with a data centre in `country`, in seat order.
 pub fn seats_in_country(w: &World, g: &GameState, country: usize) -> Vec<usize> {
-    (0..g.seats.len())
-        .filter(|&s| has_processor_in(w, g, s, country))
-        .collect()
+    (0..g.seats.len()).filter(|&s| has_dc_in(w, g, s, country)).collect()
 }
 
-/// Seats a threat in `scope` concerns: with a processor in the country, or
-/// every seat for the whole board.
+/// Seats a threat in `scope` concerns: with a data centre in the country,
+/// or every seat for the whole board.
 pub fn seats_in_scope(w: &World, g: &GameState, scope: Option<usize>) -> Vec<usize> {
     match scope {
         Some(c) => seats_in_country(w, g, c),
         None => (0..g.seats.len()).collect(),
     }
-}
-
-pub fn has_terrain(w: &World, h: usize, terrains: &[Terrain]) -> bool {
-    terrains.contains(&w.map.hexes[h].terrain)
 }
 
 /// "C1 #5" : country 1, printed hex number 5.

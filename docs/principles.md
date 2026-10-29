@@ -54,6 +54,10 @@ Agents get no information or help the printed game couldn't give players.
 
 Weigh each measure's cost against the decision it informs: screen cheaply first, and run expensive measures only on finalists.
 
+Calibrate by reasoning first: before simulating, think through when each decision, card
+and number has a place to matter in an 8–10 round game, and set its starting value so
+it does; simulation then adjusts and evaluates.
+
 Until the rules are close to final, scoping runs use shallow, fast agents (greedy,
 engine) and short runs (`aic-sim experiment --quick`); deep-search agents stay in the
 code, ready, but don't get run time until the rules settle.

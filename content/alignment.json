@@ -36,8 +36,8 @@
   "name": "Civil Defense",
   "side": "unity",
   "tier": 1,
-  "text": "In each country, remove 1 drone.",
-  "effects": [{"op": "pushback", "drones": 1}]
+  "text": "In each country, remove 1 adversary ambassador.",
+  "effects": [{"op": "pushback", "ambassadors": 1}]
  },
  {
   "id": "volunteer_corps",
@@ -77,15 +77,15 @@
   "name": "Blight",
   "side": "discord",
   "tier": 1,
-  "text": "In each country, the hex with the most adversary pieces gains 1 corruption.",
-  "effects": [{"op": "corrupt", "amount": 1}]
+  "text": "In each country, the clean city with the most adversary ambassadors gains 1 more.",
+  "effects": [{"op": "infiltrate", "amount": 1}]
  },
  {
   "id": "buildup",
   "name": "Buildup",
   "side": "discord",
   "tier": 1,
-  "text": "The adversary builds now with the card in its build slot.",
+  "text": "The adversary builds now.",
   "effects": [{"op": "build"}]
  },
  {
@@ -102,8 +102,8 @@
   "name": "Offensive",
   "side": "discord",
   "tier": 2,
-  "text": "The adversary ravages now with the card in its ravage slot.",
-  "effects": [{"op": "ravage"}]
+  "text": "The adversary spreads now.",
+  "effects": [{"op": "spread"}]
  },
  {
   "id": "two_fronts",
@@ -118,7 +118,7 @@
   "name": "Firestorm",
   "side": "discord",
   "tier": 2,
-  "text": "In each country, the hex with the most adversary pieces gains 2 corruption.",
-  "effects": [{"op": "corrupt", "amount": 2}]
+  "text": "In each country, the clean city with the most adversary ambassadors gains 2 more.",
+  "effects": [{"op": "infiltrate", "amount": 2}]
  }
 ]

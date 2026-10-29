@@ -1,11 +1,18 @@
 //! The heuristic value of a state, from the team's point of view. It reads
-//! only what the table shows: tokens, tracks, resources, open hands and
-//! buildings, active threats and what is paid on them, deck sizes. Units
-//! are roughly "credits": a credit in hand is worth `credits` (0.6) because
-//! credits buy cards that do more.
+//! only what the table shows: pieces on the board, tracks, resources, open
+//! hands and buildings, active threats and what is paid on them, deck
+//! sizes and the face-up adversary card. Units are roughly "credits": a
+//! credit in hand is worth `credits` (0.6) because credits buy cards and
+//! standard actions that do more.
+//!
+//! The board (014): cities are clean, aligned (a player cube) or corrupted
+//! (the adversary's cube; every city corrupted loses). Adversary ambassadors
+//! gather on clean cities until `adversary.corrupt_at` corrupts them, divert
+//! the production of the pieces they sit on (a factory builds a troop),
+//! and come out of a supply that loses the game when it runs dry.
 //!
 //! The weights are agent parameters, not rules: they live in [`Weights`]
-//! and an experiment can override any of them (`greedy:w.pool=20`).
+//! and an experiment can override any of them (`greedy:w.corrupted=40`).
 //!
 //! **Horizon mode** (`w.horizon` > 0; the `engine` agent's default): income
 //! and buildings are valued by what they will pay over the rounds the game
@@ -17,8 +24,8 @@
 
 use std::collections::BTreeMap;
 
-use aic_core::content::{Passive, RESOURCES};
-use aic_core::content::Side;
+use aic_core::content::{Passive, Side, Twist, RESOURCES};
+use aic_core::modules::common::{self, ADV_AMBASSADOR, ADV_CUBE, AMBASSADORS, FACTORY, HARDEN, STATION, TROOP};
 use aic_core::modules::{adversary, ai, alignment, board, cards, economy, threats};
 use aic_core::{GameState, Rules};
 use serde::{Deserialize, Serialize};
@@ -27,21 +34,32 @@ use serde::{Deserialize, Serialize};
 pub struct Weights {
     /// A finished game: won or lost.
     pub win: f64,
-    /// Added per adversary card left in the deck on a win (a wider margin).
+    /// Added per adversary card left (deck and face-up) on a win (a wider margin).
     pub win_margin: f64,
-    /// Each corruption left in the pool.
-    pub pool: f64,
-    /// Extra per corruption when the pool is down to 2 or less.
-    pub pool_danger: f64,
-    /// Each corruption on the board (it stops production).
-    pub corruption: f64,
-    /// Each population above the loss threshold.
-    pub population: f64,
-    /// Extra when only 1 population of slack is left.
-    pub population_danger: f64,
-    pub drone: f64,
-    pub outpost: f64,
-    pub foundry: f64,
+    /// Each corrupted city (it builds ambassadors, diverts its energy to
+    /// Discord, and every city corrupted loses).
+    pub corrupted: f64,
+    /// Extra per city short of 2 not corrupted (all corrupted = loss).
+    pub cities_danger: f64,
+    /// Each aligned city (a player cube: extra energy for its owner).
+    pub aligned: f64,
+    /// Each adversary ambassador on the board (the bar-0 win needs none).
+    pub adv_ambassador: f64,
+    /// Ambassadors on a city not yet corrupted: this share of `corrupted`
+    /// times (ambassadors / the next corrupt threshold)², capped at 1.
+    pub pressure: f64,
+    /// Each adversary ambassador on a player piece, base or factory (it
+    /// diverts the piece's production toward Discord).
+    pub on_piece: f64,
+    /// Extra per adversary ambassador on a factory (it builds a troop).
+    pub on_factory: f64,
+    /// Each adversary troop (it destroys a building every round).
+    pub troop: f64,
+    /// Per ambassador of slack short of 4 between the supply and the next
+    /// build's placements.
+    pub supply: f64,
+    /// Per ambassador the supply is short of the next build (starved = loss).
+    pub supply_danger: f64,
     /// Each adversary piece that keeps the current clear-board bar from
     /// being met (the win condition).
     pub blocker: f64,
@@ -55,10 +73,25 @@ pub struct Weights {
     pub level: f64,
     /// Each difficulty level Discord has escalated the adversary (a cost).
     pub escalation: f64,
-    pub factory: f64,
+    /// Each player data centre (compute, reach, a share of city energy).
     pub data_centre: f64,
-    /// Each processor on the board.
-    pub processor: f64,
+    /// Each city, base or station hex inside some seat's reach.
+    pub reach: f64,
+    /// Each research station a player owns; a corrupted one costs as much.
+    pub station: f64,
+    /// Each player cube on a megaproject; an adversary cube costs half.
+    pub project_cube: f64,
+    pub factory: f64,
+    /// Each hardening token.
+    pub harden: f64,
+    /// Each player ambassador in a seat's supply.
+    pub ambassador: f64,
+    /// Each player ambassador on the board (shields a building, cancels an
+    /// arriving adversary ambassador, unites a base).
+    pub ambassador_board: f64,
+    /// Player ambassadors on a corrupted city: this share of `corrupted`
+    /// per ambassador of the `board.free_city_at` that free it.
+    pub freeing: f64,
     /// Each point of per-round income (AI tracks).
     pub income: f64,
     pub credits: f64,
@@ -77,12 +110,6 @@ pub struct Weights {
     pub built_cost: f64,
     /// Each active threat, scaled by the share still unpaid.
     pub threat: f64,
-    /// Each defense token on the board.
-    pub defense: f64,
-    /// Share of the coming ravage's cost (the ravage-slot card) counted now.
-    pub forecast: f64,
-    /// Share of the next round's ravage (the build-slot card) counted now.
-    pub forecast_next: f64,
     /// Horizon mode, when above 0: each unit of income (AI tracks,
     /// buildings, rewards) is worth `horizon` × the resource's own weight ×
     /// the rounds left, replacing `income`. 0 = the flat weights above.
@@ -90,12 +117,11 @@ pub struct Weights {
     /// Horizon mode: Sway toward Unity the team is assumed to gain per round
     /// before it has a record of its own (round 1), for the win estimate.
     pub opp_rate: f64,
-    /// Horizon mode: rounds a win needs after the last bar drop is reached
-    /// (clearing the last foundries).
+    /// Horizon mode: rounds a win needs after the Unity target is reached.
     pub win_lag: f64,
     /// Horizon mode: chance of losing per round per unit of danger (an
-    /// unpaid threat per country, a pool or population at its edge); the
-    /// rounds left are the expected survival over the clock.
+    /// unpaid threat per country, the supply or the cities at their edge);
+    /// the rounds left are the expected survival over the clock.
     pub risk: f64,
     /// Horizon mode: per round left, a building that pays no income (an
     /// ability, a discount, protection), on top of `built`.
@@ -106,8 +132,9 @@ pub struct Weights {
     /// Horizon mode: a tier-2 card in hand before tier 2 is unlocked counts
     /// this share of its value.
     pub locked: f64,
-    /// Horizon mode: production (working factories' credits, processors'
-    /// compute) counts this share of income over the rounds left.
+    /// Horizon mode: board production (energy of aligned cities, compute of
+    /// data centres not diverted) counts this share of income over the
+    /// rounds left, on top of the flat piece weights.
     pub production: f64,
     /// Horizon mode, when above 0: cards in hand wait their turn for
     /// insight (each needs the insight of the cards before it too).
@@ -123,16 +150,17 @@ impl Default for Weights {
         Weights {
             win: 1000.0,
             win_margin: 5.0,
-            // 007: 12 suited v0's 6-corruption pool; on the tuned pool it made
-            // beam buy back corruption instead of purging (58% vs 96% won).
-            pool: 6.0,
-            pool_danger: 10.0,
-            corruption: 2.0,
-            population: 6.0,
-            population_danger: 12.0,
-            drone: 2.0,
-            outpost: 5.0,
-            foundry: 9.0,
+            // 014: chosen by hand for the new board, not yet swept.
+            corrupted: 30.0,
+            cities_danger: 60.0,
+            aligned: 8.0,
+            adv_ambassador: 3.0,
+            pressure: 0.7,
+            on_piece: 2.0,
+            on_factory: 6.0,
+            troop: 12.0,
+            supply: 5.0,
+            supply_danger: 40.0,
             blocker: 2.0,
             // 013: a Unity tip replaces about 4 opposition points (24) and
             // brings a card; a Discord tip brings one of the adversary's.
@@ -140,9 +168,15 @@ impl Default for Weights {
             discord_tip: 16.0,
             level: 10.0,
             escalation: 20.0,
-            factory: 3.0,
-            data_centre: 2.0,
-            processor: 4.0,
+            data_centre: 4.0,
+            reach: 0.5,
+            station: 5.0,
+            project_cube: 2.0,
+            factory: 0.5,
+            harden: 1.0,
+            ambassador: 3.0,
+            ambassador_board: 2.5,
+            freeing: 0.8,
             income: 3.0,
             credits: 0.6,
             compute: 0.8,
@@ -155,9 +189,6 @@ impl Default for Weights {
             built: 4.0,
             built_cost: 0.5,
             threat: 6.0,
-            defense: 0.5,
-            forecast: 0.9,
-            forecast_next: 0.3,
             horizon: 0.0,
             opp_rate: 2.0,
             win_lag: 1.0,
@@ -165,7 +196,7 @@ impl Default for Weights {
             ability: 0.5,
             spend_horizon: 2.0,
             locked: 0.5,
-            // 008 sweep (d4, 96 seeds): 1 won 65.6%, 0 won 72.9% (greedy 68.8%).
+            // Horizon mode only; the engine turns it on (see `engine`).
             production: 0.0,
             // 008: on, it cut the engine to 4% wins at d4 (96 games): spending
             // insight on one card lowered every other card's chance, so
@@ -189,6 +220,11 @@ impl Weights {
             // 011: see `clock`; chosen on 009's cheap-tier-2 patch, where
             // without it the engine ran out the deck.
             clock: 30.0,
+            // 014 (d0, 2 countries, 48 seeds, the checkpoint's map): 1 won
+            // 64.6%, 0 won ~37% (32 seeds); 2 won 66.7%. On the map as since
+            // edited, level within noise at d1-d3 (32 seeds). Energy and
+            // compute now come from the board.
+            production: 1.0,
             ..Weights::default()
         }
     }
@@ -211,25 +247,30 @@ impl Weights {
     }
 }
 
+/// What the next adversary build and corrupt steps will do, as the face-up
+/// card shows: ambassadors the build places, and the corrupt threshold.
+struct Forecast {
+    placements: i64,
+    corrupt_at: i64,
+}
+
 /// A [`Weights`] bound to one game's rules, with per-card values cached.
 pub struct Eval {
     pub w: Weights,
     card_value: BTreeMap<String, f64>,
     seats: usize,
-    loss_percent: i64,
-    /// Unity tip counts at which the bar drops; the last is the win target.
-    ease: Vec<i64>,
-    /// The adversary variant: the Militarist's pieces and ravage forecast,
-    /// or the spread variants' clusters or corrupted assets.
-    style: adversary::Style,
-    /// Spread variants: pieces allowed per bar level (purge win).
-    allowance: i64,
-    /// Ravage damage of a drone, outpost and foundry (Militarist).
-    damage: [i64; 3],
-    /// Extra ravage damage where there is a foundry (difficulty 3+ in play).
-    foundry_bonus: i64,
-    /// Damage a ravaged foundry deals to each adjacent hex (difficulty 3+).
-    foundry_reach: i64,
+    /// Unity tip count the team aims for: the outright win, or with none
+    /// the last bar drop.
+    target_tips: i64,
+    corrupt_at: i64,
+    city_build: i64,
+    build_bonus: i64,
+    factory_build: i64,
+    escalation_ambassadors: i64,
+    free_at: i64,
+    city_energy: i64,
+    aligned_bonus: i64,
+    dc_compute: i64,
 }
 
 impl Eval {
@@ -247,35 +288,26 @@ impl Eval {
             })
             .collect();
         let seats = rules.config.countries as usize;
+        let outright = world.int("alignment.unity_win");
+        let target_tips = if outright > 0 {
+            outright
+        } else {
+            world.list("alignment.unity_ease").last().copied().unwrap_or(1)
+        };
         Eval {
             w,
             card_value,
             seats,
-            loss_percent: world.int("alignment.loss_population_percent"),
-            ease: world.list("alignment.unity_ease").to_vec(),
-            style: adversary::style(&world),
-            allowance: match adversary::style(&world) {
-                adversary::Style::Militarist => 0,
-                _ => world.int("adversary.purge_allowance") * world.map.countries.len() as i64,
-            },
-            damage: match adversary::style(&world) {
-                adversary::Style::Militarist => [
-                    world.int("adversary.drone_damage"),
-                    world.int("adversary.outpost_damage"),
-                    world.int("adversary.foundry_damage"),
-                ],
-                _ => [0; 3],
-            },
-            foundry_bonus: if adversary::style(&world) == adversary::Style::Militarist {
-                world.int("adversary.foundry_bonus")
-            } else {
-                0
-            },
-            foundry_reach: if adversary::style(&world) == adversary::Style::Militarist {
-                world.int("adversary.foundry_reach")
-            } else {
-                0
-            },
+            target_tips,
+            corrupt_at: world.int("adversary.corrupt_at"),
+            city_build: world.int("adversary.city_build"),
+            build_bonus: world.int("adversary.build_bonus"),
+            factory_build: world.int("adversary.factory_build"),
+            escalation_ambassadors: world.int("adversary.escalation_ambassadors"),
+            free_at: world.int("board.free_city_at").max(1),
+            city_energy: world.int("board.city_energy"),
+            aligned_bonus: world.int("board.aligned_bonus"),
+            dc_compute: world.int("board.dc_compute"),
         }
     }
 
@@ -283,62 +315,159 @@ impl Eval {
         self.card_value.get(id).copied().unwrap_or(0.0)
     }
 
+    /// Adversary cards still to come: the face-up one and the deck.
+    fn cards_left(g: &GameState) -> usize {
+        g.pile(adversary::DECK).len() + g.pile(adversary::NEXT).len()
+    }
+
+    /// The next build and corrupt steps, read off the face-up card (public).
+    fn forecast(&self, rules: &Rules, g: &GameState) -> Forecast {
+        let world = rules.world();
+        let content = world.content;
+        let next = g
+            .pile(adversary::NEXT)
+            .first()
+            .and_then(|id| content.adversary_index(id))
+            .map(|i| &content.adversary[i]);
+        let twist = |f: &dyn Fn(&Twist) -> Option<i64>| -> i64 {
+            next.map_or(0, |c| c.twists.iter().filter_map(f).sum())
+        };
+        let mut city = self.city_build
+            + twist(&|t| match t {
+                Twist::CityBuild { amount } => Some(*amount),
+                _ => None,
+            });
+        if adversary::at(&world, g, 4) {
+            city += self.build_bonus;
+        }
+        let clean = twist(&|t| match t {
+            Twist::CleanFactories { amount } => Some(*amount),
+            _ => None,
+        });
+        let stations = twist(&|t| match t {
+            Twist::Stations { amount } => Some(*amount),
+            _ => None,
+        });
+        let sooner = twist(&|t| match t {
+            Twist::CorruptSooner { amount } => Some(*amount),
+            _ => None,
+        });
+        let mut placements = 0;
+        for h in 0..g.hexes.len() {
+            let city_here = common::is_city(&world, h);
+            if city_here && common::corrupted(g, h) {
+                placements += city;
+            }
+            if g.tokens(h, FACTORY) > 0 {
+                let nb = &world.map.hexes[h].neighbours;
+                if nb.iter().any(|&x| common::is_city(&world, x) && common::corrupted(g, x)) {
+                    placements += self.factory_build;
+                }
+                if nb.iter().any(|&x| common::clean_city(&world, g, x)) {
+                    placements += clean;
+                }
+            }
+            if g.tokens(h, STATION) > 0 && common::corrupted(g, h) {
+                placements += stations;
+            }
+            if next.is_some_and(|c| c.escalation) && common::is_base(&world, h) {
+                placements += self.escalation_ambassadors;
+            }
+        }
+        Forecast {
+            placements,
+            corrupt_at: (self.corrupt_at - sooner).max(1),
+        }
+    }
+
     /// The value of `g`. Finished games score `±win` plus a margin bonus.
     pub fn value(&self, rules: &Rules, g: &GameState) -> f64 {
         let w = &self.w;
         if let Some(o) = &g.outcome {
             return if o.won {
-                w.win + w.win_margin * g.pile(adversary::DECK).len() as f64
+                w.win + w.win_margin * Self::cards_left(g) as f64
             } else {
                 -w.win
             };
         }
+        let world = rules.world();
+        let fc = self.forecast(rules, g);
         let mut v = 0.0;
-        let (mut drones, mut outposts, mut foundries, mut pop, mut corruption) =
-            (0i64, 0i64, 0i64, 0i64, 0i64);
-        let (mut factories, mut dcs, mut processors, mut defense) = (0i64, 0i64, 0i64, 0i64);
-        // Spread variants' pieces: clusters, or corrupted assets.
-        let mut spread = 0i64;
-        for h in &g.hexes {
-            for (k, &n) in &h.tokens {
-                match k.as_str() {
-                    "drone" => drones += n,
-                    "outpost" => outposts += n,
-                    "foundry" => foundries += n,
-                    "population" => pop += n,
-                    "corruption" => corruption += n,
-                    "cluster" | "rogue_factory" | "rogue_data_centre" => spread += n,
-                    "factory" => factories += n,
-                    "data_centre" => dcs += n,
-                    _ if k.starts_with("processor:") => processors += n,
-                    _ if k.starts_with("defense:") => defense += n,
-                    _ => {}
+        let (mut corrupted, mut safe_cities) = (0i64, 0i64);
+        let mut reach = 0i64;
+        for h in 0..g.hexes.len() {
+            let city = common::is_city(&world, h);
+            let adv = g.tokens(h, ADV_AMBASSADOR);
+            let bad = common::corrupted(g, h);
+            if city {
+                if bad {
+                    corrupted += 1;
+                    let mine: i64 = (0..g.seats.len()).map(|s| g.tokens(h, &common::ambassador(s))).sum();
+                    let share = (mine as f64 / self.free_at as f64).min(1.0);
+                    v += w.corrupted * w.freeing * share;
+                } else {
+                    safe_cities += 1;
+                    if common::cube_owner(g, h).is_some() {
+                        v += w.aligned;
+                    }
+                    let p = (adv as f64 / fc.corrupt_at as f64).min(1.0);
+                    v -= w.corrupted * w.pressure * p * p;
                 }
             }
+            v -= w.adv_ambassador * adv as f64;
+            if adv > 0 {
+                let piece = common::player_owned(g, h)
+                    || common::is_base(&world, h)
+                    || g.tokens(h, FACTORY) > 0
+                    || g.tokens(h, STATION) > 0;
+                if piece {
+                    v -= w.on_piece * adv as f64;
+                }
+                if g.tokens(h, FACTORY) > 0 {
+                    v -= w.on_factory;
+                }
+            }
+            v -= w.troop * g.tokens(h, TROOP) as f64;
+            if g.tokens(h, STATION) > 0 {
+                if bad {
+                    v -= w.station;
+                } else if common::cube_owner(g, h).is_some() {
+                    v += w.station;
+                }
+            }
+            v += w.factory * g.tokens(h, FACTORY) as f64 + w.harden * g.tokens(h, HARDEN) as f64;
+            if common::dc_owner(g, h).is_some() {
+                v += w.data_centre;
+            }
+            for s in 0..self.seats {
+                v += w.ambassador_board * g.tokens(h, &common::ambassador(s)) as f64;
+            }
+            let counts = city || common::is_base(&world, h) || g.tokens(h, STATION) > 0;
+            if counts && (0..self.seats).any(|s| common::in_reach(&world, g, s, h)) {
+                reach += 1;
+            }
         }
-        let pool = g.var(adversary::POOL);
-        v += w.pool * pool as f64 - w.pool_danger * (3 - pool).max(0) as f64;
-        v -= w.corruption * corruption as f64;
-        let start = g.var(board::START_POPULATION);
-        // Lose when pop * 100 < start * percent: the smallest safe population.
-        let safe = (start * self.loss_percent + 99) / 100;
-        let slack = pop - safe;
-        v += w.population * slack as f64 - w.population_danger * (2 - slack).max(0) as f64;
-        v -= w.drone * drones as f64 + w.outpost * outposts as f64 + w.foundry * foundries as f64;
-        let world = rules.world();
+        v -= w.corrupted * corrupted as f64;
+        v -= w.cities_danger * (2 - safe_cities).max(0) as f64;
+        v += w.reach * reach as f64;
+        // The supply: the next build must find its ambassadors there.
+        let slack = g.var(adversary::SUPPLY) - fc.placements;
+        v -= w.supply_danger * (-slack).max(0) as f64 + w.supply * (4 - slack).clamp(0, 4) as f64;
+        // Megaprojects: each player cube pays when the project completes.
+        for c in 0..world.map.countries.len() {
+            if g.var(&board::project_done(c)) > 0 {
+                continue;
+            }
+            let mine: i64 = (0..self.seats).map(|s| g.var(&board::project_key(c, Some(s)))).sum();
+            let theirs = g.var(&board::project_key(c, None));
+            v += w.project_cube * (mine as f64 - 0.5 * theirs as f64);
+        }
+        for s in 0..self.seats {
+            v += w.ambassador * g.resource(s, AMBASSADORS) as f64;
+        }
+        // The win bar: what still stands between the team and a clear board.
         let level = alignment::bar_level(&world, g);
-        // A spread variant's piece weighs as an outpost; its purge bar
-        // allows `allowance` pieces per level.
-        v -= w.outpost * spread as f64;
-        let blockers = match self.style {
-            adversary::Style::Militarist => match level {
-                0 => drones + outposts + foundries,
-                1 => outposts + foundries,
-                _ => foundries,
-            },
-            _ => (spread - level * self.allowance).max(0),
-        };
-        v -= w.blocker * blockers as f64;
+        v -= w.blocker * adversary::presence(&world, g, level) as f64;
         // Alignment: tips made, and each bucket's share of its next tip.
         for (side, weight) in [(Side::Unity, w.unity_tip), (Side::Discord, -w.discord_tip)] {
             let cap = alignment::capacity(&world, g, side).max(1) as f64;
@@ -346,31 +475,13 @@ impl Eval {
             v += weight * (g.var(alignment::tips_key(side)) as f64 + fill);
         }
         v += w.level * level as f64 - w.escalation * g.var(adversary::ESCALATION) as f64;
-        v += w.factory * factories as f64
-            + w.data_centre * dcs as f64
-            + w.processor * processors as f64;
-        v += w.defense * defense as f64;
         // Added in place, term by term, so the flat agents' values (and so
-        // their games) are bit-for-bit what they were before horizon mode.
+        // their games) do not depend on horizon mode.
         let unpaid = self.unpaid_threats(rules, g);
         if w.horizon > 0.0 {
-            self.horizon_value(rules, g, &unpaid, &mut v);
+            self.horizon_value(rules, g, &unpaid, safe_cities, slack, &mut v);
         } else {
             self.flat_value(rules, g, &mut v);
-        }
-        // The coming ravages are public (the ravage and build slots): what
-        // they would cost if the table stayed as it is. Each seat's defense
-        // value is the same for both: worked out once, when first needed.
-        let mut defense = None;
-        for (slot, share) in [
-            (adversary::SLOTS[2], w.forecast),
-            (adversary::SLOTS[1], w.forecast_next),
-        ] {
-            if share != 0.0 {
-                if let Some(id) = g.pile(slot).first() {
-                    v -= share * self.ravage_cost(rules, g, id, &mut defense);
-                }
-            }
         }
         for share in unpaid {
             v -= w.threat * share;
@@ -404,28 +515,24 @@ impl Eval {
     }
 
     /// The rounds of income still to come, as the table reads: the adversary
-    /// deck's clock (a card is revealed each round; an empty deck at a
-    /// reveal loses), cut short by when the team is on course to win
-    /// (Unity still needed at its rate so far, plus `win_lag`), then
-    /// the expected rounds survived at a per-round loss chance of `risk` per
-    /// unit of danger (unpaid threats per country, the pool or population at
-    /// its edge). `unpaid`: [`Eval::unpaid_threats`], which the caller has.
-    fn rounds_left(&self, rules: &Rules, g: &GameState, unpaid: &[f64]) -> f64 {
+    /// deck's clock (each card left is one more round), cut short by when
+    /// the team is on course to win (Unity still needed at its rate so far,
+    /// plus `win_lag`), then the expected rounds survived at a per-round
+    /// loss chance of `risk` per unit of danger (unpaid threats per
+    /// country, the supply or the cities at their edge).
+    fn rounds_left(&self, rules: &Rules, g: &GameState, unpaid: &[f64], safe_cities: i64, slack: i64) -> f64 {
         let w = &self.w;
-        let clock = g.pile(adversary::DECK).len() as f64;
+        let clock = Self::cards_left(g) as f64;
         let (points, bar) = self.unity_progress(rules, g);
         let to_win = ((bar - points).max(0.0) / self.unity_rate(rules, g)).ceil() + w.win_lag;
         let rounds = clock.min(to_win).max(0.0);
         let world = rules.world();
         let countries = world.map.countries.len().max(1) as f64;
         let mut danger = unpaid.iter().sum::<f64>() / countries;
-        if g.var(adversary::POOL) <= 4 {
+        if slack <= 2 {
             danger += 0.5;
         }
-        let start = g.var(board::START_POPULATION);
-        let safe = (start * self.loss_percent + 99) / 100;
-        let pop: i64 = g.hexes.iter().map(|h| h.tokens.get("population").copied().unwrap_or(0)).sum();
-        if pop - safe <= 2 {
+        if safe_cities <= 2 {
             danger += 0.5;
         }
         let p = (1.0 - w.risk * danger).clamp(0.0, 1.0);
@@ -442,14 +549,13 @@ impl Eval {
     }
 
     /// Unity so far, in Sway (each tip counts a full bucket at the base
-    /// size), and the Sway the last bar drop needs.
+    /// size), and the Sway the target (the outright Unity win) needs.
     fn unity_progress(&self, rules: &Rules, g: &GameState) -> (f64, f64) {
         let world = rules.world();
         let per = (world.int("alignment.tip_per_player") * g.seats.len() as i64) as f64;
         let tips = g.var(alignment::tips_key(Side::Unity)) as f64;
         let points = tips * per + g.var(alignment::bucket(Side::Unity)) as f64;
-        let last = self.ease.last().copied().unwrap_or(1) as f64;
-        (points, last * per)
+        (points, self.target_tips as f64 * per)
     }
 
     /// Unity gained per round so far, in Sway (`opp_rate` before the team
@@ -467,20 +573,17 @@ impl Eval {
     }
 
     /// The deck-clock penalty: `clock` per round the team, at its Unity
-    /// rate so far, would still be short of the last bar drop when the deck
-    /// runs out (013: there is no instant win any more; before, the target
-    /// was the top opposition level, a win at once). With `k` cards left, `k` action
-    /// phases come after this one (the reveal after the last loses); this
-    /// round's points count as they are scored, not as a round still to
-    /// come, so in the last round every point short costs `clock` / rate.
-    /// The top level, not the purge bar: a team sitting at level 2 with
-    /// foundries it can't clear is not on course (the cheap-tier-2 engine
-    /// ended 19-23 points of 24 into a deck-out).
+    /// rate so far, would still be short of its Unity target when the deck
+    /// runs out. With `k` adversary cards left (the face-up one included),
+    /// `k` action phases come after this one (the build step after the last
+    /// loses); this round's points count as they are scored, not as a round
+    /// still to come, so in the last round every point short costs
+    /// `clock` / rate.
     fn clock_penalty(&self, rules: &Rules, g: &GameState) -> f64 {
         if self.w.clock == 0.0 {
             return 0.0;
         }
-        let clock = g.pile(adversary::DECK).len() as f64;
+        let clock = Self::cards_left(g) as f64;
         let (points, top) = self.unity_progress(rules, g);
         let need = (top - points).max(0.0) / self.unity_rate(rules, g);
         self.w.clock * (need - clock).max(0.0)
@@ -505,25 +608,57 @@ impl Eval {
                 };
                 *v += w.income * unit * n as f64;
             }
-            for id in g.pile(&format!("cards.hand.{s}")) {
+            for id in g.pile(&cards::hand(s)) {
                 *v += w.hand + w.hand_cost * self.cost(id);
             }
             for id in g.pile(&format!("cards.drafted.{s}")) {
                 *v += w.drafted * (w.hand + w.hand_cost * self.cost(id));
             }
-            for id in g.pile(&format!("cards.built.{s}")) {
+            for id in g.pile(&cards::built(s)) {
                 *v += w.built + w.built_cost * self.cost(id);
             }
         }
     }
 
+    /// What the board makes each seat a round if production came now, in
+    /// `RESOURCES` order: the energy of its aligned cities and the compute
+    /// of its data centres, less what adversary ambassadors there divert.
+    fn board_production(&self, rules: &Rules, g: &GameState) -> Vec<[i64; 5]> {
+        let world = rules.world();
+        let mut out = vec![[0i64; 5]; self.seats];
+        for h in 0..g.hexes.len() {
+            if g.tokens(h, ADV_AMBASSADOR) > 0 || g.tokens(h, ADV_CUBE) > 0 {
+                continue;
+            }
+            if common::is_city(&world, h) {
+                if let Some(s) = common::cube_owner(g, h).filter(|&s| s < self.seats) {
+                    out[s][2] += self.city_energy + self.aligned_bonus;
+                }
+            } else if let Some(s) = common::dc_owner(g, h).filter(|&s| s < self.seats) {
+                out[s][1] += self.dc_compute;
+            }
+        }
+        out
+    }
+
     /// Per-seat resources, income, hands and buildings in horizon mode.
-    fn horizon_value(&self, rules: &Rules, g: &GameState, unpaid: &[f64], out: &mut f64) {
+    fn horizon_value(
+        &self,
+        rules: &Rules,
+        g: &GameState,
+        unpaid: &[f64],
+        safe_cities: i64,
+        slack: i64,
+        out: &mut f64,
+    ) {
         let w = &self.w;
         let world = rules.world();
-        let left = self.rounds_left(rules, g, unpaid);
-        // Factories' credits and processors' compute, if upkeep came now.
-        let prod = economy::production(&world, g);
+        let left = self.rounds_left(rules, g, unpaid, safe_cities, slack);
+        let prod = if w.production != 0.0 {
+            self.board_production(rules, g)
+        } else {
+            vec![[0; 5]; self.seats]
+        };
         // Resources fade once fewer than `spend_horizon` rounds are left.
         let fade = if w.spend_horizon > 0.0 {
             ((left + 1.0) / w.spend_horizon).min(1.0)
@@ -539,8 +674,8 @@ impl Eval {
                 v += fade * unit[i] * res(r) as f64;
             }
             // Income (tracks, buildings with income passives, rewards) over
-            // the rounds left, less building upkeep; production counts
-            // `production` of that.
+            // the rounds left, less building upkeep; board production counts
+            // `production` of its own.
             let mut income = economy::income(&world, g, s);
             for id in g.pile(&cards::built(s)) {
                 for (r, n) in &cards::def(&world, id).upkeep {
@@ -552,8 +687,9 @@ impl Eval {
             for (i, n) in income.iter().enumerate() {
                 v += w.horizon * left * unit[i] * *n as f64;
             }
-            let (pc, pm) = prod.get(s).copied().unwrap_or((0, 0));
-            v += w.horizon * w.production * left * (unit[0] * pc as f64 + unit[1] * pm as f64);
+            for (i, n) in prod[s].iter().enumerate() {
+                v += w.horizon * w.production * left * unit[i] * *n as f64;
+            }
             for id in g.pile(&cards::built(s)) {
                 let d = cards::def(&world, id);
                 let pays = d.passives.iter().any(|p| {
@@ -568,12 +704,11 @@ impl Eval {
                 }
             }
             // A card in hand is worth its value times the chance of paying
-            // for it before the game ends, from what the seat has and earns
-            // (factory credits included). Insight is spent one card at a
-            // time: each card waits for the insight the cards before it in
-            // hand take.
+            // for it before the game ends, from what the seat has and earns.
+            // Insight is spent one card at a time: each card waits for the
+            // insight the cards before it in hand take.
             let tier2 = ai::tier2(&world, g, s);
-            let earn_credits = income[0] + pc;
+            let earn_credits = income[0];
             let mut insight_queue = 0i64;
             // The same for every building in hand: worked out once.
             let discount = cards::building_discount(&world, g, s);
@@ -584,7 +719,12 @@ impl Eval {
                 insight_queue += insight;
                 let insight_need = if w.insight_wait > 0.0 { insight_queue } else { 0 };
                 for (have, need, earn) in [
-                    (res("credits"), cards::discounted_cost(&world, d, discount), earn_credits),
+                    // The AI's discount: energy or compute spent as credits.
+                    (
+                        res("credits") + cards::discount_room(&world, g, s, d).map_or(0, |(_, rate, k)| rate * k),
+                        cards::discounted_cost(&world, d, discount),
+                        earn_credits,
+                    ),
                     (res("antimatter"), world.amount(&d.antimatter), income[3]),
                     (res("insight"), insight_need, income[4]),
                 ] {
@@ -610,79 +750,5 @@ impl Eval {
             }
         }
         *out += v;
-    }
-
-    /// What a ravage with adversary card `id` would cost now, in heuristic
-    /// units: corruption (and cascades) and population lost.
-    fn ravage_cost(
-        &self,
-        rules: &Rules,
-        g: &GameState,
-        id: &str,
-        defense: &mut Option<Vec<i64>>,
-    ) -> f64 {
-        let world = rules.world();
-        let content = world.content;
-        let Some(card) = content.adversary_index(id).map(|i| &content.adversary[i]) else {
-            return 0.0;
-        };
-        if self.style != adversary::Style::Militarist {
-            return 0.0;
-        }
-        let corruption_at = world.int("adversary.corruption_at");
-        let pop_health = world.int("adversary.population_health").max(1);
-        let defense: &[i64] = defense.get_or_insert_with(|| {
-            (0..self.seats)
-                .map(|s| cards::defense_value(&world, g, s))
-                .collect()
-        });
-        // Difficulty 3 in play (Discord escalation counts).
-        let d3 = adversary::at(&world, g, 3);
-        let (foundry_bonus, foundry_reach) = if d3 { (self.foundry_bonus, self.foundry_reach) } else { (0, 0) };
-        let mut cost = 0.0;
-        for (h, cell) in world.map.hexes.iter().enumerate() {
-            if !card.terrains.contains(&cell.terrain) {
-                continue;
-            }
-            let mut raw = g.tokens(h, "drone") * self.damage[0]
-                + g.tokens(h, "outpost") * self.damage[1]
-                + g.tokens(h, "foundry") * self.damage[2];
-            if raw == 0 {
-                continue;
-            }
-            if g.tokens(h, "foundry") > 0 {
-                raw += foundry_bonus;
-            }
-            let prevented_at = |x: usize| -> i64 {
-                defense
-                    .iter()
-                    .enumerate()
-                    .map(|(s, d)| g.tokens(x, &format!("defense:{s}")) * d)
-                    .sum()
-            };
-            // Difficulty 3: the foundries' reach into each adjacent hex
-            // (population only: no corruption).
-            let reach = foundry_reach * g.tokens(h, "foundry");
-            if reach > 0 {
-                for &n in &cell.neighbours {
-                    let d = (reach - prevented_at(n)).max(0);
-                    let lost = (d / pop_health).min(g.tokens(n, "population"));
-                    cost += lost as f64 * self.w.population;
-                }
-            }
-            let prevented = prevented_at(h);
-            let dmg = (raw - prevented).max(0);
-            if dmg >= corruption_at {
-                let cascade = if g.tokens(h, "corruption") > 0 {
-                    2.0
-                } else {
-                    1.0
-                };
-                cost += cascade * (self.w.pool + self.w.corruption);
-            }
-            let lost = (dmg / pop_health).min(g.tokens(h, "population"));
-            cost += lost as f64 * self.w.population;
-        }
-        cost
     }
 }

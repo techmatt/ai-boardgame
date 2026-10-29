@@ -363,11 +363,13 @@ mod tests {
     // The engine's beam is beam's code with another heuristic.
     const ENGINE: &str = "engine";
 
-    /// The agent plays seed 3 at difficulty 4 for up to `max_actions`; the
+    /// The agent plays seed 3 at difficulty 0 for up to `max_actions`; the
     /// game replays from seed + actions, and the same agent on the same seed
     /// plays the same actions: its RNG is its own and seeded per game.
+    /// (014: not difficulty 4, where the adversary's supply runs out in the
+    /// first build step, before any decision.)
     fn replay_and_repeat(spec: &str, max_actions: usize, to_the_end: bool) {
-        let r = rules(4);
+        let r = rules(0);
         let spec = AgentSpec::parse(spec).unwrap();
         let seed = 3;
         let (g, rec) = play(&r, seed, &mut *spec.build(&r, seed), max_actions);
@@ -391,8 +393,8 @@ mod tests {
     }
 
     // Slow lane: whole games, one test per agent so they run side by side
-    // (optimized, with the rest of the lane running: rollout ~35 s, engine
-    // ~20 s, beam ~15 s, greedy ~10 s).
+    // (014 board, each run alone: rollout ~56 s, beam ~40 s, engine ~3 s,
+    // greedy ~1 s; the beam's cost is in the action phase's wide menus).
     #[test]
     #[ignore = "slow lane: a whole search-agent game"]
     fn greedy_replays_and_repeats() {
@@ -450,8 +452,9 @@ mod tests {
 
     #[test]
     fn specs() {
-        let s = AgentSpec::parse("beam:width=4,w.pool=20").unwrap();
-        assert_eq!(s.label(), "beam:width=4,w.pool=20");
+        let s = AgentSpec::parse("beam:width=4,w.corrupted=20").unwrap();
+        assert_eq!(s.label(), "beam:width=4,w.corrupted=20");
+        assert!(AgentSpec::parse("greedy:w.pool=3").is_err());
         assert_eq!(AgentSpec::parse("greedy").unwrap().label(), "greedy");
         assert!(AgentSpec::parse("greedy:width=3").is_err());
         assert!(AgentSpec::parse("greedy:w.nope=3").is_err());
@@ -459,9 +462,10 @@ mod tests {
         assert!(AgentSpec::parse("random:samples=2").is_err());
     }
 
-    /// The deck clock (011; 013 on Unity): `w.clock` per round the team, at
-    /// its Unity rate so far, would still be short of the last bar drop when
-    /// the deck runs out; nothing while it is on course.
+    /// The deck clock (011; 013 on Unity; 014 on the outright Unity win):
+    /// `w.clock` per round the team, at its Unity rate so far, would still
+    /// be short of its Unity target when the deck runs out; nothing while it
+    /// is on course.
     #[test]
     fn deck_clock_penalises_a_team_behind_the_deck() {
         let r = rules(0);
@@ -471,16 +475,17 @@ mod tests {
             w.clock = clock;
             eval::Eval::new(&r, w).value(&r, g)
         };
-        // Round 4, one Unity tip (4 Sway: 1 a round), 5 tips (20 Sway) for
-        // the last bar drop: 16 rounds needed. Two cards left: 2 action
-        // phases after this one. 14 short.
+        // Round 4, one Unity tip (4 Sway: 1 a round), 8 tips (32 Sway) for
+        // the outright win: 28 rounds needed. Two cards left (the face-up
+        // one and one in the deck): 2 action phases after this one. 26 short.
         g.round = 4;
         g.vars.insert("alignment.unity_tips".into(), 1);
+        assert_eq!(g.pile("adversary.next").len(), 1);
         let deck = g.pile("adversary.deck").to_vec();
-        g.piles.insert("adversary.deck".into(), deck[..2].to_vec());
-        assert!((value(0.0, &g) - value(2.0, &g) - 2.0 * 14.0).abs() < 1e-9);
-        // On course (5 tips by round 4): no cost.
-        g.vars.insert("alignment.unity_tips".into(), 5);
+        g.piles.insert("adversary.deck".into(), deck[..1].to_vec());
+        assert!((value(0.0, &g) - value(2.0, &g) - 2.0 * 26.0).abs() < 1e-9);
+        // On course (8 tips by round 4): no cost.
+        g.vars.insert("alignment.unity_tips".into(), 8);
         assert_eq!(value(0.0, &g), value(2.0, &g));
         // The engine watches the deck by default; greedy doesn't (its
         // games, the difficulty calibration, are unchanged).

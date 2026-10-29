@@ -87,66 +87,73 @@ pub struct PiecePlacement {
     pub colour: String,
 }
 
+/// What a hex is. Cities, open land and ocean are printed on the piece; a
+/// military base goes on an open hex of each land border (see [`crate::Map`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Terrain {
-    Urban,
-    Industrial,
-    Network,
-    Frontier,
+pub enum HexKind {
+    City,
+    Base,
+    Open,
+    Ocean,
 }
 
-impl Terrain {
-    pub const ALL: [Terrain; 4] = [
-        Terrain::Urban,
-        Terrain::Industrial,
-        Terrain::Network,
-        Terrain::Frontier,
-    ];
-
+impl HexKind {
     pub fn name(self) -> &'static str {
         match self {
-            Terrain::Urban => "urban",
-            Terrain::Industrial => "industrial",
-            Terrain::Network => "network",
-            Terrain::Frontier => "frontier",
-        }
-    }
-
-    fn from_letter(c: char) -> Option<Terrain> {
-        match c {
-            'U' => Some(Terrain::Urban),
-            'I' => Some(Terrain::Industrial),
-            'N' => Some(Terrain::Network),
-            'F' => Some(Terrain::Frontier),
-            _ => None,
+            HexKind::City => "city",
+            HexKind::Base => "base",
+            HexKind::Open => "open",
+            HexKind::Ocean => "ocean",
         }
     }
 }
 
 /// A printed country piece. Hexes are numbered 1-16 in piece order
 /// (`i * size + j + 1` for piece position `(i, j)`); the numbers are
-/// printed and break ties. `terrain` holds one row of letters per `i`
-/// (U, I, N, F). The lists are hex numbers where the setup pieces go.
+/// printed and break ties. The lists are hex numbers: printed cities and
+/// ocean, and where the setup pieces go. Every other hex is open land.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CountryPiece {
     pub name: String,
-    pub terrain: Vec<String>,
-    pub uplinks: Vec<u8>,
-    /// Uplinks that start with an outpost.
-    pub outposts: Vec<u8>,
-    pub population: Vec<u8>,
+    pub cities: Vec<u8>,
+    /// The order cities start corrupted in (an adversary cube): setup
+    /// corrupts the first `board.start_corrupted`, difficulty 3 more.
+    pub corrupted: Vec<u8>,
+    pub ocean: Vec<u8>,
+    /// Research stations at setup (they start corrupted).
+    pub stations: Vec<u8>,
     pub factories: Vec<u8>,
+    /// Where the starting data centres of the player who starts here go.
     pub data_centres: Vec<u8>,
+    /// The corp's megaproject card.
+    pub project: Project,
+}
+
+/// A megaproject card: research stations fill it with cubes; when it holds
+/// `cubes`, it completes and every cube pays its owner. After that, each
+/// owned station in the country produces `benefit` for its owner every round.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Project {
+    pub name: String,
+    pub cubes: i64,
+    #[serde(default)]
+    pub text: String,
+    pub benefit: Vec<Cost>,
 }
 
 impl CountryPiece {
-    /// Terrain of hex number `n` (1-based).
-    pub fn terrain_at(&self, n: u8, size: u8) -> Terrain {
-        let (i, j) = ((n - 1) / size, (n - 1) % size);
-        let c = self.terrain[i as usize].chars().nth(j as usize).unwrap();
-        Terrain::from_letter(c).unwrap()
+    /// The printed kind of hex number `n` (bases are placed, not printed).
+    pub fn kind_at(&self, n: u8) -> HexKind {
+        if self.cities.contains(&n) {
+            HexKind::City
+        } else if self.ocean.contains(&n) {
+            HexKind::Ocean
+        } else {
+            HexKind::Open
+        }
     }
 }
 
@@ -227,16 +234,16 @@ pub struct Ability {
     pub effects: Vec<Effect>,
 }
 
-/// Where a damage effect may land.
+/// Where a removal effect may land.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DamageAt {
-    /// Any hex holding adversary pieces.
+    /// Any hex holding adversary ambassadors or troops.
     Any,
-    /// A hex within 1 of one of your processors.
-    NearProcessor,
-    /// A hex in a country where you have a processor.
-    ProcessorCountry,
+    /// A hex within your reach (1 of one of your data centres).
+    Reach,
+    /// A hex in a country where you have a data centre.
+    DataCentreCountry,
 }
 
 /// Which country a placement may go to.
@@ -244,16 +251,16 @@ pub enum DamageAt {
 #[serde(rename_all = "snake_case")]
 pub enum CountryRule {
     Any,
-    ProcessorCountry,
+    DataCentreCountry,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Cond {
-    /// You destroyed a foundry this round.
-    DestroyedFoundry,
-    /// Some hex holds both population and adversary pieces.
-    PopulationWithAdversary,
+    /// You removed an adversary troop this round.
+    RemovedTroop,
+    /// Some clean city holds adversary ambassadors.
+    CityWithAmbassador,
 }
 
 /// Player effect primitives (cards, abilities, growth options), resolved in
@@ -263,8 +270,8 @@ pub enum Cond {
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Effect {
     Gain { resource: String, amount: i64 },
-    /// 1 of `resource` per processor you have on the board, up to `max`.
-    GainPerProcessor { resource: String, max: i64 },
+    /// 1 of `resource` per data centre you have on the board, up to `max`.
+    GainPerDataCentre { resource: String, max: i64 },
     /// Choose another player for the `other_gain` / `transfer` that follow.
     ChoosePlayer,
     OtherGain { resource: String, amount: i64 },
@@ -273,24 +280,29 @@ pub enum Effect {
     Transfer { resource: String, max: i64, bonus: i64 },
     /// Convert up to `max` of `from` into `rate` of `to` each.
     Convert { from: String, to: String, max: i64, rate: i64 },
-    PlaceProcessor { count: i64 },
-    /// `amount` damage in one hex.
+    PlaceDataCentre { count: i64 },
+    /// Remove adversary pieces in one hex, `amount` worth: an ambassador
+    /// costs 1, a troop `board.troop_health`.
     Damage { amount: i64, at: DamageAt },
-    /// `amount` damage in each hex of one country that holds adversary pieces.
+    /// `amount` worth of removal in each hex of one country holding adversary pieces.
     DamageCountry { amount: i64 },
-    /// Destroy every adversary piece in one hex.
+    /// Remove every adversary ambassador and troop in one hex.
     DestroyAll,
-    /// Remove every drone in one country; sway 1 toward Unity per `unity_per` removed.
-    RemoveDronesCountry { unity_per: i64 },
-    /// Build a factory on an Industrial hex next to population (`empty`: holding no pieces).
-    BuildFactory { empty: bool },
-    /// Return up to `amount` corruption to the pool, one hex at a time
-    /// (`one_country`: all from the first hex's country).
-    RemoveCorruption { amount: i64, one_country: bool },
-    PlaceDefense { count: i64, #[serde(rename = "where")] in_country: CountryRule },
-    /// Move up to `max` population, one at a time, within one country.
-    MovePopulation { max: i64 },
-    /// In one country, population can't be destroyed this round.
+    /// Remove every adversary ambassador in one country; sway 1 toward Unity per `unity_per` removed.
+    RemoveAmbassadorsCountry { unity_per: i64 },
+    /// Build a factory on an empty open hex touching a city.
+    BuildFactory,
+    /// Take the adversary cube off up to `amount` corrupted cities or
+    /// stations, one at a time (`one_country`: all in the first one's country).
+    Cleanse { amount: i64, one_country: bool },
+    /// Put `count` hardening tokens on buildings in one country.
+    Harden { count: i64, #[serde(rename = "where")] in_country: CountryRule },
+    /// Move up to `max` of your ambassadors (from your supply or the board)
+    /// onto pieces within your reach, one at a time.
+    MoveAmbassadors { max: i64 },
+    /// Gain `count` player ambassadors into your supply.
+    GainAmbassadors { count: i64 },
+    /// In one country, buildings can't be destroyed this round.
     Shelter,
     /// The next `count` adversary cards are shown.
     Peek { count: i64 },
@@ -321,40 +333,25 @@ pub enum Passive {
     /// `amount` if you have at least `count` `tag` tags.
     IncomeIfTags { resource: String, tag: String, count: i64, amount: i64 },
     BuildingDiscount { amount: i64 },
-    /// Each of your defense tokens prevents this much damage.
-    DefenseValue { amount: i64 },
+    /// You may use the Harden standard action.
+    HardenAction,
     Slots { amount: i64 },
     /// Gain this when a threat you paid toward is countered.
     Logistics { resource: String, amount: i64 },
-    /// Extra Sway toward Unity when you destroy an outpost or foundry.
+    /// Extra Sway toward Unity when you remove an adversary troop.
     UnityBonus { amount: i64 },
     /// When you give insight, the receiver also gains this.
     GiveBonus { resource: String, amount: i64 },
-    /// Explore adds no drone to hexes holding your processor.
-    ExploreShield,
-    /// Once a round, prevent the first population loss in a country where
-    /// you have a processor.
+    /// The adversary's spread places no ambassador on hexes holding your data centre.
+    SpreadShield,
+    /// Once a round, prevent the first building destruction in a country
+    /// where you have a data centre.
     CivicShelter,
     /// In upkeep, convert `amount` `from` into `gain` `to` (if you have it).
     ConvertUpkeep { from: String, amount: i64, to: String, gain: i64 },
 }
 
 // ---------- threats ----------
-
-/// Which hexes a threat or adversary step touches (all conditions must hold).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Selector {
-    #[serde(default)]
-    pub uplink: bool,
-    /// Token kinds the hex must hold (each at least one).
-    #[serde(default)]
-    pub has: Vec<String>,
-    #[serde(default)]
-    pub adversary_at_least: Option<i64>,
-    #[serde(default)]
-    pub corrupted: bool,
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -369,50 +366,99 @@ pub struct ThreatDef {
     pub effects: Vec<ThreatOp>,
 }
 
+/// Pieces a threat places adversary ambassadors on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Spot {
+    /// Data centres and player-owned stations and cities.
+    PlayerBuildings,
+    CleanCities,
+    Factories,
+    Bases,
+}
+
 /// Threat effect primitives. Each applies to the threat's scope: its
-/// country, or every country for a shared-row threat.
+/// country, or every country for a shared-row threat. Team choices are
+/// asked of seat 0.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ThreatOp {
-    /// Each selected hex gains `amount` of `piece` (times the number of
-    /// `per` tokens there, if given).
-    AddPiece {
-        piece: String,
-        at: Selector,
-        amount: i64,
-        #[serde(default)]
-        per: Option<String>,
-    },
-    /// Each player with a processor in scope loses `amount` of `resource`.
+    /// `count` adversary ambassadors from the supply, each onto a piece of
+    /// kind `at` in scope (players choose each).
+    Ambassadors { at: Spot, count: i64 },
+    /// `count` adversary troops, each onto a factory in scope (players
+    /// choose), or with no factory onto a city.
+    Troop { count: i64 },
+    /// One research station in scope that is not corrupted becomes
+    /// corrupted (players choose).
+    FlipStation,
+    /// The clean city in scope with the most adversary ambassadors (ties:
+    /// lower hex number) becomes corrupted.
+    CorruptCity,
+    /// Each player with a data centre in scope loses `amount` of `resource`.
     PlayersLose { resource: String, amount: i64 },
     /// A round marker on the country, read by production.
     Flag { name: String },
-    /// One drone on the lowest-numbered uplink holding drones becomes an outpost.
-    UpgradeUplink,
-    Panic,
-    /// Each player in scope discards 1 card or pays `amount` `resource`.
-    Requisition { resource: String, amount: i64 },
-    RemovePopulation { at: Selector, amount: i64 },
-    Ravage { at: Selector },
-    Cascade { at: Selector },
-    /// Destroy the factory with the most adjacent population.
-    DestroyFactory,
-    Build { at: Selector },
+    /// Each player in scope discards `cards` cards or pays `amount`
+    /// `resource` (their choice).
+    Requisition {
+        resource: String,
+        amount: i64,
+        #[serde(default = "one")]
+        cards: i64,
+    },
+    /// Each player in scope loses a player ambassador (from their supply,
+    /// else one of theirs on the board).
+    LoseAmbassador,
+    /// Sway `amount` toward Discord.
+    Discord { amount: i64 },
+    /// The adversary builds now (everywhere).
+    Build,
     DiscardMostExpensive,
-    AddCorruption { at: Selector, amount: i64 },
+}
+
+fn one() -> i64 {
+    1
 }
 
 // ---------- adversary ----------
 
+/// An adversary deck card: the clock and the stager. Its twists change
+/// the round it is the current card of.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AdversaryCard {
     pub id: String,
     pub name: String,
     pub stage: u8,
-    pub terrains: Vec<Terrain>,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub twists: Vec<Twist>,
+    /// The Militarist's escalation: each military base gains an adversary
+    /// ambassador when this card's round builds.
     #[serde(default)]
     pub escalation: bool,
+}
+
+/// What an adversary card changes about its round.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Twist {
+    /// Each corrupted city builds `amount` more.
+    CityBuild { amount: i64 },
+    /// Factories next to clean cities build `amount` too.
+    CleanFactories { amount: i64 },
+    /// Each corrupted research station builds `amount`.
+    Stations { amount: i64 },
+    /// Spread reaches `amount` hexes further.
+    Reach { amount: i64 },
+    /// Clean cities corrupt at `amount` fewer ambassadors.
+    CorruptSooner { amount: i64 },
+    /// Sway `amount` toward Discord.
+    Discord { amount: i64 },
+    /// This round is a war round.
+    War,
 }
 
 // ---------- alignment ----------
@@ -474,19 +520,19 @@ pub enum AlignOp {
     CounterThreat,
     /// Counter every active threat.
     CounterAll,
-    /// In each country, remove `drones` drones (players choose).
-    Pushback { drones: i64 },
+    /// In each country, remove `ambassadors` adversary ambassadors (players choose).
+    Pushback { ambassadors: i64 },
     /// Sway `amount` toward `side`.
     Sway { side: Side, amount: i64 },
     /// Deal `count` extra threats now, one per country in turn.
     Threats { count: i64 },
-    /// In each country, the hex with the most adversary pieces (ties: lower
-    /// hex number) gains `amount` corruption.
-    Corrupt { amount: i64 },
-    /// The adversary builds now with the card in its build slot.
+    /// In each country, the clean city with the most adversary ambassadors
+    /// (ties: lower hex number) gains `amount` more.
+    Infiltrate { amount: i64 },
+    /// The adversary builds now.
     Build,
-    /// The adversary ravages now with the card in its ravage slot.
-    Ravage,
+    /// The adversary spreads now.
+    Spread,
 }
 
 // ---------- AI boards ----------
@@ -501,7 +547,12 @@ pub struct AiBoard {
     /// Building slots.
     pub slots: i64,
     pub innate: Innate,
-    /// Two tracks, each covered by processors except the first value.
+    /// Credit production every round, before cards raise it.
+    pub credits: i64,
+    /// Resources this AI may spend as credits on some cards.
+    #[serde(default)]
+    pub discounts: Vec<Discount>,
+    /// Two tracks, each covered by data centres except the first value.
     pub tracks: Vec<Track>,
     pub growth: Vec<Growth>,
     /// Unique cards, in hand at the start.
@@ -509,6 +560,16 @@ pub struct AiBoard {
     /// Sway toward Unity this board adds at the start of every round.
     #[serde(default)]
     pub unity: i64,
+}
+
+/// Spend `resource` for `rate` credits each off a card's credit cost: on
+/// cards tagged `tag`, or on any building for `tag` "building".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Discount {
+    pub resource: String,
+    pub tag: String,
+    pub rate: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -635,8 +696,8 @@ impl Content {
             }
         }
         for a in &self.adversary {
-            if !(1..=3).contains(&a.stage) || a.terrains.is_empty() {
-                return Err(format!("adversary card {:?}: stage 1-3 and a terrain", a.id));
+            if !(1..=3).contains(&a.stage) {
+                return Err(format!("adversary card {:?}: stage 1-3", a.id));
             }
         }
         for a in &self.alignment {
@@ -658,21 +719,24 @@ impl Content {
         let size = self.map.piece.size;
         let n = size as usize * size as usize;
         for (i, p) in self.map.countries.iter().enumerate() {
-            let letters: String = p.terrain.concat();
-            if p.terrain.len() != size as usize
-                || p.terrain.iter().any(|r| r.chars().count() != size as usize)
-                || letters.chars().any(|c| Terrain::from_letter(c).is_none())
-            {
-                return Err(format!("country piece {i}: terrain must be {size} rows of {size} of U, I, N, F"));
-            }
-            let lists = [&p.uplinks, &p.outposts, &p.population, &p.factories, &p.data_centres];
+            let lists = [&p.cities, &p.corrupted, &p.ocean, &p.stations, &p.factories, &p.data_centres];
             if lists.iter().flat_map(|l| l.iter()).any(|&h| h == 0 || h as usize > n) {
                 return Err(format!("country piece {i}: hex numbers are 1-{n}"));
             }
-            if p.uplinks.iter().any(|&u| p.terrain_at(u, size) != Terrain::Frontier)
-                || p.outposts.iter().any(|o| !p.uplinks.contains(o))
-            {
-                return Err(format!("country piece {i}: uplinks are Frontier and outposts start on uplinks"));
+            if p.corrupted.iter().any(|c| !p.cities.contains(c)) {
+                return Err(format!("country piece {i}: corrupted cities must be cities"));
+            }
+            let built: Vec<u8> = [&p.stations, &p.factories, &p.data_centres]
+                .iter()
+                .flat_map(|l| l.iter().copied())
+                .collect();
+            for (k, &h) in built.iter().enumerate() {
+                if p.kind_at(h) != HexKind::Open || built[..k].contains(&h) {
+                    return Err(format!("country piece {i}: buildings go on open hexes, one per hex (#{h})"));
+                }
+            }
+            for (r, _) in &p.project.benefit {
+                resource(r, &format!("project of country piece {i}"))?;
             }
         }
         for l in &self.map.layouts {

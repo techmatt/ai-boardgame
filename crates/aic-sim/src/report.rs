@@ -50,14 +50,17 @@ pub struct CellSummary {
     pub threats_dealt_per_game: f64,
     pub threats_countered_per_game: f64,
     pub countered_share: f64,
-    /// Margin on wins: adversary cards left (rounds to spare), pool left.
+    /// Margin on wins: adversary cards left (rounds to spare), ambassador
+    /// supply left.
     pub win_deck_left: Option<f64>,
-    pub win_pool_left: Option<f64>,
-    /// Distance on losses: adversary pieces over the bar, opposition level.
+    pub win_supply_left: Option<f64>,
+    /// Distance on losses: adversary pieces over the bar, bar level.
     pub loss_blockers: Option<f64>,
     pub loss_level: Option<f64>,
-    pub pool_left_mean: f64,
-    pub population_slack_mean: f64,
+    pub supply_left_mean: f64,
+    /// Corrupted and aligned cities at the end, per game.
+    pub cities_corrupted_mean: f64,
+    pub cities_aligned_mean: f64,
     /// Mean win probability at the start of round r (index r-1), with the
     /// number of games that reached it.
     pub winprob_by_round: Vec<(f64, usize)>,
@@ -605,11 +608,13 @@ pub fn summarize(cells: &[Cell], games: &[GameResult]) -> Vec<CellSummary> {
                 threats_countered_per_game: countered,
                 countered_share: if dealt > 0.0 { countered / dealt } else { 0.0 },
                 win_deck_left: mean(won.iter().map(|g| g.margin.deck_left as f64)),
-                win_pool_left: mean(won.iter().map(|g| g.margin.pool_left as f64)),
+                win_supply_left: mean(won.iter().map(|g| g.margin.supply_left as f64)),
                 loss_blockers: mean(lost.iter().map(|g| g.margin.blockers as f64)),
                 loss_level: mean(lost.iter().map(|g| g.margin.level as f64)),
-                pool_left_mean: mean(gs.iter().map(|g| g.margin.pool_left as f64)).unwrap_or(0.0),
-                population_slack_mean: mean(gs.iter().map(|g| g.margin.population_slack as f64))
+                supply_left_mean: mean(gs.iter().map(|g| g.margin.supply_left as f64)).unwrap_or(0.0),
+                cities_corrupted_mean: mean(gs.iter().map(|g| g.margin.cities_corrupted_end as f64))
+                    .unwrap_or(0.0),
+                cities_aligned_mean: mean(gs.iter().map(|g| g.margin.cities_aligned_end as f64))
                     .unwrap_or(0.0),
                 winprob_by_round,
                 uncertain_share: mean(
@@ -852,8 +857,14 @@ pub fn save_records(
             .iter()
             .map(|(i, g)| {
                 (*i, format!(
-                    "close loss at difficulty {top_d}: {} in round {}, {} adversary piece(s) over the level-{} bar, pool {} of {}",
-                    g.reason, g.rounds, g.margin.blockers, g.margin.level, g.margin.pool_left, g.margin.pool_start
+                    "close loss at difficulty {top_d}: {} in round {}, {} adversary piece(s) over the level-{} bar, supply {} of {}, {} cities corrupted",
+                    g.reason,
+                    g.rounds,
+                    g.margin.blockers,
+                    g.margin.level,
+                    g.margin.supply_left,
+                    g.margin.supply_start,
+                    g.margin.cities_corrupted_end
                 ))
             })
             .collect(),
@@ -1004,7 +1015,7 @@ fn q(s: &str) -> String {
 
 pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
     let mut s = String::from(
-        "config,variant,difficulty,agent,seed,won,reason,rounds,decisions,options,forced,probed,close,gap_mean,deck_left,pool_left,pool_start,population_slack,blockers,level,points,adversary_ops,adversary_ops_max,setup_ops,gives,pays,withdraws,threats_dealt,threats_countered,cards_played,buildings_played,tier2_played,buildings_standing,build,winprob,ms,replay_ok\n",
+        "config,variant,difficulty,agent,seed,won,reason,rounds,decisions,options,forced,probed,close,gap_mean,deck_left,supply_left,supply_start,cities_corrupted_end,cities_aligned_end,blockers,level,points,adversary_ops,adversary_ops_max,setup_ops,gives,pays,withdraws,threats_dealt,threats_countered,corruptions,first_corruption_round,std_actions,war_destroyed,cards_played,buildings_played,tier2_played,buildings_standing,build,winprob,ms,replay_ok\n",
     );
     for g in games {
         let c = &cells[g.cell];
@@ -1014,7 +1025,7 @@ pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
         let pl = plays(g);
         let _ = writeln!(
             s,
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.1},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.1},{}",
             q(&c.config_path),
             q(&c.variant),
             c.difficulty,
@@ -1030,9 +1041,10 @@ pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
             g.close,
             g.gap_sum / g.probed.max(1) as f64,
             g.margin.deck_left,
-            g.margin.pool_left,
-            g.margin.pool_start,
-            g.margin.population_slack,
+            g.margin.supply_left,
+            g.margin.supply_start,
+            g.margin.cities_corrupted_end,
+            g.margin.cities_aligned_end,
             g.margin.blockers,
             g.margin.level,
             g.margin.points,
@@ -1044,6 +1056,10 @@ pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
             g.withdraws,
             cnt("threats.dealt"),
             cnt("threats.countered"),
+            cnt("adversary.corruptions"),
+            cnt("adversary.first_corruption_round"),
+            cnt("board.std_actions"),
+            cnt("board.war_destroyed"),
             pl[0],
             pl[1],
             pl[2],
@@ -1445,13 +1461,13 @@ pub fn markdown(run: &Run) -> String {
     }
 
     let _ = writeln!(w, "## Game length, margin and end\n");
-    let _ = writeln!(w, "| cell | rounds (sd, min..max) | ended by | win margin: deck left / pool left | loss distance: pieces over bar / level | pool left | population slack |");
+    let _ = writeln!(w, "| cell | rounds (sd, min..max) | ended by | win margin: deck left / supply left | loss distance: pieces over bar / level | supply left | cities corrupted / aligned at end |");
     let _ = writeln!(w, "|---|---|---|---|---|---|---|");
     for s in sums {
         let ended: Vec<String> = s.ended.iter().map(|(k, v)| format!("{k} {v}")).collect();
         let _ = writeln!(
             w,
-            "| {} | {:.2} ({:.2}, {}..{}) | {} | {} / {} | {} / {} | {:.2} | {:.2} |",
+            "| {} | {:.2} ({:.2}, {}..{}) | {} | {} / {} | {} / {} | {:.2} | {:.2} / {:.2} |",
             short(s, multi_c, multi_v),
             s.rounds_mean,
             s.rounds_sd,
@@ -1459,11 +1475,12 @@ pub fn markdown(run: &Run) -> String {
             s.rounds_max,
             ended.join(", "),
             opt(s.win_deck_left, 2),
-            opt(s.win_pool_left, 2),
+            opt(s.win_supply_left, 2),
             opt(s.loss_blockers, 1),
             opt(s.loss_level, 2),
-            s.pool_left_mean,
-            s.population_slack_mean
+            s.supply_left_mean,
+            s.cities_corrupted_mean,
+            s.cities_aligned_mean
         );
     }
 

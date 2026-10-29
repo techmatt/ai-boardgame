@@ -5,13 +5,15 @@
 //! hides with a guess drawn from its own RNG, consistent with what players
 //! can see:
 //!
-//! - the player-card and threat decks: their contents are known (every card
-//!   not seen elsewhere), their order is not, so they are shuffled;
+//! - the player-card, threat and Unity/Discord decks: their contents are
+//!   known (every card not seen elsewhere), their order is not, so they are
+//!   shuffled;
 //! - the adversary deck: its size and the stage of each position are public
-//!   (the stages are stacked), and the top `adversary.peek` cards are shown
-//!   (Recon Sweep). Every other position gets a card of its stage drawn from
-//!   the printed cards of that stage not seen in a slot, the discard or the
-//!   peek: the game deals a subset of each stage, so which ones is hidden;
+//!   (the stages are stacked), next round's card (`adversary.next`) is face
+//!   up, and the top `adversary.peek` cards are shown (Recon Sweep). Every
+//!   other position gets a card of its stage drawn from the printed cards of
+//!   that stage not seen face up, current, in the discard or the peek: the
+//!   game may deal a subset of each stage, so which ones is hidden too;
 //! - every RNG stream is reseeded, so later reshuffles are guesses too.
 //!
 //! A pending choice's snapshot gets the same guess, so answering it replays
@@ -24,11 +26,15 @@ use rand::RngCore;
 use rand_chacha::ChaCha8Rng;
 
 /// Piles whose order is hidden but whose contents are known.
-const SHUFFLED: [&str; 4] = [
+const SHUFFLED: [&str; 8] = [
     "cards.deck.1",
     "cards.deck.2",
     "threats.deck.1",
     "threats.deck.2",
+    "alignment.deck.unity.1",
+    "alignment.deck.unity.2",
+    "alignment.deck.discord.1",
+    "alignment.deck.discord.2",
 ];
 
 /// Replaces the hidden parts of `g` with a sample drawn from `rng`.
@@ -56,8 +62,7 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
         let snap = std::sync::Arc::make_mut(&mut p.snapshot);
         // Usually the step that asked has not drawn, so its snapshot's
         // hidden piles are the same as the state's: give them the same
-        // guess. A step may draw before it asks (asset corruption reveals,
-        // then asks which asset): then the snapshot's pile is the drawn
+        // guess. A step may draw before it asks: then the snapshot's pile is the drawn
         // cards (now public) on top of the state's, and gets them on top of
         // the same guess, so replaying draws them again. Any other
         // difference gets its own guess.
@@ -101,7 +106,7 @@ fn resample_adversary_deck(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rn
     }
     let peek = (g.var(adversary::PEEK).max(0) as usize).min(deck.len());
     let mut seen: Vec<&str> = deck[..peek].iter().map(|s| s.as_str()).collect();
-    for key in adversary::SLOTS.iter().copied().chain([adversary::DISCARD]) {
+    for key in [adversary::NEXT, adversary::CURRENT, adversary::DISCARD] {
         seen.extend(g.pile(key).iter().map(|s| s.as_str()));
     }
     let mut out = deck[..peek].to_vec();
@@ -193,28 +198,38 @@ mod tests {
         let r = rules(0);
         for seed in 0..10 {
             let a = r.new_game(seed);
-            let mut b = a.clone();
-            for key in SHUFFLED {
-                if let Some(p) = b.piles.get_mut(key) {
-                    p.reverse();
-                }
-            }
-            for (purpose, s) in b.rng.iter_mut() {
-                *s = aic_core::rng::Stream::new(seed + 1000, purpose);
-            }
             // Swap a hidden adversary card for an unseen one of its stage.
             let w = r.world();
             let st = |id: &str| w.content.adversary[w.content.adversary_index(id).unwrap()].stage;
-            let deck = b.piles.get_mut(adversary::DECK).unwrap();
-            let last = deck.last().unwrap().clone();
+            let last = a.pile(adversary::DECK).last().unwrap().clone();
             let all: Vec<String> = a.piles.values().flatten().cloned().collect();
-            if let Some(other) = w
+            let other = w
                 .content
                 .adversary
                 .iter()
                 .find(|c| c.stage == st(&last) && !all.contains(&c.id))
-            {
-                *deck.last_mut().unwrap() = other.id.clone();
+                .map(|c| c.id.clone());
+            // The same hidden difference on the table and, mid-resolution,
+            // on the pending choice's snapshot (one table, seen twice).
+            let hide = |g: &mut GameState| {
+                for key in SHUFFLED {
+                    if let Some(p) = g.piles.get_mut(key) {
+                        p.reverse();
+                    }
+                }
+                for (purpose, s) in g.rng.iter_mut() {
+                    *s = aic_core::rng::Stream::new(seed + 1000, purpose);
+                }
+                if let (Some(other), Some(deck)) = (&other, g.piles.get_mut(adversary::DECK)) {
+                    for id in deck.iter_mut().filter(|id| **id == last) {
+                        *id = other.clone();
+                    }
+                }
+            };
+            let mut b = a.clone();
+            hide(&mut b);
+            if let Some(p) = b.pending.as_mut() {
+                hide(std::sync::Arc::make_mut(&mut p.snapshot));
             }
             assert_ne!(a, b);
             let mut ga = a.clone();
@@ -226,15 +241,12 @@ mod tests {
     }
 
     /// In the middle of a resolution (a pending choice), answering on the
-    /// guess plays out on the same public table as answering on the truth.
-    /// Not `assets`: its opening shuffles the adversary deck with the dice
-    /// and then asks which asset to corrupt, so a guess (reseeded dice) can
-    /// replay another first card. The guess still accepts every answer
-    /// there (the agents no longer crash), it can just play out differently.
+    /// guess plays out on the same public table as answering on the truth,
+    /// up to the next hidden draw (the round's end, or a tip).
     /// Fast lane: seeds 0..8; the slow lane plays 8..40.
     #[test]
     fn pending_choices_replay_on_the_guess() {
-        for name in ["baseline", "clusters"] {
+        for name in ["baseline", "shared_row"] {
             pending_choices_replay(&config_rules(name, 0), 0..8);
         }
     }
@@ -242,7 +254,7 @@ mod tests {
     #[test]
     #[ignore = "slow lane: more seeds of the pending-choice guess check"]
     fn pending_choices_replay_on_the_guess_more_seeds() {
-        for name in ["baseline", "clusters"] {
+        for name in ["baseline", "shared_row"] {
             pending_choices_replay(&config_rules(name, 0), 8..40);
         }
     }
@@ -265,7 +277,12 @@ mod tests {
                         r.apply_mut(&mut x, a, None).unwrap();
                         r.apply_mut(&mut y, a, None)
                             .expect("the guess accepts every answer");
-                        if x.round == g.round {
+                        // Until the round ends or a bucket tips (a tip
+                        // draws from a hidden Unity or Discord deck).
+                        let tips = |s: &GameState| {
+                            (s.var("alignment.unity_tips"), s.var("alignment.discord_tips"))
+                        };
+                        if x.round == g.round && tips(&x) == tips(&g) && tips(&y) == tips(&g) {
                             assert_eq!(
                                 (&x.hexes, &x.vars, &x.seats),
                                 (&y.hexes, &y.vars, &y.seats),

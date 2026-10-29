@@ -1,6 +1,7 @@
-//! Economy and production: insight each round, income and production in
-//! upkeep (AI tracks, buildings, factories, data centres), building upkeep,
-//! and giving insight to another player.
+//! Economy: insight each round, income in upkeep (AI credit production,
+//! AI tracks, buildings, Unity cards), building upkeep, and giving insight
+//! to another player. What the board produces (energy, compute,
+//! megaproject cubes) is the board's production phase.
 
 use crate::action::Action;
 use crate::content::{Passive, RESOURCES};
@@ -11,31 +12,16 @@ use crate::module::{
 use crate::state::GameState;
 use crate::view::ViewOut;
 
-use super::common::*;
-use super::{ai, alignment, board, cards};
+use super::{ai, alignment, cards};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "economy",
     summary: "Insight, income, production and upkeep; giving insight",
-    requires: &["ai", "board", "cards", "alignment"],
+    requires: &["ai", "cards", "alignment"],
     variants: &[VariantDef {
         name: "standard",
         summary: "Income in upkeep, insight at the start of each round",
         params: &[
-            ParamSpec {
-                name: "factory_credits",
-                kind: ParamKind::Int,
-                min: 0,
-                max: 10,
-                doc: "credits a working factory pays every player with a processor in its country",
-            },
-            ParamSpec {
-                name: "processor_compute",
-                kind: ParamKind::Int,
-                min: 0,
-                max: 10,
-                doc: "compute a processor on a working data centre produces",
-            },
             ParamSpec {
                 name: "give_insight",
                 kind: ParamKind::Int,
@@ -53,7 +39,7 @@ pub static DEF: ModuleDef = ModuleDef {
             PhaseSpec {
                 name: "upkeep",
                 kind: PhaseKind::Auto,
-                doc: "collect income and production; pay building upkeep",
+                doc: "collect income (credit production, tracks, buildings); pay building upkeep",
             },
         ],
         rng: &[],
@@ -67,15 +53,11 @@ pub const BONUS_INSIGHT: &str = "economy.bonus_insight";
 
 #[derive(Debug)]
 struct Economy {
-    factory_credits: i64,
-    processor_compute: i64,
     give_insight: i64,
 }
 
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Economy {
-        factory_credits: b.int("factory_credits")?,
-        processor_compute: b.int("processor_compute")?,
         give_insight: b.int("give_insight")?,
     }))
 }
@@ -89,6 +71,7 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; 5] {
             out[i] += n;
         }
     };
+    add("credits", ai::board(w, seat).credits);
     for (r, n) in ai::track_income(w, g, seat) {
         add(&r, n);
     }
@@ -117,58 +100,6 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; 5] {
     add("credits", g.var(alignment::INCOME_BONUS));
     add("insight", g.var(alignment::INSIGHT_BONUS));
     out
-}
-
-/// Production per seat if upkeep came now: (credits from working factories,
-/// compute from processors on working data centres).
-pub fn production(w: &World, g: &GameState) -> Vec<(i64, i64)> {
-    Economy {
-        factory_credits: w.int("economy.factory_credits"),
-        processor_compute: w.int("economy.processor_compute"),
-        give_insight: 0,
-    }
-    .production(w, g)
-}
-
-impl Economy {
-    /// Production per seat: (credits from factories, compute from processors).
-    fn production(&self, w: &World, g: &GameState) -> Vec<(i64, i64)> {
-        let mut out = vec![(0, 0); g.seats.len()];
-        // The search's heuristic calls this for every position it scores:
-        // token keys are built once, and the adversary's reach only looked
-        // at where a blockade or sabotage could stop production.
-        let keys: Vec<String> = (0..g.seats.len()).map(processor).collect();
-        for c in 0..w.map.countries.len() {
-            let blockade = board::flagged(g, "blockade", c);
-            let sabotage = board::flagged(g, "sabotage", c);
-            let mut factories = 0;
-            let hexes = &w.map.countries[c].hexes;
-            for &h in hexes {
-                if g.tokens(h, CORRUPTION) != 0 {
-                    continue;
-                }
-                let near_adversary = || next_to(w, h, |x| has_adversary(g, x));
-                let f = g.tokens(h, FACTORY);
-                if f > 0
-                    && next_to(w, h, |x| g.tokens(x, POPULATION) > 0)
-                    && !(blockade && near_adversary())
-                {
-                    factories += f;
-                }
-                if g.tokens(h, DATA_CENTRE) > 0 && !(sabotage && near_adversary()) {
-                    for (o, k) in out.iter_mut().zip(&keys) {
-                        o.1 += g.tokens(h, k) * self.processor_compute;
-                    }
-                }
-            }
-            for (o, k) in out.iter_mut().zip(&keys) {
-                if hexes.iter().any(|&h| g.tokens(h, k) > 0) {
-                    o.0 += factories * self.factory_credits;
-                }
-            }
-        }
-        out
-    }
 }
 
 impl Module for Economy {
@@ -221,7 +152,6 @@ impl Module for Economy {
 
     fn run(&self, _phase: usize, g: &mut GameState, cx: &mut Cx) -> Res {
         let w = cx.world;
-        let prod = self.production(&w, g);
         for s in 0..g.seats.len() {
             let inc = income(&w, g, s);
             for (i, r) in RESOURCES.iter().enumerate() {
@@ -229,22 +159,19 @@ impl Module for Economy {
                     cx.add_resource(g, s, r, inc[i]);
                 }
             }
-            cx.add_resource(g, s, "credits", prod[s].0);
-            cx.add_resource(g, s, "compute", prod[s].1);
-            cx.count(g, "credits_income", inc[0] + prod[s].0);
+            cx.count(g, "credits_income", inc[0]);
             cards::upkeep(g, cx, s);
         }
         Ok(())
     }
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
-        let prod = self.production(w, g);
         for s in 0..g.seats.len() {
             let inc = income(w, g, s);
             let parts = [
-                ("credits", inc[0] + prod[s].0, "credits in upkeep: tracks, buildings, factories"),
-                ("compute", inc[1] + prod[s].1, "compute in upkeep: processors on working data centres, buildings"),
-                ("energy", inc[2], "energy in upkeep: tracks, buildings"),
+                ("credits", inc[0], "credits in upkeep: credit production, tracks, buildings"),
+                ("compute", inc[1], "compute in upkeep: buildings (data centres make compute in production)"),
+                ("energy", inc[2], "energy in upkeep: tracks, buildings (cities make energy in production)"),
                 ("antimatter", inc[3], "antimatter in upkeep: late track values"),
                 ("insight", inc[4], "insight at the start of each round (unspent insight is lost)"),
             ];

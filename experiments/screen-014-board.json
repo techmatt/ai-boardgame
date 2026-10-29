@@ -1,0 +1,29 @@
+{
+  "name": "screen-014-board",
+  "note": "014 quick screen of the new board model (rules r6): first new corruption, adversary ambassadors on the board by round, cities corrupted at the end, destructions per war round, Unity and Discord tips, win and loss rates and causes, standard-action use. 2 and 3 countries, d0 and d4, greedy and engine. No tuning: content is this prompt's own.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    4
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 32,
+  "records": 2
+}

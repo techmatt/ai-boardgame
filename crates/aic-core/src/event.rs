@@ -39,7 +39,7 @@ pub enum Event {
         from: String,
         to: String,
     },
-    /// A rules step worth a line in the log ("ravage 3 damage at ...").
+    /// A rules step worth a line in the log ("C0 #7 is corrupted").
     Note {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]

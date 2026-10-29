@@ -1,124 +1,171 @@
 [
  {
-  "id": "s1_urban",
-  "name": "I: Urban",
+  "id": "adv_s1_probing_strikes",
+  "name": "Probing Strikes",
   "stage": 1,
-  "terrains": [
-   "urban"
+  "text": "The Militarist tests the lines: it builds and spreads as usual.",
+  "twists": []
+ },
+ {
+  "id": "adv_s1_factory_drive",
+  "name": "Factory Drive",
+  "stage": 1,
+  "text": "Factories next to clean cities build 1 too.",
+  "twists": [
+   {
+    "op": "clean_factories",
+    "amount": 1
+   }
   ]
  },
  {
-  "id": "s1_industrial",
-  "name": "I: Industrial",
+  "id": "adv_s1_long_patrols",
+  "name": "Long Patrols",
   "stage": 1,
-  "terrains": [
-   "industrial"
+  "text": "Spread reaches 1 hex further.",
+  "twists": [
+   {
+    "op": "reach",
+    "amount": 1
+   }
   ]
  },
  {
-  "id": "s1_network",
-  "name": "I: Network",
+  "id": "adv_s1_war_drums",
+  "name": "War Drums",
   "stage": 1,
-  "terrains": [
-   "network"
+  "text": "Sway 1 toward Discord.",
+  "twists": [
+   {
+    "op": "discord",
+    "amount": 1
+   }
   ]
  },
  {
-  "id": "s1_frontier",
-  "name": "I: Frontier",
-  "stage": 1,
-  "terrains": [
-   "frontier"
-  ]
- },
- {
-  "id": "s2_urban",
-  "name": "II: Urban + escalation",
+  "id": "adv_s2_mobilisation",
+  "name": "Mobilisation",
   "stage": 2,
-  "terrains": [
-   "urban"
+  "text": "Each corrupted city builds 1 more. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "twists": [
+   {
+    "op": "city_build",
+    "amount": 1
+   }
   ],
   "escalation": true
  },
  {
-  "id": "s2_industrial",
-  "name": "II: Industrial + escalation",
+  "id": "adv_s2_station_raids",
+  "name": "Station Raids",
   "stage": 2,
-  "terrains": [
-   "industrial"
+  "text": "Each corrupted research station builds 1. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "twists": [
+   {
+    "op": "stations",
+    "amount": 1
+   }
   ],
   "escalation": true
  },
  {
-  "id": "s2_network",
-  "name": "II: Network + escalation",
+  "id": "adv_s2_fifth_column",
+  "name": "Fifth Column",
   "stage": 2,
-  "terrains": [
-   "network"
+  "text": "Clean cities corrupt at 1 fewer ambassador. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "twists": [
+   {
+    "op": "corrupt_sooner",
+    "amount": 1
+   }
   ],
   "escalation": true
  },
  {
-  "id": "s2_frontier",
-  "name": "II: Frontier + escalation",
+  "id": "adv_s2_border_war",
+  "name": "Border War",
   "stage": 2,
-  "terrains": [
-   "frontier"
+  "text": "This round is a war round. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "twists": [
+   {
+    "op": "war"
+   }
   ],
   "escalation": true
  },
  {
-  "id": "s3_urban_industrial",
-  "name": "III: Urban + Industrial",
+  "id": "adv_s2_supply_lines",
+  "name": "Supply Lines",
+  "stage": 2,
+  "text": "Factories next to clean cities build 1 too. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "twists": [
+   {
+    "op": "clean_factories",
+    "amount": 1
+   }
+  ],
+  "escalation": true
+ },
+ {
+  "id": "adv_s3_total_mobilisation",
+  "name": "Total Mobilisation",
   "stage": 3,
-  "terrains": [
-   "urban",
-   "industrial"
+  "text": "Each corrupted city builds 1 more, and factories next to clean cities build 1 too.",
+  "twists": [
+   {
+    "op": "city_build",
+    "amount": 1
+   },
+   {
+    "op": "clean_factories",
+    "amount": 1
+   }
   ]
  },
  {
-  "id": "s3_urban_network",
-  "name": "III: Urban + Network",
+  "id": "adv_s3_blitzkrieg",
+  "name": "Blitzkrieg",
   "stage": 3,
-  "terrains": [
-   "urban",
-   "network"
+  "text": "This round is a war round, and spread reaches 1 hex further.",
+  "twists": [
+   {
+    "op": "war"
+   },
+   {
+    "op": "reach",
+    "amount": 1
+   }
   ]
  },
  {
-  "id": "s3_urban_frontier",
-  "name": "III: Urban + Frontier",
+  "id": "adv_s3_occupation",
+  "name": "Occupation",
   "stage": 3,
-  "terrains": [
-   "urban",
-   "frontier"
+  "text": "Clean cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1.",
+  "twists": [
+   {
+    "op": "corrupt_sooner",
+    "amount": 1
+   },
+   {
+    "op": "stations",
+    "amount": 1
+   }
   ]
  },
  {
-  "id": "s3_industrial_network",
-  "name": "III: Industrial + Network",
+  "id": "adv_s3_iron_doctrine",
+  "name": "Iron Doctrine",
   "stage": 3,
-  "terrains": [
-   "industrial",
-   "network"
-  ]
- },
- {
-  "id": "s3_industrial_frontier",
-  "name": "III: Industrial + Frontier",
-  "stage": 3,
-  "terrains": [
-   "industrial",
-   "frontier"
-  ]
- },
- {
-  "id": "s3_network_frontier",
-  "name": "III: Network + Frontier",
-  "stage": 3,
-  "terrains": [
-   "network",
-   "frontier"
+  "text": "This round is a war round; sway 2 toward Discord.",
+  "twists": [
+   {
+    "op": "war"
+   },
+   {
+    "op": "discord",
+    "amount": 2
+   }
   ]
  }
 ]

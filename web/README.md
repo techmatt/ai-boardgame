@@ -43,22 +43,43 @@ npm run e2e -- <record.json>    # browser check, dev server must be running (see
   one. Any other answer is a button in that seat's panel. *Pass every seat* passes
   all the seats still to act. *Random action* (R) and *Random to end* are for quick
   debugging.
-- **Reading the board:** hexes are filled by terrain (key at the bottom left), with a
-  band in the country's colour along each country border, the printed hex number on
-  top and an antenna badge on uplinks. Players' pieces sit on the upper row of a hex
-  (person, factory, data centre, processor chip with its seat, defense shield in the
-  seat's colour) and the adversary's on the lower row (drone, outpost, foundry, purple
-  corruption blot). A number by a glyph is its count.
+- **Reading the board:** hexes are filled by what they are (`kind`: city grey, military
+  base khaki, open land pale green, ocean blue; key at the bottom left), with a band in
+  the country's colour along each country border and the printed hex number on top.
+  A military base carries a pennant in the colour of the country across its front
+  (`facing`). Fronts are drawn in dark red: a dashed line along each land border
+  between two countries and a dashed link between the two bases facing each other; on
+  a war round (`board.war` = 1) they turn solid bright red and pulse, and the adversary row
+  shows a **war round** badge. Each seat's colour is its country's.
+  Players' pieces sit on the upper row of a hex: owner cube in the seat's colour (an
+  aligned city or owned station), research station (teal dome), factory (brown),
+  data centre (server rack in the seat's colour), hardening token (grey shield), corp
+  units at a base (chevrons in the base country's colour) and player ambassadors (pawn
+  in the seat's colour). The adversary's sit on the lower row, in purple: its owner cube
+  (a corrupted city or station), its ambassadors (pawn) and its troops (dark
+  spearhead). A number by a glyph is its count.
 - **Around the board:** the Alignment track (the Unity bucket, blue, filling leftward
   and the Discord bucket, red, filling rightward on either side of the Undecided; each
-  side's tip count with its next threshold; the clear-board bar level and its win
-  condition; adversary pieces left), the Unity, Discord and ongoing cards resolved so
-  far (hover a chip for its text) with what is left in each deck, and the loss
-  conditions; the adversary pipeline
-  (deck → explore → build → ravage → discard, with what each slot does this round);
-  the countries strip with each country's name, its threat and its counter progress
-  (or the shared threat row). Country names (the printed pieces', from the view's
-  `countries[].name`) also label the board and the hover text.
+  side's tip count with its next threshold; the Unity tips that win outright; the
+  clear-board bar level and its win condition; adversary ambassadors and troops on the
+  board), the Unity, Discord and ongoing cards resolved so far (hover a chip for its
+  text) with what is left in each deck, and the loss conditions (adversary ambassador
+  supply, corrupted cities out of all cities, adversary cards left); the adversary row
+  (stage, difficulty, escalation, threat tier and fronts, then deck →
+  next round's card, face up → this round's card → discard, each card with its stage,
+  text and escalation/war marks); the countries strip with each country's name, its
+  cities (clean, aligned, corrupted), adversary pieces and corp units, its megaproject
+  card (one box per cube place, filled by owner: purple for the adversary, the seat's
+  colour for a player; "completed" once done), its round flags (blackout, sabotage,
+  shelter), its threat and counter progress (or the shared threat row). Country names
+  (the printed pieces', from the view's `countries[].name`) also label the board and the
+  hover text.
+- **Actions:** besides cards, threats and gifts, each seat panel offers the board's
+  standard actions (`standard`: place a data centre, build a factory or research
+  station, remove an adversary ambassador, move an ambassador, gain an ambassador,
+  align a city, harden a building) with their costs from the config, and one *sell*
+  button per card in hand. A standard action that needs a hex asks for it next, as a
+  hex pick.
 - **Seat panels:** the AI board's name (hover it for its text, innate rule, slots and
   unique cards), resources with income, then the board's two tracks with every printed
   step: solid steps are uncovered, dashed ones still under processors, the boxed one
@@ -101,16 +122,21 @@ rules revision) and the saved outcome and final fingerprint. The engine writes i
 `npm run e2e -- <record.json>` (`scripts/e2e.mjs`) drives headless Edge or Chrome
 over the DevTools protocol, with no extra packages. Point it at the dev server with
 `AIC_URL` (default `http://localhost:5173/`), and at a browser with `AIC_BROWSER` if it
-isn't at the usual path. It checks the board drawing (terrain fills, borders,
-uplinks), the pipeline, Alignment track and threats, country names, each seat's AI board
-with two tracks, and that no bookkeeping var is among the globals, then plays a game to the end by
-clicking any action button (and a highlighted hex for hex choices), then checks the
-following:
+isn't at the usual path. It checks the board drawing (fills by hex kind, borders, base
+pennants, fronts, every token stack drawn, owner colours distinct), the adversary row
+with the face-up next card's text and the ambassador supply, the megaproject cards,
+Alignment track and threats, country names, each seat's AI board with two tracks, and
+that no bookkeeping var is among the globals, then plays a baseline game (seed 1) to
+the end by clicking any action button (and a highlighted hex for hex choices), then
+checks the following:
 
 - hex choices highlight their hexes without a click;
+- standard actions and selling a card were offered as buttons;
+- war rounds are marked on the adversary row and the fronts;
 - undo;
 - the restored session;
 - the record dialog;
+- *Random to end* plays a new baseline game (seed 5) to an outcome;
 - hover details;
 - no page scroll at 1366×768, 1920×1080 and 2560×1440;
 - a 4-country game (64 hexes) still fits at 1366×768 and 1920×1080;
@@ -119,11 +145,19 @@ following:
 
 Screenshots go to `web/e2e-out/` (git-ignored): the start, draft, growth, first
 choice, mid-game and end of the game, the layouts, four countries and the shared row.
-A run takes about 15 s.
+With `AIC_SHOTS=<dir>` the mid-game and end-of-game shots are also saved there as
+`viewer-mid.png` and `viewer-end.png`. A run takes about 15 s (12-20 s measured).
+
+- **Against a built site:** `npm run build`, then `npx vite preview --port <p>
+  --strictPort` serves `web/dist/` with no engine watcher, so the run can't be reloaded
+  under it (see the first gotcha). After changing only `web/src/`, `npx vite build`
+  (about 1 s, reuses `web/src/wasm/`) refreshes `dist/`.
 
 - **Gotcha:** the dev server rebuilds the wasm and reloads the page whenever anything
   under `crates/` or `content/` changes. An e2e run during such a rebuild fails with
-  `Cannot read properties of undefined`; run it again once the build is done.
+  `Cannot read properties of undefined`; run it again once the build is done. Any
+  `.rs` edit under `crates/` counts, tests and `aic-sim` included, so while someone
+  else edits the engine, run the e2e against `vite preview` instead.
 - **Gotcha:** stopping a backgrounded `npm run dev` wrapper can leave the `vite`
   process serving the port; `--strictPort` then fails on the next start. Kill the
   process that holds the port.
@@ -134,7 +168,7 @@ A run takes about 15 s.
 |---|---|
 | `src/engine.ts` | Typed wrapper over the wasm API: view, record and event shapes. |
 | `src/session.ts` | `Timeline`: config + seed + actions with every replayed state, cursor, undo, localStorage. |
-| `src/board.ts` | SVG hex board drawn from the view: terrain, borders, uplinks, token glyphs. |
-| `src/format.ts` | Labels for actions (content names for cards, threats, growth options) and events; terrain and token colours. |
-| `src/panels.ts` | Alignment track, adversary pipeline, countries strip (threats), seat panel contents, piles. |
+| `src/board.ts` | SVG hex board drawn from the view: hex kinds, borders, base pennants, fronts, token glyphs. |
+| `src/format.ts` | Labels for actions (content names for cards, threats, growth options; standard actions with costs) and events; hex-kind and token colours. |
+| `src/panels.ts` | Alignment track, adversary row, countries strip (megaprojects, threats), seat panel contents, piles. |
 | `src/main.ts` | Wiring: choice prompt, action buttons, log, timeline, hover card, record dialog. |

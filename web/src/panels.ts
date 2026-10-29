@@ -1,24 +1,25 @@
 // HTML for the panels around the board: the Alignment track and loss conditions, the
-// adversary pipeline, the countries strip (threats), and the seat panels' contents.
-// Everything comes from the generic view; known keys (adversary.*, alignment.*,
-// threats.*, ai.*, economy.income.*, cards.*) get a dedicated drawing, every other
-// value, card group or pile falls back to a generic chip so nothing goes unshown.
+// adversary row (deck, this round's card, the face-up next card, discard), the countries
+// strip (megaprojects, threats), and the seat panels' contents. Everything comes from
+// the generic view; known keys (adversary.*, alignment.*, board.*, threats.*, ai.*,
+// economy.income.*, cards.*) get a dedicated drawing, every other value, card group or
+// pile falls back to a generic chip so nothing goes unshown.
 
 import { aiBoard, content, type CardView, type Config, type PileView, type Value, type View } from './engine';
-import { escapeHtml, strong, TERRAIN, terrainFill } from './format';
+import { ADVERSARY_COLOUR, escapeHtml, KINDS, strong } from './format';
 
 const esc = escapeHtml;
 
-/** Global values drawn by the status strip or the pipeline; the rest are generic chips. */
+/** Global values drawn by the status strip or the adversary row; the rest are generic chips. */
 const DRAWN_GLOBALS = new Set([
-  'adversary.pool', 'adversary.stage', 'adversary.difficulty', 'adversary.deck', 'adversary.peek',
+  'adversary.supply', 'adversary.stage', 'adversary.difficulty', 'adversary.deck', 'adversary.escalation',
   'threats.tier', 'alignment.undecided', 'alignment.unity', 'alignment.discord', 'alignment.unity_tips',
-  'alignment.discord_tips', 'alignment.bar', 'alignment.population', 'alignment.loss_population',
-  'board.start_population',
+  'alignment.discord_tips', 'alignment.bar', 'alignment.corrupted_cities', 'alignment.unity_win',
+  'board.war', 'board.fronts',
 ]);
-/** Piles drawn by the status strip, the pipeline or the countries strip. */
+/** Piles drawn by the status strip, the adversary row or the countries strip. */
 const DRAWN_PILES = new Set([
-  'adversary.deck', 'adversary.explore', 'adversary.build', 'adversary.ravage', 'adversary.discard', 'threats.row',
+  'adversary.deck', 'adversary.next', 'adversary.current', 'adversary.discard', 'threats.row',
   'alignment.deck.unity', 'alignment.deck.discord', 'alignment.resolved.unity', 'alignment.resolved.discord', 'alignment.ongoing',
 ]);
 
@@ -38,10 +39,7 @@ export function cardChip(c: CardView, where: string): string {
   return `<span class="card ${esc(c.status.replace(/\s+/g, '-'))}" data-card="${esc(c.id)}" data-where="${where}">${esc(c.name)}${cost}${status}</span>`;
 }
 
-const terrainChips = (ts: string[]) =>
-  ts.map((t) => `<span class="terrain" style="background:${terrainFill(t)}">${esc(TERRAIN[t]?.label ?? t)}</span>`).join('');
-
-/** Adversary pieces still on the board, by kind. */
+/** Adversary pieces on the board, by kind. */
 function onBoard(v: View, kinds: string[]): Record<string, number> {
   const n: Record<string, number> = Object.fromEntries(kinds.map((k) => [k, 0]));
   for (const h of v.hexes) for (const t of h.tokens) if (t.kind in n) n[t.kind] += t.count;
@@ -67,6 +65,7 @@ function tipsChip(t: Value | undefined, side: 'unity' | 'discord', name: string)
 export function statusHtml(v: View): string {
   const g = v.globals;
   const parts: string[] = [];
+  const acards: string[] = [];
   const und = findValue(g, 'alignment.undecided');
   const unity = findValue(g, 'alignment.unity');
   const discord = findValue(g, 'alignment.discord');
@@ -74,17 +73,16 @@ export function statusHtml(v: View): string {
   if (und || unity || discord || bar) {
     const level = bar?.value ?? 0;
     const max = bar?.max ?? 0;
-    const left = onBoard(v, ['drone', 'outpost', 'foundry']);
-    const pieces = Object.entries(left).map(([k, n]) => `${n} ${k}${n === 1 ? '' : 's'}`).join(' · ');
+    const uw = findValue(g, 'alignment.unity_win');
+    const winAt = uw ? `<span class="tips unity" data-value="${esc(uw.key)}" data-scope="global">win at <b>${uw.value}</b> Unity tips</span>` : '';
     const undHtml = und
       ? `<span class="undecided" data-value="${esc(und.key)}" data-scope="global"><b>${und.value}</b><small>/${und.max ?? '?'}</small> undecided</span>`
       : '';
     parts.push(`<div class="alignment">
       <span class="alabel">Alignment</span>
       <span class="tug">${bucketBar(unity, 'unity', 'Unity')}${undHtml}${bucketBar(discord, 'discord', 'Discord')}</span>
-      ${tipsChip(findValue(g, 'alignment.unity_tips'), 'unity', 'Unity')}${tipsChip(findValue(g, 'alignment.discord_tips'), 'discord', 'Discord')}
+      ${tipsChip(findValue(g, 'alignment.unity_tips'), 'unity', 'Unity')}${tipsChip(findValue(g, 'alignment.discord_tips'), 'discord', 'Discord')}${winAt}
       ${bar ? `<span class="level" data-value="${esc(bar.key)}" data-scope="global">bar <b>${level}</b>/${max}</span><span class="win">${esc(bar.doc ?? '')}</span>` : ''}
-      <span class="left" title="adversary pieces on the board">on board: ${pieces}</span>
     </div>`);
     const groups = ([['alignment.resolved.unity', 'unity'], ['alignment.resolved.discord', 'discord'], ['alignment.ongoing', 'ongoing']] as const)
       .map(([key, cls]) => [pile(v, key), cls] as const)
@@ -92,91 +90,94 @@ export function statusHtml(v: View): string {
       .map(([p, cls]) => `<span class="agroup ${cls}" data-pile="${esc(p!.key)}"><span class="what">${esc(p!.label)}</span>${p!.visible.map((c) => cardChip(c, `pile:${p!.key}`)).join('')}</span>`);
     const decks = ['unity', 'discord'].map((s) => pile(v, `alignment.deck.${s}`)).filter((p): p is PileView => !!p)
       .map((p) => `<span class="adeck" data-pile="${esc(p.key)}">${esc(p.label)} <b>${p.count}</b></span>`);
-    if (groups.length || decks.length) parts.push(`<div class="acards">${groups.join('')}${decks.join('')}</div>`);
+    acards.push(...groups, ...decks);
   }
   const loss: string[] = [];
-  const pop = findValue(g, 'alignment.population');
-  const below = findValue(g, 'alignment.loss_population');
-  if (pop) {
-    const danger = below && pop.value - below.value <= 2 ? ' danger' : '';
-    loss.push(`<span class="value${danger}" data-value="${pop.key}" data-scope="global"><span class="label">population</span> <b>${pop.value}</b>${below ? `<small> (lose below ${below.value})</small>` : ''}</span>`);
+  const supply = findValue(g, 'adversary.supply');
+  if (supply) {
+    const danger = supply.value <= 3 ? ' danger' : '';
+    loss.push(`<span class="value${danger}" data-value="${supply.key}" data-scope="global"><span class="label">adversary ambassadors run out</span> <b>${supply.value}</b><small>/${supply.max ?? '?'} left</small></span>`);
   }
-  const pool = findValue(g, 'adversary.pool');
-  if (pool) {
-    const danger = pool.value <= 2 ? ' danger' : '';
-    loss.push(`<span class="value${danger}" data-value="${pool.key}" data-scope="global"><span class="label">corruption pool</span> <b>${pool.value}</b><small>/${pool.max ?? '?'} (lose at 0)</small></span>`);
+  const bad = findValue(g, 'alignment.corrupted_cities');
+  if (bad) {
+    const danger = bad.max !== undefined && bad.max - bad.value <= 1 ? ' danger' : '';
+    loss.push(`<span class="value${danger}" data-value="${bad.key}" data-scope="global"><span class="label">all cities corrupted</span> <b>${bad.value}</b><small>/${bad.max ?? '?'}</small></span>`);
   }
   const deck = findValue(g, 'adversary.deck');
   if (deck) {
     const danger = deck.value <= 1 ? ' danger' : '';
-    loss.push(`<span class="value${danger}" data-value="${deck.key}" data-scope="global"><span class="label">adversary deck</span> <b>${deck.value}</b><small> left (lose if empty)</small></span>`);
+    loss.push(`<span class="value${danger}" data-value="${deck.key}" data-scope="global"><span class="label">adversary cards run out</span> <b>${deck.value}</b><small> left</small></span>`);
   }
   // Unlabelled `vars` (source "engine") are folded under the piles: see `varsHtml`.
   const other = g.filter((x) => !DRAWN_GLOBALS.has(x.key) && x.source !== 'engine').map((x) => valueChip(x, 'global'));
   if (loss.length || other.length) {
-    parts.push(`<div class="losses">${loss.length ? `<span class="what">Lose if</span>${loss.join('')}` : ''}${other.length ? `<span class="sep"></span>${other.join('')}` : ''}</div>`);
+    acards.push(`<span class="losses">${loss.length ? `<span class="what">Lose if</span>${loss.join('')}` : ''}${other.length ? `<span class="sep"></span>${other.join('')}` : ''}</span>`);
   }
+  // The Alignment cards and the loss conditions share one wrapping line.
+  if (acards.length) parts.push(`<div class="acards">${acards.join('')}</div>`);
   return parts.join('');
 }
 
-// ---------- the adversary pipeline ----------
+// ---------- the adversary row ----------
 
-const phaseAt = (v: View, name: string) => v.round_order.findIndex((p) => p.name.split('+').includes(name));
-
-function slotTerrains(c: CardView): string[] {
+/** An adversary card face under the box's title: name, stage, escalation mark, then its printed text. */
+function adversaryCard(c: CardView, where: string, title: string): string {
   const def = content.adversary?.find((a) => a.id === c.id);
-  if (def) return def.terrains;
-  const m = /:\s*([a-z +]+)/.exec(c.text ?? '');
-  return m ? m[1].split('+').map((s) => s.trim()).filter(Boolean) : [];
+  // The view's text starts "stage n: "; the stage is drawn as a chip instead.
+  const text = def?.text ?? (c.text ?? '').replace(/^stage \d+:\s*/, '');
+  const stage = def ? `<span class="stage">stage ${def.stage}</span>` : '';
+  const war = def?.twists.some((t) => t.op === 'war') ? '<span class="war-tag">war</span>' : '';
+  return `<div class="acard" data-card="${esc(c.id)}" data-where="${where}"><div class="sline"><span class="stitle">${title}</span><span class="sname">${esc(c.name)}</span>${stage}${war}${def?.escalation ? '<span class="escal">escalation</span>' : ''}</div><div class="atext">${esc(text)}</div></div>`;
 }
 
-function slotBox(p: PileView | undefined, title: string, hint: string, cls: string): string {
+function cardBox(p: PileView | undefined, title: string, empty: string, cls: string): string {
   if (!p) return '';
   const cards = p.visible.length
-    ? p.visible.map((c) => {
-      const esc8 = content.adversary?.find((a) => a.id === c.id)?.escalation;
-      return `<span class="acard" data-card="${esc(c.id)}" data-where="pile:${esc(p.key)}">${terrainChips(slotTerrains(c))}${esc8 ? '<span class="escal">escalation</span>' : ''}</span>`;
-    }).join('')
-    : '<span class="empty">empty</span>';
-  const names = p.visible.map((c) => esc(c.name)).join(', ');
-  return `<div class="slot-box ${cls}" data-pile="${esc(p.key)}"><div class="sline"><span class="stitle">${title}</span>${names ? `<span class="sname">${names}</span>` : ''}</div><div class="sline">${cards}</div><div class="hint">${hint}</div></div>`;
+    ? p.visible.map((c) => adversaryCard(c, `pile:${p.key}`, title)).join('')
+    : `<div class="sline"><span class="stitle">${title}</span></div><span class="empty">${esc(empty)}</span>`;
+  return `<div class="slot-box ${cls}" data-pile="${esc(p.key)}">${cards}</div>`;
+}
+
+/** The war-round badge, drawn when `board.war` is 1. */
+function warBadge(v: View): string {
+  const war = findValue(v.globals, 'board.war');
+  if (!war?.value) return '';
+  return `<span class="war-round" data-value="${esc(war.key)}" data-scope="global">⚔ war round</span>`;
 }
 
 export function pipelineHtml(v: View): string {
   const deck = pile(v, 'adversary.deck');
-  const ex = pile(v, 'adversary.explore');
-  const bu = pile(v, 'adversary.build');
-  const ra = pile(v, 'adversary.ravage');
+  const next = pile(v, 'adversary.next');
+  const cur = pile(v, 'adversary.current');
   const di = pile(v, 'adversary.discard');
-  if (!deck && !ex && !bu && !ra) return '';
-  const cur = v.phase?.index ?? v.round_order.length;
-  const when = (phase: string) => {
-    const i = phaseAt(v, phase);
-    return i < 0 || cur <= i ? 'this round' : 'next round';
-  };
+  if (!deck && !next && !cur) return '';
   const g = v.globals;
-  const head = ['adversary.stage', 'adversary.difficulty', 'threats.tier', 'adversary.pool', 'adversary.peek']
+  // The ambassador supply is with the loss conditions in the status strip.
+  const short: Record<string, string> = { 'board.fronts': 'fronts' };
+  const head = ['adversary.stage', 'adversary.difficulty', 'adversary.escalation', 'threats.tier', 'board.fronts']
     .map((k) => findValue(g, k)).filter((x): x is Value => !!x)
-    .map((x) => valueChip(x, 'global', x.key === 'adversary.pool' ? 'corruption pool' : x.label.replace('adversary ', ''), false))
+    .map((x) => valueChip(x, 'global', short[x.key] ?? x.label.replace('adversary ', ''), false))
     .join('');
-  const ravageDone = phaseAt(v, 'adversary.ravage') >= 0 && cur > phaseAt(v, 'adversary.ravage');
-  const buildDone = phaseAt(v, 'adversary.build') >= 0 && cur > phaseAt(v, 'adversary.build');
-  const deckBox = deck
-    ? `<div class="slot-box deck" data-pile="adversary.deck"><div class="sline"><span class="stitle">Deck</span><span class="big">${deck.count}</span><small>left</small></div>${deck.visible.length ? `<div class="sline peek">next: ${deck.visible.map((c) => `<span class="acard" data-card="${esc(c.id)}" data-where="pile:adversary.deck">${terrainChips(slotTerrains(c))}</span>`).join(' ')}</div>` : ''}<div class="hint">top card explores ${when('adversary.explore')}</div></div>`
+  const peek = deck?.visible.length
+    ? `<div class="sline peek">top: ${deck.visible.map((c) => `<span data-card="${esc(c.id)}" data-where="pile:adversary.deck">${esc(c.name)}</span>`).join(', ')}</div>`
     : '';
-  const last = di?.visible[di.visible.length - 1];
+  const deckBox = deck
+    ? `<div class="slot-box deck" data-pile="adversary.deck"><div class="sline"><span class="stitle">Deck</span><span class="big">${deck.count}</span><small>left</small></div>${peek}<div class="hint">the clock: lose when no card is left for the next round</div></div>`
+    : '';
+  const last = di?.visible[0];
   const discBox = di
     ? `<div class="slot-box discard" data-pile="adversary.discard"><div class="sline"><span class="stitle">Discard</span><span class="big">${di.count}</span></div>${last ? `<div class="hint">last: <span data-card="${esc(last.id)}" data-where="pile:adversary.discard">${esc(last.name)}</span></div>` : ''}</div>`
     : '';
   const arrow = '<span class="parrow">→</span>';
   const boxes = [
     deckBox,
-    slotBox(ex, 'Explore', ex?.count ? 'builds next round' : 'the explored card waits here', 'explore'),
-    slotBox(bu, 'Build', buildDone ? 'built · ravages next round' : `builds ${when('adversary.build')} · ravages next`, 'build'),
-    slotBox(ra, 'Ravage', !ra?.count ? 'nothing to ravage' : ravageDone ? 'ravaged · discarded at round end' : `ravages ${when('adversary.ravage')}`, 'ravage'),
+    cardBox(next, 'Next round (face up)', 'not revealed yet', 'next'),
+    cardBox(cur, 'This round', 'no card this round', 'current'),
     discBox,
   ].filter(Boolean);
-  return `<div class="phead"><b>Adversary</b>${head}<span class="note">cards slide one step each round</span></div><div class="prow">${boxes.join(arrow)}</div>`;
+  const left = onBoard(v, ['ambassador:adversary', 'troop']);
+  const pieces = `<span class="left" title="adversary pieces on the board">on board: ${left['ambassador:adversary']} ambassador${left['ambassador:adversary'] === 1 ? '' : 's'} · ${left.troop} troop${left.troop === 1 ? '' : 's'}</span>`;
+  return `<div class="phead"><b>Adversary</b>${head}${pieces}${warBadge(v)}</div><div class="prow">${boxes.join(arrow)}</div>`;
 }
 
 // ---------- countries strip: threats ----------
@@ -197,19 +198,56 @@ function threatCard(c: CardView, where: string): string {
   return `<div class="threat" data-card="${esc(c.id)}" data-where="${where}"><span class="tname"><b>${esc(c.name)}</b>${progressBars(c.status)}</span><span class="ttext">${esc(effect)}</span></div>`;
 }
 
+/**
+ * A country's megaproject card: its name and a row of cube places, filled left to right
+ * by owner (the adversary's, then each seat's), from `board.project*`.
+ */
+function projectHtml(v: View, c: View['countries'][number]): string {
+  const total = findValue(c.values, 'board.project');
+  if (!total) return '';
+  const name = total.label.replace(/^megaproject:\s*/, '');
+  const max = total.max ?? 0;
+  const done = !!findValue(c.values, 'board.project.done');
+  const owners: { label: string; n: number; colour: string; key: string }[] = [];
+  const adv = findValue(c.values, 'board.project.adversary');
+  if (adv) owners.push({ label: 'adversary', n: adv.value, colour: ADVERSARY_COLOUR, key: adv.key });
+  for (const s of v.seats) {
+    const x = findValue(c.values, `board.project.${s.index}`);
+    if (x) owners.push({ label: `seat ${s.index}`, n: x.value, colour: strong(v.countries[s.country]?.colour ?? '#888888'), key: x.key });
+  }
+  const cells: string[] = [];
+  for (const o of owners) for (let i = 0; i < o.n && cells.length < max; i++) cells.push(`<span class="pc" style="background:${o.colour}" title="${esc(o.label)}"></span>`);
+  while (cells.length < max) cells.push(`<span class="pc${done ? ' done' : ''}"></span>`);
+  const by = done ? '<b class="pdone">completed</b>' : owners.filter((o) => o.n).map((o) => `<span data-value="${esc(o.key)}" data-scope="country:${c.index}">${esc(o.label)} ${o.n}</span>`).join(' · ');
+  return `<div class="project${done ? ' done' : ''}" data-value="${esc(total.key)}" data-scope="country:${c.index}"><b title="megaproject">◆ ${esc(name)}</b><span class="cubes">${cells.join('')}</span><small>${total.value}/${max}${by ? ` · ${by}` : ''}</small></div>`;
+}
+
 export function countriesHtml(v: View, config: Config): string {
   const boxes = v.countries.map((c) => {
     const seat = v.seats.find((s) => s.country === c.index);
     const ai = seat ? seat.board?.name ?? aiBoard(config, seat.index)?.name : undefined;
     const tok = (k: string) => findValue(c.values, `tokens.${k}`)?.value ?? 0;
-    const counts = `<span class="counts" title="population · adversary pieces in this country">pop ${tok('population')} · ▲${tok('drone')} ■${tok('outpost')} ⬣${tok('foundry')}${tok('corruption') ? ` · corruption ${tok('corruption')}` : ''}</span>`;
-    const flags = c.values.filter((x) => !x.key.startsWith('tokens.')).map((x) => valueChip(x, `country:${c.index}`)).join('');
+    // Cities by owner cube: the adversary's (corrupted), a seat's (aligned), none (clean).
+    const cities = v.hexes.filter((h) => h.country === c.index && h.kind === 'city');
+    const corrupted = cities.filter((h) => h.tokens.some((t) => t.kind === 'cube:adversary')).length;
+    const aligned = cities.filter((h) => h.tokens.some((t) => /^cube:\d+$/.test(t.kind))).length;
+    // Only what is there: a clean country reads "cities 3 clean".
+    const some = (n: number, what: string, cls = '') => (n ? [`<span class="${cls}">${n} ${what}</span>`] : []);
+    const parts = [
+      `cities ${cities.length - corrupted - aligned} clean`, ...some(aligned, 'aligned'), ...some(corrupted, 'corrupted', 'adv'),
+      ...some(tok('ambassador:adversary'), 'amb.', 'adv'), ...some(tok('troop'), `troop${tok('troop') === 1 ? '' : 's'}`, 'adv'),
+      ...some(tok('unit'), `unit${tok('unit') === 1 ? '' : 's'}`),
+    ];
+    const counts = `<span class="counts" title="cities: clean, aligned, corrupted; adversary ambassadors and troops; corp units at bases">${parts.join(' · ')}</span>`;
+    const flags = c.values.filter((x) => !x.key.startsWith('tokens.') && !x.key.startsWith('board.project')).map((x) => valueChip(x, `country:${c.index}`)).join('');
     const groups = c.cards.map((g) => g.key === 'threats.on'
       ? g.cards.map((x) => threatCard(x, `country:${c.index}:${g.key}`)).join('')
       : `<div class="row"><span class="what">${esc(g.label)}</span>${g.cards.map((x) => cardChip(x, `country:${c.index}:${g.key}`)).join('')}</div>`).join('');
+    const project = projectHtml(v, c);
     return `<div class="country" data-country="${c.index}" style="--tint:${strong(c.colour)};--soft:${c.colour}">
       <div class="chead"><b title="country ${c.index}">${esc(countryName(v, c.index))}</b>${seat ? ` seat ${seat.index}${ai ? ` · ${esc(ai)}` : ''}` : ''} ${counts}${flags}</div>
-      ${groups || '<div class="none">no threat</div>'}</div>`;
+      ${project}
+      ${groups || (project ? '' : '<div class="none">no threat</div>')}</div>`;
   });
   const row = pile(v, 'threats.row');
   if (row) {
@@ -218,19 +256,19 @@ export function countriesHtml(v: View, config: Config): string {
   return boxes.join('');
 }
 
-/** The board's key: terrain fills and the uplink mark. */
+/** The board's key: hex kinds, the base pennant, fronts, and whose colour is whose. */
 export function legendHtml(): string {
-  const t = Object.values(TERRAIN).map((x) => `<span class="terrain" style="background:${x.fill}">${x.label}</span>`).join('');
-  const up = `<svg viewBox="-0.17 -0.17 0.34 0.34" width="1.2em" height="1.2em" style="vertical-align:middle"><g class="uplink">
-    <circle r="0.15" class="badge"/><path d="M0,0.1 V-0.04 M-0.06,0.1 H0.06" class="mast"/><circle cy="-0.05" r="0.025" class="tip"/>
-    <path d="M-0.06,-0.11 A0.08,0.08 0 0 1 0.06,-0.11 M-0.09,-0.02 A0.11,0.11 0 0 1 -0.09,-0.1 M0.09,-0.02 A0.11,0.11 0 0 0 0.09,-0.1" class="waves"/></g></svg>`;
-  return `${t}<span class="lg">${up} uplink</span>`;
+  const t = Object.values(KINDS).map((x) => `<span class="kind" style="background:${x.fill}">${x.label}</span>`).join('');
+  const flag = `<svg viewBox="-0.05 -0.2 0.3 0.4" width="0.9em" height="1.2em" style="vertical-align:middle"><g class="base-mark">
+    <path d="M0,0.17 V-0.17" class="pole"/><path d="M0,-0.17 L0.2,-0.1 L0,-0.03 Z" class="flag" fill="#888"/></g></svg>`;
+  const front = `<svg viewBox="0 -0.1 0.6 0.2" width="1.8em" height="0.8em" style="vertical-align:middle"><g class="fronts"><line x1="0" y1="0" x2="0.6" y2="0" class="front-link"/></g></svg>`;
+  return `${t}<span class="lg">${flag} base: flag in the colour of the country it faces</span><span class="lg">${front} front between two bases</span><span class="lg"><span class="sw" style="background:${ADVERSARY_COLOUR}"></span> adversary · seat colour = its country's</span>`;
 }
 
 // ---------- seat panels ----------
 
 const SEAT_DRAWN = (k: string) =>
-  k.startsWith('resource.') || k.startsWith('economy.income.') || ['ai.tier2', 'ai.processors', 'cards.slots'].includes(k);
+  k.startsWith('resource.') || k.startsWith('economy.income.') || ['ai.tier2', 'cards.slots'].includes(k);
 
 /** The seat's resources with income, its board's tracks, then other values. */
 export function seatValuesHtml(v: View, seatIndex: number): string {
@@ -242,7 +280,7 @@ export function seatValuesHtml(v: View, seatIndex: number): string {
     const r = x.key.startsWith('economy.income.') ? x.key.slice('economy.income.'.length) : null;
     if (r && x.value !== 0) names.add(r);
   }
-  const order = ['credits', 'compute', 'energy', 'insight', 'antimatter'];
+  const order = ['credits', 'compute', 'energy', 'insight', 'antimatter', 'ambassadors'];
   const sorted = [...names].sort((a, b) => (order.indexOf(a) + 99) % 99 - (order.indexOf(b) + 99) % 99 || a.localeCompare(b));
   const resHtml = sorted.map((r) => {
     const have = findValue(s.values, `resource.${r}`);
@@ -254,8 +292,6 @@ export function seatValuesHtml(v: View, seatIndex: number): string {
   const ai: string[] = [];
   const t2 = findValue(s.values, 'ai.tier2');
   if (t2) ai.push(`<span class="value t2 ${t2.value ? 'on' : 'off'}" data-value="ai.tier2" data-scope="${scope}">tier 2 ${t2.value ? 'unlocked' : 'locked'}</span>`);
-  const pr = findValue(s.values, 'ai.processors');
-  if (pr) ai.push(valueChip(pr, scope));
   const slots = findValue(s.values, 'cards.slots');
   const built = s.cards.find((g) => g.key === 'cards.built');
   if (slots) {

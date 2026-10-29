@@ -182,24 +182,14 @@ pub fn tags(w: &World, g: &GameState, seat: usize, tag: &str) -> i64 {
         .sum()
 }
 
-/// Ravage damage one of seat `s`'s defense tokens prevents.
-pub fn defense_value(w: &World, g: &GameState, seat: usize) -> i64 {
-    passives(w, g, seat)
-        .iter()
-        .filter_map(|p| match p {
-            Passive::DefenseValue { amount } => Some(*amount),
-            _ => None,
-        })
-        .max()
-        .unwrap_or_else(|| w.int("adversary.defense_value"))
-}
 
-/// Uses a Civic Shelter for a population loss in `country`, if one applies.
+
+/// Uses a Civic Shelter for a building destruction in `country`, if one applies.
 pub fn civic_shelter(g: &mut GameState, cx: &mut Cx, country: usize) -> bool {
     let w = cx.world;
     for s in 0..g.seats.len() {
         if g.var(&civic_used(s)) == 0
-            && has_processor_in(&w, g, s, country)
+            && has_dc_in(&w, g, s, country)
             && has_passive(&w, g, s, |p| matches!(p, Passive::CivicShelter))
         {
             cx.set_key(g, civic_used(s), 1);
@@ -330,7 +320,8 @@ fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static s
         return Some("needs tags");
     }
     if g.resource(seat, "insight") < w.amount(&d.insight)
-        || g.resource(seat, "credits") < play_cost(w, g, seat, d)
+        || g.resource(seat, "credits") + discount_room(w, g, seat, d).map_or(0, |(_, rate, k)| rate * k)
+            < play_cost(w, g, seat, d)
         || g.resource(seat, "antimatter") < w.amount(&d.antimatter)
     {
         return Some("unaffordable");
@@ -339,6 +330,22 @@ fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static s
         return Some("no target");
     }
     None
+}
+
+/// The AI's resource discount on card `d` for seat `s`: (resource, credits
+/// per unit, most units worth spending), if the AI has one that applies and
+/// the seat holds some of it.
+pub fn discount_room<'w>(w: &World<'w>, g: &GameState, seat: usize, d: &CardDef) -> Option<(&'w str, i64, i64)> {
+    let cost = play_cost(w, g, seat, d);
+    ai::board(w, seat).discounts.iter().find_map(|x| {
+        let applies = if x.tag == "building" { d.is_building() } else { d.tags.contains(&x.tag) };
+        let have = g.resource(seat, &x.resource);
+        if !applies || have <= 0 || x.rate <= 0 || cost <= 0 {
+            return None;
+        }
+        let most = ((cost + x.rate - 1) / x.rate).min(have);
+        Some((x.resource.as_str(), x.rate, most))
+    })
 }
 
 /// Credits to play a card: buildings get the seat's discounts.
@@ -427,7 +434,20 @@ impl Cards {
             return Err(Halt::Illegal(format!("can't play {id}: {why}")));
         }
         let d = def(&w, id);
-        let credits = play_cost(&w, g, seat, d);
+        let mut credits = play_cost(&w, g, seat, d);
+        if let Some((resource, rate, most)) = discount_room(&w, g, seat, d) {
+            // Spend the AI's resource for credits: at least enough to afford it.
+            let short = (credits - g.resource(seat, "credits")).max(0);
+            let least = (short + rate - 1) / rate;
+            let opts = (least..=most).map(|k| opt(format!("spend {k} {resource}"))).collect();
+            let prompt = format!("Seat {seat}: spend how much {resource} at {rate} credit each on {id}?");
+            let k = least + cx.choose(seat, &prompt, opts)?.unwrap_or(0) as i64;
+            if k > 0 {
+                cx.add_resource(g, seat, resource, -k);
+                credits = (credits - k * rate).max(0);
+                cx.tally(g, "cards.discount_used", k);
+            }
+        }
         cx.add_resource(g, seat, "credits", -credits);
         cx.add_resource(g, seat, "antimatter", -w.amount(&d.antimatter));
         cx.add_resource(g, seat, "insight", -w.amount(&d.insight));
@@ -787,7 +807,7 @@ impl Module for Cards {
                 out.seat(s, "draft_tier", "drafting tier", t, None, "the tier you are dealt from this round");
             }
             if g.var(&civic_used(s)) > 0 {
-                out.seat(s, "civic_used", "civic shelter used", 1, None, "your Civic Shelter has saved a population this round");
+                out.seat(s, "civic_used", "civic shelter used", 1, None, "your Civic Shelter has saved a building this round");
             }
         }
         // Per-seat markers: shown above as seat values, card status

@@ -50,6 +50,10 @@ pub enum Action {
     Give { seat: u8, to: u8 },
     /// Sway toward Discord to produce one antimatter (module `alignment`).
     Antimatter { seat: u8 },
+    /// A standard action (module `board`): deliberately poorly priced.
+    Standard { seat: u8, act: String },
+    /// Sell a card from your hand (module `board`).
+    Sell { seat: u8, card: String },
 }
 
 impl Action {
@@ -67,7 +71,9 @@ impl Action {
             | Action::Pay { seat, .. }
             | Action::Withdraw { seat, .. }
             | Action::Give { seat, .. }
-            | Action::Antimatter { seat } => *seat,
+            | Action::Antimatter { seat }
+            | Action::Standard { seat, .. }
+            | Action::Sell { seat, .. } => *seat,
         }
     }
 }

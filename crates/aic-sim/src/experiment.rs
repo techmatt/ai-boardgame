@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use aic_core::content::Side;
-use aic_core::modules::{adversary, alignment, board};
+use aic_core::modules::{adversary, alignment, common};
 use aic_core::{replay, Action, Config, GameState, Rules};
 use serde::{Deserialize, Serialize};
 
@@ -300,40 +300,40 @@ pub struct GameResult {
 /// How a game ended, measured on the final table.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Margin {
-    /// Adversary cards still in the deck: rounds to spare on a win.
+    /// Adversary cards still to come (the face-up one and the deck): rounds
+    /// to spare on a win.
     pub deck_left: u32,
-    pub pool_left: i64,
-    pub pool_start: i64,
-    /// Population above the loss threshold.
-    pub population_slack: i64,
+    /// Adversary ambassadors left in the supply, and at the start.
+    pub supply_left: i64,
+    pub supply_start: i64,
+    /// Cities with the adversary's cube at the end (every city = a loss),
+    /// and cities with a player cube.
+    pub cities_corrupted_end: i64,
+    pub cities_aligned_end: i64,
     /// Adversary pieces keeping the current level's bar from being met
-    /// (0 on a win): how far a loss was from winning.
+    /// (corrupted cities, and ambassadors or troops the bar still counts;
+    /// 0 on a win): how far a loss was from winning.
     pub blockers: i64,
     pub level: i64,
+    /// Unity tips.
     pub points: i64,
 }
 
 fn margin(rules: &Rules, g: &GameState) -> Margin {
     let w = rules.world();
-    let count = |k: &str| (0..g.hexes.len()).map(|h| g.tokens(h, k)).sum::<i64>();
     let level = alignment::bar_level(&w, g);
-    let (d, o, f) = (count("drone"), count("outpost"), count("foundry"));
     let blockers = if g.outcome.as_ref().is_some_and(|o| o.won) {
         0
     } else {
-        match level {
-            0 => d + o + f,
-            1 => o + f,
-            _ => f,
-        }
+        adversary::presence(&w, g, level)
     };
-    let start = g.var(board::START_POPULATION);
-    let safe = (start * w.int("alignment.loss_population_percent") + 99) / 100;
+    let cities: Vec<usize> = (0..g.hexes.len()).filter(|&h| common::is_city(&w, h)).collect();
     Margin {
-        deck_left: g.pile(adversary::DECK).len() as u32,
-        pool_left: g.var(adversary::POOL),
-        pool_start: adversary::start_pool(&w),
-        population_slack: count("population") - safe,
+        deck_left: (g.pile(adversary::DECK).len() + g.pile(adversary::NEXT).len()) as u32,
+        supply_left: g.var(adversary::SUPPLY),
+        supply_start: adversary::start_supply(&w),
+        cities_corrupted_end: cities.iter().filter(|&&h| common::corrupted(g, h)).count() as i64,
+        cities_aligned_end: cities.iter().filter(|&&h| common::cube_owner(g, h).is_some()).count() as i64,
         blockers,
         level,
         points: g.var(alignment::tips_key(Side::Unity)),

@@ -16,7 +16,7 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{adversary, ai, board, cards, threats};
+use super::{adversary, ai, cards, threats};
 
 const fn i(name: &'static str, min: i64, max: i64, doc: &'static str) -> ParamSpec {
     ParamSpec {
@@ -38,20 +38,19 @@ const fn l(name: &'static str, doc: &'static str) -> ParamSpec {
     }
 }
 
-const PARAMS: [ParamSpec; 13] = [
+const PARAMS: [ParamSpec; 12] = [
     i("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
     i("tip_per_player", 1, 50, "a bucket tips when it holds this many Sway per player"),
     i("momentum_every", 0, 10, "Momentum: a side's bucket holds 1 fewer Sway per this many of its tips, down to 1 per player (0: off)"),
-    i("outpost", 0, 10, "Sway toward Unity for destroying an outpost"),
-    i("foundry", 0, 10, "Sway toward Unity for destroying a foundry"),
+    i("troop", 0, 10, "Sway toward Unity for removing an adversary troop"),
     i("threat_discord", 0, 10, "Sway toward Discord when a threat executes uncountered"),
     i("adversary_discord", 0, 10, "Sway toward Discord the adversary adds at the start of every round"),
     i("antimatter_discord", 0, 5, "the antimatter action: Sway toward Discord to produce 1 antimatter (0: no such action)"),
     i("antimatter_uses", 0, 5, "times each player may take the antimatter action per round"),
     l("unity_ease", "Unity tip counts at which the clear-board bar drops a level (the first also starts the stronger Unity cards)"),
     l("discord_escalate", "Discord tip counts at which the adversary escalates a difficulty level (the first also starts the stronger Discord cards)"),
-    i("loss_population_percent", 0, 100, "players lose when population falls below this % of the start"),
-    i("clear_win_stage", 1, 3, "the bar-0 win (no adversary pieces) counts only once a card of this stage has been revealed (1: any time)"),
+    i("unity_win", 0, 50, "Unity tips that win outright (0: never)"),
+    i("clear_win_stage", 1, 3, "the bar-0 win counts only once this round's adversary card is of this stage (1: any time)"),
 ];
 
 const PHASES: &[PhaseSpec] = &[
@@ -219,17 +218,14 @@ pub fn sway(g: &mut GameState, cx: &mut Cx, side: Side, n: i64) {
     }
 }
 
-/// Sway toward Unity for a destroyed adversary piece (plus the destroyer's
-/// Unity Network bonus).
+/// Sway toward Unity for a removed adversary troop (plus the remover's
+/// Unity bonus).
 pub fn for_kill(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, kind: &str) {
     let w = cx.world;
-    let base = match kind {
-        OUTPOST => w.int("alignment.outpost"),
-        FOUNDRY => w.int("alignment.foundry"),
-        CLUSTER => w.int("adversary.cluster_unity"),
-        ROGUE_FACTORY | ROGUE_DATA_CENTRE => w.int("adversary.reclaim_unity"),
-        _ => return,
-    };
+    if kind != TROOP {
+        return;
+    }
+    let base = w.int("alignment.troop");
     let bonus: i64 = seat.map_or(0, |s| {
         cards::passives(&w, g, s)
             .iter()
@@ -242,9 +238,6 @@ pub fn for_kill(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, kind: &str)
     sway(g, cx, Side::Unity, base + bonus);
 }
 
-fn population(g: &GameState) -> i64 {
-    (0..g.hexes.len()).map(|h| g.tokens(h, POPULATION)).sum()
-}
 
 /// Whether the adversary's presence is under the bar for `level`. The
 /// level-0 bar (no adversary pieces) counts only once a card of stage
@@ -280,18 +273,18 @@ fn resolve(g: &mut GameState, cx: &mut Cx, op: &AlignOp) -> Res {
                 threats::counter(g, cx, &t);
             }
         }
-        AlignOp::Pushback { drones } => {
+        AlignOp::Pushback { ambassadors } => {
             for c in 0..w.map.countries.len() {
-                for _ in 0..*drones {
+                for _ in 0..*ambassadors {
                     adversary::pushback(g, cx, c)?;
                 }
             }
         }
         AlignOp::Sway { side, amount } => sway(g, cx, *side, *amount),
         AlignOp::Threats { count } => threats::deal_extra(g, cx, *count),
-        AlignOp::Corrupt { amount } => adversary::corrupt_busiest(g, cx, *amount),
-        AlignOp::Build => adversary::act_now(g, cx, false)?,
-        AlignOp::Ravage => adversary::act_now(g, cx, true)?,
+        AlignOp::Infiltrate { amount } => adversary::infiltrate(g, cx, *amount),
+        AlignOp::Build => adversary::build_all(g, cx, None)?,
+        AlignOp::Spread => adversary::spread(g, cx, None)?,
     }
     Ok(())
 }
@@ -457,14 +450,14 @@ impl Module for Alignment {
             break;
         }
         // Losses first.
-        if g.var(adversary::POOL) <= 0 {
-            cx.end(g, false, "corruption", "the corruption pool ran out".into());
+        if let Some((reason, detail)) = adversary::loss(&w, g) {
+            cx.end(g, false, reason, detail);
             return Ok(());
         }
-        let start = g.var(board::START_POPULATION);
-        let pop = population(g);
-        if pop * 100 < start * w.int("alignment.loss_population_percent") {
-            cx.end(g, false, "population", format!("population fell to {pop} of {start}"));
+        let unity = g.var(tips_key(Side::Unity));
+        let outright = w.int("alignment.unity_win");
+        if outright > 0 && unity >= outright {
+            cx.end(g, true, "unity", format!("{unity} Unity tips win outright"));
             return Ok(());
         }
         let level = bar_level(&w, g);
@@ -521,15 +514,12 @@ impl Module for Alignment {
             text += &format!(" (from adversary stage {stage})");
         }
         out.global("bar", "clear-board bar", level, Some(w.list("alignment.unity_ease").len() as i64), &text);
-        let start = g.var(board::START_POPULATION);
-        out.global("population", "population", population(g), None, "players lose when population falls below the loss threshold");
-        out.global(
-            "loss_population",
-            "lose below",
-            (start * w.int("alignment.loss_population_percent") + 99) / 100,
-            None,
-            "population at which players lose (it must stay at or above this)",
-        );
+        let cities = (0..g.hexes.len()).filter(|&h| is_city(w, h)).count() as i64;
+        let bad = (0..g.hexes.len()).filter(|&h| is_city(w, h) && corrupted(g, h)).count() as i64;
+        out.global("corrupted_cities", "corrupted cities", bad, Some(cities), "players lose when every city is corrupted");
+        if w.int("alignment.unity_win") > 0 {
+            out.global("unity_win", "Unity tips to win", w.int("alignment.unity_win"), None, "this many Unity tips win outright");
+        }
         if g.var(INCOME_BONUS) > 0 {
             out.global("income_bonus", "Unity income bonus", g.var(INCOME_BONUS), None, "credit income every player has from Unity cards");
         }

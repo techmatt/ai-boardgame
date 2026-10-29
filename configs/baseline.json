@@ -4,13 +4,45 @@
   "modules": [
     {
       "module": "board",
-      "variant": "pieces",
+      "variant": "corps",
       "params": {
-        "start_population": 1,
-        "start_factories": 1,
-        "start_data_centres": 1,
-        "start_drones": 1,
-        "start_outposts": 0
+        "start_corrupted": 1,
+        "start_ambassadors": 1,
+        "troop_health": 2,
+        "unit_cap": 3,
+        "factory_units": 1,
+        "war": [
+          0,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1,
+          1
+        ],
+        "city_energy": 1,
+        "aligned_bonus": 1,
+        "dc_compute": 1,
+        "station_cubes": 1,
+        "project_credits": 10,
+        "project_discord_per": 2,
+        "divert_discord": 1,
+        "base_discord": 3,
+        "base_unity": 2,
+        "factory_unity": 1,
+        "free_city_at": 3,
+        "destruction_discord": 1,
+        "dc_energy": 2,
+        "dc_credits": 4,
+        "build_energy": 2,
+        "build_credits": 8,
+        "remove_energy": 2,
+        "move_energy": 1,
+        "ambassador_credits": 6,
+        "harden_credits": 3,
+        "sell_credits": 1,
+        "align_energy": 2
       }
     },
     {
@@ -19,36 +51,24 @@
       "params": {
         "difficulty": 0,
         "stage_cards": [
+          3,
           4,
-          4,
-          2
+          3
         ],
-        "drone_health": 1,
-        "outpost_health": 2,
-        "foundry_health": 3,
-        "drone_damage": 1,
-        "outpost_damage": 2,
-        "foundry_damage": 3,
-        "population_health": 2,
-        "building_health": 3,
-        "defense_value": 1,
-        "corruption_at": 3,
-        "corruption_per_ravage": 1,
-        "cascade": 1,
-        "pool_per_country": 10,
-        "pool_base": 2,
-        "explore_drones": 1,
-        "build_pieces": 1,
-        "momentum_drones": 1,
-        "escalation_outposts": 1,
+        "supply_per_country": 10,
+        "city_build": 2,
+        "factory_build": 1,
+        "spread_range": 2,
+        "corrupt_at": 5,
+        "escalation_ambassadors": 1,
         "counter_bonus": 0,
         "counter_bonus_all": 0,
         "extra_threats": 1,
         "stage1_removed": 1,
-        "foundry_bonus": 0,
-        "foundry_reach": 3,
+        "extra_corrupted": 0,
+        "build_bonus": 1,
         "tier2_early": 1,
-        "pool_reduction": 4
+        "supply_reduction": 2
       }
     },
     {
@@ -65,10 +85,9 @@
         "undecided_per_player": 4,
         "tip_per_player": 2,
         "momentum_every": 0,
-        "outpost": 1,
-        "foundry": 2,
+        "troop": 1,
         "threat_discord": 1,
-        "adversary_discord": 1,
+        "adversary_discord": 0,
         "antimatter_discord": 1,
         "antimatter_uses": 1,
         "unity_ease": [
@@ -79,16 +98,14 @@
           2,
           5
         ],
-        "loss_population_percent": 50,
-        "clear_win_stage": 2
+        "unity_win": 8,
+        "clear_win_stage": 1
       }
     },
     {
       "module": "economy",
       "variant": "standard",
       "params": {
-        "factory_credits": 3,
-        "processor_compute": 1,
         "give_insight": 1
       }
     },
@@ -100,8 +117,7 @@
           0,
           1
         ],
-        "start_credits": 12,
-        "start_processors": 1
+        "start_credits": 25
       }
     },
     {
@@ -164,19 +180,23 @@
   ],
   "round": [
     "alignment.sway",
+    "adversary.build",
+    "adversary.spread",
+    "adversary.corrupt",
     "threats.deal",
+    "adversary.reveal",
     "cards.tier",
     "cards.deal",
     "cards.draft",
     "cards.keep",
     "ai.growth",
-    "cards.play+threats.counter+economy.give+alignment.act",
-    "threats.execute",
-    "adversary.ravage",
-    "adversary.build",
-    "adversary.explore",
-    "adversary.slide",
+    "cards.play+threats.counter+economy.give+alignment.act+board.act",
+    "board.bases",
+    "board.war",
+    "board.strike",
+    "board.produce",
     "economy.upkeep",
+    "threats.execute",
     "board.cleanup"
   ]
 }

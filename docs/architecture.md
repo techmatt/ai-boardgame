@@ -86,18 +86,20 @@ differs only in the threat variant. Abridged:
   "name": "baseline",
   "countries": 2,
   "modules": [
-    { "module": "board", "variant": "pieces", "params": { "start_population": 1, ... } },
+    { "module": "board", "variant": "corps", "params": { "start_corrupted": 1, "war": [0, 1, 0, 1, 0, 1, 1, 1], ... } },
     { "module": "adversary", "variant": "militarist", "params": { "difficulty": 0, "stage_cards": [3, 4, 3], ... } },
     { "module": "threats", "variant": "countries", "params": { "per_country": 1 } },
     { "module": "alignment", "variant": "tug", "params": { "undecided_per_player": 4, "tip_per_player": 2, ... } },
     { "module": "economy", "variant": "standard", "params": { ... } },
-    { "module": "ai", "variant": "boards", "params": { "boards": [0, 1], "start_credits": 12, ... } },
+    { "module": "ai", "variant": "boards", "params": { "boards": [0, 1], "start_credits": 25 } },
     { "module": "cards", "variant": "draft", "params": { "deal": 4, ... }, "cards": ["fab_line", ...] }
   ],
-  "round": ["threats.deal", "cards.tier", "cards.deal", "cards.draft", "cards.keep", "ai.growth",
-            "cards.play+threats.counter+economy.give", "threats.execute",
-            "adversary.ravage", "adversary.build", "adversary.explore", "adversary.slide",
-            "economy.upkeep", "board.cleanup"]
+  "round": ["alignment.sway", "adversary.build", "adversary.spread", "adversary.corrupt",
+            "threats.deal", "adversary.reveal", "cards.tier", "cards.deal", "cards.draft",
+            "cards.keep", "ai.growth",
+            "cards.play+threats.counter+economy.give+alignment.act+board.act",
+            "board.bases", "board.war", "board.strike", "board.produce", "economy.upkeep",
+            "threats.execute", "board.cleanup"]
 }
 ```
 
@@ -134,9 +136,9 @@ differs only in the threat variant. Abridged:
     another (`ModuleDef::requires`), so this is rejected with the reason. To measure a
     module's effect, use its `off` *variant* instead (`threats.variant=off`,
     `alignment.variant=off`, `cards.variant=off`): it keeps the module's phases and
-    the parameters other modules read, and does nothing. See rules.md §2b.
-  - Switching the adversary variant drops most of its parameters, so the spread
-    variants have their own configs (`configs/clusters.json`, `configs/assets.json`).
+    the parameters other modules read, and does nothing. See rules.md §9.
+  - The adversary's two variants (`militarist`, `overflow`) take the same parameters,
+    so `adversary.variant=overflow` needs nothing else.
 - **`aic-sim show <config>`** prints the resolved config, its hash and every tunable
   (card-derived ones included), with its range.
 
@@ -154,21 +156,23 @@ way of doing it. The difference matters for tuning:
 | A new effect primitive or selector | code (`content.rs`, plus the module that runs it) |
 | A new kind of player action | code (`Action`); a structural change |
 
-The v0 modules are `board`, `adversary`, `threats`, `alignment` (013, in place of `opposition`), `economy`, `ai` and
-`cards` (`crates/aic-core/src/modules/`); `common.rs` (board queries, piece names) and
-`effects.rs` (the player effect primitives) are shared code. Rules areas lean on each
-other, so modules call each other's public functions (a card's damage calls
-`adversary::damage`, which sways toward Unity through `alignment::for_kill`) and read each other's
+The modules are `board` (014: pieces, production, war, ambassadors, standard actions),
+`adversary` (014: deck, build, spread, corrupt), `threats`, `alignment` (013), `economy`,
+`ai` and `cards` (`crates/aic-core/src/modules/`); `common.rs` (board queries, token
+names, reach) and `effects.rs` (the player effect primitives) are shared code. Rules
+areas lean on each other, so modules call each other's public functions (a card's
+removal calls `adversary::damage`, which sways toward Unity through
+`alignment::for_kill` when it takes a troop) and read each other's
 parameters through `World::int("<module>.<param>")`. A module lists the modules it reads
 in `ModuleDef::requires`; a config missing one is rejected.
 
-A rule that depends on another module's *variant* reads `World::variant("<module>")`.
-The one case so far: the adversary variants (`militarist`, `clusters`, `assets`) use
-different pieces, so threats, Unity-card pushback and card effects ask
-`adversary::style(w)` and go through adversary functions (`selects`, `kind_count`,
-`reinforce`, `forward_base`, `pushback`, `under_bar`, `ravage`, `build_hex`, `cascade`)
-that read the Militarist's piece names as the pieces in play. `common::ADVERSARY` lists
-every variant's piece kinds; a game holds only its own.
+A rule that depends on another module's *variant* reads `World::variant("<module>")`
+(the `overflow` adversary variant is read inside `adversary::arrive`). Everything that
+places or removes adversary ambassadors goes through `adversary::place`, `remove`,
+`remove_piece`, `build_all`, `spread`, `corrupt_city` and `corrupt_station`, so the supply,
+cancellation and overflow hold everywhere; buildings are destroyed only through
+`board::destroy_building`, which applies Shelter Order, hardening, a player
+ambassador's defense and Civic Shelter, and sways the Discord.
 
 Each variant is a `VariantDef` (in `module.rs`), holding:
 
@@ -208,8 +212,8 @@ consistent:
 
 ### Choices ("players choose")
 
-Every point where the rules say players choose (a ravage's loss order, a cascade target,
-the Momentum drone, a Panic destination, a card's target hex) is a choice in
+Every point where the rules say players choose (a spreading ambassador's destination, a
+troop's target, a city's energy on a tie, a card's target hex) is a choice in
 `legal_actions`, made by the team agent like any other action:
 
 - A module calls `cx.choose(seat, prompt, options)?` in the middle of resolving. With no
@@ -278,12 +282,13 @@ Content is data in `content/`, composed from code primitives:
   `passives` ([`Passive`]: standing effects), an `ability` (once a round), `upkeep`,
   `tags`, `needs`, a `tier` (0 for an AI's unique card). List the id in the `cards`
   module's config `cards`. A cost written as `{"param": "name"}` becomes a tunable.
-- **Threats** (`threats.json`): `counter` costs and `effects` ([`ThreatOp`], with hex
-  `Selector`s).
-- **Adversary cards** (`adversary.json`): stage, terrains, escalation.
-- **AI boards** (`ais.json`): slots, innate passives, two tracks, growth options (lists of
-  `Effect`), unique cards.
-- **Country pieces** (`map.json`, `countries`): terrain rows, uplinks, setup hexes.
+- **Threats** (`threats.json`): `counter` costs and `effects` ([`ThreatOp`], with
+  `Spot`s naming the pieces they hit).
+- **Adversary cards** (`adversary.json`): stage, text, `twists` ([`Twist`]), escalation.
+- **AI boards** (`ais.json`): slots, credit production, resource `discounts`, innate
+  passives, two data-centre tracks, growth options (lists of `Effect`), unique cards.
+- **Country pieces** (`map.json`, `countries`): cities (in corruption order), ocean,
+  setup buildings, starting data-centre spots, and the corp's megaproject card.
 
 Ids are unique across all content, and actions refer to content by id, so reordering a
 file does not break action logs. `Content::check` validates references, tags and
@@ -297,13 +302,14 @@ country count (1–4), and the four printed country pieces. A placed piece cover
 
 - `Map::build` derives hexes in country-then-piece order, so `state.hexes[i]` is
   `map.hexes[i]`. It also derives neighbours (in `Dir::ALL` order), each country's hex
-  list, and each hex's printed number (`i·4 + j + 1`), terrain and uplink flag from the
-  country's piece (country *c* uses piece *c*).
+  list, and each hex's printed number (`i·4 + j + 1`) and kind (city, open, ocean) from
+  the country's piece (country *c* uses piece *c*). It then finds the fronts (land
+  borders; an ocean edge is not one) and puts a military base on each side of each
+  (`Map::fronts`, `Cell::facing`): bases depend on the layout, so they are derived, not
+  printed.
 - Geometry is not in the state. UIs get it from `board(config)` in wasm.
-- The `layouts_match_the_reference_images` test pins the 3/4 layouts to the hex sets
-  read off the reference images; `country_pieces_follow_the_ruleset` checks the piece
-  constraints (terrain counts, uplinks on the outer edge, factories next to population)
-  in every layout.
+- Tests pin the layouts and check the piece constraints (3 cities, factories touching
+  a city, ocean on the outer edge, a front for every country) in every layout.
 
 ## The generic view
 
@@ -313,7 +319,7 @@ web viewer draws only these:
 
 | Part | Holds | Filled by the engine |
 |---|---|---|
-| `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `number`, `terrain`, `uplink`, `tokens` (`{kind, count}`) | every token stack on every hex |
+| `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `number`, `kind` (`city`, `base`, `open`, `ocean`), `facing` (a base's rival country), `tokens` (`{kind, count}`) | every token stack on every hex |
 | `countries[c]` | `name` (the printed piece's, `content/map.json`), `colour`, `hexes`, `slots` (card strip), `values`, `cards` (card groups, such as its threat) | `name`; `tokens.<kind>` totals over the country |
 | `seats[s]` | `passed`, `values`, `cards` (card groups), `board` (a player board, or `null`) | `resource.<name>` per resource; exhausted cards no module shows, as group `engine.exhausted` |
 | `globals` | `values` of the whole game | every `vars` track no module declares bookkeeping, by its key |
@@ -358,25 +364,27 @@ derive:
 
 In v0:
 
-- `adversary` adds the pipeline as piles (`deck` with any peeked cards, `explore`,
-  `build`, `ravage`, `discard`) and the corruption pool, stage and difficulty. Its
-  bookkeeping: `adversary.peek` (shown as the peeked cards, and a global while >0) and
-  `adversary.killed_foundry.<seat>` (seat value `adversary.killed_foundry` while set).
+- `adversary` adds its deck as piles (`deck` with any peeked cards, `next` face up,
+  `current`, `discard`) and the ambassador supply, stage and difficulty. Its
+  bookkeeping: `adversary.peek`, `adversary.starved`, `adversary.first_corruption`,
+  `adversary.removed_troop.<seat>`.
 - `threats` adds each country's threat (`threats.on`, status = counter progress such as
   `1/2 energy`; the text adds who paid what and any Jam Signals), or the shared row
   pile, and the tier dealt next. Bookkeeping: `threats.paid.*`, `threats.jam.*`.
 - `alignment` adds the Undecided, both buckets (each against the size it tips at), both
   tip counts (against the next threshold), the bar level with its win condition, and
-  population against the loss threshold; piles for both decks (counts only), each side's
+  corrupted cities against all cities; piles for both decks (counts only), each side's
   resolved cards and the ongoing cards; each seat's antimatter actions left.
   Bookkeeping: `alignment.used.*`. `adversary` adds the difficulty in play and, once
   Discord has escalated it, `adversary.escalation`.
 - `ai` adds each seat's board (`ai.board`: name, text, innate rule, both tracks with
   every step, tier-2 and antimatter marks, printed slots, the AI's unique cards and
-  where they are), tier-2 unlock and processor count. Bookkeeping: `ai.track.*` (the
+  where they are), tier-2 unlock and credit production. Bookkeeping: `ai.track.*` (the
   tracks' `uncovered`).
-- `board` shows its per-country flags (blockade, sabotage, shelter) as country values;
-  bookkeeping `board.<flag>.*`.
+- `board` shows its per-country flags (blackout, sabotage, shelter) and each country's
+  megaproject (cubes by owner, against its size) as country values, the war round and
+  fronts as globals, and each seat's data centres and ambassadors on the board;
+  bookkeeping `board.<flag>.*`, `board.project.*`, `board.project_done.*`.
 - `economy` adds each seat's income per resource and the next round's bonus insight
   (bookkeeping `economy.bonus_insight`, shown as its own global while >0); `cards`
   adds hand, buildings (`n/slots`), draft hand and drafted cards with statuses, tags,
@@ -384,8 +392,8 @@ In v0:
   Bookkeeping: `cards.tier.*`, `cards.picked.*`, `cards.next_discount.*`,
   `cards.civic_used.*`, `cards.unpowered.*` (a building's `unpowered` status).
 
-So in v0 the globals hold only game-wide tracks (the Alignment track and tips, the
-corruption pool, adversary stage, starting population and what modules derive).
+So the globals hold only game-wide tracks (the Alignment track and tips, the
+adversary supply and stage, the war round and what modules derive).
 
 The view is display data:
 
@@ -393,10 +401,9 @@ The view is display data:
 - It is not in the state, the fingerprint or a replay.
 - A hook must not draw from the RNG; it gets `&GameState`, so it can't.
 
-Two tests check it (`tests.rs`): `the_view_shows_terrain_threats_pipeline_tracks_and_choices`
-and `the_view_names_countries_shows_boards_and_keeps_bookkeeping_out_of_globals`.
+Tests in `tests.rs` check it.
 
-**What the client assumes.** It draws hexes from `[q, r]` by terrain, with the
+**What the client assumes.** It draws hexes from `[q, r]` by kind, with the
 country colour, and draws token kinds it knows with their own glyph and any other kind
 as a counter. It offers actions as `legal_actions` lists them, grouped per seat:
 
@@ -424,8 +431,10 @@ differ.
   - `actions`: player actions applied, answered choices included;
   - `counters["<module>.<name>"]`: anything a module counts. v0 counts cards kept,
     played and used (per card), growth picks, threats dealt, countered and executed,
-    adversary pieces destroyed, population and buildings lost, corruption added,
-    processors placed, insight given and credit income.
+    corruptions (and the round of the first), adversary ambassadors on the board per
+    round (`adversary.ambassadors_rNN`), ambassadors and troops removed, buildings
+    destroyed (per war round too), standard actions (`board.std.<act>`), data centres
+    placed, insight given and credit income.
 - **Outcome**: `won`, the `round` the game ended, a stable `reason` code for aggregation,
   and a human `detail`.
 - **Decisions** (`driver::play` → `GameRecord`): each applied action is one decision.
@@ -442,8 +451,8 @@ know the counter names in advance.
 Left out on purpose until something needs them:
 
 - **`Event` is a closed enum**, and there are no interception hooks between modules
-  (such as "before a population is lost"); modules call each other's functions instead
-  (Civic Shelter is checked inside `adversary::lose_population`).
+  (such as "before a building is destroyed"); modules call each other's functions
+  instead (Civic Shelter is checked inside `board::destroy_building`).
 - **Timed-out games** (the action cap) still count toward the round statistics.
   They're visible as `ended: timeout`.
 - **Old saved states**: `GameState` has no schema version (only `Stats`, `piles` and

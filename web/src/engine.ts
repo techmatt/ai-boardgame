@@ -72,10 +72,10 @@ export interface HexView {
   neighbours: number[];
   /** The printed hex number (1-16 on its piece). */
   number: number;
-  /** `urban`, `industrial`, `network` or `frontier`. */
-  terrain: string;
-  /** A printed uplink, where the adversary enters. */
-  uplink: boolean;
+  /** What the hex is: `city`, `base` (a military base), `open` or `ocean`. */
+  kind: string;
+  /** For a military base: the country across its front. */
+  facing?: number;
   tokens: Token[];
 }
 export interface CountryView {
@@ -146,7 +146,14 @@ export interface GameRecord {
 
 export interface CardDef { id: string; name: string; text: string; cost?: unknown }
 export interface ThreatDef { id: string; name: string; tier: number; text: string; counter: [string, number][] }
-export interface AdversaryDef { id: string; name: string; stage: number; terrains: string[]; escalation?: boolean }
+export interface AdversaryDef { id: string; name: string; stage: number; text: string; twists: { op: string; amount?: number }[]; escalation?: boolean }
+/** A printed country piece (content/map.json): country `c` is piece `c`. */
+export interface PieceDef {
+  name: string;
+  cities: number[];
+  ocean: number[];
+  project: { name: string; cubes: number; text: string; benefit: [string, number][] };
+}
 export interface AiBoardDef {
   id: string;
   name: string;
@@ -155,7 +162,7 @@ export interface AiBoardDef {
   innate: { name: string; text: string };
   growth: { name: string }[];
 }
-export interface Content { cards: CardDef[]; threats: ThreatDef[]; adversary: AdversaryDef[]; ais: AiBoardDef[] }
+export interface Content { cards: CardDef[]; threats: ThreatDef[]; adversary: AdversaryDef[]; ais: AiBoardDef[]; map?: { countries: PieceDef[] } }
 
 /** A state as the engine produced it, plus a parsed copy for display. */
 export interface Snapshot { json: string; state: GameState }

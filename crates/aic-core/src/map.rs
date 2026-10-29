@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::content::{Content, Terrain};
+use crate::content::{Content, HexKind};
 use crate::hex::Hex;
 
 #[derive(Debug, Clone, Serialize)]
@@ -16,6 +16,8 @@ pub struct Map {
     /// its index in `GameState::hexes`.
     pub hexes: Vec<Cell>,
     pub countries: Vec<CountryGeo>,
+    /// Land borders between countries, each with a military base on either side.
+    pub fronts: Vec<Front>,
     #[serde(skip)]
     index: BTreeMap<Hex, usize>,
 }
@@ -30,9 +32,17 @@ pub struct Cell {
     pub neighbours: Vec<usize>,
     /// The printed hex number on its piece (1-16), for tie-breaks.
     pub number: u8,
-    pub terrain: Terrain,
-    /// A printed uplink: where the adversary enters.
-    pub uplink: bool,
+    pub kind: HexKind,
+    /// For a military base: the country across its front.
+    pub facing: Option<u8>,
+}
+
+/// A front: a land border between two countries (an ocean edge is not one).
+/// `bases[i]` is the military base of `countries[i]` on it.
+#[derive(Debug, Clone, Serialize)]
+pub struct Front {
+    pub countries: [u8; 2],
+    pub bases: [usize; 2],
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -76,8 +86,8 @@ impl Map {
                         piece_pos: [i as u8, j as u8],
                         neighbours: Vec::new(),
                         number,
-                        terrain: design.terrain_at(number, size as u8),
-                        uplink: design.uplinks.contains(&number),
+                        kind: design.kind_at(number),
+                        facing: None,
                     });
                 }
             }
@@ -95,9 +105,11 @@ impl Map {
                 .filter_map(|n| index.get(n).copied())
                 .collect();
         }
+        let fronts = place_bases(content, &mut hexes, &geo)?;
         Ok(Map {
             hexes,
             countries: geo,
+            fronts,
             index,
         })
     }
@@ -124,4 +136,66 @@ impl Map {
     pub fn distance(&self, a: usize, b: usize) -> i32 {
         self.hexes[a].hex.distance(self.hexes[b].hex)
     }
+}
+
+/// Finds the fronts and puts a military base on each side of each: on an
+/// open hex of that country, touching land of the other, holding no setup
+/// building. A country's fronts with the fewest candidates choose first;
+/// each takes its lowest-numbered free candidate.
+fn place_bases(content: &Content, hexes: &mut [Cell], geo: &[CountryGeo]) -> Result<Vec<Front>, String> {
+    let n = geo.len();
+    let land = |h: usize| hexes[h].kind != HexKind::Ocean;
+    let mut touching = vec![vec![false; n]; n];
+    for h in 0..hexes.len() {
+        for &x in &hexes[h].neighbours {
+            let (a, b) = (hexes[h].country as usize, hexes[x].country as usize);
+            if a != b && land(h) && land(x) {
+                touching[a][b] = true;
+            }
+        }
+    }
+    let mut base = vec![vec![usize::MAX; n]; n];
+    for c in 0..n {
+        let piece = &content.map.countries[c];
+        let busy = |num: u8| {
+            piece.stations.contains(&num) || piece.factories.contains(&num) || piece.data_centres.contains(&num)
+        };
+        let candidates = |o: usize| -> Vec<usize> {
+            geo[c]
+                .hexes
+                .iter()
+                .copied()
+                .filter(|&h| hexes[h].kind == HexKind::Open && !busy(hexes[h].number))
+                .filter(|&h| hexes[h].neighbours.iter().any(|&x| hexes[x].country as usize == o && land(x)))
+                .collect()
+        };
+        let mut others: Vec<usize> = (0..n).filter(|&o| touching[c][o]).collect();
+        others.sort_by_key(|&o| (candidates(o).len(), o));
+        let mut used: Vec<usize> = Vec::new();
+        for o in others {
+            let h = candidates(o)
+                .into_iter()
+                .find(|h| !used.contains(h))
+                .ok_or_else(|| format!("country {c}: no free hex for a military base facing country {o}"))?;
+            used.push(h);
+            base[c][o] = h;
+        }
+    }
+    let mut fronts = Vec::new();
+    for a in 0..n {
+        for b in a + 1..n {
+            if touching[a][b] {
+                let bases = [base[a][b], base[b][a]];
+                hexes[bases[0]].kind = HexKind::Base;
+                hexes[bases[0]].facing = Some(b as u8);
+                hexes[bases[1]].kind = HexKind::Base;
+                hexes[bases[1]].facing = Some(a as u8);
+                fronts.push(Front {
+                    countries: [a as u8, b as u8],
+                    bases,
+                });
+            }
+        }
+    }
+    Ok(fronts)
 }

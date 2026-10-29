@@ -159,10 +159,10 @@
   "tags": [
    "cyber"
   ],
-  "text": "+1 compute each round; place 1 processor.",
+  "text": "+1 compute each round; place 1 data centre.",
   "effects": [
    {
-    "op": "place_processor",
+    "op": "place_data_centre",
     "count": 1
    }
   ],
@@ -210,10 +210,10 @@
    "cyber",
    "discord"
   ],
-  "text": "Explore adds no drone to hexes holding your processor.",
+  "text": "The adversary's spread places no ambassador on hexes holding your data centre.",
   "passives": [
    {
-    "op": "explore_shield"
+    "op": "spread_shield"
    }
   ]
  },
@@ -227,7 +227,7 @@
   "tags": [
    "discord"
   ],
-  "text": "Once a round: pay 2 energy for 1 damage in a country where you have a processor.",
+  "text": "Once a round: pay 2 energy to remove 1 worth of adversary pieces (an ambassador) in one hex of a country where you have a data centre.",
   "ability": {
    "cost": [
     [
@@ -239,7 +239,7 @@
     {
      "op": "damage",
      "amount": 1,
-     "at": "processor_country"
+     "at": "data_centre_country"
     }
    ]
   }
@@ -255,7 +255,7 @@
    "discord",
    "unity"
   ],
-  "text": "Destroying an outpost or foundry sways 1 more toward Unity.",
+  "text": "Removing an adversary troop sways 1 more toward Unity.",
   "passives": [
    {
     "op": "unity_bonus",
@@ -273,7 +273,7 @@
   "tags": [
    "unity"
   ],
-  "text": "Once a round, prevent the first population loss in a country where you have a processor.",
+  "text": "Once a round, prevent the first building destruction in a country where you have a data centre.",
   "passives": [
    {
     "op": "civic_shelter"
@@ -290,12 +290,18 @@
   "tags": [
    "unity"
   ],
-  "text": "When you give insight, the receiver also gains 2 credits.",
+  "text": "When built, gain 2 ambassadors. When you give insight, the receiver also gains 2 credits.",
   "passives": [
    {
     "op": "give_bonus",
     "resource": "credits",
     "amount": 2
+   }
+  ],
+  "effects": [
+   {
+    "op": "gain_ambassadors",
+    "count": 2
    }
   ]
  },
@@ -328,11 +334,10 @@
   "tags": [
    "economy"
   ],
-  "text": "Build a factory on an empty Industrial hex next to population.",
+  "text": "Build a factory on an empty open hex touching a city.",
   "effects": [
    {
-    "op": "build_factory",
-    "empty": true
+    "op": "build_factory"
    }
   ]
  },
@@ -346,10 +351,10 @@
   "tags": [
    "economy"
   ],
-  "text": "Return 1 corruption from a hex to the pool.",
+  "text": "Take the adversary cube off 1 corrupted city or research station.",
   "effects": [
    {
-    "op": "remove_corruption",
+    "op": "cleanse",
     "amount": 1,
     "one_country": false
    }
@@ -386,10 +391,10 @@
   "tags": [
    "cyber"
   ],
-  "text": "Gain 1 compute per processor you have (max 4).",
+  "text": "Gain 1 compute per data centre you have (max 4).",
   "effects": [
    {
-    "op": "gain_per_processor",
+    "op": "gain_per_data_centre",
     "resource": "compute",
     "max": 4
    }
@@ -405,10 +410,10 @@
   "tags": [
    "cyber"
   ],
-  "text": "Place 1 processor.",
+  "text": "Place 1 data centre.",
   "effects": [
    {
-    "op": "place_processor",
+    "op": "place_data_centre",
     "count": 1
    }
   ]
@@ -465,7 +470,7 @@
   "tags": [
    "discord"
   ],
-  "text": "2 damage in one hex.",
+  "text": "Remove 2 worth of adversary pieces in one hex (an ambassador is 1, a troop 2).",
   "effects": [
    {
     "op": "damage",
@@ -484,7 +489,7 @@
   "tags": [
    "discord"
   ],
-  "text": "1 damage in each hex of one country that holds adversary pieces.",
+  "text": "Remove 1 worth of adversary pieces (an ambassador) in each hex of one country that holds them.",
   "effects": [
    {
     "op": "damage_country",
@@ -502,11 +507,11 @@
   "tags": [
    "discord"
   ],
-  "text": "If you destroyed a foundry this round, gain 1 antimatter; otherwise gain 2 energy.",
+  "text": "If you removed an adversary troop this round, gain 1 antimatter; otherwise gain 2 energy.",
   "effects": [
    {
     "op": "if",
-    "cond": "destroyed_foundry",
+    "cond": "removed_troop",
     "then": [
      {
       "op": "gain",
@@ -534,10 +539,10 @@
   "tags": [
    "unity"
   ],
-  "text": "Move up to 3 population within one country.",
+  "text": "Move up to 3 of your ambassadors onto pieces within your reach.",
   "effects": [
    {
-    "op": "move_population",
+    "op": "move_ambassadors",
     "max": 3
    }
   ]
@@ -552,10 +557,10 @@
   "tags": [
    "unity"
   ],
-  "text": "Place 3 defense in one country.",
+  "text": "Harden 3 buildings in one country.",
   "effects": [
    {
-    "op": "place_defense",
+    "op": "harden",
     "count": 3,
     "where": "any"
    }
@@ -571,11 +576,15 @@
   "tags": [
    "unity"
   ],
-  "text": "Sway 2 toward Unity if any hex holds both population and adversary pieces.",
+  "text": "Gain 1 ambassador; sway 2 toward Unity if any clean city holds adversary ambassadors.",
   "effects": [
    {
+    "op": "gain_ambassadors",
+    "count": 1
+   },
+   {
     "op": "if",
-    "cond": "population_with_adversary",
+    "cond": "city_with_ambassador",
     "then": [
      {
       "op": "unity",
@@ -708,7 +717,7 @@
     2
    ]
   ],
-  "text": "Once a round: pay 1 antimatter for 4 damage in any hex.",
+  "text": "Once a round: pay 1 antimatter to remove 4 worth of adversary pieces in any hex.",
   "ability": {
    "cost": [
     [
@@ -779,7 +788,7 @@
   "cost": 8,
   "antimatter": 1,
   "insight": 1,
-  "text": "Destroy every adversary piece in one hex.",
+  "text": "Remove every adversary ambassador and troop in one hex.",
   "effects": [
    {
     "op": "destroy_all"
@@ -824,11 +833,11 @@
     2
    ]
   ],
-  "text": "Return up to 3 corruption in one country to the pool.",
+  "text": "Take the adversary cube off up to 2 corrupted cities or research stations in one country.",
   "effects": [
    {
-    "op": "remove_corruption",
-    "amount": 3,
+    "op": "cleanse",
+    "amount": 2,
     "one_country": true
    }
   ]
@@ -861,10 +870,10 @@
     2
    ]
   ],
-  "text": "Remove every drone in one country; sway 1 toward Unity per 2 removed.",
+  "text": "Remove every adversary ambassador in one country; sway 1 toward Unity per 2 removed.",
   "effects": [
    {
-    "op": "remove_drones_country",
+    "op": "remove_ambassadors_country",
     "unity_per": 2
    }
   ]
@@ -876,11 +885,10 @@
   "kind": "building",
   "cost": 6,
   "insight": 1,
-  "text": "Build a factory on any Industrial hex next to population; +1 credit income.",
+  "text": "Build a factory on an empty open hex touching a city; +1 credit income.",
   "effects": [
    {
-    "op": "build_factory",
-    "empty": false
+    "op": "build_factory"
    }
   ],
   "passives": [
@@ -941,7 +949,7 @@
   "kind": "building",
   "cost": 6,
   "insight": 1,
-  "text": "Once a round, pay 1 energy to place 2 defense in a country where you have a processor.",
+  "text": "Once a round, pay 1 energy to harden 2 buildings in a country where you have a data centre.",
   "ability": {
    "cost": [
     [
@@ -951,9 +959,9 @@
    ],
    "effects": [
     {
-     "op": "place_defense",
+     "op": "harden",
      "count": 2,
-     "where": "processor_country"
+     "where": "data_centre_country"
     }
    ]
   },
@@ -966,12 +974,12 @@
   "kind": "program",
   "cost": 2,
   "insight": 1,
-  "text": "3 damage in a hex within 1 of your processor.",
+  "text": "Remove 3 worth of adversary pieces in a hex within your reach.",
   "effects": [
    {
     "op": "damage",
     "amount": 3,
-    "at": "near_processor"
+    "at": "reach"
    }
   ],
   "unique": "protector"
@@ -983,7 +991,7 @@
   "kind": "program",
   "cost": 0,
   "insight": 0,
-  "text": "In one country, population can't be destroyed this round.",
+  "text": "In one country, buildings can't be destroyed this round.",
   "effects": [
    {
     "op": "shelter"

@@ -3,6 +3,8 @@
 //   node scripts/e2e.mjs [record.json]
 //   AIC_URL     viewer URL (default http://localhost:5173/)
 //   AIC_BROWSER browser executable (default: Edge, then Chrome, at their usual paths)
+//   AIC_SHOTS   a folder to also save the mid-game and end-of-game screenshots in
+//               (viewer-mid.png, viewer-end.png)
 // Plays a game to the end through the UI, checks undo, the record dialog, the saved
 // session, hover details and the no-scroll layout at 1366x768 and 2560x1440, then loads
 // the record (if given) and steps through it. Screenshots go to web/e2e-out/.
@@ -101,9 +103,14 @@ async function size(w, h) {
   await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
   await sleep(150);
 }
-async function shot(name) {
+/** Saves a screenshot to web/e2e-out/, and under `copy` in AIC_SHOTS too if that is set. */
+async function shot(name, copy) {
   const r = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(join(out, `${name}.png`), Buffer.from(r.data, 'base64'));
+  if (copy && process.env.AIC_SHOTS) {
+    mkdirSync(process.env.AIC_SHOTS, { recursive: true });
+    writeFileSync(join(process.env.AIC_SHOTS, `${copy}.png`), Buffer.from(r.data, 'base64'));
+  }
 }
 const noScroll = () => js(`document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth
   && document.body.scrollHeight <= innerHeight && document.body.scrollWidth <= innerWidth`);
@@ -124,18 +131,38 @@ try {
     return { n: v.hexes.length, keys, want: v.hexes.map((h) => h.hex.join(',')),
              labels: document.querySelectorAll('#board .country-label').length, countries: v.countries.length,
              borders: document.querySelectorAll('#board .border').length,
-             terrains: new Set(v.hexes.map((h) => h.terrain)).size,
+             kinds: new Set(v.hexes.map((h) => h.kind)).size,
              fills: new Set([...document.querySelectorAll('#board .hex .cell')].map((p) => p.getAttribute('fill'))).size,
-             uplinks: v.hexes.filter((h) => h.uplink).length, antennas: document.querySelectorAll('#board .uplink').length };
+             bases: v.hexes.filter((h) => h.kind === 'base' && h.facing !== undefined).length,
+             pennants: document.querySelectorAll('#board .hex.k-base .base-mark').length,
+             fronts: v.globals.find((g) => g.key === 'board.fronts')?.value ?? -1,
+             links: document.querySelectorAll('#board .front-link').length, edges: document.querySelectorAll('#board .front-edge').length };
   })()`);
   check(board.n > 0 && JSON.stringify(board.keys) === JSON.stringify(board.want), `board has ${board.n} hexes with data-hex="q,r"`);
   check(board.labels === board.countries && board.borders > 0, `${board.countries} countries labelled, ${board.borders} border edges`);
-  check(board.fills === board.terrains, `hexes filled by terrain (${board.fills} fills for ${board.terrains} terrains)`);
-  check(board.uplinks === board.antennas, `${board.antennas} uplinks marked`);
+  check(board.kinds === 4 && board.fills === board.kinds, `hexes filled by kind (${board.fills} fills for ${board.kinds} kinds: city, base, open, ocean)`);
+  check(board.bases > 0 && board.pennants === board.bases, `${board.pennants} military bases marked with the country they face`);
+  check(board.fronts > 0 && board.links === board.fronts && board.edges > 0, `${board.links} fronts linked base to base, ${board.edges} front edges`);
+  // Tokens: one glyph per stack, owner cubes and data centres in their owner's colour.
+  const toks = await js(`(() => {
+    const v = window.aic.view;
+    const stacks = v.hexes.reduce((n, h) => n + h.tokens.length, 0);
+    const fill = (k) => [...document.querySelectorAll('#board .token[data-token="' + k + '"] .glyph')].map((e) => e.getAttribute('fill'))[0];
+    const kinds = [...new Set(v.hexes.flatMap((h) => h.tokens.map((t) => t.kind)))].sort();
+    return { stacks, drawn: document.querySelectorAll('#board .token').length, kinds,
+             adv: fill('cube:adversary'), dc0: fill('dc:0'), dc1: fill('dc:1') };
+  })()`);
+  check(toks.stacks > 0 && toks.drawn === toks.stacks, `${toks.drawn} token stacks drawn (${toks.kinds.join(', ')})`);
+  check(!!toks.adv && !!toks.dc0 && !!toks.dc1 && toks.dc0 !== toks.dc1 && toks.adv !== toks.dc0, `owner colours differ: adversary ${toks.adv}, seat 0 ${toks.dc0}, seat 1 ${toks.dc1}`);
   const panels = await js(`({ pipeline: document.querySelectorAll('#pipeline .slot-box').length, alignment: document.querySelectorAll('#status .alignment .tug .bar').length,
                              undecided: !!document.querySelector('#status .alignment .undecided'),
+                             next: document.querySelector('#pipeline .slot-box.next .acard .atext')?.textContent ?? '',
+                             supply: !!document.querySelector('[data-value="adversary.supply"]'),
+                             projects: document.querySelectorAll('#countries .project .cubes').length, countries: window.aic.view.countries.length,
                              threats: document.querySelectorAll('#countries .threat').length })`);
-  check(panels.pipeline >= 4 && panels.alignment === 2 && panels.undecided, `adversary pipeline (${panels.pipeline} boxes) and Alignment track (${panels.alignment} buckets, the Undecided) drawn`);
+  check(panels.pipeline >= 4 && panels.alignment === 2 && panels.undecided, `adversary row (${panels.pipeline} boxes) and Alignment track (${panels.alignment} buckets, the Undecided) drawn`);
+  check(panels.next.length > 0 && panels.supply, `face-up next adversary card shown with its text ("${panels.next}") and the ambassador supply`);
+  check(panels.projects === panels.countries, `${panels.projects} megaproject cards shown with their cubes`);
   check(panels.threats > 0, `${panels.threats} threats shown with their countries`);
 
   // Country names, the AI boards' tracks, and no per-seat bookkeeping among the globals.
@@ -157,7 +184,7 @@ try {
   check(named.boards.every((b) => b && b.length === 2) && named.rows.length === named.boards.length
     && named.rows.every((r) => r.rows === 2 && r.current === 2 && r.open >= 2 && r.steps > r.open && r.t2 > 0),
     `each seat's AI board drawn with 2 tracks (${named.rows.map((r) => `${r.open}/${r.steps} uncovered`).join(', ')})`);
-  const bookkeeping = /^(ai\.track\.|threats\.paid\.|threats\.jam\.|cards\.(tier|picked|next_discount|civic_used|unpowered)\.|adversary\.killed_foundry\.|board\.(blockade|sabotage|shelter)\.)/;
+  const bookkeeping = /^(ai\.track\.|threats\.paid\.|threats\.jam\.|cards\.(tier|picked|next_discount|civic_used|unpowered)\.|adversary\.removed_troop\.|board\.(blackout|sabotage|shelter|project|project_done)\.)/;
   check(!named.keys.some((k) => bookkeeping.test(k)) && named.raw === 0,
     `no bookkeeping vars among the globals (${named.keys.length} globals)`);
 
@@ -172,7 +199,8 @@ try {
   check((await hover('#board .hex polygon')).includes('hex'), 'hovering a hex shows its details');
   check((await hover('#board .token .hit')).includes('×'), 'hovering a token shows its details');
   check((await hover('.value')).length > 0, 'hovering a value shows its details');
-  check((await hover('#pipeline .slot-box.build')).length > 0, 'hovering an adversary slot shows its pile');
+  check((await hover('#pipeline .slot-box.next .acard')).length > 0, 'hovering the next adversary card shows its text');
+  check((await hover('#board .hex.k-base polygon')).includes('military base'), 'hovering a military base shows it as one');
   check((await hover('.seat .board .step')).includes('step'), 'hovering a track step shows its details');
   check((await hover('.seat .board-name')).length > 0, 'hovering a board name shows the board');
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
@@ -185,19 +213,27 @@ try {
   let hexChoices = 0;
   let armedAtOnce = 0;
   const shots = new Set();
+  const seen = { standard: new Set(), sell: 0, war: 0, warShown: 0 };
   while (clicks < 3000 && !(await js(`!!document.querySelector('#phase-bar .outcome')`))) {
     const st = await js(`(() => {
       const v = window.aic.view;
       const hexPick = !!v.choice && window.aic.legal.some((a) => a.type === 'choose' && a.target);
+      const war = v.globals.find((g) => g.key === 'board.war')?.value === 1;
       return { hexPick, targets: document.querySelectorAll('#board .hex.target').length, prompt: document.querySelector('#prompt.choice') ? 1 : 0,
-               phase: v.phase?.name ?? '', round: v.round };
+               phase: v.phase?.name ?? '', round: v.round, war,
+               warShown: war && !!document.querySelector('#pipeline .war-round') && !!document.querySelector('#board .fronts.war'),
+               standard: [...document.querySelectorAll('#seats .actions button.a-standard')].map((b) => JSON.parse(b.dataset.action).act),
+               sell: document.querySelectorAll('#seats .actions button.a-sell').length };
     })()`);
     if (st.hexPick) {
       hexChoices++;
       if (st.targets > 0 && st.prompt) armedAtOnce++;
       if (!shots.has('choice')) { shots.add('choice'); await shot('play-choice-1366'); }
     }
-    if (st.round >= 2 && st.phase.includes('cards.play') && !shots.has('mid')) { shots.add('mid'); await shot('play-mid-1366'); }
+    for (const a of st.standard) seen.standard.add(a);
+    seen.sell += st.sell ? 1 : 0;
+    if (st.war) { seen.war++; seen.warShown += st.warShown ? 1 : 0; }
+    if (st.round >= 2 && st.phase.includes('cards.play') && !shots.has('mid')) { shots.add('mid'); await shot('play-mid-1366', 'viewer-mid'); }
     if (st.phase === 'cards.draft' && !shots.has('draft')) { shots.add('draft'); await shot('play-draft-1366'); }
     if (st.phase === 'ai.growth' && !shots.has('growth')) { shots.add('growth'); await shot('play-growth-1366'); }
     const did = await js(`(() => {
@@ -220,7 +256,9 @@ try {
   const played = await js(`window.aic.timeline.actions.filter((a) => a.type !== 'pass').length`);
   check(played > 0, `${played} non-pass actions taken through the UI`);
   check(armedAtOnce === hexChoices, `hex choices highlight their hexes at once (${armedAtOnce}/${hexChoices})`);
-  await shot('play-end-1366');
+  check(seen.standard.size > 0 && seen.sell > 0, `standard actions offered as buttons (${[...seen.standard].join(', ')}) and selling a card`);
+  check(seen.war === 0 || seen.warShown === seen.war, `war rounds marked on the adversary row and fronts (${seen.warShown}/${seen.war} war-round steps)`);
+  await shot('play-end-1366', 'viewer-end');
 
   // Layout: no page scroll at both ends of the supported range.
   for (const [w, h] of [[1366, 768], [1920, 1080], [2560, 1440]]) {
@@ -246,6 +284,14 @@ try {
     `record dialog: ${rec.format}, seed ${rec.seed}, ${rec.actions.length} actions`);
   await shot('record-dialog');
   await js(`document.getElementById('record-close').click()`);
+
+  // The viewer's own autoplay: a new baseline game, Random to end, reaches an outcome.
+  await js(`(() => { document.getElementById('config').value = 'baseline.json'; document.getElementById('seed').value = '5';
+                      document.getElementById('new-form').requestSubmit(); })()`);
+  await until(`window.aic.timeline.last === 0 && window.aic.timeline.seed === '5'`, 'the seed-5 game');
+  await js(`document.getElementById('random-end').click()`);
+  const auto = await js(`({ o: window.aic.view.outcome, n: window.aic.timeline.last, text: document.querySelector('#phase-bar .outcome')?.textContent })`);
+  check(!!auto.o && !!auto.text, `Random to end plays baseline seed 5 to an outcome in ${auto.n} actions: ${auto.text}`);
 
   // Four countries (64 hexes): the default config with `countries: 4`, played a while
   // with random actions, still fits without page scroll and keeps a usable board.

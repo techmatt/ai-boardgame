@@ -1,5 +1,6 @@
-//! AI boards: which AI each seat plays, its two processor tracks, processor
-//! placement, tier-2 unlock, starting resources and growth.
+//! AI boards: which AI each seat plays, its two data-centre tracks, data
+//! centre placement, tier-2 unlock, credit production, starting resources
+//! and growth.
 
 use crate::action::Action;
 use crate::content::{AiBoard, Track};
@@ -15,7 +16,7 @@ use super::{cards, effects};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "ai",
-    summary: "AI boards: tracks, processors, growth, starting resources",
+    summary: "AI boards: tracks, data centres, growth, credit production, starting resources",
     requires: &["cards", "adversary", "alignment", "threats"],
     variants: &[VariantDef {
         name: "boards",
@@ -34,13 +35,6 @@ pub static DEF: ModuleDef = ModuleDef {
                 min: 0,
                 max: 100,
                 doc: "credits each player starts with",
-            },
-            ParamSpec {
-                name: "start_processors",
-                kind: ParamKind::Int,
-                min: 0,
-                max: 5,
-                doc: "processors each player starts with on a data centre in their starting country",
             },
         ],
         phases: &[PhaseSpec {
@@ -64,7 +58,7 @@ fn track_key(seat: usize, t: usize) -> String {
     format!("ai.track.{seat}.{t}")
 }
 
-/// Processors taken off track `t` of seat `s` so far.
+/// Data centres taken off track `t` of seat `s` so far.
 pub fn track_pos(g: &GameState, seat: usize, t: usize) -> usize {
     g.var(&track_key(seat, t)) as usize
 }
@@ -96,10 +90,10 @@ pub fn tier2(w: &World, g: &GameState, seat: usize) -> bool {
     })
 }
 
-/// Places one processor for `seat`: off the left end of a track (players
-/// choose which), onto a hex within 1 of one of their processors or onto a
-/// data centre in a country where they have one. Returns whether placed.
-pub fn place_processor(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> {
+/// Places one data centre for `seat`: off the left end of a track (players
+/// choose which), onto an empty open hex touching one of its data centres.
+/// Returns whether placed.
+pub fn place_data_centre(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> {
     let w = cx.world;
     let b = board(&w, seat);
     let tracks: Vec<usize> = (0..2)
@@ -113,37 +107,37 @@ pub fn place_processor(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool>
             opt(format!("{} track -> {}", tr.resource, next.value))
         })
         .collect();
-    let prompt = format!("Seat {seat}: take a processor from which track?");
+    let prompt = format!("Seat {seat}: take a data centre from which track?");
     let Some(i) = cx.choose(seat, &prompt, opts)? else {
         return Ok(false);
     };
     let t = tracks[i];
-    let hexes = processor_hexes(&w, g, seat);
+    let hexes = dc_hexes(&w, g, seat);
     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
-    let prompt = format!("Seat {seat}: place the processor on which hex?");
+    let prompt = format!("Seat {seat}: place the data centre on which hex?");
     let Some(j) = cx.choose(seat, &prompt, opts)? else {
         return Ok(false);
     };
     cx.add_key(g, track_key(seat, t), 1);
-    cx.add_tokens(g, hexes[j], &processor(seat), 1);
-    cx.tally(g, "ai.processors_placed", 1);
+    cx.add_tokens(g, hexes[j], &dc(seat), 1);
+    cx.tally(g, "ai.data_centres_placed", 1);
     Ok(true)
 }
 
-/// Where seat `s` may place a processor.
-pub fn processor_hexes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
-    let mine = processor(seat);
-    let own: Vec<usize> = (0..g.hexes.len()).filter(|&h| g.tokens(h, &mine) > 0).collect();
+/// Where seat `s` may place a data centre: an empty open hex touching one
+/// of its own (with none left, any empty open hex in its starting country).
+pub fn dc_hexes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
+    let mine = dc(seat);
+    if dc_count(g, seat) == 0 {
+        let c = seat % w.map.countries.len();
+        return w.map.countries[c].hexes.iter().copied().filter(|&h| buildable(w, g, h)).collect();
+    }
     (0..g.hexes.len())
-        .filter(|&h| {
-            own.iter().any(|&p| w.map.distance(p, h) <= 1)
-                || (g.tokens(h, DATA_CENTRE) > 0
-                    && has_processor_in(w, g, seat, w.map.hexes[h].country as usize))
-        })
+        .filter(|&h| buildable(w, g, h) && w.map.hexes[h].neighbours.iter().any(|&x| g.tokens(x, &mine) > 0))
         .collect()
 }
 
-/// Whether seat `s` has a processor left on a track.
+/// Whether seat `s` has a data centre left on a track.
 pub fn can_place(w: &World, g: &GameState, seat: usize) -> bool {
     let b = board(w, seat);
     (0..2).any(|t| track_pos(g, seat, t) + 1 < b.tracks[t].values.len())
@@ -152,7 +146,6 @@ pub fn can_place(w: &World, g: &GameState, seat: usize) -> bool {
 #[derive(Debug)]
 struct Ai {
     start_credits: i64,
-    start_processors: i64,
 }
 
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
@@ -162,21 +155,13 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     }
     Ok(Box::new(Ai {
         start_credits: b.int("start_credits")?,
-        start_processors: b.int("start_processors")?,
     }))
 }
 
 impl Module for Ai {
     fn setup(&self, g: &mut GameState, cx: &mut Cx) {
-        let w = cx.world;
         for s in 0..g.seats.len() {
             cx.add_resource(g, s, "credits", self.start_credits);
-            // The starting country only says where the first processor goes.
-            let c = s % w.map.countries.len();
-            let piece = &w.content.map.countries[c];
-            if let Some(&n) = piece.data_centres.iter().min() {
-                cx.add_tokens(g, w.map.numbered(c, n), &processor(s), self.start_processors);
-            }
         }
     }
 
@@ -302,14 +287,7 @@ impl Module for Ai {
                 None,
                 "1 once this AI has unlocked tier 2",
             );
-            out.seat(
-                s,
-                "processors",
-                "processors",
-                processors_of(g, s),
-                None,
-                "processors on the board",
-            );
+            out.seat(s, "credit_production", "credit production", b.credits, None, "credits this AI board makes every round");
         }
     }
 }

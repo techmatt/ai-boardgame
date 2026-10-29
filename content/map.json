@@ -1,268 +1,287 @@
 {
-  "piece": {
-    "size": 4,
-    "card_slots": 3
+ "piece": {
+  "size": 4,
+  "card_slots": 3
+ },
+ "layouts": [
+  {
+   "countries": 1,
+   "pieces": [
+    {
+     "anchor": [
+      -4,
+      3
+     ],
+     "axes": [
+      "E",
+      "SE"
+     ],
+     "colour": "#efe4b0"
+    }
+   ]
   },
-  "layouts": [
+  {
+   "countries": 2,
+   "pieces": [
     {
-      "countries": 1,
-      "pieces": [
-        {
-          "anchor": [
-            -4,
-            3
-          ],
-          "axes": [
-            "E",
-            "SE"
-          ],
-          "colour": "#efe4b0"
-        }
-      ]
+     "anchor": [
+      -4,
+      3
+     ],
+     "axes": [
+      "E",
+      "SE"
+     ],
+     "colour": "#efe4b0"
     },
     {
-      "countries": 2,
-      "pieces": [
-        {
-          "anchor": [
-            -4,
-            3
-          ],
-          "axes": [
-            "E",
-            "SE"
-          ],
-          "colour": "#efe4b0"
-        },
-        {
-          "anchor": [
-            3,
-            0
-          ],
-          "axes": [
-            "SW",
-            "SE"
-          ],
-          "colour": "#ffaec9"
-        }
-      ]
-    },
-    {
-      "countries": 3,
-      "pieces": [
-        {
-          "anchor": [
-            -4,
-            3
-          ],
-          "axes": [
-            "E",
-            "SE"
-          ],
-          "colour": "#efe4b0"
-        },
-        {
-          "anchor": [
-            3,
-            0
-          ],
-          "axes": [
-            "SW",
-            "SE"
-          ],
-          "colour": "#ffaec9"
-        },
-        {
-          "anchor": [
-            0,
-            -1
-          ],
-          "axes": [
-            "E",
-            "SW"
-          ],
-          "colour": "#99d9ea"
-        }
-      ]
-    },
-    {
-      "countries": 4,
-      "pieces": [
-        {
-          "anchor": [
-            -4,
-            3
-          ],
-          "axes": [
-            "E",
-            "SE"
-          ],
-          "colour": "#efe4b0"
-        },
-        {
-          "anchor": [
-            3,
-            0
-          ],
-          "axes": [
-            "SW",
-            "SE"
-          ],
-          "colour": "#ffaec9"
-        },
-        {
-          "anchor": [
-            0,
-            -1
-          ],
-          "axes": [
-            "NE",
-            "SE"
-          ],
-          "colour": "#99d9ea"
-        },
-        {
-          "anchor": [
-            -4,
-            -1
-          ],
-          "axes": [
-            "E",
-            "SE"
-          ],
-          "colour": "#b5e61d"
-        }
-      ]
+     "anchor": [
+      3,
+      0
+     ],
+     "axes": [
+      "SW",
+      "SE"
+     ],
+     "colour": "#ffaec9"
     }
-  ],
-  "countries": [
+   ]
+  },
+  {
+   "countries": 3,
+   "pieces": [
     {
-      "name": "Coastal Republic",
-      "terrain": [
-        "NFFI",
-        "UUIF",
-        "NUIF",
-        "UINN"
-      ],
-      "uplinks": [
-        3,
-        12
-      ],
-      "outposts": [
-        3
-      ],
-      "population": [
-        5,
-        6,
-        7,
-        10,
-        13,
-        14
-      ],
-      "factories": [
-        4,
-        11
-      ],
-      "data_centres": [
-        1,
-        15
-      ]
+     "anchor": [
+      -4,
+      3
+     ],
+     "axes": [
+      "E",
+      "SE"
+     ],
+     "colour": "#efe4b0"
     },
     {
-      "name": "Northern Union",
-      "terrain": [
-        "IFNF",
-        "UIUF",
-        "NUIF",
-        "UNIN"
-      ],
-      "uplinks": [
-        2,
-        8
-      ],
-      "outposts": [
-        8
-      ],
-      "population": [
-        5,
-        6,
-        7,
-        10,
-        13,
-        15
-      ],
-      "factories": [
-        1,
-        11
-      ],
-      "data_centres": [
-        3,
-        14
-      ]
+     "anchor": [
+      3,
+      0
+     ],
+     "axes": [
+      "SW",
+      "SE"
+     ],
+     "colour": "#ffaec9"
     },
     {
-      "name": "Highland Federation",
-      "terrain": [
-        "NUIN",
-        "FUIU",
-        "FIUN",
-        "FINF"
-      ],
-      "uplinks": [
-        5,
-        9
-      ],
-      "outposts": [
-        9
-      ],
-      "population": [
-        2,
-        6,
-        7,
-        8,
-        10,
-        11
-      ],
-      "factories": [
-        3,
-        14
-      ],
-      "data_centres": [
-        4,
-        12
-      ]
-    },
-    {
-      "name": "Delta States",
-      "terrain": [
-        "UNFI",
-        "FUIN",
-        "FIUF",
-        "NUIN"
-      ],
-      "uplinks": [
-        3,
-        9
-      ],
-      "outposts": [
-        9
-      ],
-      "population": [
-        1,
-        6,
-        7,
-        10,
-        11,
-        14
-      ],
-      "factories": [
-        4,
-        15
-      ],
-      "data_centres": [
-        2,
-        16
-      ]
+     "anchor": [
+      0,
+      -1
+     ],
+     "axes": [
+      "E",
+      "SW"
+     ],
+     "colour": "#99d9ea"
     }
-  ]
+   ]
+  },
+  {
+   "countries": 4,
+   "pieces": [
+    {
+     "anchor": [
+      -4,
+      3
+     ],
+     "axes": [
+      "E",
+      "SE"
+     ],
+     "colour": "#efe4b0"
+    },
+    {
+     "anchor": [
+      3,
+      0
+     ],
+     "axes": [
+      "SW",
+      "SE"
+     ],
+     "colour": "#ffaec9"
+    },
+    {
+     "anchor": [
+      0,
+      -1
+     ],
+     "axes": [
+      "NE",
+      "SE"
+     ],
+     "colour": "#99d9ea"
+    },
+    {
+     "anchor": [
+      -4,
+      -1
+     ],
+     "axes": [
+      "E",
+      "SE"
+     ],
+     "colour": "#b5e61d"
+    }
+   ]
+  }
+ ],
+ "countries": [
+  {
+   "name": "Coastal Republic",
+   "cities": [
+    7,
+    6,
+    14
+   ],
+   "corrupted": [
+    7,
+    6
+   ],
+   "ocean": [
+    3,
+    12
+   ],
+   "stations": [
+    4
+   ],
+   "factories": [
+    2,
+    8
+   ],
+   "data_centres": [
+    9,
+    10
+   ],
+   "project": {
+    "name": "Tidal Grid",
+    "cubes": 7,
+    "text": "Placeholder: each owned station then makes 2 credits a round.",
+    "benefit": [
+     [
+      "credits",
+      2
+     ]
+    ]
+   }
+  },
+  {
+   "name": "Northern Union",
+   "cities": [
+    10,
+    7,
+    15
+   ],
+   "corrupted": [
+    10,
+    7
+   ],
+   "ocean": [
+    4
+   ],
+   "stations": [
+    12
+   ],
+   "factories": [
+    3,
+    14
+   ],
+   "data_centres": [
+    6,
+    2
+   ],
+   "project": {
+    "name": "Polar Compute Array",
+    "cubes": 7,
+    "text": "Placeholder: each owned station then makes 2 credits a round.",
+    "benefit": [
+     [
+      "credits",
+      2
+     ]
+    ]
+   }
+  },
+  {
+   "name": "Highland Federation",
+   "cities": [
+    7,
+    2,
+    10
+   ],
+   "corrupted": [
+    7,
+    2
+   ],
+   "ocean": [],
+   "stations": [
+    14
+   ],
+   "factories": [
+    1,
+    6
+   ],
+   "data_centres": [
+    11,
+    12
+   ],
+   "project": {
+    "name": "Mountain Fusion Works",
+    "cubes": 7,
+    "text": "Placeholder: each owned station then makes 2 credits a round.",
+    "benefit": [
+     [
+      "credits",
+      2
+     ]
+    ]
+   }
+  },
+  {
+   "name": "Delta States",
+   "cities": [
+    11,
+    6,
+    14
+   ],
+   "corrupted": [
+    11,
+    6
+   ],
+   "ocean": [
+    1
+   ],
+   "stations": [
+    12
+   ],
+   "factories": [
+    7,
+    13
+   ],
+   "data_centres": [
+    5,
+    9
+   ],
+   "project": {
+    "name": "Delta Seawall",
+    "cubes": 7,
+    "text": "Placeholder: each owned station then makes 2 credits a round.",
+    "benefit": [
+     [
+      "credits",
+      2
+     ]
+    ]
+   }
+  }
+ ]
 }

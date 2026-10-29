@@ -8,7 +8,7 @@ import {
   type Action, type CardView, type View,
 } from './engine';
 import {
-  actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, strong, tokenColour, tokenName,
+  actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, kindName, strong, tokenColour, tokenName,
   type LabelContext,
 } from './format';
 import {
@@ -215,7 +215,7 @@ function renderPhase() {
   if (v.outcome) {
     const o = v.outcome;
     status = `<span class="outcome ${o.won ? 'won' : 'lost'}">${o.won ? 'WON' : 'LOST'} in round ${o.round}: ${escapeHtml(o.reason)} (${escapeHtml(o.detail)})</span>`;
-  } else status = ''; // who is to act is in #prompt
+  } else status = ''; // who is to act is in #prompt; a war round is marked on the adversary row
   ui.phaseBar.innerHTML = `<b>Round ${v.round}</b> <span class="order">${order}</span> ${status}`;
 }
 
@@ -301,8 +301,8 @@ function actionButtons(seat: number, mine: Action[]): HTMLElement {
   return row;
 }
 
-/** Button order: answers and decisions first, threat counters and gifts next, pass last. */
-const TYPE_ORDER = ['choose', 'growth', 'tier', 'draft', 'keep', 'play', 'use', 'draw', 'pay', 'withdraw', 'give'];
+/** Button order: answers and decisions first, standard actions, threat counters and gifts next, selling a card and pass last. */
+const TYPE_ORDER = ['choose', 'growth', 'tier', 'draft', 'keep', 'play', 'use', 'draw', 'standard', 'pay', 'withdraw', 'give', 'antimatter', 'sell'];
 const typeRank = (t: string) => (t === 'pass' ? 99 : TYPE_ORDER.indexOf(t) < 0 ? 50 : TYPE_ORDER.indexOf(t));
 
 function passAll() {
@@ -377,13 +377,14 @@ function details(t: HTMLElement | SVGElement): string | null {
   if (d.token !== undefined && d.hex) {
     const h = shown.hexes.find((x) => hexKey(x.hex) === d.hex);
     const tok = h?.tokens.find((x) => x.kind === d.token);
-    return `<b>${escapeHtml(tokenName(d.token))}</b> × ${tok?.count ?? 0}<br><code>${escapeHtml(d.token)}</code> on ${escapeHtml(countryName(shown, h?.country ?? -1))} #${h?.number} (${escapeHtml(h?.terrain ?? '')}, hex ${d.hex})`;
+    return `<b>${escapeHtml(tokenName(d.token))}</b> × ${tok?.count ?? 0}<br><code>${escapeHtml(d.token)}</code> on ${escapeHtml(countryName(shown, h?.country ?? -1))} #${h?.number} (${escapeHtml(kindName(h?.kind ?? ''))}, hex ${d.hex})`;
   }
   if (d.hex && d.index !== undefined) {
     const h = shown.hexes[Number(d.index)];
     const toks = h.tokens.map((x) => `<span class="dot" style="background:${tokenColour(x.kind)}"></span>${escapeHtml(tokenName(x.kind))} × ${x.count}`).join('<br>') || 'no tokens';
     const here = legal.filter((a) => isHex(a.target) && hexKey(a.target) === d.hex).map((a) => escapeHtml(actionLabel(a, true, true, labels())));
-    return `<b>${escapeHtml(countryName(shown, h.country))} #${h.number}</b> · ${escapeHtml(h.terrain)}${h.uplink ? ' · <b>uplink</b> (the adversary enters here)' : ''}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
+    const facing = h.facing !== undefined ? ` · <b>front</b> facing ${escapeHtml(countryName(shown, h.facing))}` : '';
+    return `<b>${escapeHtml(countryName(shown, h.country))} #${h.number}</b> · ${escapeHtml(kindName(h.kind))}${facing}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
   }
   if (d.pile) {
     const p = shown.piles.find((x) => x.key === d.pile);

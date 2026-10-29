@@ -22,8 +22,8 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `crates/aic-sim` | Native CLI: seeded games over a seed range, one config or two side by side, with every game replay-checked; the agent skill ladder (`agents/`) and the experiment harness (`experiment.rs`, `report.rs`). |
 | `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports with their records. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
-| `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is v0 as tuned by the 007 run with 011's rules and 013's Alignment in place of opposition, r5 (2 countries, difficulty 0); `v0_untuned.json` keeps v0's numbers and rules; `shared_row.json` differs only in the threat variant; `clusters.json` and `assets.json` only in the adversary (the two spread variants, rules.md §2a). Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §2b): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §3): `alignment.variant=still` (an empty Undecided: nothing happens), `alignment.momentum_every=2` (Momentum), `alignment.antimatter_discord=0` (no antimatter action). 011's opt-in variants: `cards.variant=free_keep` (+ `cards.free_keeps=1`), `adversary.variant=uplinks` (+ `adversary.explore_foundries=0|1`). |
+| `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces with their cities, ocean, setup buildings and megaproject), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, all built from code primitives. |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 014 board model, r6 (2 countries, difficulty 0; every number a reasoned candidate, untuned); `shared_row.json` differs only in the threat variant. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Opt-in variants: `adversary.variant=overflow`, `cards.variant=free_keep` (+ `cards.free_keeps=1`). The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
 | `scripts/wasm-smoke.mjs` | Plays one game through the wasm package in Node. |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
@@ -67,7 +67,7 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 ```sh
 cargo build --workspace
 cargo test --workspace                             # fast lane: ~6 s once built (013; 012 ~5 s, before ~10 s), ~13 s after an edit in aic-sim (rebuild included); after every change
-cargo test-all                                     # full run, slow lane included: ~16 s (013; 012 ~15 s, before ~70 s); before every commit
+cargo test-all                                     # full run, slow lane included: ~2 min 45 s with the build (014: aic-sim rollout and beam tests ~106 s on the new action menus; 013 ~16 s); before every commit
 cargo test-slow                                    # the slow lane alone: ~13 s
 cargo build --release -p aic-sim                   # ~12 s
 wasm-pack build crates/aic-wasm --target web       # ~20 s cold, ~9 s warm -> crates/aic-wasm/pkg (git-ignored)
@@ -113,13 +113,11 @@ Always run the sim in release.
 
 ```sh
 S=target/release/aic-sim
-$S run configs/baseline.json --games 2000                          # tuned v0, 2 countries, difficulty 0
+$S run configs/baseline.json --games 2000                          # the 014 board, 2 countries, difficulty 0
 for n in 1 2 3 4; do $S run configs/baseline.json --games 500 --set countries=$n; done
 $S compare configs/baseline.json configs/shared_row.json --games 2000  # threat variants
-$S compare configs/baseline.json configs/clusters.json --games 2000    # spread variants
-$S compare configs/baseline.json configs/assets.json --games 2000
+$S compare configs/baseline.json configs/baseline.json --set-b adversary.variant=overflow  # overflow
 $S compare configs/baseline.json configs/baseline.json --set-b threats.variant=off  # off-variants
-$S compare configs/clusters.json configs/clusters.json --set-b alignment.variant=off
 $S run configs/baseline.json --set alignment.variant=still --set alignment.momentum_every=2
 $S compare configs/baseline.json configs/baseline.json --set-b adversary.difficulty=4
 $S run configs/baseline.json --games 1 --trace     # first game as JSON lines
@@ -162,14 +160,11 @@ the resolved config, and must equal the final state. The exit code is 1 on any
 mismatch, and 2 on a bad config or bad arguments (including a seed range that
 overflows `u64`).
 
-Measured on this machine (v0, 2 countries): about 1.4 ms per game, replay included
-(every action and automatic phase clones the state for choice replay); 2,000 games take
-about 3 s. Untuned v0 (`configs/v0_untuned.json`): random-agent games end in 2–6 rounds,
-almost all on the corruption pool. Tuned baseline: random games last about 6.5 rounds
-(max 10) and still lose (0 of 1,000; 3 ms per game). The spread variants (2,000 games each, 2 / 3
-countries): `clusters` 1.2 / 1.9 ms per game, 2.8 rounds, about a quarter lost on
-population; `assets` 0.9 / 1.3 ms, 2.0 rounds, all on the pool. Random agents won none
-of the three. (The placeholder loop ran at 0.03–0.05 ms per game.)
+Measured on this machine (014 board, 2 countries, random agent, 12:05am): about 1.5 ms
+per game, replay included (every action and automatic phase clones the state for choice
+replay); 2,000 games take about 3 s. Random games last about 5 rounds and all lose,
+almost all on the adversary's ambassador supply (1,984 of 2,000; the rest on every city
+corrupted).
 
 **Game records** (`aic-game-record/1`, `aic_core::SavedGame`) are JSON: the resolved
 config, the seed and the action list (one action per line), plus a `note` saying why the
@@ -198,23 +193,32 @@ hands and drafts open, and answers the "players choose" questions too. Agents pl
 through the public API only (`legal_actions_into`, `apply_mut`, reading the state).
 
 - **No peeking.** Before any search an agent replaces what the printed game hides with
-  a guess from its own RNG (`agents/determinize.rs`): the player-card and threat decks
-  are shuffled (contents are public, order is not); each hidden adversary-deck position
-  gets an unseen printed card of its stage (stages are stacked and public; the top
-  cards stay put under Recon Sweep); every RNG stream is reseeded. The guess depends only
+  a guess from its own RNG (`agents/determinize.rs`): the player-card, threat and
+  Unity/Discord decks are shuffled (contents are public, order is not); each hidden
+  adversary-deck position gets an unseen printed card of its stage (stages are stacked and
+  public; next round's card is face up, and the top cards stay put under Recon Sweep);
+  every RNG stream is reseeded. The guess depends only
   on the public table and the agent's RNG; a test changes only hidden information and
   checks that decisions stay the same.
 - **Own randomness.** Each agent's RNG is the game seed on a stream named after the agent
   kind, apart from every engine stream. Games replay from seed + actions, and results
   don't depend on `--threads`.
-- **Heuristic** (`agents/eval.rs`): win/loss, the corruption pool, population slack,
-  adversary pieces and Alignment (013: Unity and Discord tips made, each bucket's fill as a share of its next tip, the bar level and Discord escalation), the players' engine (factories, data
-  centres, processors, track income, resources, cards in hand and built), unpaid threats,
-  and a forecast of the coming ravages (the ravage- and build-slot cards are public).
-  Every weight is a parameter: `w.<name>=V` in an agent spec.
-  The 007 tuning run re-fit two defaults to the tuned ruleset: `pool` 12 → 6 and
-  `opposition` 3 → 6 (013 replaced it with `unity_tip` 24, `discord_tip` 16, `escalation` 20). With the old values, on the larger tuned pool, beam bought back
-  corruption instead of purging and ran out the deck (58% won against greedy's 94%).
+- **Heuristic** (`agents/eval.rs`, 014 board): win/loss; corrupted cities (`corrupted`
+  30, plus `cities_danger` 60 per city short of 2 not corrupted), aligned cities
+  (`aligned` 8); adversary ambassadors (`adv_ambassador` 3 each, `on_piece` 2 more on a
+  player piece, base or factory, `on_factory` 6 more on a factory), the pressure on cities
+  not yet corrupted (`pressure` 0.7 × `corrupted` × (ambassadors / threshold)², the
+  threshold and the next build read off the face-up card), troops (`troop` 12); the
+  supply against the next build (`supply` 5 per ambassador of slack short of 4,
+  `supply_danger` 40 per ambassador short: starved loses); the bar's blockers
+  (`blocker` 2); Alignment (Unity and Discord tips made, each bucket's fill as a share of
+  its next tip, the bar level and Discord escalation); the players' board (data centres
+  4, cities/bases/stations in reach 0.5, owned stations 5 (a corrupted one −5),
+  megaproject cubes 2 (adversary's −1), factories 0.5, hardening 1, player ambassadors
+  3 in supply / 2.5 on the board, and toward freeing a corrupted city `freeing` 0.8 ×
+  `corrupted` × share of `free_city_at`); track income, resources, cards in hand and
+  built; unpaid threats. Every weight is a parameter: `w.<name>=V` in an agent spec. The
+  014 weights are hand-set, not swept.
 
 | Spec | What it does | Budget parameters (defaults) |
 |---|---|---|
@@ -222,7 +226,7 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
 | `greedy` | One action at a time: each scored by the heuristic after it, its own choices resolved best-first. A pass scores the table as it is (else stalling beats stopping). | `samples` 1 (guesses averaged), `depth` 1 (actions looked ahead), `choices` 2 |
 | `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all), `choices` 2 (levels of an action's own choices resolved before scoring it; with 1, placing a processor, which asks a track and then a hex, looks worthless and beam stops growing its engine) |
 | `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `choices` 2, `candidates` 3, `rollouts` 4, `horizon` 2 |
-| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and production (working factories' credits, processors' compute) `w.production` of that; the rounds left are the adversary deck's clock, cut short by when the team is on course to win (Unity Sway still needed for the last bar drop at its rate so far, `w.opp_rate`, `w.win_lag`; 013, was opposition) and discounted by danger (`w.risk` per unpaid threat per country, pool ≤ 4, population near the loss line); a building without income earns `w.ability` per round left; a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.locked` for tier 2 not yet unlocked; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left; and the **deck clock** (011, `w.clock`): a penalty per round the team, at its Unity rate so far, would still be short of the last bar drop (5 Unity tips; before 013 the top opposition level) when the deck runs out. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `locked` 0.5, `opp_rate` 2, `win_lag` 1, `production` 0, `insight_wait` 0, `clock` 30 |
+| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and board production (aligned cities' energy, data centres' compute, less what adversary ambassadors divert) `w.production` of that (014: 1 won 65% at d0 against 37% with 0 on the checkpoint's map; level within noise at d1–d3 on the map since edited); the rounds left are the adversary deck's clock (deck plus the face-up card), cut short by when the team is on course to win (Unity Sway still needed for the outright Unity win at its rate so far, `w.opp_rate`, `w.win_lag`) and discounted by danger (`w.risk` per unpaid threat per country, supply slack ≤ 2 against the next build, 2 or fewer cities not corrupted); a building without income earns `w.ability` per round left; a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.locked` for tier 2 not yet unlocked; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left; and the **deck clock** (011, `w.clock`): a penalty per round the team, at its Unity rate so far, would still be short of the outright Unity win (`alignment.unity_win`, 8 tips; with it 0, the last bar drop) when the deck runs out. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `locked` 0.5, `opp_rate` 2, `win_lag` 1, `production` 1, `insight_wait` 0, `clock` 30 |
 
 Any agent can use horizon mode (`greedy:w.horizon=1,...`); `engine` only changes the
 defaults. Agent sweeps with strategy health (win %, buildings and tier-2 cards played per
@@ -233,7 +237,7 @@ games at difficulty 4 on 12 threads take about 45 s for greedy and `engine`, 2 m
 `samples=3`, 4 min for `engine:width=4`, and longer with rollouts.
 
 Spec syntax: `kind[:key=value,...]`, for example `beam:width=12`,
-`rollout:rollouts=8,horizon=3`, `greedy:w.pool=20`. `aic-sim run ... --agent SPEC` plays
+`rollout:rollouts=8,horizon=3`, `greedy:w.corrupted=40`. `aic-sim run ... --agent SPEC` plays
 any of them; an experiment lists several.
 
 ## Experiments
@@ -243,8 +247,8 @@ S=target/release/aic-sim
 $S experiment experiments/ladder-v0.json                    # -> out/experiments/ladder-v0/
 $S experiment experiments/smoke.json --out out/smoke        # a quick check (6 seeds)
 $S experiment experiments/ladder-v0.json --games 20 --seed 1000 --threads 6
-$S experiment experiments/proposals-011.json --quick        # scoping: shallow agents, 16 seeds, no probes
-$S experiment experiments/proposals-011.json --resume       # continue a stopped run from its games.jsonl
+$S experiment experiments/screen-014-board.json --quick     # scoping: shallow agents, 16 seeds, no probes
+$S experiment experiments/screen-014-board.json --resume    # continue a stopped run from its games.jsonl
 ```
 
 **Tuning sweeps** (`scripts/tune/`, from the repo root): `sweep.py` runs `aic-sim run --json`
@@ -422,9 +426,13 @@ nothing extra):
 - **Win probability by round** from the playouts; checkpoints that are uncertain
   (0.1 < p < 0.9); early lock-in (the result was decided, p ≤ 0.05 or ≥ 0.95 to the end,
   by round 2).
-- **Margin**: on a win, adversary cards left (rounds to spare) and pool left; on a loss,
-  the adversary pieces over the current bar (013: `margin.level` is the bar level and
-  `margin.points` the Unity tip count).
+- **Margin**: on a win, adversary cards left (deck plus the face-up card: rounds to
+  spare) and the adversary's ambassador supply left; on a loss, the adversary pieces over
+  the current bar (`margin.level` is the bar level and `margin.points` the Unity tip
+  count); every game, `margin.cities_corrupted_end` and `margin.cities_aligned_end`
+  (also columns of `games.csv`, with the core's `adversary.corruptions`,
+  `adversary.first_corruption_round`, `board.std_actions` and `board.war_destroyed`
+  counters; every counter is in `games.jsonl`).
 - **Game length**, ends by reason and round; **adversary operations** per round (mean,
   max) and at setup.
 - **Help and counters**: gifts, payments and withdrawals per game; threats countered of
@@ -471,6 +479,13 @@ costs about as much as a greedy decision per probed decision. Measured:
 seeds, 10 probed seeds per cell) took **3.7–4.3 minutes** (two runs); `experiments/smoke.json` (36
 games) 30 s. The per-cell split (agent, probes, total) is in each report's *Timing*
 table and in `games.csv`.
+
+**Timing on the 014 board** (baseline, release, 12 threads): `smoke.json --quick` (24
+games; beam dropped) 0.8–1.3 s wall, greedy 0.3–0.6 s per game at d0 (at the old difficulty-4
+ladder d4 games ended in round 1; rebuilt, rules.md §3); `screen-014-board.json --quick` (128 games) 11–13 s wall, per game greedy
+0.7 s / engine 1.1–1.4 s with 2 countries, 1.9–2.3 s / 3.2–3.7 s with 3. `cargo test
+-p aic-sim` (fast lane, built) about 17 s wall; with `--include-ignored` 78–122 s (two runs,
+the map changing between them), almost all of it the whole-game `rollout` (~56 s alone) and `beam` (~40 s) tests.
 
 **Timing on the tuned baseline** (007: games last 7–8 rounds, about 200 decisions; 12
 threads busy, so per-game times are under load):
