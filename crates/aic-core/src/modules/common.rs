@@ -28,7 +28,10 @@ pub const HARDEN: &str = "harden";
 pub const AMBASSADORS: &str = "ambassadors";
 /// Seat resource: hardware, made by player-owned factories.
 pub const HARDWARE: &str = "hardware";
-/// An adversary node: persistent, makes adversary compute, contests presence.
+/// Seat resource: destroyed presence back beside the seat's board, placed
+/// before the track's next token (018).
+pub const RESERVE: &str = "presence_reserve";
+/// An adversary node: persistent, makes adversary compute, blocks claims next to it.
 pub const NODE: &str = "node";
 
 /// Seat `s`'s presence on a hex.

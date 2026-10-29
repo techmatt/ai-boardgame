@@ -78,7 +78,7 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
 ## Config
 
 A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the baseline
-game, rules revision 8 (2 countries, difficulty 0);
+game, rules revision 9 (2 countries, difficulty 0);
 [`configs/shared_row.json`](../configs/shared_row.json) differs only in the threat
 variant. Abridged:
 

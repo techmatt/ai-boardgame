@@ -3,7 +3,11 @@ use crate::modules::adversary;
 
 #[test]
 fn the_build_step_grows_corrupted_cities_and_the_factories_next_to_them() {
-    let (rules, mut g0) = lab(&["adversary.build"]);
+    // The baseline's factory build is 0 (018); pinned here so it shows.
+    let (rules, mut g0) = lab_with(
+        &["adversary.build"],
+        &["adversary.city_build=2", "adversary.factory_build=1"],
+    );
     let m = &rules.map;
     let city = m.numbered(0, piece(0).corrupted[0]);
     put(&mut g0, city, ADV_CUBE, 1);
@@ -160,24 +164,29 @@ fn spread_keeps_one_and_sends_the_rest_by_priority() {
 }
 
 #[test]
-fn a_clean_city_holding_five_ambassadors_is_corrupted() {
+fn a_clean_city_holding_corrupt_at_ambassadors_is_corrupted() {
     let (rules, mut g) = lab(&["adversary.corrupt"]);
     let m = &rules.map;
+    let n = rules.world().int("adversary.corrupt_at");
+    assert_eq!(n, 6);
     let [a, b, aligned] = [0, 1, 2].map(|i| m.numbered(0, piece(0).cities[i]));
-    put(&mut g, a, ADV_AMBASSADOR, 5);
-    put(&mut g, b, ADV_AMBASSADOR, 4);
-    put(&mut g, aligned, ADV_AMBASSADOR, 5);
+    put(&mut g, a, ADV_AMBASSADOR, n);
+    put(&mut g, b, ADV_AMBASSADOR, n - 1);
+    put(&mut g, aligned, ADV_AMBASSADOR, n);
     put(&mut g, aligned, &cube(0), 1);
     let supply = g.var(SUPPLY);
     run(&rules, &mut g);
     // Their ambassadors go back to the supply; an aligned city loses its cube.
     assert_eq!((g.tokens(a, ADV_CUBE), g.tokens(a, ADV_AMBASSADOR)), (1, 0));
-    assert_eq!((g.tokens(b, ADV_CUBE), g.tokens(b, ADV_AMBASSADOR)), (0, 4));
+    assert_eq!(
+        (g.tokens(b, ADV_CUBE), g.tokens(b, ADV_AMBASSADOR)),
+        (0, n - 1)
+    );
     assert_eq!(
         (g.tokens(aligned, ADV_CUBE), g.tokens(aligned, &cube(0))),
         (1, 0)
     );
-    assert_eq!(g.var(SUPPLY), supply + 10);
+    assert_eq!(g.var(SUPPLY), supply + 2 * n);
     assert_eq!(g.stats.counters["adversary.corruptions"], 2);
 }
 
@@ -309,7 +318,8 @@ fn the_players_lose_when_the_next_round_has_no_adversary_card() {
 
 #[test]
 fn the_players_lose_when_the_supply_starves_or_every_city_is_corrupted() {
-    let (rules, mut g) = lab(&["adversary.build"]);
+    // A city that builds 2 with 1 left in the supply.
+    let (rules, mut g) = lab_with(&["adversary.build"], &["adversary.city_build=2"]);
     let city = rules.map.numbered(0, piece(0).corrupted[0]);
     put(&mut g, city, ADV_CUBE, 1);
     g.vars.insert(SUPPLY.into(), 1);
@@ -322,12 +332,13 @@ fn the_players_lose_when_the_supply_starves_or_every_city_is_corrupted() {
 
     let (rules, mut g) = lab(&["adversary.corrupt"]);
     let m = &rules.map;
+    let n = rules.world().int("adversary.corrupt_at");
     let last = cities(m)[0];
     corrupt_cities_except(m, &mut g, &[last]);
-    put(&mut g, last, ADV_AMBASSADOR, 4);
+    put(&mut g, last, ADV_AMBASSADOR, n - 1);
     run(&rules, &mut g);
     assert!(!g.is_over());
-    put(&mut g, last, ADV_AMBASSADOR, 5);
+    put(&mut g, last, ADV_AMBASSADOR, n);
     run(&rules, &mut g);
     let o = g.outcome.as_ref().expect("a loss");
     assert_eq!((o.won, o.reason.as_str()), (false, "cities"));

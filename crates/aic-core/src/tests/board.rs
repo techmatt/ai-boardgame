@@ -42,7 +42,7 @@ fn opposing_ambassadors_on_one_piece_cancel_without_unity() {
 }
 
 #[test]
-fn a_player_ambassador_takes_a_neutral_station_and_three_free_a_corrupted_city() {
+fn a_player_ambassador_takes_a_neutral_station_and_two_free_a_corrupted_city() {
     let (rules, mut g) = lab(&[]);
     let m = &rules.map;
     let neutral = m.numbered(0, piece(0).stations[0]);
@@ -73,9 +73,10 @@ fn a_player_ambassador_takes_a_neutral_station_and_three_free_a_corrupted_city()
 
     let city = m.numbered(0, piece(0).corrupted[0]);
     put(&mut g, city, ADV_CUBE, 1);
-    for (k, seat) in [0, 1, 0].into_iter().enumerate() {
+    assert_eq!(rules.world().int("board.free_city_at"), 2);
+    for (k, seat) in [0, 1].into_iter().enumerate() {
         with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, seat, city));
-        let freed = k == 2;
+        let freed = k == 1;
         assert_eq!(
             g.tokens(city, ADV_CUBE),
             !freed as i64,
@@ -242,15 +243,22 @@ fn a_player_ambassador_absorbs_a_destruction() {
     put(&mut g, at, TROOP, 1);
     put(&mut g, at, &ambassador(0), 1);
     let discord = g.var("alignment.discord");
+    // The ambassador absorbs the strike; the troop that struck is used up.
     run(&rules, &mut g);
     assert_eq!(
-        (g.tokens(at, FACTORY), g.tokens(at, &ambassador(0))),
-        (1, 0)
+        (
+            g.tokens(at, FACTORY),
+            g.tokens(at, &ambassador(0)),
+            g.tokens(at, TROOP)
+        ),
+        (1, 0, 0)
     );
     assert_eq!(g.var("alignment.discord"), discord);
+    // A second troop destroys it; a troop strike sways no Discord.
+    put(&mut g, at, TROOP, 1);
     run(&rules, &mut g);
-    assert_eq!((g.tokens(at, FACTORY), g.tokens(at, TROOP)), (0, 1));
-    assert_eq!(g.var("alignment.discord"), discord + 1);
+    assert_eq!((g.tokens(at, FACTORY), g.tokens(at, TROOP)), (0, 0));
+    assert_eq!(g.var("alignment.discord"), discord);
 }
 
 // ---------- production ----------
@@ -501,9 +509,10 @@ fn adversary_troops_strike_buildings_next_to_them() {
     let mut g = g0.clone();
     put(&mut g, next[0], FACTORY, 1);
     run(&rules, &mut g);
+    // A troop strike sways no Discord (only war does), and uses the troop up.
     assert_eq!(
         (g.tokens(next[0], FACTORY), discord(&g), g.tokens(at, TROOP)),
-        (0, 1, 1)
+        (0, 0, 0)
     );
 
     // Two in reach: the players choose.
@@ -531,10 +540,95 @@ fn adversary_troops_strike_buildings_next_to_them() {
         (
             g.tokens(next[0], FACTORY),
             g.tokens(next[1], &presence(0)),
-            discord(&g)
+            discord(&g),
+            g.tokens(at, TROOP)
         ),
-        (1, 0, 1)
+        (1, 0, 0, 0)
     );
+}
+
+#[test]
+fn a_troop_that_strikes_is_used_up_and_one_with_no_target_stays() {
+    let (rules, mut g0) = lab(&["board.strike"]);
+    let m = &rules.map;
+    assert_eq!(rules.world().int("board.troop_spent"), 1);
+    let (city, n) = city_with_lonely_neighbours(m);
+    let at = n[0];
+    let target = m.hexes[at]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&x| x != city && kind(m, x) != HexKind::Ocean)
+        .unwrap();
+    put(&mut g0, at, TROOP, 2);
+
+    // Nothing in reach: both stay, round after round.
+    let mut g = g0.clone();
+    run(&rules, &mut g);
+    run(&rules, &mut g);
+    assert_eq!(g.tokens(at, TROOP), 2);
+    assert!(!g.stats.counters.contains_key("board.troops_spent"));
+
+    // One building in reach: the first troop destroys it and is used up;
+    // the second finds nothing left and stays.
+    let mut g = g0.clone();
+    put(&mut g, target, FACTORY, 1);
+    run(&rules, &mut g);
+    assert_eq!((g.tokens(target, FACTORY), g.tokens(at, TROOP)), (0, 1));
+    assert_eq!(g.stats.counters["board.troops_spent"], 1);
+
+    // With `troop_spent` 0 a troop strikes and stays.
+    let (rules, mut g) = lab_with(&["board.strike"], &["board.troop_spent=0"]);
+    put(&mut g, at, TROOP, 1);
+    put(&mut g, target, FACTORY, 1);
+    run(&rules, &mut g);
+    assert_eq!((g.tokens(target, FACTORY), g.tokens(at, TROOP)), (0, 1));
+}
+
+#[test]
+fn with_presence_returns_a_destroyed_presence_goes_to_the_reserve_and_is_placed_first() {
+    use crate::modules::common::RESERVE;
+    let (rules, mut g) = lab_with(&["board.strike"], &["board.presence_returns=1"]);
+    let m = &rules.map;
+    let (city, n) = city_with_lonely_neighbours(m);
+    let at = n[0];
+    let target = m.hexes[at]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&x| x != city && kind(m, x) == HexKind::Open)
+        .unwrap();
+    put(&mut g, at, TROOP, 1);
+    put(&mut g, target, &presence(0), 1);
+    run(&rules, &mut g);
+    assert_eq!(g.tokens(target, &presence(0)), 0);
+    assert_eq!((g.resource(0, RESERVE), g.resource(1, RESERVE)), (1, 0));
+
+    // Placing takes from the reserve, not the track.
+    put(&mut g, city, &presence(0), 1);
+    let track = board::track_taken(&g, 0);
+    set_res(&mut g, 0, "energy", 1);
+    rules
+        .apply_mut(&mut g, &std_act(0, "presence"), None)
+        .unwrap();
+    let p = g.pending.as_ref().expect("a placement choice");
+    assert!(
+        p.ask.prompt.contains("from your reserve"),
+        "{}",
+        p.ask.prompt
+    );
+    answer_all(&rules, &mut g);
+    assert_eq!(g.resource(0, RESERVE), 0);
+    assert_eq!(board::track_taken(&g, 0), track);
+    assert_eq!(presence_of(&g, 0).len(), 2);
+
+    // Off: the presence is just gone.
+    let (rules, mut g) = lab_with(&["board.strike"], &["board.presence_returns=0"]);
+    put(&mut g, at, TROOP, 1);
+    put(&mut g, target, &presence(0), 1);
+    run(&rules, &mut g);
+    assert_eq!(g.tokens(target, &presence(0)), 0);
+    assert_eq!(g.resource(0, RESERVE), 0);
 }
 
 // ---------- standard actions ----------
@@ -684,7 +778,7 @@ fn standard_actions_cost_what_the_config_says() {
     put(&mut g, d, NODE, 1);
     let nodes = total(&g, NODE);
     act(&rules, &mut g, std_act(0, "node"));
-    assert_eq!((spent(&g, 0), total(&g, NODE)), ((3, 0, 0), nodes - 1));
+    assert_eq!((spent(&g, 0), total(&g, NODE)), ((2, 0, 0), nodes - 1));
 
     let mut g = g0.clone();
     act(&rules, &mut g, std_act(1, "harden"));
@@ -777,7 +871,7 @@ fn card_targets_on_the_map_must_be_in_reach() {
 }
 
 #[test]
-fn claiming_a_site_needs_uncontested_presence_on_or_next_to_it() {
+fn claiming_a_site_needs_presence_and_no_node_on_or_next_to_it() {
     let (rules, g0) = lab(&[]);
     let m = &rules.map;
     let station = m.numbered(0, piece(0).stations[0]);
@@ -811,16 +905,29 @@ fn claiming_a_site_needs_uncontested_presence_on_or_next_to_it() {
     with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, station));
     assert_eq!(g.tokens(station, &cube(0)), 1);
 
-    // A node next to that presence contests it.
+    // A node next to the presence but not the site does not block it.
     let mut g = g0.clone();
     put(&mut g, next, &presence(0), 1);
-    let node_at = m.hexes[next]
+    let node_far = m.hexes[next]
         .neighbours
         .iter()
         .copied()
-        .find(|&h| h != station)
+        .find(|&h| m.distance(h, station) == 2)
         .unwrap();
-    put(&mut g, node_at, NODE, 1);
+    put(&mut g, node_far, NODE, 1);
+    with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, station));
+    assert_eq!(g.tokens(station, &cube(0)), 1);
+
+    // A node next to the site blocks it, wherever the presence is.
+    let mut g = g0.clone();
+    put(&mut g, next, &presence(0), 1);
+    let node_near = m.hexes[station]
+        .neighbours
+        .iter()
+        .copied()
+        .find(|&h| h != next && kind(m, h) != HexKind::Ocean)
+        .unwrap();
+    put(&mut g, node_near, NODE, 1);
     with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, 0, station));
     assert_eq!(
         (
@@ -829,6 +936,11 @@ fn claiming_a_site_needs_uncontested_presence_on_or_next_to_it() {
         ),
         (0, 1)
     );
+    // So does a node on the site itself.
+    let mut g = g0.clone();
+    put(&mut g, next, &presence(0), 1);
+    put(&mut g, station, NODE, 1);
+    assert!(!board::can_claim(&rules.world(), &g, 0, station));
 
     // Aligning a city: likewise.
     let (city, lonely) = city_with_lonely_neighbours(m);
@@ -837,13 +949,18 @@ fn claiming_a_site_needs_uncontested_presence_on_or_next_to_it() {
     set_res(&mut g, 0, "energy", 2);
     set_res(&mut g, 0, AMBASSADORS, 1);
     assert!(standard_offered(&rules, &g, 0).contains("align"));
-    let n2 = m.hexes[lonely[0]]
+    // A node next to the presence, two from the city: still offered.
+    let far = m.hexes[lonely[0]]
         .neighbours
         .iter()
         .copied()
-        .find(|&h| h != city)
+        .find(|&h| m.distance(h, city) == 2)
         .unwrap();
-    put(&mut g, n2, NODE, 1);
+    put(&mut g, far, NODE, 1);
+    assert!(standard_offered(&rules, &g, 0).contains("align"));
+    // A node next to the city: not.
+    put(&mut g, far, NODE, 0);
+    put(&mut g, lonely[1], NODE, 1);
     assert!(!standard_offered(&rules, &g, 0).contains("align"));
 }
 
@@ -855,6 +972,7 @@ fn cities_grow_factories_that_take_their_owner() {
     let m = &rules.map;
     let at = |n: u8| m.numbered(0, n);
     // Country 0: cities 6, 7, 14; zones 2 (by 6), 8 and 11 (by 7), 11 and 13 (by 14).
+    // Cities build in board order: 6, 7, 14.
     assert_eq!(
         (piece(0).cities.clone(), piece(0).industry.clone()),
         (vec![7, 6, 14], vec![2, 8, 11, 13])
@@ -863,25 +981,20 @@ fn cities_grow_factories_that_take_their_owner() {
     let zones =
         |g: &GameState| [2, 8, 11, 13].map(|n| (g.tokens(at(n), FACTORY), cube_on(g, at(n))));
 
-    // Clean 6 builds at 2 (its only zone), neutral; corrupted 7 at the free
-    // zone with the lowest key: 8 (nearest, lowest number), adversary-owned.
+    // Clean 6 builds at 2 (its only zone), neutral (no presence near);
+    // corrupted 7 and 14 at the lowest-numbered free zones, 8 then 11,
+    // adversary-owned.
     let mut g = g0.clone();
     put(&mut g, c7, ADV_CUBE, 1);
     put(&mut g, at(14), ADV_CUBE, 1);
     let mut gg = g.clone();
     run(&rules, &mut gg);
     answer_all(&rules, &mut gg);
-    assert_eq!(zones(&gg)[0], (1, None));
-    assert_eq!(zones(&gg)[1], (1, Some("cube:adversary".into())));
-
-    // An adversary ambassador draws it (13, further); a player ambassador repels it.
-    let mut gg = g.clone();
-    put(&mut gg, at(13), ADV_AMBASSADOR, 1);
-    put(&mut gg, at(8), &ambassador(0), 1);
-    run(&rules, &mut gg);
-    answer_all(&rules, &mut gg);
-    assert_eq!(gg.tokens(at(13), FACTORY), 1);
-    assert_eq!(gg.tokens(at(8), FACTORY), 0);
+    let adv = Some("cube:adversary".to_string());
+    assert_eq!(
+        zones(&gg),
+        [(1, None), (1, adv.clone()), (1, adv.clone()), (0, None)]
+    );
 
     // An aligned city's factory is its owner's.
     let mut gg = g0.clone();
@@ -918,6 +1031,113 @@ fn cube_on(g: &GameState, h: usize) -> Option<String> {
         .keys()
         .find(|k| k.starts_with("cube:"))
         .cloned()
+}
+
+#[test]
+fn a_corrupted_city_builds_next_to_an_adversary_ambassador_else_at_its_lowest_free_zone() {
+    let (rules, mut g0) = lab(&["board.bases"]);
+    let m = &rules.map;
+    let at = |n: u8| m.numbered(0, n);
+    // Country 0 (see above): city 6 builds first; zone 2 is taken, so its
+    // own neighbourhood has no free zone.
+    put(&mut g0, at(2), STATION, 1);
+    put(&mut g0, at(6), ADV_CUBE, 1);
+    let adv = Some("cube:adversary".to_string());
+    let zone = |g: &GameState, n: u8| (g.tokens(at(n), FACTORY), cube_on(g, at(n)));
+
+    // No adversary ambassador: the lowest-numbered free zone, 8, even though
+    // it is not next to the city; then 7 builds at 11 and 14 at 13, neutral.
+    let mut g = g0.clone();
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert!(!m.adjacent(at(6), at(8)));
+    assert_eq!(zone(&g, 8), (1, adv.clone()));
+    assert_eq!((zone(&g, 11), zone(&g, 13)), ((1, None), (1, None)));
+
+    // An adversary ambassador next to 13 (on 9) draws it there, past 8 and 11.
+    let mut g = g0.clone();
+    put(&mut g, at(9), ADV_AMBASSADOR, 1);
+    assert!(m.adjacent(at(9), at(13)) && !m.adjacent(at(9), at(8)) && !m.adjacent(at(9), at(11)));
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(zone(&g, 13), (1, adv.clone()));
+    assert_ne!(zone(&g, 8).1, adv);
+    assert_ne!(zone(&g, 11).1, adv);
+
+    // An ambassador on a zone counts too; among two drawn zones (13 on one,
+    // 11 next to the one on 14; 8 next to neither), the lower.
+    let mut g = g0.clone();
+    put(&mut g, at(13), ADV_AMBASSADOR, 1);
+    put(&mut g, at(14), ADV_AMBASSADOR, 1);
+    assert!(!m.adjacent(at(8), at(14)) && !m.adjacent(at(8), at(13)));
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(zone(&g, 11), (1, adv.clone()));
+    assert_ne!(zone(&g, 13).1, adv);
+    // A player ambassador no longer repels it.
+    let mut g = g0.clone();
+    put(&mut g, at(8), &ambassador(0), 1);
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(zone(&g, 8), (1, adv));
+}
+
+#[test]
+fn a_clean_citys_factory_goes_to_the_most_presence_by_its_zone() {
+    let (rules, mut g0) = lab(&["board.bases"]);
+    let m = &rules.map;
+    let at = |n: u8| m.numbered(0, n);
+    // Country 0 (see above), 8 taken: 6 builds at 2, 7 at 11, 14 at 13.
+    put(&mut g0, at(8), STATION, 1);
+    let owners = |g: &GameState| {
+        [2, 11, 13].map(|n| {
+            assert_eq!(g.tokens(at(n), FACTORY), 1, "zone {n}");
+            cube_on(g, at(n))
+        })
+    };
+
+    // Nobody's presence near: neutral.
+    let mut g = g0.clone();
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(owners(&g), [None, None, None]);
+
+    // Seat 1 next to 2; seat 1 on 11 against seat 0 on 10 (next to it), a
+    // tie the players settle; seat 0 on 9 and 10, both next to 13.
+    let mut g = g0.clone();
+    put(&mut g, at(1), &presence(1), 1);
+    put(&mut g, at(11), &presence(1), 1);
+    put(&mut g, at(9), &presence(0), 1);
+    put(&mut g, at(10), &presence(0), 1);
+    run(&rules, &mut g);
+    let p = g.pending.as_ref().expect("a tie to settle");
+    assert!(
+        p.ask
+            .prompt
+            .starts_with("The factory at C0 #11 goes to which player?"),
+        "{}",
+        p.ask.prompt
+    );
+    assert_eq!(p.ask.options.len(), 2);
+    answer_with(&rules, &mut g, "seat 1");
+    answer_all(&rules, &mut g);
+    let c = |s: usize| Some(cube(s));
+    assert_eq!(owners(&g), [c(1), c(1), c(0)]);
+    let built = |g: &GameState| {
+        g.stats
+            .counters
+            .get("board.factories_built.player")
+            .copied()
+    };
+    assert_eq!(built(&g).unwrap_or(0) - built(&g0).unwrap_or(0), 3);
+
+    // An aligned city's factory stays its owner's, whatever presence is near.
+    let mut g = g0.clone();
+    put(&mut g, at(6), &cube(0), 1);
+    put(&mut g, at(1), &presence(1), 1);
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(owners(&g)[0], c(0));
 }
 
 #[test]

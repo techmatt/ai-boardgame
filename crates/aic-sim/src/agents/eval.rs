@@ -205,7 +205,9 @@ impl Default for Weights {
             project_cube: 2.0,
             factory: 0.5,
             harden: 1.0,
-            ambassador: 3.0,
+            // 018: was 3, below the 6 credits (3.6) an ambassador costs, so no
+            // agent ever bought one and corrupted cities were never freed.
+            ambassador: 5.0,
             ambassador_board: 2.5,
             freeing: 0.8,
             income: 3.0,

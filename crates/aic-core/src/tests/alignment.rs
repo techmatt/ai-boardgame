@@ -72,7 +72,7 @@ fn bar_levels_follow_the_unity_tips() {
     let rules = Rules::new(&baseline()).unwrap();
     let w = rules.world();
     let mut g = rules.new_game(1);
-    for (tips, level) in [(0, 0), (1, 0), (2, 1), (4, 1), (5, 2), (9, 2)] {
+    for (tips, level) in [(0, 0), (1, 1), (2, 1), (3, 2), (9, 2)] {
         g.vars.insert("alignment.unity_tips".into(), tips);
         assert_eq!(alignment::bar_level(&w, &g), level, "{tips} tips");
     }

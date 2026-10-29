@@ -4,10 +4,10 @@ use super::*;
 fn setup_places_the_printed_pieces() {
     // Difficulty 4's second corrupted city is a tunable, 0 in the baseline.
     let cases: [(i64, usize, usize, i64, &str); 4] = [
-        (0, 1, 9, 20, ""),
-        (3, 1, 8, 20, ""),
-        (4, 1, 8, 16, ""),
-        (4, 2, 8, 16, "adversary.extra_corrupted=1"),
+        (0, 1, 10, 28, ""),
+        (3, 1, 9, 28, ""),
+        (4, 1, 9, 20, ""),
+        (4, 2, 9, 20, "adversary.extra_corrupted=1"),
     ];
     for (d, corrupt, deck, supply, set) in cases {
         let level = format!("adversary.difficulty={d}");

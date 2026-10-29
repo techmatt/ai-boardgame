@@ -62,7 +62,8 @@ pub fn tier2(w: &World, g: &GameState, seat: usize) -> bool {
 
 /// Whether seat `s` has a presence token left on its track.
 pub fn can_place(w: &World, g: &GameState, seat: usize) -> bool {
-    board::track_taken(g, seat) < board(w, seat).presence.len()
+    g.resource(seat, super::common::RESERVE) > 0
+        || board::track_taken(g, seat) < board(w, seat).presence.len()
 }
 
 /// What uncovering a space gives, as a short label (`+1 compute, T2`).

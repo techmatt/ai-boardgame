@@ -224,17 +224,17 @@ fn a_discord_tip_advances_every_troop_which_then_strikes() {
         .unwrap();
     assert_eq!(m.distance(at, p), 2);
     assert_eq!(g.stats.counters["board.troop_advances"], 1);
-    // The second tip brings it next to the presence, and it strikes it.
+    // The second tip brings it next to the presence, and it strikes it,
+    // which uses it up (`troop_spent`).
     next_discord(&mut g, "propaganda");
     fill_discord(&rules, &mut g);
     give(&rules, &mut g);
     answer_all(&rules, &mut g);
-    let at = (0..m.hexes.len())
-        .find(|&h| g.tokens(h, TROOP) > 0)
-        .unwrap();
-    assert_eq!(m.distance(at, p), 1);
     assert_eq!(g.tokens(p, &presence(0)), 0);
+    assert_eq!(total(&g, TROOP), 0);
+    assert_eq!(g.stats.counters["board.troop_advances"], 2);
     assert_eq!(g.stats.counters["board.advance_destroyed"], 1);
+    assert_eq!(g.stats.counters["board.troops_spent"], 1);
     // No escalation any more.
     assert_eq!(g.var("adversary.escalation"), 0);
 }

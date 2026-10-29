@@ -53,7 +53,12 @@ The standards every module and every rules change is judged against.
 - help and counter usage;
 - luck share (most outcome variance comes from decisions, not the shuffle).
 
-Agents get no information or help the printed game couldn't give players.
+Agents get no help the printed game couldn't give players. **Information (Matt,
+2026-10-29):** for the foreseeable future agents may play with full information (deck
+orders and other hidden state revealed, one agent for the whole team, deterministic): it
+is simpler and should give similar balance. Where determinization or hidden-information
+handling gets in the way, it may be dropped. Today's agents still determinize (018 did
+not need to drop it).
 
 Weigh each measure's cost against the decision it informs: screen cheaply first, and run expensive measures only on finalists.
 

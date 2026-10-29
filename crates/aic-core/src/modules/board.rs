@@ -41,7 +41,9 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("base_unity", 0, 10, "Unity a player ambassador on a producing base sways"),
             ParamSpec::int("factory_unity", 0, 10, "Unity a player ambassador on a producing factory sways"),
             ParamSpec::int("free_city_at", 0, 10, "player ambassadors on a corrupted city that free it"),
-            ParamSpec::int("destruction_discord", 0, 5, "Discord each destroyed building sways"),
+            ParamSpec::int("destruction_discord", 0, 5, "Discord each building destroyed in war sways"),
+            ParamSpec::int("troop_spent", 0, 1, "1: an adversary troop that strikes a target is used up"),
+            ParamSpec::int("presence_returns", 0, 1, "1: a destroyed presence goes to its owner's reserve, placed before the track"),
             ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence"),
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_hardware", 0, 20, "standard action: hardware to build a research station"),
@@ -172,28 +174,33 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
         return Ok(false);
     }
     let hexes = presence_hexes(&w, g, seat);
-    let next = &ai::board(&w, seat).presence[track_taken(g, seat)];
+    let reserve = g.resource(seat, RESERVE) > 0;
+    let what = if reserve {
+        "from your reserve".to_string()
+    } else {
+        let next = &ai::board(&w, seat).presence[track_taken(g, seat)];
+        format!("uncovers {}", ai::uncover_label(next))
+    };
     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
-    let prompt = format!(
-        "Seat {seat}: place presence (uncovers {}) on which hex?",
-        ai::uncover_label(next)
-    );
+    let prompt = format!("Seat {seat}: place presence ({what}) on which hex?");
     let Some(j) = cx.choose(seat, &prompt, opts)? else {
         return Ok(false);
     };
-    cx.add_key(g, track_key(seat), 1);
+    if reserve {
+        cx.add_resource(g, seat, RESERVE, -1);
+    } else {
+        cx.add_key(g, track_key(seat), 1);
+    }
     cx.add_tokens(g, hexes[j], &presence(seat), 1);
     cx.tally(g, "board.presence_placed", 1);
     Ok(true)
 }
 
 /// Whether seat `s` can claim the site on hex `h` (align a city, take a
-/// station or factory): one of its presence on or next to `h` that is not
-/// contested, i.e. not on or next to a node.
+/// station or factory): its presence is on or next to `h`, and no node is.
 pub fn can_claim(w: &World, g: &GameState, seat: usize, h: usize) -> bool {
     let k = presence(seat);
-    let ok = |x: usize| g.tokens(x, &k) > 0 && !next_to(w, x, |y| g.tokens(y, NODE) > 0);
-    next_to(w, h, ok)
+    next_to(w, h, |x| g.tokens(x, &k) > 0) && !next_to(w, h, |x| g.tokens(x, NODE) > 0)
 }
 
 #[derive(Debug)]
@@ -393,8 +400,9 @@ fn buildings_on(g: &GameState, h: usize) -> Vec<String> {
 /// A building of `kind` on hex `h` would be destroyed. A Shelter Order in
 /// its country, a corp troop at a base next to it (adversary strikes only,
 /// `by_troop`), a hardening token, a player ambassador on the hex, or a
-/// Civic Shelter absorbs it (in that order); otherwise it goes and sways
-/// toward Discord. Returns whether it was destroyed.
+/// Civic Shelter absorbs it (in that order); otherwise it goes, and a war
+/// destruction (not `by_troop`) sways toward Discord. Returns whether it was
+/// destroyed.
 pub fn destroy_building(
     g: &mut GameState,
     cx: &mut Cx,
@@ -431,6 +439,11 @@ pub fn destroy_building(
         return false;
     }
     cx.add_tokens(g, h, kind, -1);
+    if w.int("board.presence_returns") > 0 {
+        if let Some(s) = (0..g.seats.len()).find(|&s| kind == presence(s)) {
+            cx.add_resource(g, s, RESERVE, 1);
+        }
+    }
     if kind == STATION || kind == FACTORY {
         if let Some(s) = cube_owner(g, h) {
             cx.add_tokens(g, h, &cube(s), -1);
@@ -443,7 +456,9 @@ pub fn destroy_building(
     cx.note(Some(h), || {
         format!("{kind} at {} destroyed", hex_name(&w, h))
     });
-    alignment::sway(g, cx, Side::Discord, w.int("board.destruction_discord"));
+    if !by_troop {
+        alignment::sway(g, cx, Side::Discord, w.int("board.destruction_discord"));
+    }
     true
 }
 
@@ -559,11 +574,14 @@ pub fn free_zones(w: &World, g: &GameState) -> Vec<usize> {
         .collect()
 }
 
-/// Each city builds one factory: a corrupted city at the free zone in its
-/// country holding no player ambassador if it can, then holding an
-/// adversary ambassador, then nearest, then lowest number; any other city on
+/// Each city builds one factory: a corrupted city at a free zone in its
+/// country next to an adversary ambassador if there is one, else the
+/// lowest-numbered free zone (lowest number among equals); any other city on
 /// a free zone next to it, where the players choose (an aligned city's
-/// owner, else seat 0). The factory takes the city's owner.
+/// owner, else seat 0). A corrupted city's factory is the adversary's, an
+/// aligned city's its owner's, and a clean city's goes to the player with
+/// the most presence next to the zone (players choose on a tie), neutral if
+/// none.
 fn grow_factories(g: &mut GameState, cx: &mut Cx) -> Res {
     let w = cx.world;
     for city in 0..g.hexes.len() {
@@ -578,9 +596,7 @@ fn grow_factories(g: &mut GameState, cx: &mut Cx) -> Res {
                 .filter(|&z| w.map.hexes[z].country == c)
                 .min_by_key(|&z| {
                     (
-                        player_ambassador(g, z).is_some(),
-                        g.tokens(z, ADV_AMBASSADOR) == 0,
-                        w.map.distance(city, z),
+                        !next_to(&w, z, |x| g.tokens(x, ADV_AMBASSADOR) > 0),
                         w.map.hexes[z].number,
                     )
                 })
@@ -605,7 +621,10 @@ fn grow_factories(g: &mut GameState, cx: &mut Cx) -> Res {
         if corrupted(g, city) {
             cx.add_tokens(g, z, ADV_CUBE, 1);
             cx.tally(g, "board.factories_built.adversary", 1);
-        } else if let Some(s) = cube_owner(g, city) {
+        } else if let Some(s) = match cube_owner(g, city) {
+            Some(s) => Some(s),
+            None => zone_owner(g, cx, z)?,
+        } {
             cx.add_tokens(g, z, &cube(s), 1);
             cx.tally(g, "board.factories_built.player", 1);
         } else {
@@ -620,6 +639,31 @@ fn grow_factories(g: &mut GameState, cx: &mut Cx) -> Res {
         });
     }
     Ok(())
+}
+
+/// Who takes a clean city's new factory on zone `z`: the player with the
+/// most presence next to it (players choose on a tie), none if nobody has any.
+fn zone_owner(g: &mut GameState, cx: &mut Cx, z: usize) -> Res<Option<usize>> {
+    let w = cx.world;
+    let near: Vec<usize> = (0..g.seats.len())
+        .map(|s| {
+            std::iter::once(z)
+                .chain(w.map.hexes[z].neighbours.iter().copied())
+                .filter(|&x| g.tokens(x, &presence(s)) > 0)
+                .count()
+        })
+        .collect();
+    let most = near.iter().copied().max().unwrap_or(0);
+    if most == 0 {
+        return Ok(None);
+    }
+    let tied: Vec<usize> = (0..g.seats.len()).filter(|&s| near[s] == most).collect();
+    if tied.len() == 1 {
+        return Ok(Some(tied[0]));
+    }
+    let opts = tied.iter().map(|&s| seat_opt(s)).collect();
+    let prompt = format!("The factory at {} goes to which player?", hex_name(&w, z));
+    Ok(cx.choose(0, &prompt, opts)?.map(|i| tied[i]))
 }
 
 /// Production step 2, on a war round: on each front the units cancel 1 for
@@ -721,6 +765,10 @@ fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize, key: &str) -> Res<bool>
     if destroy_building(g, cx, x, &k, true) {
         cx.tally(g, key, 1);
     }
+    if w.int("board.troop_spent") > 0 {
+        cx.add_tokens(g, h, TROOP, -1);
+        cx.tally(g, "board.troops_spent", 1);
+    }
     Ok(true)
 }
 
@@ -774,7 +822,13 @@ pub fn advance_troops(g: &mut GameState, cx: &mut Cx) -> Res {
             }
         }
         cx.tally(g, "board.advance_strikes", 1);
-        strike_from(g, cx, at, "board.advance_destroyed")?;
+        if strike_from(g, cx, at, "board.advance_destroyed")?
+            && at != from
+            && w.int("board.troop_spent") > 0
+        {
+            // The troop that moved here was used up.
+            moved[at] -= 1;
+        }
         if g.is_over() {
             return Ok(());
         }

@@ -343,6 +343,11 @@ pub struct Margin {
     pub level: i64,
     /// Unity tips.
     pub unity_tips: i64,
+    /// Nodes and adversary troops on the board at the end (018).
+    #[serde(default)]
+    pub nodes_end: i64,
+    #[serde(default)]
+    pub troops_end: i64,
 }
 
 fn margin(rules: &Rules, g: &GameState) -> Margin {
@@ -368,6 +373,8 @@ fn margin(rules: &Rules, g: &GameState) -> Margin {
         blockers,
         level,
         unity_tips: g.var(alignment::tips_key(Side::Unity)),
+        nodes_end: (0..g.hexes.len()).map(|h| g.tokens(h, common::NODE)).sum(),
+        troops_end: (0..g.hexes.len()).map(|h| g.tokens(h, common::TROOP)).sum(),
     }
 }
 

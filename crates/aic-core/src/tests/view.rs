@@ -57,7 +57,7 @@ fn the_view_shows_the_board_the_fronts_the_projects_and_the_next_card() {
     assert!(global("adversary.compute").value > 0);
     assert_eq!(global("board.war").value, 0);
     let supply = global("adversary.supply");
-    assert_eq!((supply.value, supply.max), (g.var(SUPPLY), Some(20)));
+    assert_eq!((supply.value, supply.max), (g.var(SUPPLY), Some(28)));
     assert_eq!(
         global("adversary.deck").value,
         (g.pile(DECK).len() + 1) as i64

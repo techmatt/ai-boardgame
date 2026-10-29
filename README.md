@@ -6,7 +6,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 
 - [docs/principles.md](docs/principles.md): design pillars, difficulty targets, lenses,
   measures.
-- [docs/rules.md](docs/rules.md): what the code implements: **rules revision 8** (017: the adversary project deck, the Discord troop advance, one-shot Alignment cards; on 016: presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the purge), on the 014
+- [docs/rules.md](docs/rules.md): what the code implements: **rules revision 9** (018: the structural fixes and calibration, troops used up when they strike; 017: the adversary project deck, the Discord troop advance, one-shot Alignment cards; on 016: presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the purge), on the 014
   board model, Militarist against Builder and Protector, 1–4 countries, with every
   default and deviation.
 - [docs/ruleset-v0.md](docs/ruleset-v0.md): the v0 design draft as handed over.
@@ -24,8 +24,8 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history and does not replay. `archive/`: specs the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces with their cities, ocean, setup buildings and megaproject), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, `alignment.json` (the Unity and Discord decks), all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects, r8 (2 countries, difficulty 0; every number a reasoned candidate, untuned); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. Opt-in variants: `cards.variant=free_keep` (+ `cards.free_keeps=1`). The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
-| `scripts/` | `wasm-smoke.mjs`: plays one game through the wasm package in Node (current). `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline (current). `board/`: `screen_017.py` (017), the r8 screen summary (current); `screen_016.py` (016), the r7 screen summary (reads r8 too); `screen_summary.py` (014), the board screen summary (current). `alignment/` (013): the Alignment screen summary (current: the alignment counters it reads still exist). `bench/` (012): `same_results.py`, compares two experiment outputs (current). `tune/` (007–008): `sweep.py`, `log_table.py` and `engine_sweep.py` run on r6. `payback/` (009): content patches and summaries for r3's payback sweep, not checked against r6 (see [experiments/history.md](experiments/history.md)). |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects, r9 (2 countries, difficulty 0; 018 calibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. Opt-in variants: `cards.variant=free_keep` (+ `cards.free_keeps=1`). The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
+| `scripts/` | `wasm-smoke.mjs`: plays one game through the wasm package in Node (current). `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline (current). `board/`: `screen_018.py` (018), the r9 calibration summary with the strategy-health gate (current); `screen_017.py` (017), the r8 screen summary (reads r9 too); `screen_016.py` (016), the r7 screen summary (reads r8 too); `screen_summary.py` (014), the board screen summary (current). `alignment/` (013): the Alignment screen summary (current: the alignment counters it reads still exist). `bench/` (012): `same_results.py`, compares two experiment outputs (current). `tune/` (007–008): `sweep.py`, `log_table.py` and `engine_sweep.py` (`sweep.py` still runs on r9: 018 used it). `payback/` (009): content patches and summaries for r3's payback sweep, not checked against r6 (see [experiments/history.md](experiments/history.md)). |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
 Core source map: `rules.rs` (config compilation, round/phase loop, apply, choice
@@ -62,9 +62,11 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 - `node scripts/shots-017.mjs` (with `AIC_URL` and `AIC_SHOTS=<dir>`, ~30–90 s) plays
   baseline seeds and saves viewer shots of the adversary project row mid-fill and after
   a project resolved (017).
-- e2e at 1366x768 (017): `4 countries: no page scroll` fails, board 260 px tall against
-  307 needed (016: 297); the project row takes ~20 px, the Alignment block and the
-  4-country strip the rest. Everything else passes.
+- e2e at 1366x768 (018): every check passes. `4 countries: no page scroll` has the board
+  340 px tall against 307 needed (017: 260 to 281), `board fills its pane` 382 to 406
+  against 346 (it varies with the game the run plays). Below 820 px of height
+  (`@media (max-height: 820px)` in `web/src/style.css`) the strips around the board take
+  tighter lines and the adversary cards one line of text.
 - The view (008) names each country (`countries[].name`), shows each seat's AI board as a
   `board` (name, innate rule, tracks with every step, slots, unique cards), and keeps
   module bookkeeping vars (threat payments, discounts, flags, ...) out of the globals:
@@ -232,7 +234,7 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
   its cost, `project` 8, 017); the players' board (presence
   4, nodes −6, owned factories 4 (an adversary-owned one −4), hardware 2, cities/bases/stations in reach 0.5, owned stations 5 (a corrupted one −5),
   megaproject cubes 2 (adversary's −1), factories 0.5, hardening 1, player ambassadors
-  3 in supply / 2.5 on the board, and toward freeing a corrupted city `freeing` 0.8 ×
+  5 in supply (018: was 3, below their 6-credit cost, so agents never bought one) / 2.5 on the board, and toward freeing a corrupted city `freeing` 0.8 ×
   `corrupted` × share of `free_city_at`); track income, resources, cards in hand and
   built; unpaid threats. Every weight is a parameter: `w.<name>=V` in an agent spec. The
   014 weights are hand-set, not swept.
@@ -300,6 +302,18 @@ cities corrupted at the end, destructions per war round, Unity and Discord tips,
 standard actions and how games ended; then adversary ambassadors on the board by round,
 and standard actions by kind. Committed with the report and records in
 `experiments/results/screen-014-board/` (`board.md`).
+
+**Calibration screen (018, r9)**, `experiments/screen-018-calibration.json` (`c2`, `c3`
+× d0–d4 × random, greedy, engine; 480 games): `aic-sim experiment
+experiments/screen-018-calibration.json --quick --out out/screen-018` (**~3 min** wall on
+12 threads: r9 games run longer, 6–12 rounds, and c3 engine games go the full 11),
+then `python scripts/board/screen_018.py out/screen-018`: per cell the win rate,
+rounds, what was left on the board at the end (corrupted cities, nodes, troops: the
+purge's blockers), tips and ends, then the strategy-health gate per game (presence,
+factories per side and owned at the end, hardware made and spent, nodes made and
+removed, compute blocked by a player ambassador on a node, Security Patch, cities
+freed, cards). `margin.nodes_end` / `troops_end` in `games.jsonl` are new in 018.
+Committed in `experiments/results/screen-018-calibration/` (`calibration.md`).
 
 **Projects screen (017, r8)**, `experiments/screen-017-projects.json` (the same cells):
 `aic-sim experiment experiments/screen-017-projects.json --quick --out out/screen-017`

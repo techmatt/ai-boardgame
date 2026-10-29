@@ -1,0 +1,33 @@
+{
+  "name": "screen-018-calibration",
+  "note": "018 quick screen: the structural fixes (war-only destruction Discord, presence-owned clean-city factories, 2-energy node removal, the simpler corrupted-city placement and contested claims) and the calibration on top. 2 and 3 countries, d0 to d4, random, greedy and engine: the strategy-health gate (presence, factories, hardware, node ambassadors, Security Patch) and the difficulty curve.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "agents": [
+    "random",
+    "greedy",
+    "engine"
+  ],
+  "games": 16,
+  "records": 2
+}
