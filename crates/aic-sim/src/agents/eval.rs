@@ -9,7 +9,7 @@
 //! (the adversary's cube; every city corrupted loses). Adversary ambassadors
 //! gather on clean cities until `adversary.corrupt_at` corrupts them, divert
 //! the production of the pieces they sit on (a factory builds a troop),
-//! and come out of a supply that loses the game when it runs dry.
+//! and come out of a supply that caps them.
 //!
 //! The weights are agent parameters, not rules: they live in [`Weights`]
 //! and an experiment can override any of them (`greedy:w.corrupted=40`).
@@ -28,7 +28,7 @@ use aic_core::content::{Op, Resource, Side, RESOURCES};
 use aic_core::modules::common::{
     self, ADV_AMBASSADOR, ADV_CUBE, FACTORY, HARDEN, STATION, TROOP,
 };
-use aic_core::modules::{adversary, ai, alignment, board, cards, economy, plan, threats};
+use aic_core::modules::{adversary, ai, alignment, board, cards, economy, threats};
 use aic_core::{GameState, Rules};
 use serde::{Deserialize, Serialize};
 
@@ -43,8 +43,9 @@ pub struct Weights {
     /// Each corrupted city (it builds ambassadors, diverts its energy to
     /// Discord, and every city corrupted loses).
     pub corrupted: f64,
-    /// Extra per city short of 2 not corrupted (all corrupted = loss).
-    pub cities_danger: f64,
+    /// A seat down to its last presence (027: a player with none loses);
+    /// half that with two.
+    pub presence_danger: f64,
     /// Each aligned city (a player cube: extra energy for its owner).
     pub aligned: f64,
     /// Each adversary ambassador on the board (the bar-0 win needs none).
@@ -59,11 +60,9 @@ pub struct Weights {
     pub on_factory: f64,
     /// Each adversary troop (it destroys a building every round).
     pub troop: f64,
-    /// Per ambassador of slack short of 4 between the supply and the next
-    /// build's placements.
-    pub supply: f64,
-    /// Per ambassador the supply is short of the next build (starved = loss).
-    pub supply_danger: f64,
+    /// Per Discord card short of 3 left in the deck (027: the tip that finds
+    /// it empty loses).
+    pub discord_danger: f64,
     /// Each adversary piece that keeps the current clear-board bar from
     /// being met (the win condition).
     pub blocker: f64,
@@ -103,9 +102,8 @@ pub struct Weights {
     /// Each player ambassador on the board (shields a building, cancels an
     /// arriving adversary ambassador, unites a base).
     pub ambassador_board: f64,
-    /// One player's ambassadors on a corrupted city: this share of
-    /// `corrupted` per ambassador of the `board.free_city_at` that free it,
-    /// halved while an adversary ambassador is on or next to it (024).
+    /// Player ambassadors toward a corrupted city's hold (027), on it or in
+    /// the supply of a seat with it in reach: this share of `corrupted`.
     pub freeing: f64,
     /// Each adversary ambassador next to a corrupted city (024: it blocks
     /// the freeing), on top of `adv_ambassador`.
@@ -155,7 +153,7 @@ pub struct Weights {
     /// Horizon mode: rounds a win needs after the Unity target is reached.
     pub win_lag: f64,
     /// Horizon mode: chance of losing per round per unit of danger (an
-    /// unpaid threat per country, the supply or the cities at their edge);
+    /// unpaid threat per country, a last presence, the Discord deck at its edge);
     /// the rounds left are the expected survival over the clock.
     pub risk: f64,
     /// Horizon mode: per round left, a building that pays no income (an
@@ -201,15 +199,14 @@ impl Default for Weights {
             win_margin: 5.0,
             // 014: chosen by hand for the new board, not yet swept.
             corrupted: 30.0,
-            cities_danger: 60.0,
+            presence_danger: 60.0,
             aligned: 8.0,
             adv_ambassador: 3.0,
             pressure: 0.7,
             on_piece: 2.0,
             on_factory: 6.0,
             troop: 12.0,
-            supply: 5.0,
-            supply_danger: 40.0,
+            discord_danger: 40.0,
             blocker: 2.0,
             // 013: a Unity tip replaces about 4 opposition points (24) and
             // brings a card; a Discord tip brings one of the adversary's.
@@ -233,7 +230,7 @@ impl Default for Weights {
             // agent ever bought one and corrupted cities were never freed.
             ambassador: 5.0,
             ambassador_board: 2.5,
-            freeing: 0.8,
+            freeing: 2.0,
             guard: 3.0,
             income: 3.0,
             credits: 0.6,
@@ -315,9 +312,8 @@ impl Weights {
 }
 
 /// What the next adversary build and corrupt steps will do, as the face-up
-/// card shows: ambassadors the build places, and the corrupt threshold.
+/// card shows: the corrupt threshold.
 struct Forecast {
-    placements: i64,
     corrupt_at: i64,
 }
 
@@ -326,11 +322,9 @@ pub struct Eval {
     pub w: Weights,
     card_value: BTreeMap<String, f64>,
     seats: usize,
-    /// Unity tip count the team aims for: the outright win, or with none
-    /// the last bar drop.
+    /// Unity tip count the team aims for: the last bar drop.
     target_tips: i64,
     corrupt_at: i64,
-    free_at: i64,
     city_energy: i64,
     aligned_bonus: i64,
 }
@@ -345,23 +339,17 @@ impl Eval {
             .map(|c| (c.id.clone(), credit_equivalent(c, c.cost).max(0) as f64))
             .collect();
         let seats = rules.config.countries as usize;
-        let outright = world.int("alignment.unity_win");
-        let target_tips = if outright > 0 {
-            outright
-        } else {
-            world
-                .list("alignment.unity_ease")
-                .last()
-                .copied()
-                .unwrap_or(1)
-        };
+        let target_tips = world
+            .list("alignment.unity_ease")
+            .last()
+            .copied()
+            .unwrap_or(1);
         Eval {
             w,
             card_value,
             seats,
             target_tips,
             corrupt_at: world.int("adversary.corrupt_at"),
-            free_at: world.int("board.free_city_at").max(1),
             city_energy: world.list("board.corp_energy").first().copied().unwrap_or(1),
             aligned_bonus: world.int("board.aligned_bonus"),
         }
@@ -385,7 +373,6 @@ impl Eval {
     }
 
     /// The next build and corrupt steps, read off the face-up card (public).
-    /// The build is the core's own forecast (`plan::next_build`).
     fn forecast(&self, rules: &Rules, g: &GameState) -> Forecast {
         let world = rules.world();
         let content = world.content;
@@ -416,7 +403,6 @@ impl Eval {
                     .sum()
             });
         Forecast {
-            placements: plan::next_build(&world, g).iter().map(|&(_, n)| n).sum(),
             corrupt_at: (self.corrupt_at - sooner).max(1),
         }
     }
@@ -434,7 +420,7 @@ impl Eval {
         let world = rules.world();
         let fc = self.forecast(rules, g);
         let mut v = 0.0;
-        let (mut corrupted, mut safe_cities) = (0i64, 0i64);
+        let mut corrupted = 0i64;
         let mut reach = 0i64;
         for h in 0..g.hexes.len() {
             let city = common::is_city(&world, h);
@@ -443,18 +429,27 @@ impl Eval {
             if city {
                 if bad {
                     corrupted += 1;
-                    let mine: i64 = (0..g.seats.len())
-                        .map(|s| g.tokens(h, &common::ambassador(s)))
-                        .max()
-                        .unwrap_or(0);
-                    let share = (mine as f64 / self.free_at as f64).min(1.0);
-                    let open = if board::guarded(&world, g, h) { 0.5 } else { 1.0 };
-                    v += w.corrupted * w.freeing * share * open;
+                    let on = board::ambassadors_on(g, h) as f64;
+                    let held: i64 = (0..g.seats.len())
+                        .filter(|&s| common::in_reach(&world, g, s, h))
+                        .map(|s| g.resource(s, Resource::Ambassadors))
+                        .sum();
+                    let need = board::hold(&world, g, h).max(1) as f64;
+                    // Gathering counts a little; landing, once enough are at
+                    // hand to meet the hold, counts more each step, so a push
+                    // climbs to the free one action at a time (027: agents
+                    // bought ambassadors and never moved them).
+                    let at_hand = on + held as f64;
+                    let mut share = 0.25 * (at_hand / need).min(1.0);
+                    if at_hand >= need {
+                        share += 0.75 * (on / need).powi(2);
+                    }
+                    v += w.corrupted * w.freeing * share;
+                    v += (w.ambassador - w.ambassador_board) * on;
                     let around = world.map.hexes[h].neighbours.iter();
                     let near: i64 = around.map(|&n| g.tokens(n, ADV_AMBASSADOR)).sum();
                     v -= w.guard * near as f64;
                 } else {
-                    safe_cities += 1;
                     if common::cube_owner(g, h).is_some() {
                         v += w.aligned;
                     }
@@ -504,11 +499,18 @@ impl Eval {
             }
         }
         v -= w.corrupted * corrupted as f64;
-        v -= w.cities_danger * (2 - safe_cities).max(0) as f64;
+        let thin = (0..self.seats).map(|s| common::presence_count(g, s)).min().unwrap_or(0);
+        for s in 0..self.seats {
+            match common::presence_count(g, s) {
+                ..=1 => v -= w.presence_danger,
+                2 => v -= 0.5 * w.presence_danger,
+                _ => {}
+            }
+        }
         v += w.reach * reach as f64;
-        // The supply: the next build must find its ambassadors there.
-        let slack = g.var(adversary::SUPPLY) - fc.placements;
-        v -= w.supply_danger * (-slack).max(0) as f64 + w.supply * (4 - slack).clamp(0, 4) as f64;
+        // The Discord deck: the tip that finds it empty loses.
+        let discord_left = alignment::cards_left(g, Side::Discord) as i64;
+        v -= w.discord_danger * (3 - discord_left).max(0) as f64;
         // Megaprojects: each player cube pays when the project completes.
         for c in 0..world.map.countries.len() {
             if g.var(&board::project_done(c)) > 0 {
@@ -546,7 +548,7 @@ impl Eval {
         // their games) do not depend on horizon mode.
         let unpaid = self.unpaid_threats(rules, g);
         if w.horizon > 0.0 {
-            self.horizon_value(rules, g, &unpaid, safe_cities, slack, &mut v);
+            self.horizon_value(rules, g, &unpaid, thin, discord_left, &mut v);
         } else {
             self.flat_value(rules, g, &mut v);
         }
@@ -586,14 +588,14 @@ impl Eval {
     /// the team is on course to win (Unity still needed at its rate so far,
     /// plus `win_lag`), then the expected rounds survived at a per-round
     /// loss chance of `risk` per unit of danger (unpaid threats per
-    /// country, the supply or the cities at their edge).
+    /// country, a seat's last presence, the Discord deck at its edge).
     fn rounds_left(
         &self,
         rules: &Rules,
         g: &GameState,
         unpaid: &[f64],
-        safe_cities: i64,
-        slack: i64,
+        thin: i64,
+        discord_left: i64,
     ) -> f64 {
         let w = &self.w;
         let clock = Self::cards_left(g) as f64;
@@ -603,10 +605,10 @@ impl Eval {
         let world = rules.world();
         let countries = world.map.countries.len().max(1) as f64;
         let mut danger = unpaid.iter().sum::<f64>() / countries;
-        if slack <= 2 {
+        if discord_left <= 1 {
             danger += 0.5;
         }
-        if safe_cities <= 2 {
+        if thin <= 1 {
             danger += 0.5;
         }
         let p = (1.0 - w.risk * danger).clamp(0.0, 1.0);
@@ -749,13 +751,13 @@ impl Eval {
         rules: &Rules,
         g: &GameState,
         unpaid: &[f64],
-        safe_cities: i64,
-        slack: i64,
+        thin: i64,
+        discord_left: i64,
         out: &mut f64,
     ) {
         let w = &self.w;
         let world = rules.world();
-        let left = self.rounds_left(rules, g, unpaid, safe_cities, slack);
+        let left = self.rounds_left(rules, g, unpaid, thin, discord_left);
         let prod = if w.production != 0.0 {
             self.board_production(rules, g)
         } else {

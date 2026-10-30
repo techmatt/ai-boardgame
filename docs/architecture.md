@@ -439,7 +439,7 @@ In the baseline:
 
 - `adversary` adds its deck as piles (`deck` with any peeked cards, `next` face up,
   `current`, `discard`) and the ambassador supply, stage and difficulty. Its
-  bookkeeping: `adversary.peek`, `adversary.starved`, `adversary.first_corruption`,
+  bookkeeping: `adversary.peek`, `adversary.first_corruption`,
   `adversary.removed_troop.<seat>`.
 - `threats` adds each country's threat (`threats.on`, status = counter progress such as
   `1/2 energy`; the text adds who paid what and any Jam Signals), or the shared row

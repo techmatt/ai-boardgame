@@ -6,8 +6,8 @@ fn setup_places_the_printed_pieces() {
     let cases: [(i64, usize, usize, i64, &str); 4] = [
         (0, 1, 10, 48, ""),
         (3, 1, 9, 48, ""),
-        (4, 1, 9, 40, ""),
-        (4, 2, 9, 40, "adversary.extra_corrupted=1"),
+        (4, 1, 9, 48, ""),
+        (4, 2, 9, 48, "adversary.extra_corrupted=1"),
     ];
     for (d, corrupt, deck, supply, set) in cases {
         let level = format!("adversary.difficulty={d}");

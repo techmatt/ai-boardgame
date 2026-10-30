@@ -7,7 +7,28 @@ What each rules revision changed, what it replaced and whether it is **locked** 
 record, moved out of it in 025 otherwise as written, so a row quoting a number or a card
 is as of its revision. Add a table here with every rules change.
 
-What the code implements: **rules revision 15** (024: **a scarier adversary**, a purge
+**Revision 16 (027): steady pressure, two decks as the clocks, presence loss.**
+
+| What | Was | Now | Status |
+|---|---|---|---|
+| Discord deck | reshuffled | never reshuffles; a tip with no card loses | **locked** (Matt, 2026-10-30) |
+| Presence loss | none | a player with no presence on the board: everyone loses | **locked** (Matt, 2026-10-30) |
+| Unity win | `unity_win` 8 tips | drawing the last Unity card; never reshuffles | candidate |
+| Purge | counted from `purge_round` 6; `unity_ease` 1, 1, 2 | no round gate; `unity_ease` 2, 2, 4 | candidate |
+| Arrivals | none | each adversary card names a site type; every such site gains 1 ambassador in the build | candidate |
+| Freeing | `free_city_at`, no adversary ambassador adjacent | hold: `hold_base` 2 + adversary ambassadors on or next to it, any players, at least `hold_min` 2 | candidate |
+| Piece ladder | freeing cleared the city | a freed city keeps `free_leaves` 1 adversary ambassador | candidate |
+| Presence destruction | troops, war with no factory left; a sacrifice left the game | threats, tier-2 Discord cards, corruption, war through a destroyed factory, Purge the Unaligned; all to the destroyed pile (018's reserve); troops strike buildings only; stage I never takes a last presence | candidate |
+| Supply | ran out: a loss | a cap | candidate |
+| Every city corrupted | a loss | no loss | candidate |
+| Calibration | `city_build` 2, `node_compute` 3, `base_discord` 3, `destruction_discord` 1, `unit_cap` 3, one bucket size, `undecided_per_player` 3 | `city_build` 1, `node_compute` 1, `base_discord` 1, `destruction_discord` 0, `ambassador_discord` 0, `unit_cap` 2, `discord_tip_per_player` 2, `undecided_per_player` 4 | candidate |
+| Difficulty 4 | supply smaller (`supply_reduction`) | one Discord card fewer (`discord_removed`) | candidate |
+| Content | | Eviction, Embargo, Smear campaign, Manhunt; Siege, Total war, Purge protocols, Propaganda, Offensive and Firestorm changed; the Discord deck loses Buildup (6 cards) and steps at reachable tips; stage-III cards sway 2 Discord; `docs/harms.md` | candidate |
+
+Screen: `experiments/results/screen-027-endgame/endgame.md`.
+
+What the code implements: **rules revision 16** (027: **steady pressure, two decks as the
+clocks, presence loss**, above; on 024's revision 15: **a scarier adversary**, a purge
 that can't come early, and credits that matter, below; on 023's revision 14: **the player card set**, about 150
 cards built on 021's primitives and 022's costs, with four new effect primitives, §8; on
 022's revision 13: **insight costs on cards**, shared

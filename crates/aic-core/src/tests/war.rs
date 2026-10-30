@@ -66,13 +66,15 @@ fn on_a_war_round_units_cancel_and_the_surplus_destroys_rival_buildings() {
     );
     assert_eq!(discord(&g), 2);
 
-    // With no factory left, a presence; a surplus with nothing to hit is spent.
+    // A destroyed factory takes the presence on its hex (027); a presence
+    // elsewhere stays, and a surplus with nothing to hit is spent.
     let mut g = g0.clone();
     put(&mut g, f1, FACTORY, 1);
+    put(&mut g, f1, &presence(1), 1);
     put(&mut g, b0, UNIT, 3);
     run(&rules, &mut g);
-    assert_eq!((g.tokens(f1, FACTORY), g.tokens(d1, &presence(1))), (0, 0));
-    assert_eq!((units(&g), discord(&g)), ((0, 0), 2));
+    assert_eq!((g.tokens(f1, FACTORY), g.tokens(f1, &presence(1)), g.tokens(d1, &presence(1))), (0, 0, 1));
+    assert_eq!((units(&g), discord(&g)), ((0, 0), 1));
 
     // Hardening absorbs one.
     let mut g = g0.clone();
@@ -253,7 +255,7 @@ fn with_presence_returns_a_destroyed_presence_goes_to_the_reserve_and_is_placed_
         .unwrap();
     let p = g.pending.as_ref().expect("a placement choice");
     assert!(
-        p.ask.prompt.contains("from your reserve"),
+        p.ask.prompt.contains("from your destroyed pile"),
         "{}",
         p.ask.prompt
     );

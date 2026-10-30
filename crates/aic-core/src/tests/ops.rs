@@ -35,7 +35,7 @@ fn ops_check_the_resources_they_name() {
     assert!(check_ops(&[gives], Slot::Player, "test").is_ok());
     let income = Op::TeamIncome { resource: Resource::Energy, amount: 1 };
     assert!(check_ops(&[income], Slot::Team, "test").is_err());
-    let each = Op::Troops { count: 1, each_country: true };
+    let each = Op::Troops { count: 1, each_country: true, destroy: false };
     assert!(check_ops(&[each], Slot::Threat, "test").is_err());
 }
 

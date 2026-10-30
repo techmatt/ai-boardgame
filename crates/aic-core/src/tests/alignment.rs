@@ -5,7 +5,7 @@ use crate::modules::{adversary, alignment};
 /// The baseline playing only the action phase, after setup (no build yet).
 fn action_only(sets: &[&str]) -> (Rules, GameState) {
     let mut c = baseline_with(sets);
-    c.apply_override("alignment.purge_round=0").unwrap();
+    c.apply_override("alignment.unity_ease=1,1,2").unwrap();
     c.round = vec![ACTIONS.into()];
     let rules = Rules::new(&c).unwrap();
     let g = rules.new_game(4);
@@ -59,7 +59,7 @@ fn a_full_unity_bucket_tips_a_card_and_lowers_the_bar() {
 
 #[test]
 fn bar_levels_follow_the_unity_tips() {
-    let rules = Rules::new(&baseline()).unwrap();
+    let rules = Rules::new(&baseline_with(&["alignment.unity_ease=1,1,2"])).unwrap();
     let w = rules.world();
     let mut g = rules.new_game(1);
     // 019: `unity_ease` 1, 1, 2: ambassadors and troops at 1 tip, nodes at 2.
@@ -125,23 +125,6 @@ fn the_board_clear_win_and_the_bar_easing() {
     }
 }
 
-#[test]
-fn eight_unity_tips_win_outright() {
-    let (rules, mut g) = action_only(&[]);
-    // Corrupted cities stay: only the outright win can end it.
-    g.vars.insert("alignment.unity_tips".into(), 7);
-    fill_bucket(&rules, &mut g, Side::Unity);
-    next_alignment_card(&mut g, Side::Unity, "grassroots_funding");
-    give(&rules, &mut g);
-    let o = g.outcome.as_ref().expect("a win");
-    assert_eq!((o.won, o.reason.as_str()), (true, "unity"));
-    // Off at 0.
-    let (rules, mut g) = action_only(&["alignment.unity_win=0"]);
-    g.vars.insert("alignment.unity_tips".into(), 20);
-    give(&rules, &mut g);
-    assert!(!g.is_over());
-}
-
 /// The antimatter action sways toward Discord; with the Undecided empty
 /// the Sway comes from the Unity bucket (`tug`) or nowhere (`still`).
 #[test]
@@ -203,7 +186,7 @@ fn discord_tips_do_not_escalate_and_momentum_shrinks_buckets() {
     for (tips, cap) in [(0, 4), (1, 4), (2, 3), (4, 2), (9, 2)] {
         g.vars.insert("alignment.unity_tips".into(), tips);
         assert_eq!(alignment::capacity(&w, &g, Side::Unity), cap, "{tips} tips");
-        assert_eq!(alignment::capacity(&w, &g, Side::Discord), 4);
+        assert_eq!(alignment::capacity(&w, &g, Side::Discord), w.int("alignment.discord_tip_per_player") * 2);
     }
 }
 
@@ -228,7 +211,7 @@ fn a_discord_tip_no_longer_moves_troops() {
 
 #[test]
 fn discord_cards_step_up_with_the_discord_tip_count() {
-    for (tips, each) in [(0, 1), (2, 2), (5, 3)] {
+    for (tips, each) in [(0, 1), (5, 3)] {
         let (rules, mut g) = lab(&[]);
         g.vars.insert("alignment.discord_tips".into(), tips);
         next_alignment_card(&mut g, Side::Discord, "blight");
@@ -282,25 +265,3 @@ fn freeing_a_city_and_removing_a_node_sway_unity() {
     assert_eq!(g.var("alignment.unity"), 6);
 }
 
-#[test]
-fn the_purge_counts_only_from_its_round() {
-    assert_eq!(Rules::new(&baseline()).unwrap().world().int("alignment.purge_round"), 6);
-    let mut c = lab_config(&[ACTIONS]);
-    c.apply_override("alignment.purge_round=6").unwrap();
-    let rules = Rules::new(&c).unwrap();
-    let mut g = rules.new_game(1);
-    for h in 0..g.hexes.len() {
-        put(&mut g, h, ADV_CUBE, 0);
-        put(&mut g, h, NODE, 0);
-        put(&mut g, h, ADV_AMBASSADOR, 0);
-    }
-    g.vars.insert("alignment.unity_tips".into(), 2);
-    set_res(&mut g, 0, Resource::Credits, 10);
-    g.round = 5;
-    let mut k = g.clone();
-    rules.apply_mut(&mut k, &std_act(0, "energy"), None).unwrap();
-    assert!(k.outcome.is_none());
-    g.round = 6;
-    rules.apply_mut(&mut g, &std_act(0, "energy"), None).unwrap();
-    assert!(g.outcome.as_ref().is_some_and(|o| o.won && o.reason == "purge"));
-}

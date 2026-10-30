@@ -1,0 +1,28 @@
+{
+  "name": "screen-027-tune",
+  "note": "027 tuning probe (r16): the engine at d0 and d2, 2 and 3 countries, 16 seeds. Summary: python scripts/cards/screen_027.py DIR.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    2
+  ],
+  "agents": [
+    "engine"
+  ],
+  "games": 16,
+  "records": 0
+}

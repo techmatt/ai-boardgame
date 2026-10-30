@@ -8,7 +8,7 @@
       "params": {
         "start_corrupted": 1,
         "start_ambassadors": 1,
-        "unit_cap": 3,
+        "unit_cap": 2,
         "factory_units": 1,
         "clock": [
           1,
@@ -23,13 +23,18 @@
         "project_credits": 10,
         "project_discord_per": 2,
         "divert_discord": 1,
-        "base_discord": 3,
+        "ambassador_discord": 0,
+        "base_discord": 1,
         "base_unity": 2,
         "factory_unity": 1,
-        "free_city_at": 1,
-        "destruction_discord": 1,
+        "hold_base": 2,
+        "last_safe_stage": 2,
+        "hold_min": 2,
+        "free_leaves": 1,
+        "destruction_discord": 0,
         "troop_spent": 1,
         "troop_steps": 2,
+        "troop_presence": 4,
         "presence_returns": 1,
         "presence_energy": 1,
         "build_energy": 2,
@@ -64,7 +69,7 @@
           3
         ],
         "supply_per_country": 24,
-        "city_build": 2,
+        "city_build": 1,
         "factory_build": 0,
         "spread_range": 2,
         "corrupt_at": 6,
@@ -76,8 +81,9 @@
         "extra_corrupted": 0,
         "build_bonus": 1,
         "tier2_early": 1,
-        "supply_reduction": 4,
-        "node_compute": 3,
+        "discord_removed": 1,
+        "arrivals": 1,
+        "node_compute": 1,
         "project_cards": [
           6,
           6
@@ -97,8 +103,9 @@
       "module": "alignment",
       "variant": "tug",
       "params": {
-        "undecided_per_player": 3,
+        "undecided_per_player": 4,
         "tip_per_player": 2,
+        "discord_tip_per_player": 2,
         "momentum_every": 0,
         "troop": 1,
         "free_city": 4,
@@ -108,14 +115,13 @@
         "antimatter_discord": 1,
         "antimatter_uses": 1,
         "unity_ease": [
-          1,
-          1,
-          2
+          2,
+          2,
+          4
         ],
         "discord_tier2": 2,
-        "unity_win": 8,
-        "clear_win_stage": 1,
-        "purge_round": 6
+        "presence_loss": 1,
+        "clear_win_stage": 1
       }
     },
     {

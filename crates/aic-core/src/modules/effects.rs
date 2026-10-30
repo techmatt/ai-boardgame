@@ -30,11 +30,19 @@ pub struct Ctx {
     pub scope: Option<usize>,
     /// What earlier effects of the same card chose (the other player).
     pub other: Option<usize>,
+    /// The kind of source, for tallying what it destroys.
+    pub label: &'static str,
 }
 
 impl Ctx {
     fn new(source: Source, scope: Option<usize>) -> Ctx {
-        Ctx { source, scope, other: None }
+        Ctx { source, scope, other: None, label: "card" }
+    }
+
+    /// Names the kind of source, for tallies (`discord`, `threat2`, ...).
+    pub fn named(mut self, label: &'static str) -> Ctx {
+        self.label = label;
+        self
     }
 
     pub fn seat(seat: usize) -> Ctx {
@@ -390,10 +398,11 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
                 if i >= hexes.len() {
                     break;
                 }
-                cx.add_tokens(g, hexes[i], ADV_CUBE, -1);
                 cx.tally(g, "effects.cleansed", 1);
                 if is_city(&w, hexes[i]) {
-                    alignment::for_city_freed(g, cx);
+                    board::liberate(g, cx, hexes[i]);
+                } else {
+                    cx.add_tokens(g, hexes[i], ADV_CUBE, -1);
                 }
                 if *one_country {
                     country = Some(w.map.hexes[hexes[i]].country);
@@ -675,14 +684,15 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
         }
 
         // Threats and the team: the wordings differ, the rule doesn't.
-        Op::Troops { count, each_country } => {
+        Op::Troops { count, each_country, destroy } => {
             let prompt = ctx.says(
                 "Threat: an adversary troop lands on which hex?",
                 "An adversary troop lands on which hex?",
             );
             let tally = ctx.says("threats.troops", "adversary.project_troops");
             for hexes in ctx.regions(&w, *each_country) {
-                adversary::land_troops(g, cx, &hexes, *count, prompt, tally)?;
+                let kills = destroy.then_some(ctx.label);
+                adversary::land_troops(g, cx, &hexes, *count, prompt, tally, kills)?;
             }
         }
         Op::FlipStation { each_country } => {
@@ -716,6 +726,29 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             }
         }
         Op::AdversaryBuild => adversary::build_all(g, cx, ctx.scope)?,
+        Op::DestroyPresence => {
+            let threat = |g: &GameState, h: usize| g.tokens(h, ADV_AMBASSADOR) + g.tokens(h, TROOP);
+            // `max_by_key` takes the last of equals: walk from the top.
+            let top = scope_hexes(&w, ctx.scope)
+                .into_iter()
+                .rev()
+                .filter(|&h| presence_owner(g, h).is_some())
+                .max_by_key(|&h| threat(g, h));
+            if let Some(h) = top {
+                for s in 0..g.seats.len() {
+                    if g.tokens(h, &presence(s)) > 0 {
+                        board::destroy_building(g, cx, h, &presence(s), board::Cause::Effect(ctx.label));
+                    }
+                }
+            }
+        }
+        Op::PullUnity { amount } => alignment::pull_unity(g, cx, *amount),
+        Op::LoseInsight { amount } => {
+            for s in ctx.seats(&w, g) {
+                cx.add_key(g, economy::insight_debt(s), *amount);
+                cx.tally(g, "effects.insight_lost", *amount);
+            }
+        }
 
         // Threats.
         Op::Ambassadors { at, count } => threats::place_ambassadors(g, cx, ctx.scope, *at, *count)?,
@@ -730,6 +763,9 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             threats::requisition(g, cx, ctx.scope, *resource, *amount, *n)?
         }
         Op::LoseAmbassador => threats::lose_ambassador(g, cx, ctx.scope)?,
+        Op::LosePresenceOr { resource, amount } => {
+            threats::lose_presence_or(g, cx, ctx.scope, *resource, *amount, ctx.label)?
+        }
         Op::DiscardMostExpensive => threats::discard_most_expensive(g, cx, ctx.scope)?,
         Op::Compute { amount } => adversary::gain_compute(g, cx, *amount)?,
         Op::LoseTokens { amount } => threats::lose_tokens(g, cx, ctx.scope, *amount)?,
@@ -806,6 +842,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
         | Op::StationBuild { .. }
         | Op::SpreadReach { .. }
         | Op::CorruptSooner { .. }
+        | Op::Arrivals { .. }
         | Op::War => unreachable!("{e:?} is read, not resolved"),
     }
     Ok(())

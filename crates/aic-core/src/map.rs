@@ -37,6 +37,8 @@ pub struct Cell {
     pub facing: Option<u8>,
     /// A printed industrial zone: where cities build factories.
     pub industrial: bool,
+    /// A coastal city (027): next to ocean, or printed so on the piece.
+    pub coastal: bool,
 }
 
 /// A front: a land border between two countries (an ocean edge is not one).
@@ -89,6 +91,7 @@ impl Map {
                         kind: design.kind_at(number),
                         facing: None,
                         industrial: design.industry.contains(&number),
+                        coastal: design.coast.contains(&number),
                     });
                 }
             }
@@ -104,6 +107,12 @@ impl Map {
                 .iter()
                 .filter_map(|n| index.get(n).copied())
                 .collect();
+        }
+        for i in 0..hexes.len() {
+            let near_ocean = hexes[i].neighbours.iter().any(|&n| hexes[n].kind == HexKind::Ocean);
+            if hexes[i].kind == HexKind::City && near_ocean {
+                hexes[i].coastal = true;
+            }
         }
         let fronts = place_bases(content, &layout.fronts, &mut hexes, &geo)?;
         Ok(Map {

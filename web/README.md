@@ -66,10 +66,9 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   and each seat's chips show as values. A number by a glyph is its count.
 - **Around the board:** the Alignment track (the Unity bucket, blue, filling leftward
   and the Discord bucket, red, filling rightward on either side of the Undecided; each
-  side's tip count with its next threshold; the Unity tips that win outright; the
+  side's tip count with its next threshold; the
   clear-board bar level and its win condition), the Unity and Discord cards resolved so far (hover a chip for its
-  text) with what is left in each deck, and the loss conditions (adversary ambassador
-  supply, corrupted cities out of all cities, adversary cards left); the adversary row
+  text) with what is left in each deck, and the loss conditions (Discord cards left, adversary cards left); the adversary row
   (stage, difficulty, adversary compute, threat tier and fronts, the adversary ambassadors and troops on the board, then deck →
   next round's card, face up → this round's card → discard, each card with its stage,
   text and escalation/war marks; under it the adversary's projects (017: each visible

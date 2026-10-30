@@ -193,6 +193,69 @@
   ]
  },
  {
+  "id": "eviction",
+  "name": "Eviction",
+  "tier": 1,
+  "text": "Each player here loses a presence here or pays 6 credits (with one presence on the board, pays).",
+  "counter": [
+   [
+    "credits",
+    5
+   ]
+  ],
+  "effects": [
+   {
+    "op": "lose_presence_or",
+    "resource": "credits",
+    "amount": 6
+   }
+  ]
+ },
+ {
+  "id": "embargo",
+  "name": "Embargo",
+  "tier": 1,
+  "text": "No site here can be claimed next round; the adversary gains 3 compute.",
+  "counter": [
+   [
+    "credits",
+    4
+   ]
+  ],
+  "effects": [
+   {
+    "op": "flag",
+    "name": "embargo"
+   },
+   {
+    "op": "compute",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "smear_campaign",
+  "name": "Smear campaign",
+  "tier": 1,
+  "text": "Each player here gets 2 less insight next round; 2 Sway leaves the Unity bucket.",
+  "counter": [
+   [
+    "credits",
+    4
+   ]
+  ],
+  "effects": [
+   {
+    "op": "lose_insight",
+    "amount": 2
+   },
+   {
+    "op": "pull_unity",
+    "amount": 2
+   }
+  ]
+ },
+ {
   "id": "station_seizure",
   "name": "Station seizure",
   "tier": 2,
@@ -255,7 +318,7 @@
   "id": "purge_protocols",
   "name": "Purge protocols",
   "tier": 2,
-  "text": "Each player discards their most expensive card in hand.",
+  "text": "Each player discards their most expensive card in hand and loses 3 tokens from their cards.",
   "counter": [
    [
     "credits",
@@ -265,6 +328,10 @@
   "effects": [
    {
     "op": "discard_most_expensive"
+   },
+   {
+    "op": "lose_tokens",
+    "amount": 3
    }
   ]
  },
@@ -272,7 +339,7 @@
   "id": "total_war",
   "name": "Total war",
   "tier": 2,
-  "text": "2 adversary troops land on factories here (else cities), and 2 adversary ambassadors on military bases; the adversary gains 4 compute.",
+  "text": "2 adversary troops land on factories here (else cities), each destroying any presence on its hex, and 2 adversary ambassadors on military bases; the adversary gains 4 compute.",
   "counter": [
    [
     "credits",
@@ -282,7 +349,8 @@
   "effects": [
    {
     "op": "troops",
-    "count": 2
+    "count": 2,
+    "destroy": true
    },
    {
     "op": "ambassadors",
@@ -370,7 +438,7 @@
   "id": "siege",
   "name": "Siege",
   "tier": 2,
-  "text": "2 adversary troops land on factories here (players choose; with no factory, on cities), and each player here loses an ambassador (from supply, else from the board); the adversary gains 3 compute.",
+  "text": "2 adversary troops land on factories here (players choose; with no factory, on cities), each destroying any presence on its hex, and each player here loses an ambassador (from supply, else from the board); the adversary gains 3 compute.",
   "counter": [
    [
     "credits",
@@ -380,7 +448,8 @@
   "effects": [
    {
     "op": "troops",
-    "count": 2
+    "count": 2,
+    "destroy": true
    },
    {
     "op": "lose_ambassador"
@@ -388,6 +457,23 @@
    {
     "op": "compute",
     "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "manhunt",
+  "name": "Manhunt",
+  "tier": 2,
+  "text": "Destroy all presence on the most threatened hex here (the presence hex with the most adversary ambassadors and troops).",
+  "counter": [
+   [
+    "credits",
+    8
+   ]
+  ],
+  "effects": [
+   {
+    "op": "destroy_presence"
    }
   ]
  }

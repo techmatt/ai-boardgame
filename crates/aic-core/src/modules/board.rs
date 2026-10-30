@@ -36,15 +36,20 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("station_cubes", 0, 5, "megaproject cubes a research station makes a round"),
             ParamSpec::int("project_credits", 0, 50, "credits each player cube pays when a megaproject completes"),
             ParamSpec::int("project_discord_per", 1, 10,"adversary cubes per Discord when a megaproject completes"),
-            ParamSpec::int("divert_discord", 0, 5, "Discord per unit of energy or compute diverted to the adversary"),
+            ParamSpec::int("divert_discord", 0, 5, "Discord per unit of a corrupted city's energy diverted to the adversary"),
+            ParamSpec::int("ambassador_discord", 0, 5, "Discord per unit of energy an adversary ambassador on a clean or aligned city diverts"),
             ParamSpec::int("base_discord", 0, 10, "Discord an adversary ambassador on a producing base sways"),
             ParamSpec::int("base_unity", 0, 10, "Unity a player ambassador on a producing base sways"),
             ParamSpec::int("factory_unity", 0, 10, "Unity a player ambassador on a producing factory sways"),
-            ParamSpec::int("free_city_at", 1, 10,"one player's ambassadors on a corrupted city that free it, with no adversary ambassador on or next to it"),
+            ParamSpec::int("hold_base", 0, 10, "a corrupted city's hold before adversary ambassadors: 1 more for each on or next to it"),
+            ParamSpec::int("last_safe_stage", 0, 3, "while this round's adversary card is below this stage, nothing destroys a player's last presence (0: never safe)"),
+            ParamSpec::int("hold_min", 1, 10, "player ambassadors that free a corrupted city, at the least"),
+            ParamSpec::int("free_leaves", 0, 5, "adversary ambassadors left on a city as it frees (the piece ladder)"),
             ParamSpec::int("destruction_discord", 0, 5, "Discord each building destroyed in war sways"),
             ParamSpec::int("troop_spent", 0, 1, "1: an adversary troop that strikes a target is used up"),
             ParamSpec::int("troop_steps", 0, 5, "steps each adversary troop takes in the march: destroy a target on or next to it, else move 1 hex toward the nearest"),
-            ParamSpec::int("presence_returns", 0, 1, "1: a destroyed presence goes to its owner's reserve, placed before the track"),
+            ParamSpec::int("troop_presence", 0, 4, "adversary troops strike presence from this stage of adversary card on (0: always, 4: never)"),
+            ParamSpec::int("presence_returns", 0, 1, "1: a destroyed presence goes to its owner's destroyed pile, placed before the track"),
             ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence"),
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_chips", 0, 20, "standard action: chips to build a research station"),
@@ -78,7 +83,8 @@ pub static DEF: ModuleDef = ModuleDef {
 
 /// Country flags: up while their var is above 0, counted down in cleanup (1 lasts to
 /// the end of the round; a threat sets 2, to the end of the next).
-pub const FLAGS: [RoundFlag; 3] = [RoundFlag::Blackout, RoundFlag::Sabotage, RoundFlag::Shelter];
+pub const FLAGS: [RoundFlag; 4] =
+    [RoundFlag::Blackout, RoundFlag::Sabotage, RoundFlag::Shelter, RoundFlag::Embargo];
 
 /// The var key of a country flag.
 pub fn flag(f: RoundFlag, country: usize) -> String {
@@ -253,7 +259,7 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
     }
     let mut second = false;
     let what = if reserve {
-        "from your reserve".to_string()
+        "from your destroyed pile".to_string()
     } else {
         let opts = tracks
             .iter()
@@ -293,7 +299,9 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
 /// Whether seat `s` can claim the site on hex `h` (align a city, take a
 /// station or factory): its presence is on or next to `h`, and no node is.
 pub fn can_claim(w: &World, g: &GameState, seat: usize, h: usize) -> bool {
-    in_reach(w, g, seat, h) && !next_to(w, h, |x| g.tokens(x, NODE) > 0)
+    in_reach(w, g, seat, h)
+        && !next_to(w, h, |x| g.tokens(x, NODE) > 0)
+        && !flagged(g, RoundFlag::Embargo, w.map.hexes[h].country as usize)
 }
 
 #[derive(Debug)]
@@ -518,32 +526,62 @@ pub fn place_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
     cx.add_tokens(g, h, &ambassador(seat), 1);
 }
 
-/// Whether an adversary ambassador stands on hex `h` or an adjacent hex.
+/// Whether an adversary ambassador stands on hex `h` or an adjacent hex
+/// (each adds 1 to a corrupted city's [`hold`]).
 pub fn guarded(w: &World, g: &GameState, h: usize) -> bool {
     next_to(w, h, |x| g.tokens(x, ADV_AMBASSADOR) > 0)
 }
 
-/// 024: a corrupted city frees the moment one player holds `free_city_at`
-/// ambassadors on it and no adversary ambassador is on or next to it; those
-/// ambassadors are used up. Checked after every action and automatic phase.
+/// A corrupted city's hold (027): the player ambassadors, from any players,
+/// that free it. `hold_base`, plus 1 for each adversary ambassador on or
+/// next to it, never below `hold_min`.
+pub fn hold(w: &World, g: &GameState, h: usize) -> i64 {
+    let near: i64 = g.tokens(h, ADV_AMBASSADOR)
+        + w.map.hexes[h]
+            .neighbours
+            .iter()
+            .map(|&x| g.tokens(x, ADV_AMBASSADOR))
+            .sum::<i64>();
+    (w.int("board.hold_base") + near).max(w.int("board.hold_min"))
+}
+
+/// Player ambassadors on hex `h`, from all seats.
+pub fn ambassadors_on(g: &GameState, h: usize) -> i64 {
+    (0..g.seats.len()).map(|s| g.tokens(h, &ambassador(s))).sum()
+}
+
+/// City `h` frees: the adversary's cube comes off, Unity sways, and it drops
+/// down the piece ladder rather than off the board (027: `free_leaves`
+/// adversary ambassadors stay on it).
+pub fn liberate(g: &mut GameState, cx: &mut Cx, h: usize) {
+    let w = cx.world;
+    cx.add_tokens(g, h, ADV_CUBE, -1);
+    cx.tally(g, "board.cities_freed", 1);
+    alignment::for_city_freed(g, cx);
+    adversary::place(g, cx, h, w.int("board.free_leaves"));
+    cx.note(Some(h), || format!("{} is freed", hex_name(&w, h)));
+}
+
+/// 027: a corrupted city frees the moment player ambassadors on it, from any
+/// players, reach its [`hold`]; that many are used up, lower seats first.
+/// Checked after every action and automatic phase.
 fn free_cities(g: &mut GameState, cx: &mut Cx) {
     let w = cx.world;
-    let need = w.int("board.free_city_at");
     for h in 0..g.hexes.len() {
         if !is_city(&w, h) || !corrupted(g, h) {
             continue;
         }
-        let Some(s) = (0..g.seats.len()).find(|&s| g.tokens(h, &ambassador(s)) >= need) else {
-            continue;
-        };
-        if guarded(&w, g, h) {
+        let need = hold(&w, g, h);
+        if ambassadors_on(g, h) < need {
             continue;
         }
-        cx.add_tokens(g, h, &ambassador(s), -need);
-        cx.add_tokens(g, h, ADV_CUBE, -1);
-        cx.tally(g, "board.cities_freed", 1);
-        alignment::for_city_freed(g, cx);
-        cx.note(Some(h), || format!("{} is freed", hex_name(&w, h)));
+        let mut left = need;
+        for s in 0..g.seats.len() {
+            let k = g.tokens(h, &ambassador(s)).min(left);
+            cx.add_tokens(g, h, &ambassador(s), -k);
+            left -= k;
+        }
+        liberate(g, cx, h);
     }
 }
 
@@ -577,9 +615,57 @@ pub fn move_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, to: usize) -
     Ok(())
 }
 
-/// A building of `kind` on hex `h` would be destroyed. A Shelter Order in
+/// What destroys a piece: it decides the corp units' help, the Sway and the
+/// tally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cause {
+    /// An adversary troop's strike.
+    Troop,
+    /// Corp troops crossing a front.
+    War,
+    /// A threat, Discord card or project, named for the tally.
+    Effect(&'static str),
+}
+
+impl Cause {
+    fn name(self) -> &'static str {
+        match self {
+            Cause::Troop => "march",
+            Cause::War => "war",
+            Cause::Effect(n) => n,
+        }
+    }
+}
+
+/// Whether seat `s`'s presence is safe as its last (027): while this round's
+/// adversary card is below `last_safe_stage` (stage II), nothing destroys a
+/// player's last presence.
+pub fn last_presence_safe(w: &World, g: &GameState, s: usize) -> bool {
+    g.var(adversary::STAGE) < w.int("board.last_safe_stage") && presence_count(g, s) <= 1
+}
+
+/// Seat `s` loses its presence on hex `h`, unless it is safe as their last.
+/// It goes to the destroyed pile (the resource `PresenceReserve`); its track
+/// space stays uncovered. The tally names `source`. Returns whether it went.
+pub fn lose_presence(g: &mut GameState, cx: &mut Cx, h: usize, s: usize, source: &str) -> bool {
+    let w = cx.world;
+    if last_presence_safe(&w, g, s) {
+        cx.tally(g, "board.last_presence_safe", 1);
+        return false;
+    }
+    cx.add_tokens(g, h, &presence(s), -1);
+    if w.int("board.presence_returns") > 0 {
+        cx.add_resource(g, s, Resource::PresenceReserve, 1);
+    }
+    cx.tally(g, "board.presence_lost", 1);
+    cx.tally(g, &format!("board.presence_lost.{source}"), 1);
+    true
+}
+
+/// A piece of `kind` on hex `h` would be destroyed. A presence safe as its
+/// owner's last stays. A Shelter Order in
 /// its country, a corp unit at a base next to it (adversary strikes only,
-/// `by_troop`), a hardening token, a player ambassador on the hex, or an
+/// [`Cause::Troop`]), a hardening token, a player ambassador on the hex, or an
 /// Aegis Dome Array absorbs it (in that order); otherwise it goes, and a war
 /// destruction (not `by_troop`) sways toward Discord. Returns whether it was
 /// destroyed.
@@ -588,10 +674,16 @@ pub fn destroy_building(
     cx: &mut Cx,
     h: usize,
     kind: &str,
-    by_troop: bool,
+    cause: Cause,
 ) -> bool {
     let w = cx.world;
     let c = w.map.hexes[h].country as usize;
+    let owner = (0..g.seats.len()).find(|&s| kind == presence(s));
+    if owner.is_some_and(|s| last_presence_safe(&w, g, s)) {
+        cx.tally(g, "board.last_presence_safe", 1);
+        return false;
+    }
+    let by_troop = cause == Cause::Troop;
     if flag_level(g, RoundFlag::Shelter, c) > 0 {
         return false;
     }
@@ -618,10 +710,12 @@ pub fn destroy_building(
     if civic_shelter(g, cx, c) {
         return false;
     }
-    cx.add_tokens(g, h, kind, -1);
-    if w.int("board.presence_returns") > 0 {
-        if let Some(s) = (0..g.seats.len()).find(|&s| kind == presence(s)) {
-            cx.add_resource(g, s, Resource::PresenceReserve, 1);
+    match owner {
+        Some(s) => {
+            lose_presence(g, cx, h, s, cause.name());
+        }
+        None => {
+            cx.add_tokens(g, h, kind, -1);
         }
     }
     if kind == STATION || kind == FACTORY {
@@ -636,7 +730,7 @@ pub fn destroy_building(
     cx.note(Some(h), || {
         format!("{} at {} destroyed", piece_name(kind), hex_name(&w, h))
     });
-    if !by_troop {
+    if cause == Cause::War {
         alignment::sway(g, cx, Side::Discord, w.int("board.destruction_discord"));
     }
     true
@@ -847,7 +941,8 @@ fn zone_owner(g: &mut GameState, cx: &mut Cx, z: usize) -> Res<Option<usize>> {
 
 /// Production step 2, on a war round: on each front the units cancel 1 for
 /// 1; each surplus unit crosses and destroys the rival factory nearest its
-/// base, or with none a presence. All units at the front are used up.
+/// base, taking any presence on its hex (027: a presence was the target with
+/// no factory left). All units at the front are used up.
 fn battle(g: &mut GameState, cx: &mut Cx) {
     let w = cx.world;
     if !war_round(&w, g) {
@@ -874,24 +969,16 @@ fn battle(g: &mut GameState, cx: &mut Cx) {
                     .iter()
                     .copied()
                     .filter(|&h| g.tokens(h, FACTORY) > 0 && !corrupted(g, h)),
-            )
-            .map(|h| (h, FACTORY.to_string()))
-            .or_else(|| {
-                nearest(
-                    &w,
-                    from,
-                    hexes
-                        .iter()
-                        .copied()
-                        .filter(|&h| presence_owner(g, h).is_some()),
-                )
-                .map(|h| (h, presence(presence_owner(g, h).unwrap())))
-            });
-            let Some((h, kind)) = target else {
+            );
+            let Some(h) = target else {
                 break;
             };
-            if destroy_building(g, cx, h, &kind, false) {
+            if destroy_building(g, cx, h, FACTORY, Cause::War) {
                 destroyed += 1;
+                // War that destroys a building takes the presence on its hex (027).
+                if let Some(s) = presence_owner(g, h) {
+                    lose_presence(g, cx, h, s, "war");
+                }
             }
         }
     }
@@ -954,7 +1041,7 @@ fn march(g: &mut GameState, cx: &mut Cx) -> Res {
 /// What an adversary troop may destroy on hex `h`, as token keys: a
 /// presence, and a player-owned research station or factory (019: not
 /// neutral or corrupted ones, and never cities).
-fn troop_targets_on(g: &GameState, h: usize) -> Vec<String> {
+fn troop_targets_on(w: &World, g: &GameState, h: usize) -> Vec<String> {
     let mut out = Vec::new();
     if cube_owner(g, h).is_some() && !corrupted(g, h) {
         if g.tokens(h, FACTORY) > 0 {
@@ -964,8 +1051,10 @@ fn troop_targets_on(g: &GameState, h: usize) -> Vec<String> {
             out.push(STATION.to_string());
         }
     }
-    if let Some(s) = presence_owner(g, h) {
-        out.push(presence(s));
+    if g.var(adversary::STAGE) >= w.int("board.troop_presence") {
+        if let Some(s) = presence_owner(g, h) {
+            out.push(presence(s));
+        }
     }
     out
 }
@@ -978,13 +1067,13 @@ pub fn hardenable(g: &GameState, h: usize) -> bool {
 }
 
 /// Whether hex `h` holds anything an adversary troop targets.
-pub fn is_troop_target(g: &GameState, h: usize) -> bool {
-    !troop_targets_on(g, h).is_empty()
+pub fn is_troop_target(w: &World, g: &GameState, h: usize) -> bool {
+    !troop_targets_on(w, g, h).is_empty()
 }
 
 /// Whether an adversary troop at `h` has a target on or next to it.
 fn has_troop_target(w: &World, g: &GameState, h: usize) -> bool {
-    next_to(w, h, |x| is_troop_target(g, x))
+    next_to(w, h, |x| is_troop_target(w, g, x))
 }
 
 /// Walking distance over land from the nearest of `sources`, for every hex
@@ -1014,7 +1103,7 @@ fn land_distances(w: &World, sources: impl Iterator<Item = usize>) -> Vec<Option
 /// Walking distance from the nearest troop target, for every hex (`None`
 /// with no target reachable over land).
 fn target_gaps(w: &World, g: &GameState) -> Vec<Option<u32>> {
-    land_distances(w, (0..g.hexes.len()).filter(|&h| is_troop_target(g, h)))
+    land_distances(w, (0..g.hexes.len()).filter(|&h| is_troop_target(w, g, h)))
 }
 
 /// The land hexes next to `at` that bring a troop closer to the nearest
@@ -1054,7 +1143,7 @@ fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize) -> Res<bool> {
     let mut near = vec![h];
     near.extend(w.map.hexes[h].neighbours.iter().copied());
     for x in near {
-        for k in troop_targets_on(g, x) {
+        for k in troop_targets_on(&w, g, x) {
             targets.push((x, k));
         }
     }
@@ -1071,7 +1160,7 @@ fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize) -> Res<bool> {
     };
     let (x, k) = targets[i].clone();
     cx.tally(g, "board.troop_strikes", 1);
-    if destroy_building(g, cx, x, &k, true) {
+    if destroy_building(g, cx, x, &k, Cause::Troop) {
         let kind = if k == FACTORY || k == STATION { k.as_str() } else { "presence" };
         cx.tally(g, &format!("board.troop_destroyed.{kind}"), 1);
         cx.tally(g, "board.troop_destroyed", 1);
@@ -1094,7 +1183,7 @@ pub fn troop_plan(w: &World, g: &GameState, h: usize) -> Option<(usize, i64)> {
     }
     let from = land_distances(w, std::iter::once(h));
     let target = (0..g.hexes.len())
-        .filter(|&x| is_troop_target(g, x) && from[x].is_some())
+        .filter(|&x| is_troop_target(w, g, x) && from[x].is_some())
         .min_by_key(|&x| (from[x], w.map.hexes[x].country, w.map.hexes[x].number))?;
     let steps = w.int("board.troop_steps");
     // Moves until the target is on or next to the troop, then the strike.
@@ -1127,7 +1216,7 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             cx.tally(g, "board.energy_diverted", energy);
         } else if g.tokens(h, ADV_AMBASSADOR) > 0 {
             adversary::remove(g, cx, h, 1);
-            alignment::sway(g, cx, Side::Discord, energy * divert);
+            alignment::sway(g, cx, Side::Discord, energy * w.int("board.ambassador_discord"));
             cx.tally(g, "board.energy_diverted", energy);
         } else if let Some(s) = cube_owner(g, h) {
             // An aligned city's cube goes free to the player who aligned it.
@@ -1488,7 +1577,7 @@ impl Module for Board {
                 continue;
             }
             if let Some((t, rounds)) = troop_plan(w, g, h) {
-                let what = troop_targets_on(g, t)
+                let what = troop_targets_on(w, g, t)
                     .iter()
                     .map(|k| piece_name(k))
                     .collect::<Vec<_>>()
@@ -1550,7 +1639,7 @@ impl Module for Board {
                 "presence left on track 1",
                 left as i64,
                 None,
-                "presence tokens still on your AI board's first track (the second shows on the board; your reserve is separate)",
+                "presence tokens still on your AI board's first track (the second shows on the board; your destroyed pile is separate)",
             );
         }
     }
@@ -1561,5 +1650,6 @@ fn flag_doc(f: RoundFlag) -> &'static str {
         RoundFlag::Blackout => "Blackout: while this is up, cities here make no energy in production (an uncountered threat's lasts to the end of the next round)",
         RoundFlag::Sabotage => "Sabotage: while this is up, players with presence here make no energy in upkeep (an uncountered threat's lasts to the end of the next round)",
         RoundFlag::Shelter => "Shelter Order: buildings here can't be destroyed this round",
+        RoundFlag::Embargo => "Embargo: while this is up, no site here can be claimed (an uncountered threat's lasts to the end of the next round)",
     }
 }

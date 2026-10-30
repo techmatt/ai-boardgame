@@ -9,6 +9,7 @@
 //! troops' forecast is `board::troop_plan`.
 
 use crate::content::Op;
+use crate::op::Site;
 use crate::module::World;
 use crate::state::GameState;
 
@@ -20,8 +21,9 @@ use super::common::{clean_city, corrupted, is_base, is_city, scope_hexes, FACTOR
 /// in hex order. Each corrupted city gains `city_build` (plus `build_bonus`
 /// at difficulty 3 or more in play, plus city-build twists); each factory
 /// next to a corrupted city `factory_build`, and next to a clean city the
-/// clean-factory twists; each corrupted station the station twists. The
-/// supply is not checked: the plan is what the step asks for.
+/// clean-factory twists; each corrupted station the station twists; each
+/// site the card names its arrivals (027). The supply is not checked: the
+/// plan is what the step asks for.
 pub fn build_plan(
     w: &World,
     g: &GameState,
@@ -46,6 +48,14 @@ pub fn build_plan(
         _ => None,
     });
     let factory = w.int("adversary.factory_build");
+    let arrivals = w.int("adversary.arrivals");
+    let sites: Vec<Site> = twists
+        .iter()
+        .filter_map(|t| match t {
+            Op::Arrivals { site } => Some(*site),
+            _ => None,
+        })
+        .collect();
     let mut plan = Vec::new();
     for h in scope_hexes(w, scope) {
         let mut n = 0;
@@ -65,11 +75,36 @@ pub fn build_plan(
         if g.tokens(h, STATION) > 0 && corrupted(g, h) {
             n += stations;
         }
+        n += arrivals * sites.iter().filter(|&&s| is_site(w, g, h, s)).count() as i64;
         if n > 0 {
             plan.push((h, n));
         }
     }
     plan
+}
+
+/// Whether hex `h` is a site of type `site`.
+pub fn is_site(w: &World, g: &GameState, h: usize, site: Site) -> bool {
+    match site {
+        Site::Coastal => w.map.hexes[h].coastal,
+        Site::Industrial => w.map.hexes[h].industrial,
+        Site::Stations => g.tokens(h, STATION) > 0,
+        Site::Bases => is_base(w, h),
+    }
+}
+
+/// How many ambassadors `twists`' arrivals bring in `scope` (a tally).
+pub fn arrival_count(w: &World, g: &GameState, twists: &[&Op], scope: Option<usize>) -> i64 {
+    let per = w.int("adversary.arrivals");
+    let hexes = scope_hexes(w, scope);
+    twists
+        .iter()
+        .filter_map(|t| match t {
+            Op::Arrivals { site } => Some(*site),
+            _ => None,
+        })
+        .map(|s| per * hexes.iter().filter(|&&h| is_site(w, g, h, s)).count() as i64)
+        .sum()
 }
 
 /// What an escalating card places in its build: `(hex, ambassadors)` for

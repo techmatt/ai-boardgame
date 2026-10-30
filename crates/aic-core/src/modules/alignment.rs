@@ -18,11 +18,12 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{adversary, ai, cards, effects};
+use super::{adversary, ai, board, cards, effects};
 
 const PARAMS: [ParamSpec; 15] = [
     ParamSpec::int("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
-    ParamSpec::int("tip_per_player", 1, 50, "a bucket tips when it holds this many Sway per player"),
+    ParamSpec::int("tip_per_player", 1, 50, "the Unity bucket tips when it holds this many Sway per player"),
+    ParamSpec::int("discord_tip_per_player", 1, 50, "the Discord bucket tips when it holds this many Sway per player"),
     ParamSpec::int("momentum_every", 0, 10, "Momentum: a side's bucket holds 1 fewer Sway per this many of its tips, down to 1 per player (0: off)"),
     ParamSpec::int("troop", 0, 10, "Sway toward Unity for removing an adversary troop"),
     ParamSpec::int("free_city", 0, 10, "Sway toward Unity for freeing a corrupted city"),
@@ -33,9 +34,8 @@ const PARAMS: [ParamSpec; 15] = [
     ParamSpec::int("antimatter_uses", 0, 5, "times each player may take the antimatter action per round"),
     ParamSpec::list("unity_ease", 0, 50, "Unity tip counts at which the clear-board bar drops a level: ambassadors, then troops, then nodes stop counting (the first also starts the stronger Unity cards)"),
     ParamSpec::int("discord_tier2", 1, 50, "Discord tip count from which a Discord tip draws the stronger tier"),
-    ParamSpec::int("unity_win", 0, 50, "Unity tips that win outright (0: never)"),
+    ParamSpec::int("presence_loss", 0, 1, "1: a player with no presence on the board loses the game for everyone"),
     ParamSpec::int("clear_win_stage", 1, 3, "the bar-0 win counts only once this round's adversary card is of this stage (1: any time)"),
-    ParamSpec::int("purge_round", 0, 20, "the purge counts only from this printed round on, at every Unity level (0: any time)"),
 ];
 
 const PHASES: &[PhaseSpec] = &[
@@ -92,8 +92,8 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     }
     // Sway only moves between the Undecided and the buckets: with less than a
     // tip in all, nothing could ever tip (020).
-    if b.int("undecided_per_player")? < b.int("tip_per_player")? {
-        return Err("alignment.undecided_per_player: below tip_per_player, nothing could ever tip (the Undecided must hold at least one tip)".into());
+    if b.int("undecided_per_player")? < b.int("tip_per_player")?.max(b.int("discord_tip_per_player")?) {
+        return Err("alignment.undecided_per_player: below a bucket's tip size, it could never tip (the Undecided must hold at least one tip)".into());
     }
     Ok(Box::new(Alignment))
 }
@@ -160,6 +160,11 @@ pub fn resolved(side: Side) -> String {
     format!("alignment.resolved.{}", side.name())
 }
 
+/// Cards left in a side's decks: its clock (027).
+pub fn cards_left(g: &GameState, side: Side) -> usize {
+    g.pile(&deck(side, 1)).len() + g.pile(&deck(side, 2)).len()
+}
+
 fn used_key(seat: usize) -> String {
     format!("alignment.used.{seat}")
 }
@@ -174,7 +179,11 @@ fn card<'w>(w: &World<'w>, id: &str) -> &'w AlignmentCard {
 /// Sway a side's bucket holds before it tips (Momentum applied).
 pub fn capacity(w: &World, g: &GameState, side: Side) -> i64 {
     let seats = g.seats.len().max(1) as i64;
-    let full = w.int("alignment.tip_per_player") * seats;
+    let per = match side {
+        Side::Unity => w.int("alignment.tip_per_player"),
+        Side::Discord => w.int("alignment.discord_tip_per_player"),
+    };
+    let full = per * seats;
     let every = w.int("alignment.momentum_every");
     if every <= 0 {
         return full;
@@ -255,9 +264,6 @@ pub fn for_node_removed(g: &mut GameState, cx: &mut Cx) {
 /// level-0 bar (no adversary pieces) counts only once a card of stage
 /// `clear_win_stage` has been revealed (the stages are stacked and public).
 fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
-    if (g.round as i64) < w.int("alignment.purge_round") {
-        return false;
-    }
     if level == 0 && g.var(adversary::STAGE) < w.int("alignment.clear_win_stage") {
         return false;
     }
@@ -276,9 +282,20 @@ pub fn add_free_purchases(g: &mut GameState, cx: &mut Cx, n: i64) {
     cx.add_key(g, FREE_LEFT.into(), n);
 }
 
+/// Up to `n` Sway leaves the Unity bucket for the Undecided (027).
+pub fn pull_unity(g: &mut GameState, cx: &mut Cx, n: i64) {
+    let k = n.min(g.var(bucket(Side::Unity))).max(0);
+    if k > 0 {
+        cx.add_key(g, bucket(Side::Unity).into(), -k);
+        cx.add_key(g, UNDECIDED.into(), k);
+        cx.tally(g, "alignment.unity_pulled", k);
+    }
+}
+
 /// Seat `s` sacrifices one of their ambassadors (from their supply or a
 /// hex) or one of their presence tokens, their choice; with none, nothing.
-/// A sacrificed presence leaves the game.
+/// A last presence is never offered (027); a sacrificed presence goes to
+/// the destroyed pile.
 pub fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
     let w = cx.world;
     let k = ambassador(s);
@@ -287,9 +304,8 @@ pub fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
         .collect();
     // The hexes holding the seat's presence (020: this listed `presence_hexes`, the
     // free hexes where it could place one, so a sacrificed presence removed nothing).
-    let pres: Vec<usize> = (0..g.hexes.len())
-        .filter(|&h| g.tokens(h, &presence(s)) > 0)
-        .collect();
+    let pres: Vec<usize> = presence_of(g, s);
+    let pres = if pres.len() < 2 { Vec::new() } else { pres };
     let labelled = |what: &str, h: usize| {
         let mut o = hex_opt(&w, h);
         o.option = format!("{what} at {}", o.option);
@@ -313,7 +329,7 @@ pub fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
         cx.add_tokens(g, ambs[i - off], &k, -1);
         cx.tally(g, "alignment.sacrificed_ambassadors", 1);
     } else {
-        cx.add_tokens(g, pres[i - off - ambs.len()], &presence(s), -1);
+        board::lose_presence(g, cx, pres[i - off - ambs.len()], s, "project");
         cx.tally(g, "alignment.sacrificed_presence", 1);
     }
     Ok(())
@@ -322,56 +338,20 @@ pub fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
 impl Alignment {
     /// Draws the next card of `side`: the stronger tier once the side's tip
     /// count has reached its first threshold, else tier 1; the other tier
-    /// if that deck is empty; with both empty, the side's resolved cards
-    /// are shuffled back into their decks first.
-    fn draw(
-        &self,
-        g: &mut GameState,
-        cx: &mut Cx,
-        side: Side,
-        tips: i64,
-    ) -> Option<(String, String)> {
-        let w = cx.world;
+    /// if that deck is empty. Neither deck ever reshuffles (027): they are
+    /// the game's clocks.
+    fn draw(&self, g: &GameState, w: &World, side: Side, tips: i64) -> Option<(String, String)> {
         let first = match side {
             Side::Unity => w.list("alignment.unity_ease")[0],
             Side::Discord => w.int("alignment.discord_tier2"),
         };
         let want: u8 = if tips >= first { 2 } else { 1 };
-        for pass in 0..2 {
-            for tier in [want, 3 - want] {
-                if let Some(id) = g.pile(&deck(side, tier)).first().cloned() {
-                    return Some((id, deck(side, tier)));
-                }
-            }
-            if pass == 0 && !self.reshuffle(g, cx, side) {
-                return None;
+        for tier in [want, 3 - want] {
+            if let Some(id) = g.pile(&deck(side, tier)).first().cloned() {
+                return Some((id, deck(side, tier)));
             }
         }
         None
-    }
-
-    /// Shuffles a side's resolved cards back into their tier decks; false
-    /// with none resolved.
-    fn reshuffle(&self, g: &mut GameState, cx: &mut Cx, side: Side) -> bool {
-        let w = cx.world;
-        let back = g.pile(&resolved(side)).to_vec();
-        if back.is_empty() {
-            return false;
-        }
-        cx.set_pile(g, &resolved(side), Vec::new());
-        for tier in [1u8, 2] {
-            let mut ids: Vec<String> = back
-                .iter()
-                .filter(|id| card(&w, id).tier == tier)
-                .cloned()
-                .collect();
-            shuffle(&mut ids, cx.rng(g, "alignment"));
-            cx.set_pile(g, &deck(side, tier), ids);
-        }
-        cx.note(None, || {
-            format!("The resolved {} cards are shuffled back", side.name())
-        });
-        true
     }
 
     /// A bucket tips: one card of its side resolves (at the strength step
@@ -388,14 +368,20 @@ impl Alignment {
         cx.set_key(g, tips_key(side).into(), before + 1);
         cx.tally(g, &format!("alignment.tips_{}", side.name()), 1);
         cx.tally(g, &format!("alignment.tip_{}.r{round:02}", side.name()), 1);
-        if let Some((id, from)) = self.draw(g, cx, side, before) {
+        let Some((id, from)) = self.draw(g, &w, side, before) else {
+            // Discord tips with no card left: the players lose (locked, 027).
+            if side == Side::Discord {
+                cx.end(g, false, "discord_deck", "a Discord tip found the Discord deck empty".into());
+            }
+            return Ok(());
+        };
+        {
             let c = card(&w, &id);
             cx.move_card(g, &id, &from, &resolved(side), true).unwrap();
-            // The last card drawn: the resolved cards are shuffled back now,
-            // before the card acts, so a draw never shuffles (a pending
-            // choice after the draw then replays on a fixed deck).
-            if g.pile(&deck(side, 1)).is_empty() && g.pile(&deck(side, 2)).is_empty() {
-                self.reshuffle(g, cx, side);
+            // Drawing the last Unity card wins outright (027); it needn't act.
+            if side == Side::Unity && cards_left(g, side) == 0 {
+                cx.end(g, true, "unity_deck", "the last Unity card was drawn".into());
+                return Ok(());
             }
             cx.note(None, || {
                 format!("{} ({}) resolves: {}", c.name, side.name(), c.text)
@@ -406,7 +392,8 @@ impl Alignment {
                 .rev()
                 .find(|st| before >= st.at)
                 .map_or(&c.effects, |st| &st.effects);
-            effects::run(g, cx, effects, &mut effects::Ctx::team())?;
+            let source = if side == Side::Discord { "discord" } else { "unity" };
+            effects::run(g, cx, effects, &mut effects::Ctx::team().named(source))?;
             cx.tally(g, &format!("alignment.card.{id}"), 1);
         }
         Ok(())
@@ -430,6 +417,11 @@ impl Module for Alignment {
                     .map(|c| c.id.clone())
                     .collect();
                 shuffle(&mut ids, cx.rng(g, "alignment"));
+                // Difficulty 4: the Discord deck, the clock, is shorter.
+                if side == Side::Discord && tier == 1 && adversary::level(&w, 4) {
+                    let cut = w.int("adversary.discord_removed") as usize;
+                    ids.truncate(ids.len().saturating_sub(cut));
+                }
                 cx.set_pile(g, &deck(side, tier), ids);
             }
         }
@@ -503,15 +495,11 @@ impl Module for Alignment {
             break;
         }
         // Losses first.
-        if let Some((reason, detail)) = adversary::loss(&w, g) {
-            cx.end(g, false, reason, detail);
-            return Ok(());
-        }
-        let unity = g.var(tips_key(Side::Unity));
-        let outright = w.int("alignment.unity_win");
-        if outright > 0 && unity >= outright {
-            cx.end(g, true, "unity", format!("{unity} Unity tips win outright"));
-            return Ok(());
+        if w.int("alignment.presence_loss") > 0 {
+            if let Some((reason, detail)) = adversary::loss(g) {
+                cx.end(g, false, reason, detail);
+                return Ok(());
+            }
         }
         let level = bar_level(&w, g);
         if under_bar(&w, g, level) {
@@ -576,10 +564,6 @@ impl Module for Alignment {
         if level == 0 && g.var(adversary::STAGE) < stage {
             text += &format!(" (from adversary stage {stage})");
         }
-        let first = w.int("alignment.purge_round");
-        if (g.round as i64) < first {
-            text += &format!(" (counts from round {first})");
-        }
         out.global(
             "bar",
             "clear-board bar",
@@ -596,17 +580,8 @@ impl Module for Alignment {
             "corrupted cities",
             bad,
             Some(cities),
-            "players lose when every city is corrupted",
+            "corrupted cities always count against the purge; each one builds adversary ambassadors",
         );
-        if w.int("alignment.unity_win") > 0 {
-            out.global(
-                "unity_win",
-                "Unity tips to win",
-                w.int("alignment.unity_win"),
-                None,
-                "this many Unity tips win outright",
-            );
-        }
         if g.var(INCOME_BONUS) > 0 {
             out.global(
                 "income_bonus",
@@ -645,10 +620,10 @@ impl Module for Alignment {
             }
         };
         for side in [Side::Unity, Side::Discord] {
-            let n = g.pile(&deck(side, 1)).len() + g.pile(&deck(side, 2)).len();
+            let n = cards_left(g, side);
             let label = match side {
-                Side::Unity => "Unity deck",
-                Side::Discord => "Discord deck",
+                Side::Unity => "Unity deck (drawing the last card wins)",
+                Side::Discord => "Discord deck (a tip with no card left loses)",
             };
             out.pile(&format!("deck.{}", side.name()), label, None, n, Vec::new());
             let done = g.pile(&resolved(side));

@@ -42,40 +42,6 @@ fn play_card(rules: &Rules, g: &mut GameState, seat: u8, card: &str) {
 }
 
 #[test]
-fn a_corrupted_city_frees_with_x_of_your_own_and_no_adversary_ambassador_next_to_it() {
-    // At 2, so that seats' ambassadors could pool if they did.
-    let (rules, mut g) = lab_with(&[], &["board.free_city_at=2"]);
-    let (h, n) = city(&rules, &mut g);
-    set_res(&mut g, 0, Resource::Energy, 10);
-    set_res(&mut g, 0, Resource::Credits, 10);
-    set_res(&mut g, 0, Resource::Ambassadors, 2);
-    put(&mut g, h, &ambassador(1), 1);
-    // Another player's ambassadors don't pool (024: was any player's), with
-    // nothing guarding the city.
-    rules.apply_mut(&mut g, &std_act(0, "move"), None).unwrap();
-    pick(&rules, &mut g, h);
-    answer_all(&rules, &mut g);
-    assert_eq!(g.tokens(h, ADV_CUBE), 1);
-    // Two of your own with an adversary ambassador next to it: still corrupted.
-    put(&mut g, n, ADV_AMBASSADOR, 1);
-    rules.apply_mut(&mut g, &std_act(0, "move"), None).unwrap();
-    pick(&rules, &mut g, h);
-    answer_all(&rules, &mut g);
-    assert_eq!(g.tokens(h, &ambassador(0)), 2);
-    assert_eq!(g.tokens(h, ADV_CUBE), 1);
-    // Removing the neighbour frees it at once; your ambassadors are used up.
-    let unity = g.var("alignment.unity");
-    let mut k = g.clone();
-    put(&mut k, n, ADV_AMBASSADOR, 0);
-    rules.apply_mut(&mut k, &std_act(0, "energy"), None).unwrap();
-    assert_eq!(k.tokens(h, ADV_CUBE), 0);
-    assert_eq!(k.tokens(h, &ambassador(0)), 0);
-    assert_eq!(k.tokens(h, &ambassador(1)), 1);
-    assert_eq!(k.var("alignment.unity") - unity, rules.world().int("alignment.free_city"));
-    assert_eq!(k.stats.counters["board.cities_freed"], 1);
-}
-
-#[test]
 fn only_a_tier_2_ultimate_frees_a_city_outright() {
     for c in &crate::content().cards {
         let cities = c.effects.iter().any(|e| matches!(e, Op::Cleanse { cities: true, .. }));

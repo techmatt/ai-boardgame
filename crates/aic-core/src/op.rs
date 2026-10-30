@@ -84,6 +84,22 @@ pub enum RoundFlag {
     Sabotage,
     /// Buildings in the country can't be destroyed.
     Shelter,
+    /// Sites in the country can't be claimed (027).
+    Embargo,
+}
+
+/// A site type an adversary card's arrivals land on (027).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Site {
+    /// Cities marked coastal on the map: next to ocean, or printed `coast`.
+    Coastal,
+    /// Printed industrial zones, built on or not.
+    Industrial,
+    /// Research stations, whoever owns them.
+    Stations,
+    /// Military bases.
+    Bases,
 }
 
 impl RoundFlag {
@@ -92,6 +108,7 @@ impl RoundFlag {
             RoundFlag::Blackout => "blackout",
             RoundFlag::Sabotage => "sabotage",
             RoundFlag::Shelter => "shelter",
+            RoundFlag::Embargo => "embargo",
         }
     }
 }
@@ -295,6 +312,28 @@ pub enum Op {
         count: i64,
         #[serde(default)]
         each_country: bool,
+        /// Each troop also destroys the presence on the hex it lands on (027).
+        #[serde(default)]
+        destroy: bool,
+    },
+    /// Every presence on the most threatened hex in scope (the presence hex
+    /// with the most adversary ambassadors and troops; ties: the first in
+    /// board order) is destroyed, unless absorbed (027).
+    DestroyPresence,
+    /// Each player in scope loses a presence in scope, or pays `amount`
+    /// `resource` (their choice). Losing it needs 2 or more presence on the
+    /// board, so this never takes a last presence (027).
+    LosePresenceOr {
+        resource: Resource,
+        amount: i64,
+    },
+    /// Up to `amount` Sway leaves the Unity bucket for the Undecided (027).
+    PullUnity {
+        amount: i64,
+    },
+    /// Each player in scope gets `amount` less insight next round (027).
+    LoseInsight {
+        amount: i64,
     },
     /// One research station in scope that is not corrupted becomes corrupted
     /// (players choose). With `each_country` (team cards), one per country.
@@ -465,6 +504,12 @@ pub enum Op {
     SpreadReach {
         amount: i64,
     },
+    /// The round's arrivals (027): every matching site in every country gains
+    /// `adversary.arrivals` adversary ambassadors in the build, whatever the
+    /// board holds.
+    Arrivals {
+        site: Site,
+    },
     /// Clean cities corrupt at `amount` fewer ambassadors.
     CorruptSooner {
         amount: i64,
@@ -488,11 +533,15 @@ impl Op {
             | Op::FlipStation { .. }
             | Op::CorruptCity
             | Op::PlayersLose { .. }
+            | Op::DestroyPresence
+            | Op::PullUnity { .. }
+            | Op::LoseInsight { .. }
             | Op::AdversaryBuild => &[Threat, Team],
             Op::Ambassadors { .. }
             | Op::Flag { .. }
             | Op::Requisition { .. }
             | Op::LoseAmbassador
+            | Op::LosePresenceOr { .. }
             | Op::DiscardMostExpensive
             | Op::Compute { .. }
             | Op::LoseTokens { .. } => &[Threat],
@@ -525,6 +574,7 @@ impl Op {
             | Op::StationBuild { .. }
             | Op::SpreadReach { .. }
             | Op::CorruptSooner { .. }
+            | Op::Arrivals { .. }
             | Op::War => &[Twist],
             Op::GainPerPresence { .. }
             | Op::ChoosePlayer

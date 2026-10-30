@@ -12,9 +12,9 @@ const esc = escapeHtml;
 
 /** Global values drawn by the status strip or the adversary row; the rest are generic chips. */
 const DRAWN_GLOBALS = new Set([
-  'adversary.supply', 'adversary.stage', 'adversary.difficulty', 'adversary.deck', 'adversary.compute',
+  'adversary.stage', 'adversary.difficulty', 'adversary.deck', 'adversary.compute',
   'threats.tier', 'alignment.undecided', 'alignment.unity', 'alignment.discord', 'alignment.unity_tips',
-  'alignment.discord_tips', 'alignment.bar', 'alignment.corrupted_cities', 'alignment.unity_win',
+  'alignment.discord_tips', 'alignment.bar',
   'board.war', 'board.fronts',
 ]);
 /** Piles drawn by the status strip, the adversary row or the countries strip. */
@@ -82,8 +82,6 @@ export function statusHtml(v: View): string {
   if (und || unity || discord || bar) {
     const level = bar?.value ?? 0;
     const max = bar?.max ?? 0;
-    const uw = findValue(g, 'alignment.unity_win');
-    const winAt = uw ? `<span class="tips unity" data-value="${esc(uw.key)}" data-scope="global">win at <b>${uw.value}</b> Unity tips</span>` : '';
     const undHtml = und
       ? `<span class="undecided" data-value="${esc(und.key)}" data-scope="global"><b>${und.value}</b><small>/${und.max ?? '?'}</small> undecided</span>`
       : '';
@@ -102,15 +100,10 @@ export function statusHtml(v: View): string {
     acards.push(...groups, ...decks);
   }
   const loss: string[] = [];
-  const supply = findValue(g, 'adversary.supply');
-  if (supply) {
-    const danger = supply.value <= 3 ? ' danger' : '';
-    loss.push(`<span class="value${danger}" data-value="${supply.key}" data-scope="global"><span class="label">adversary ambassadors run out</span> <b>${supply.value}</b><small>/${supply.max ?? '?'} left</small></span>`);
-  }
-  const bad = findValue(g, 'alignment.corrupted_cities');
-  if (bad) {
-    const danger = bad.max !== undefined && bad.max - bad.value <= 1 ? ' danger' : '';
-    loss.push(`<span class="value${danger}" data-value="${bad.key}" data-scope="global"><span class="label">all cities corrupted</span> <b>${bad.value}</b><small>/${bad.max ?? '?'}</small></span>`);
+  const dd = pile(v, 'alignment.deck.discord');
+  if (dd) {
+    const danger = dd.count <= 1 ? ' danger' : '';
+    loss.push(`<span class="value${danger}" data-pile="${esc(dd.key)}"><span class="label">a Discord tip finds no card</span> <b>${dd.count}</b></span>`);
   }
   const deck = findValue(g, 'adversary.deck');
   if (deck) {
@@ -166,7 +159,6 @@ export function pipelineHtml(v: View): string {
   const di = pile(v, 'adversary.discard');
   if (!deck && !next && !cur) return '';
   const g = v.globals;
-  // The ambassador supply is with the loss conditions in the status strip.
   const short: Record<string, string> = { 'board.fronts': 'fronts' };
   const head = ['adversary.stage', 'adversary.difficulty', 'adversary.compute', 'threats.tier', 'board.fronts']
     .map((k) => findValue(g, k)).filter((x): x is Value => !!x)

@@ -97,7 +97,7 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
                 shuffle_project_stages(rules, snap, rng);
             } else {
                 // The step drew the snapshot's whole pile (public now) and
-                // reshuffled (017: a tip reshuffles the moment its deck
+                // reshuffled (017-026: a tip reshuffled the moment its deck
                 // empties): the snapshot keeps its order, so the replay
                 // draws the same cards.
                 drawn_out = true;
@@ -300,7 +300,7 @@ mod tests {
         }
     }
 
-    /// 3 countries at d0 and d4 (017: the Discord deck reshuffles mid-step
+    /// 3 countries at d0 and d4 (017, before 027: the Discord deck reshuffled mid-step
     /// often; 019: the troops' march asks every round).
     #[test]
     #[ignore = "slow lane: the pending-choice guess check at 3 countries"]

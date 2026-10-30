@@ -1,0 +1,33 @@
+{
+  "name": "screen-027-cards",
+  "note": "027 quick screen (r16): the endgame. 2 and 3 countries, d0 to d4, random, greedy and engine. Summary: python scripts/cards/screen_027.py DIR.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "agents": [
+    "random",
+    "greedy",
+    "engine"
+  ],
+  "games": 16,
+  "records": 2
+}

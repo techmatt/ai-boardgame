@@ -154,14 +154,14 @@ fn tunables_list_every_module_parameter() {
     };
     for k in [
         "board.start_corrupted",
-        "board.free_city_at",
+        "board.hold_base",
         "board.align_energy",
         "adversary.difficulty",
         "adversary.supply_per_country",
         "adversary.corrupt_at",
         "threats.per_country",
         "alignment.tip_per_player",
-        "alignment.unity_win",
+        "alignment.discord_tip_per_player",
         "economy.give_insight",
         "ai.start_credits",
         "cards.keep_tier1",
@@ -221,7 +221,7 @@ fn off_switches_and_degenerate_values() {
 /// reported with its key and the value, not serde's untagged-enum message.
 #[test]
 fn a_bad_parameter_value_names_its_key() {
-    let json = BASELINE.replacen("\"unit_cap\": 3", "\"unit_cap\": \"3\"", 1);
+    let json = BASELINE.replacen("\"unit_cap\": 2", "\"unit_cap\": \"3\"", 1);
     assert_ne!(json, BASELINE);
     let err = Config::from_json(&json).unwrap_err();
     assert!(
@@ -229,7 +229,7 @@ fn a_bad_parameter_value_names_its_key() {
         "{err}"
     );
     for (bad, shown) in [("2.5", "2.5"), ("null", "null"), ("[1, \"x\"]", "[1,\"x\"]")] {
-        let json = BASELINE.replacen("\"unit_cap\": 3", &format!("\"unit_cap\": {bad}"), 1);
+        let json = BASELINE.replacen("\"unit_cap\": 2", &format!("\"unit_cap\": {bad}"), 1);
         let err = Config::from_json(&json).unwrap_err();
         let want = format!("board.unit_cap: expected an integer or a list of integers, got {shown}");
         assert!(err.contains(&want), "{err}");

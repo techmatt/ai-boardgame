@@ -35,7 +35,7 @@ saving game records (run, compare):
   --save DIR        write the selected games as game records into DIR (created if needed),
                     named <config name>-<run|A|B>-seed<S>.json
   --save-when W     select games by outcome: all, win, loss, timeout, or an end reason
-                    code such as supply or unity (repeatable; default loss, or none
+                    code such as discord_deck or purge (repeatable; default loss, or none
                     when only --save-seed is given)
   --save-seed S     always save this seed, whatever --save-when says (repeatable)
   --save-max N      at most the first N games --save-when selects, in seed order, per

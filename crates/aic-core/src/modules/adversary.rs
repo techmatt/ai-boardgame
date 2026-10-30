@@ -11,7 +11,7 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{alignment, cards, effects};
+use super::{alignment, board, cards, effects};
 
 const PARAMS: &[ParamSpec] = &[
     ParamSpec::int("difficulty", 0, 4, "difficulty level 0-4 (each level includes the ones below)"),
@@ -29,7 +29,8 @@ const PARAMS: &[ParamSpec] = &[
     ParamSpec::int("extra_corrupted", 0, 3, "difficulty 4: more cities per country start corrupted"),
     ParamSpec::int("build_bonus", 0, 5, "difficulty 3+: ambassadors each corrupted city gains on top of city_build"),
     ParamSpec::int("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
-    ParamSpec::int("supply_reduction", 0, 20, "difficulty 4+: ambassador supply smaller by this per country"),
+    ParamSpec::int("discord_removed", 0, 3, "difficulty 4+: Discord cards removed at setup (from tier 1)"),
+    ParamSpec::int("arrivals", 0, 5, "build: ambassadors each site the adversary card names gains, whatever the board holds"),
     ParamSpec::int("troop_health", 0, 10, "removal a card must spend on an adversary troop (an ambassador takes 1)"),
     ParamSpec::int("node_compute", 0, 5, "adversary compute each node makes a round (none with a player ambassador on it)"),
     ParamSpec::list("project_cards", 0, 20, "adversary projects dealt from stage 1 (cheap) and stage 2 (big), cheap on top"),
@@ -68,8 +69,6 @@ pub const CURRENT: &str = "adversary.current";
 pub const NEXT: &str = "adversary.next";
 /// Adversary ambassadors in the supply.
 pub const SUPPLY: &str = "adversary.supply";
-/// Set when an ambassador had to be placed and the supply was empty.
-pub const STARVED: &str = "adversary.starved";
 /// Stage of this round's card.
 pub const STAGE: &str = "adversary.stage";
 /// How many more deck cards beyond the next are shown (Recon Sweep).
@@ -125,11 +124,7 @@ pub fn project_cost(w: &World, g: &GameState, id: &str) -> i64 {
 
 /// The ambassador supply at the start, for the map's countries.
 pub fn start_supply(w: &World) -> i64 {
-    let mut per = w.int("adversary.supply_per_country");
-    if level(w, 4) {
-        per -= w.int("adversary.supply_reduction");
-    }
-    (per * w.map.countries.len() as i64).max(0)
+    (w.int("adversary.supply_per_country") * w.map.countries.len() as i64).max(0)
 }
 
 /// Which tier of threats is dealt now: tier 2 once this round's card is
@@ -337,7 +332,7 @@ impl Module for Adversary {
                 }
                 // Ongoing projects act, in the order they came into play.
                 for id in g.pile(PROJECTS_ONGOING).to_vec() {
-                    effects::run(g, cx, &project(&w, &id).effects, &mut effects::Ctx::team())?;
+                    effects::run(g, cx, &project(&w, &id).effects, &mut effects::Ctx::team().named("project"))?;
                     if g.is_over() {
                         return Ok(());
                     }
@@ -447,7 +442,7 @@ impl Module for Adversary {
             "adversary ambassador supply",
             g.var(SUPPLY),
             Some(start_supply(w)),
-            "adversary ambassadors left; players lose when one must be placed and none is left",
+            "adversary ambassadors left: a cap, a placement it can't make doesn't happen",
         );
         out.global(
             "stage",
@@ -529,7 +524,6 @@ impl Module for Adversary {
         );
         out.bookkeeping(&[
             PEEK,
-            STARVED,
             FIRST_CORRUPTION,
             FIRST_PROJECT,
             "adversary.removed_troop.",
@@ -624,7 +618,7 @@ fn resolve_project(g: &mut GameState, cx: &mut Cx, id: &str) -> Res {
         deal_projects(g, cx);
     }
     if !p.ongoing {
-        effects::run(g, cx, &p.effects, &mut effects::Ctx::team())?;
+        effects::run(g, cx, &p.effects, &mut effects::Ctx::team().named("project"))?;
     }
     Ok(())
 }
@@ -673,18 +667,20 @@ fn reveal(g: &mut GameState, cx: &mut Cx) {
 pub fn build_all(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> Res {
     let w = cx.world;
     // One source for the rule: the plan agents forecast with is the build.
-    for (h, n) in super::plan::build_plan(&w, g, &twists(&w, g), scope) {
+    let on = twists(&w, g);
+    cx.tally(g, "adversary.arrivals", super::plan::arrival_count(&w, g, &on, scope));
+    for (h, n) in super::plan::build_plan(&w, g, &on, scope) {
         place(g, cx, h, n);
     }
     Ok(())
 }
 
-/// Places `n` adversary ambassadors from the supply on hex `h`. With the
-/// supply empty the adversary is starved (players lose).
+/// Places `n` adversary ambassadors from the supply on hex `h`. The supply
+/// is a cap (027): a placement it can't make doesn't happen.
 pub fn place(g: &mut GameState, cx: &mut Cx, h: usize, n: i64) {
-    for _ in 0..n {
+    for k in 0..n {
         if g.var(SUPPLY) <= 0 {
-            cx.set_key(g, STARVED.into(), 1);
+            cx.tally(g, "adversary.supply_short", n - k);
             return;
         }
         cx.add_key(g, SUPPLY.into(), -1);
@@ -768,7 +764,8 @@ pub fn place_troop(g: &mut GameState, cx: &mut Cx, h: usize) {
 }
 
 /// City `h` is corrupted: the adversary's cube goes on (a player cube
-/// comes off), and its adversary ambassadors return to the supply.
+/// comes off), its adversary ambassadors return to the supply, and any
+/// presence on it is destroyed (027).
 pub fn corrupt_city(g: &mut GameState, cx: &mut Cx, h: usize) {
     let w = cx.world;
     if let Some(s) = cube_owner(g, h) {
@@ -783,6 +780,9 @@ pub fn corrupt_city(g: &mut GameState, cx: &mut Cx, h: usize) {
         let k = ambassador(s);
         let mine = g.tokens(h, &k);
         cx.add_tokens(g, h, &k, -mine);
+        if g.tokens(h, &presence(s)) > 0 {
+            board::lose_presence(g, cx, h, s, "corruption");
+        }
     }
     cx.tally(g, "adversary.corruptions", 1);
     if g.round > 0 && g.var(FIRST_CORRUPTION) == 0 {
@@ -793,7 +793,9 @@ pub fn corrupt_city(g: &mut GameState, cx: &mut Cx, h: usize) {
 }
 
 /// `count` adversary troops, each onto a factory among `hexes` (players
-/// choose), or with no factory onto a city.
+/// choose), or with no factory onto a city. With `destroy`, each destroys
+/// the presence on the hex it lands on (027), named for its tally.
+#[allow(clippy::too_many_arguments)]
 pub fn land_troops(
     g: &mut GameState,
     cx: &mut Cx,
@@ -801,6 +803,7 @@ pub fn land_troops(
     count: i64,
     prompt: &str,
     tally: &str,
+    destroy: Option<&'static str>,
 ) -> Res {
     let w = cx.world;
     for _ in 0..count {
@@ -819,6 +822,13 @@ pub fn land_troops(
         place_troop(g, cx, spots[i]);
         cx.per_round(g, OPS, 1);
         cx.tally(g, tally, 1);
+        if let Some(source) = destroy {
+            for s in 0..g.seats.len() {
+                if g.tokens(spots[i], &presence(s)) > 0 {
+                    board::destroy_building(g, cx, spots[i], &presence(s), board::Cause::Effect(source));
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -1087,15 +1097,10 @@ pub fn win_text(level: i64) -> String {
     }
 }
 
-/// A board loss, if any: every city corrupted, or the supply starved.
-/// (The deck running out ends the game in the build step.)
-pub fn loss(w: &World, g: &GameState) -> Option<(&'static str, String)> {
-    if g.var(STARVED) > 0 {
-        return Some(("supply", "the adversary's ambassador supply ran out".into()));
-    }
-    let cities: Vec<usize> = (0..g.hexes.len()).filter(|&h| is_city(w, h)).collect();
-    if !cities.is_empty() && cities.iter().all(|&h| corrupted(g, h)) {
-        return Some(("cities", "every city is corrupted".into()));
-    }
-    None
+/// A board loss, if any: a player with no presence on the board (locked,
+/// 027). (The deck running out ends the game in the build step, and the
+/// Discord deck running out in the tip.)
+pub fn loss(g: &GameState) -> Option<(&'static str, String)> {
+    let gone = (0..g.seats.len()).find(|&s| presence_count(g, s) == 0)?;
+    Some(("presence", format!("seat {gone} has no presence left on the board")))
 }

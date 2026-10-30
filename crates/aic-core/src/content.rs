@@ -134,6 +134,10 @@ pub struct CountryPiece {
     /// `adversary.extra_corrupted` more.
     pub corrupted: Vec<u8>,
     pub ocean: Vec<u8>,
+    /// Cities printed coastal though no ocean touches them (a river or lake:
+    /// a piece without ocean would get no coastal arrivals, 027).
+    #[serde(default)]
+    pub coast: Vec<u8>,
     /// Research stations at setup (they start corrupted).
     pub stations: Vec<u8>,
     /// Printed industrial zones: open hexes next to a city where factories go.
@@ -652,6 +656,7 @@ impl Content {
                 &p.cities,
                 &p.corrupted,
                 &p.ocean,
+                &p.coast,
                 &p.stations,
                 &p.industry,
                 &start,
@@ -662,6 +667,9 @@ impl Content {
                 .any(|&h| h == 0 || h as usize > n)
             {
                 return Err(format!("country piece {i}: hex numbers are 1-{n}"));
+            }
+            if p.coast.iter().any(|h| !p.cities.contains(h)) {
+                return Err(format!("country piece {i}: a coast entry is not a city"));
             }
             if p.corrupted.iter().any(|c| !p.cities.contains(c)) {
                 return Err(format!(

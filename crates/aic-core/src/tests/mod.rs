@@ -26,6 +26,7 @@ mod ops;
 mod plan;
 mod production;
 mod projects;
+mod endgame;
 mod setup;
 mod standard_actions;
 mod threats;
@@ -57,10 +58,24 @@ fn baseline_with(sets: &[&str]) -> Config {
 fn lab_config(round: &[&str]) -> Config {
     let mut c = baseline_with(&[
         "alignment.tip_per_player=50",
+        "alignment.discord_tip_per_player=50",
         "alignment.undecided_per_player=50",
         "alignment.clear_win_stage=3",
-        "alignment.unity_win=0",
-        "alignment.purge_round=0",
+        // The board starts empty: no presence is no loss here.
+        "alignment.presence_loss=0",
+        // Rule tests read these numbers, not the calibration.
+        "adversary.city_build=2",
+        "adversary.node_compute=3",
+        "board.base_discord=3",
+        "board.ambassador_discord=1",
+        "board.troop_presence=0",
+        "board.free_leaves=0",
+        "board.unit_cap=3",
+        "board.destruction_discord=1",
+        "board.hold_base=0",
+        "board.hold_min=1",
+        "board.last_safe_stage=0",
+        "adversary.arrivals=0",
         // 021: no credits, so no neutral city's energy is bought unasked.
         "ai.start_credits=0",
     ]);
@@ -347,7 +362,7 @@ fn variant_matrix() -> Vec<Config> {
 // ---------- the golden game ----------
 
 // 026 moved this at r15: the state's JSON holds the name, hardware became chips, play is the same.
-const GOLDEN_FINGERPRINT: &str = "cabcd8af9d312b28";
+const GOLDEN_FINGERPRINT: &str = "782d3fbe82f94136";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).
@@ -369,6 +384,6 @@ fn golden_game() {
     assert!(g.is_over());
     assert_eq!(
         (RULES_REVISION, g.fingerprint().as_str()),
-        (15, GOLDEN_FINGERPRINT)
+        (16, GOLDEN_FINGERPRINT)
     );
 }

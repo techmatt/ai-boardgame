@@ -316,34 +316,6 @@ fn the_players_lose_when_the_next_round_has_no_adversary_card() {
     assert_eq!((o.won, o.reason.as_str()), (false, "deck_empty"));
 }
 
-#[test]
-fn the_players_lose_when_the_supply_starves_or_every_city_is_corrupted() {
-    // A city that builds 2 with 1 left in the supply.
-    let (rules, mut g) = lab_with(&["adversary.build"], &["adversary.city_build=2"]);
-    let city = rules.map.numbered(0, piece(0).corrupted[0]);
-    put(&mut g, city, ADV_CUBE, 1);
-    g.vars.insert(SUPPLY.into(), 1);
-    g.piles
-        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()]);
-    run(&rules, &mut g);
-    assert_eq!(g.tokens(city, ADV_AMBASSADOR), 1);
-    let o = g.outcome.as_ref().expect("a loss");
-    assert_eq!((o.won, o.reason.as_str()), (false, "supply"));
-
-    let (rules, mut g) = lab(&["adversary.corrupt"]);
-    let m = &rules.map;
-    let n = rules.world().int("adversary.corrupt_at");
-    let last = cities(m)[0];
-    corrupt_cities_except(m, &mut g, &[last]);
-    put(&mut g, last, ADV_AMBASSADOR, n - 1);
-    run(&rules, &mut g);
-    assert!(!g.is_over());
-    put(&mut g, last, ADV_AMBASSADOR, n);
-    run(&rules, &mut g);
-    let o = g.outcome.as_ref().expect("a loss");
-    assert_eq!((o.won, o.reason.as_str()), (false, "cities"));
-}
-
 /// 022 (D13): before this round's build step (a Discord tip in the Sway
 /// phase resolving Buildup or Offensive) the round's twists are the face-up
 /// card's, the one about to become this round's; after it, the current card's.

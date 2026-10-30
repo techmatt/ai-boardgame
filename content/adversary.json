@@ -3,15 +3,24 @@
   "id": "adv_s1_probing_strikes",
   "name": "Probing Strikes",
   "stage": 1,
-  "text": "The Militarist tests the lines: it builds and spreads as usual.",
-  "twists": []
+  "text": "Arrivals: coastal cities. The Militarist tests the lines: it builds and spreads as usual.",
+  "twists": [
+   {
+    "op": "arrivals",
+    "site": "coastal"
+   }
+  ]
  },
  {
   "id": "adv_s1_factory_drive",
   "name": "Factory Drive",
   "stage": 1,
-  "text": "Factories next to clean cities build 1 too.",
+  "text": "Arrivals: industrial zones. Factories next to clean cities build 1 too.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "industrial"
+   },
    {
     "op": "clean_factories",
     "amount": 1
@@ -22,8 +31,12 @@
   "id": "adv_s1_long_patrols",
   "name": "Long Patrols",
   "stage": 1,
-  "text": "Spread reaches 1 hex further.",
+  "text": "Arrivals: research stations. Spread reaches 1 hex further.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "stations"
+   },
    {
     "op": "spread_reach",
     "amount": 1
@@ -34,8 +47,12 @@
   "id": "adv_s1_war_drums",
   "name": "War Drums",
   "stage": 1,
-  "text": "Sway 1 toward Discord.",
+  "text": "Arrivals: military bases. Sway 1 toward Discord.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "bases"
+   },
    {
     "op": "sway",
     "side": "discord",
@@ -47,8 +64,12 @@
   "id": "adv_s2_mobilisation",
   "name": "Mobilisation",
   "stage": 2,
-  "text": "Each corrupted city builds 1 more. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "text": "Arrivals: coastal cities. Each corrupted city builds 1 more. Escalation: each military base gains an adversary ambassador when this round builds.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "coastal"
+   },
    {
     "op": "city_build",
     "amount": 1
@@ -60,8 +81,12 @@
   "id": "adv_s2_station_raids",
   "name": "Station Raids",
   "stage": 2,
-  "text": "Each corrupted research station builds 1. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "text": "Arrivals: research stations. Each corrupted research station builds 1. Escalation: each military base gains an adversary ambassador when this round builds.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "stations"
+   },
    {
     "op": "station_build",
     "amount": 1
@@ -73,8 +98,12 @@
   "id": "adv_s2_fifth_column",
   "name": "Fifth Column",
   "stage": 2,
-  "text": "Clean cities corrupt at 1 fewer ambassador. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "text": "Arrivals: coastal cities. Clean cities corrupt at 1 fewer ambassador. Escalation: each military base gains an adversary ambassador when this round builds.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "coastal"
+   },
    {
     "op": "corrupt_sooner",
     "amount": 1
@@ -86,8 +115,12 @@
   "id": "adv_s2_border_war",
   "name": "Border War",
   "stage": 2,
-  "text": "This round is a war round. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "text": "Arrivals: military bases. This round is a war round. Escalation: each military base gains an adversary ambassador when this round builds.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "bases"
+   },
    {
     "op": "war"
    }
@@ -98,8 +131,12 @@
   "id": "adv_s2_supply_lines",
   "name": "Supply Lines",
   "stage": 2,
-  "text": "Factories next to clean cities build 1 too. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "text": "Arrivals: industrial zones. Factories next to clean cities build 1 too. Escalation: each military base gains an adversary ambassador when this round builds.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "industrial"
+   },
    {
     "op": "clean_factories",
     "amount": 1
@@ -111,8 +148,12 @@
   "id": "adv_s3_total_mobilisation",
   "name": "Total Mobilisation",
   "stage": 3,
-  "text": "Each corrupted city builds 1 more, and factories next to clean cities build 1 too.",
+  "text": "Arrivals: industrial zones. Each corrupted city builds 1 more, and factories next to clean cities build 1 too; sway 2 toward Discord.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "industrial"
+   },
    {
     "op": "city_build",
     "amount": 1
@@ -120,6 +161,11 @@
    {
     "op": "clean_factories",
     "amount": 1
+   },
+   {
+    "op": "sway",
+    "side": "discord",
+    "amount": 2
    }
   ]
  },
@@ -127,14 +173,23 @@
   "id": "adv_s3_blitzkrieg",
   "name": "Blitzkrieg",
   "stage": 3,
-  "text": "This round is a war round, and spread reaches 1 hex further.",
+  "text": "Arrivals: military bases. This round is a war round, and spread reaches 1 hex further; sway 2 toward Discord.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "bases"
+   },
    {
     "op": "war"
    },
    {
     "op": "spread_reach",
     "amount": 1
+   },
+   {
+    "op": "sway",
+    "side": "discord",
+    "amount": 2
    }
   ]
  },
@@ -142,8 +197,12 @@
   "id": "adv_s3_occupation",
   "name": "Occupation",
   "stage": 3,
-  "text": "Clean cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1.",
+  "text": "Arrivals: research stations. Clean cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1; sway 2 toward Discord.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "stations"
+   },
    {
     "op": "corrupt_sooner",
     "amount": 1
@@ -151,6 +210,11 @@
    {
     "op": "station_build",
     "amount": 1
+   },
+   {
+    "op": "sway",
+    "side": "discord",
+    "amount": 2
    }
   ]
  },
@@ -158,8 +222,12 @@
   "id": "adv_s3_iron_doctrine",
   "name": "Iron Doctrine",
   "stage": 3,
-  "text": "This round is a war round; sway 2 toward Discord.",
+  "text": "Arrivals: coastal cities. This round is a war round; sway 2 toward Discord.",
   "twists": [
+   {
+    "op": "arrivals",
+    "site": "coastal"
+   },
    {
     "op": "war"
    },

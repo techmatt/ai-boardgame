@@ -13,7 +13,7 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{adversary, alignment, cards, effects};
+use super::{adversary, alignment, board, cards, effects};
 
 const PARAMS: &[ParamSpec] = &[ParamSpec::int(
     "per_country",
@@ -427,7 +427,8 @@ impl Module for Threats {
                 None => format!("Threat {} executes everywhere", d.name),
             });
             cx.count(g, "executed", 1);
-            effects::run(g, cx, &d.effects, &mut effects::Ctx::threat(scope))?;
+            let source = if d.tier == 1 { "threat1" } else { "threat2" };
+            effects::run(g, cx, &d.effects, &mut effects::Ctx::threat(scope).named(source))?;
             alignment::sway(g, cx, Side::Discord, w.int("alignment.threat_discord"));
             clear(g, cx, &t, scope);
         }
@@ -698,6 +699,51 @@ pub fn lose_ambassador(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> 
         let prompt = format!("Seat {s}: lose the ambassador on which hex?");
         if let Some(i) = cx.choose(s, &prompt, opts)? {
             cx.add_tokens(g, on[i], &k, -1);
+        }
+    }
+    Ok(())
+}
+
+/// Each player in `scope` loses a presence in `scope` or pays `amount`
+/// `resource` (their choice). Losing one needs 2 or more on the board (027:
+/// this never takes a last presence); with neither possible, what they have.
+pub fn lose_presence_or(
+    g: &mut GameState,
+    cx: &mut Cx,
+    scope: Option<usize>,
+    resource: Resource,
+    amount: i64,
+    source: &'static str,
+) -> Res {
+    let w = cx.world;
+    let hexes = scope_hexes(&w, scope);
+    for s in seats_in_scope(&w, g, scope) {
+        let mine: Vec<usize> = if presence_count(g, s) >= 2 {
+            hexes.iter().copied().filter(|&h| g.tokens(h, &presence(s)) > 0).collect()
+        } else {
+            Vec::new()
+        };
+        let mut opts = Vec::new();
+        let can_pay = g.resource(s, resource) >= amount;
+        if can_pay {
+            opts.push(opt(format!("pay {amount} {resource}")));
+        }
+        let off = opts.len();
+        opts.extend(mine.iter().map(|&h| {
+            let mut o = hex_opt(&w, h);
+            o.option = format!("lose presence at {}", o.option);
+            o
+        }));
+        let prompt = format!("Seat {s}: pay {amount} {resource} or lose a presence?");
+        match cx.choose(s, &prompt, opts)? {
+            Some(i) if i < off => cx.add_resource(g, s, resource, -amount),
+            Some(i) => {
+                board::lose_presence(g, cx, mine[i - off], s, source);
+            }
+            None => {
+                let k = g.resource(s, resource);
+                cx.add_resource(g, s, resource, -k);
+            }
         }
     }
     Ok(())

@@ -5,7 +5,13 @@
   "side": "unity",
   "tier": 1,
   "text": "Every player gains 2 credit income for the rest of the game.",
-  "effects": [{"op": "team_income", "resource": "credits", "amount": 2}]
+  "effects": [
+   {
+    "op": "team_income",
+    "resource": "credits",
+    "amount": 2
+   }
+  ]
  },
  {
   "id": "open_market",
@@ -13,7 +19,12 @@
   "side": "unity",
   "tier": 1,
   "text": "The next 2 card purchases are free.",
-  "effects": [{"op": "free_purchases", "count": 2}]
+  "effects": [
+   {
+    "op": "free_purchases",
+    "count": 2
+   }
+  ]
  },
  {
   "id": "think_tank",
@@ -21,7 +32,13 @@
   "side": "unity",
   "tier": 1,
   "text": "Every player gains 1 insight each round for the rest of the game.",
-  "effects": [{"op": "team_income", "resource": "insight", "amount": 1}]
+  "effects": [
+   {
+    "op": "team_income",
+    "resource": "insight",
+    "amount": 1
+   }
+  ]
  },
  {
   "id": "ceasefire",
@@ -29,7 +46,11 @@
   "side": "unity",
   "tier": 1,
   "text": "Counter one active threat.",
-  "effects": [{"op": "counter_threat"}]
+  "effects": [
+   {
+    "op": "counter_threat"
+   }
+  ]
  },
  {
   "id": "civil_defense",
@@ -37,7 +58,12 @@
   "side": "unity",
   "tier": 1,
   "text": "In each country, remove 1 adversary ambassador.",
-  "effects": [{"op": "pushback", "ambassadors": 1}]
+  "effects": [
+   {
+    "op": "pushback",
+    "ambassadors": 1
+   }
+  ]
  },
  {
   "id": "volunteer_corps",
@@ -45,7 +71,13 @@
   "side": "unity",
   "tier": 1,
   "text": "Sway 3 toward Unity.",
-  "effects": [{"op": "sway", "side": "unity", "amount": 3}]
+  "effects": [
+   {
+    "op": "sway",
+    "side": "unity",
+    "amount": 3
+   }
+  ]
  },
  {
   "id": "global_coalition",
@@ -53,7 +85,11 @@
   "side": "unity",
   "tier": 2,
   "text": "Counter every active threat.",
-  "effects": [{"op": "counter_all"}]
+  "effects": [
+   {
+    "op": "counter_all"
+   }
+  ]
  },
  {
   "id": "new_deal",
@@ -61,7 +97,18 @@
   "side": "unity",
   "tier": 2,
   "text": "Every player gains 2 credit income for the rest of the game and 4 credits now.",
-  "effects": [{"op": "team_income", "resource": "credits", "amount": 2}, {"op": "gain", "resource": "credits", "amount": 4}]
+  "effects": [
+   {
+    "op": "team_income",
+    "resource": "credits",
+    "amount": 2
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 4
+   }
+  ]
  },
  {
   "id": "decommission",
@@ -69,69 +116,175 @@
   "side": "unity",
   "tier": 2,
   "text": "Remove a node anywhere on the board (placeholder, 019).",
-  "effects": [{"op": "remove_nodes", "count": 1}]
+  "effects": [
+   {
+    "op": "remove_nodes",
+    "count": 1
+   }
+  ]
  },
  {
   "id": "incursion",
   "name": "Incursion",
   "side": "discord",
   "tier": 1,
-  "text": "Deal one extra threat (2+ Discord tips: two; 5+: three).",
-  "effects": [{"op": "deal_threats", "count": 1}],
-  "steps": [{"at": 2, "effects": [{"op": "deal_threats", "count": 2}]}, {"at": 5, "effects": [{"op": "deal_threats", "count": 3}]}]
+  "text": "Deal one extra threat (5+ Discord tips: three).",
+  "effects": [
+   {
+    "op": "deal_threats",
+    "count": 1
+   }
+  ],
+  "steps": [
+   {
+    "at": 5,
+    "effects": [
+     {
+      "op": "deal_threats",
+      "count": 3
+     }
+    ]
+   }
+  ]
  },
  {
   "id": "blight",
   "name": "Blight",
   "side": "discord",
   "tier": 1,
-  "text": "In each country, the clean city with the most adversary ambassadors gains 1 more (2+ Discord tips: 2; 5+: 3).",
-  "effects": [{"op": "infiltrate", "amount": 1}],
-  "steps": [{"at": 2, "effects": [{"op": "infiltrate", "amount": 2}]}, {"at": 5, "effects": [{"op": "infiltrate", "amount": 3}]}]
- },
- {
-  "id": "buildup",
-  "name": "Buildup",
-  "side": "discord",
-  "tier": 1,
-  "text": "The adversary builds now (5+ Discord tips: it builds, then spreads).",
-  "effects": [{"op": "adversary_build"}],
-  "steps": [{"at": 5, "effects": [{"op": "adversary_build"}, {"op": "adversary_spread"}]}]
+  "text": "In each country, the clean city with the most adversary ambassadors gains 1 more (5+ Discord tips: 3).",
+  "effects": [
+   {
+    "op": "infiltrate",
+    "amount": 1
+   }
+  ],
+  "steps": [
+   {
+    "at": 5,
+    "effects": [
+     {
+      "op": "infiltrate",
+      "amount": 3
+     }
+    ]
+   }
+  ]
  },
  {
   "id": "propaganda",
   "name": "Propaganda",
   "side": "discord",
   "tier": 1,
-  "text": "Every player loses 4 credits (2+ Discord tips: 6; 5+: 8).",
-  "effects": [{"op": "players_lose", "resource": "credits", "amount": 4}],
-  "steps": [{"at": 2, "effects": [{"op": "players_lose", "resource": "credits", "amount": 6}]}, {"at": 5, "effects": [{"op": "players_lose", "resource": "credits", "amount": 8}]}]
+  "text": "Every player loses 4 credits (5+ Discord tips: 8); 2 Sway leaves the Unity bucket.",
+  "effects": [
+   {
+    "op": "players_lose",
+    "resource": "credits",
+    "amount": 4
+   },
+   {
+    "op": "pull_unity",
+    "amount": 2
+   }
+  ],
+  "steps": [
+   {
+    "at": 5,
+    "effects": [
+     {
+      "op": "players_lose",
+      "resource": "credits",
+      "amount": 8
+     },
+     {
+      "op": "pull_unity",
+      "amount": 2
+     }
+    ]
+   }
+  ]
  },
  {
   "id": "offensive",
   "name": "Offensive",
   "side": "discord",
   "tier": 2,
-  "text": "The adversary spreads now (5+ Discord tips: it builds, then spreads).",
-  "effects": [{"op": "adversary_spread"}],
-  "steps": [{"at": 5, "effects": [{"op": "adversary_build"}, {"op": "adversary_spread"}]}]
+  "text": "The adversary spreads now (4+ Discord tips: it builds, then spreads); then all presence on the board's most threatened hex is destroyed.",
+  "effects": [
+   {
+    "op": "adversary_spread"
+   },
+   {
+    "op": "destroy_presence"
+   }
+  ],
+  "steps": [
+   {
+    "at": 4,
+    "effects": [
+     {
+      "op": "adversary_build"
+     },
+     {
+      "op": "adversary_spread"
+     },
+     {
+      "op": "destroy_presence"
+     }
+    ]
+   }
+  ]
  },
  {
   "id": "two_fronts",
   "name": "Two Fronts",
   "side": "discord",
   "tier": 2,
-  "text": "Deal two extra threats (5+ Discord tips: three).",
-  "effects": [{"op": "deal_threats", "count": 2}],
-  "steps": [{"at": 5, "effects": [{"op": "deal_threats", "count": 3}]}]
+  "text": "Deal two extra threats (4+ Discord tips: three).",
+  "effects": [
+   {
+    "op": "deal_threats",
+    "count": 2
+   }
+  ],
+  "steps": [
+   {
+    "at": 4,
+    "effects": [
+     {
+      "op": "deal_threats",
+      "count": 3
+     }
+    ]
+   }
+  ]
  },
  {
   "id": "firestorm",
   "name": "Firestorm",
   "side": "discord",
   "tier": 2,
-  "text": "In each country, the clean city with the most adversary ambassadors gains 2 more (5+ Discord tips: 3).",
-  "effects": [{"op": "infiltrate", "amount": 2}],
-  "steps": [{"at": 5, "effects": [{"op": "infiltrate", "amount": 3}]}]
+  "text": "In each country, the clean city with the most adversary ambassadors gains 2 more (4+ Discord tips: 3, and all presence on the board's most threatened hex is destroyed).",
+  "effects": [
+   {
+    "op": "infiltrate",
+    "amount": 2
+   }
+  ],
+  "steps": [
+   {
+    "at": 4,
+    "effects": [
+     {
+      "op": "infiltrate",
+      "amount": 3
+     },
+     {
+      "op": "destroy_presence"
+     }
+    ]
+   }
+  ]
  }
 ]

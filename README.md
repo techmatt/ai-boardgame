@@ -33,7 +33,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history and does not replay. `archive/`: specs the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces with their cities, ocean, setup buildings and megaproject), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, `alignment.json` (the Unity and Discord decks), all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects and 023's 150-card set, r15 (2 countries, difficulty 0; 018 calibrated it, 019, 021, 022 and 023 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. (021 removed the `cards.variant=free_keep` opt-in: keeps cost insight.) The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects and 023's 150-card set, r16 (2 countries, difficulty 0; 018 calibrated it, 019, 021, 022, 023, 024 and 027 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. (021 removed the `cards.variant=free_keep` opt-in: keeps cost insight.) The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
 | `scripts/` | See [Scripts](#scripts). |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
@@ -56,8 +56,8 @@ Current:
 - `wasm-smoke.mjs`: plays one game through the wasm package in Node. `wasm-parity.mjs`
   (020): replays aic-sim records of every variant in wasm.
 - `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline.
-- `cards/cards_doc.py`: regenerates `docs/cards.md`. `cards/screen_024.py`: the r15
-  screen summary and dominance gate; `screen_023.py` and `screen_022.py` still read r15.
+- `cards/cards_doc.py`: regenerates `docs/cards.md`. `cards/screen_027.py`: the r16
+  screen summary and gate; `cards/screen_024.py`: the r15 ones; `screen_023.py` and `screen_022.py` still read r15.
 - `board/screen_summary.py` (014), `alignment/screen_summary.py` (013): screen summaries
   whose counters still exist.
 - `bench/same_results.py` (012): compares two experiment outputs. `--map OLD=NEW` (026)
@@ -193,7 +193,7 @@ browser; `npm ci` first):
 ```sh
 cargo build --workspace
 cargo test --workspace                             # fast lane: ~4 s once built, ~13 s after an edit in aic-sim (rebuild included); after every change
-cargo test-all                                     # full run, slow lane included: ~3.4 min at r15 (025), the aic-sim slow tests ~160 s
+cargo test-all                                     # full run, slow lane included: ~2.2 min at r16 (027), the aic-sim slow tests ~160 s
 cargo test-slow                                    # the slow lane alone: nearly all of that
 cargo build --release -p aic-sim                   # ~12 s
 ./target/release/aic-sim docs                      # regenerate the docs built from content and configs (--check: report only)
@@ -269,7 +269,7 @@ $S replay out/games/*.json                         # check records natively (als
 | `--json` | off | Print the summary as JSON: every field below, plus the diff, agent, `max_actions` and rules revision. |
 | `--trace` | off | Print the first game of each config: every action (with its option count) and event. Goes to stderr with `--json`. |
 | `--save DIR` | off | `run`/`compare`: write the selected games as game records into `DIR` (created if needed), named `<config name>-<run\|A\|B>-seed<S>.json`, so A and B never collide. The paths are printed after the table, or listed under `saved` in each `--json` result with the match counts. A write failure exits 2. |
-| `--save-when W` | `loss` | Which games to save: `all`, `win`, `loss`, `timeout`, or an end reason code (`supply`, `cities`, `deck_empty`, `unity`, `purge`, ...). Repeatable; a game matching any is saved. With only `--save-seed` given, no default: just those seeds. A reason code no game ended with gets a warning on stderr (likely a typo). |
+| `--save-when W` | `loss` | Which games to save: `all`, `win`, `loss`, `timeout`, or an end reason code (`deck_empty`, `discord_deck`, `presence`, `unity_deck`, `purge`, ...). Repeatable; a game matching any is saved. With only `--save-seed` given, no default: just those seeds. A reason code no game ended with gets a warning on stderr (likely a typo). |
 | `--save-seed S` | | Always save this seed, whatever `--save-when` says and not counted against `--save-max`. Repeatable. A seed outside the range played gets a warning. |
 | `--save-max N` | `20` | Per config, keep the first `N` games `--save-when` matched, in seed order. The output says how many matched, so a cap never truncates silently. |
 
@@ -335,21 +335,20 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
   kind, apart from every engine stream. Games replay from seed + actions, and results
   don't depend on `--threads`.
 - **Heuristic** (`agents/eval.rs`, 014 board): win/loss; corrupted cities (`corrupted`
-  30, plus `cities_danger` 60 per city short of 2 not corrupted), aligned cities
+  30), a seat down to its last presence (`presence_danger` 60, half with two), aligned cities
   (`aligned` 8); adversary ambassadors (`adv_ambassador` 3 each, `on_piece` 2 more on a
   player piece, base or factory, `on_factory` 6 more on a factory), the pressure on cities
   not yet corrupted (`pressure` 0.7 × `corrupted` × (ambassadors / threshold)², the
   threshold and the next build read off the face-up card; the build is the core's
   `plan::next_build`), troops (`troop` 12); the
-  supply against the next build (`supply` 5 per ambassador of slack short of 4,
-  `supply_danger` 40 per ambassador short: starved loses); the bar's blockers
+  Discord deck (`discord_danger` 40 per card short of 3 left: the empty tip loses); the bar's blockers
   (`blocker` 2); Alignment (Unity and Discord tips made, each bucket's fill as a share of
   its next tip, the bar level, and each visible adversary project's fill as a share of
   its cost, `project` 8, 017); the players' board (presence
   4, nodes −25 (022, 020's D9: was −6, and agents made nodes when an equal free choice existed), owned factories 4 (an adversary-owned one −4), chips 2, cities/bases/stations in reach 0.5, owned stations 5 (a corrupted one −5),
   megaproject cubes 2 (adversary's −1), factories 0.5, hardening 1, player ambassadors
   5 in supply (018: was 3, below their 6-credit cost, so agents never bought one) / 2.5 on the board, and toward freeing a corrupted city `freeing` 0.8 ×
-  `corrupted` × share of `free_city_at`); track income, resources, cards in hand and
+  `corrupted` × a share of the hold: gathered ambassadors, then, once enough are at hand, a climbing bonus for landing them, 027); track income, resources, cards in hand and
   built; unpaid threats. Every weight is a parameter: `w.<name>=V` in an agent spec. The
   014 weights are hand-set, not swept.
 
@@ -431,6 +430,12 @@ standard actions and how games ended; then adversary ambassadors on the board by
 and standard actions by kind. Committed with the report and records in
 `experiments/results/screen-014-board/` (`board.md`).
 
+**Endgame screen and gate (027, r16)**: `experiments/screen-027-cards.json` and
+`experiments/screen-027-dominance.json` (024's checks plus `ignore_threats`, `turtle`,
+`free_only`), run with `--quick` (the gate `--games 32`), then `python
+scripts/cards/screen_027.py DIR` and `--gate DIR`; `screen-027-tune.json` is the tuning probe
+(engine, d0 and d2, ~3 min on 12 threads). Results: `experiments/results/screen-027-endgame/`.
+
 **Scarier-adversary screen and dominance gate (024, r15)**: `experiments/screen-024-cards.json`
 and `experiments/screen-024-dominance.json` (023's two specs at r15; same cells), run with the
 same flags, then `python scripts/cards/screen_024.py out/screen-024-cards
@@ -508,7 +513,7 @@ threads with the tuned r10, 107–129 s; 211 s for r10 before tuning, whose game
 the deck's end), then `python scripts/board/screen_019.py out/screen-019`: per cell the win
 rate, rounds and the purge's blockers left; then the troops (built, march steps, moves,
 strikes, destructions by target, absorbed, presence lost and placed back from the
-reserve), nodes (made, removed, peak; the rounds that ended with only nodes blocking the
+destroyed pile), nodes (made, removed, peak; the rounds that ended with only nodes blocking the
 purge) and the strategy-health gate with a pass line per cell (the gate is defined in the
 script's docstring). Counters new in 019: `board.troop_steps`, `.troop_moves`,
 `.troop_strikes`, `.troop_destroyed.<presence|station|factory>`, `.troop_absorbed`,

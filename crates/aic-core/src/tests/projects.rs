@@ -211,12 +211,12 @@ fn node_takedown_removes_a_node_in_reach() {
 /// 020: a sacrificed presence comes off the board (the options listed the free
 /// hexes where a presence could go, so picking one removed nothing).
 #[test]
-fn purge_the_unaligned_sacrifices_a_presence_that_is_on_the_board() {
+fn purge_the_unaligned_never_takes_a_last_presence() {
     let (rules, mut g) = lab(&[]);
     let homes = [0, 1].map(|c| rules.map.numbered(c, piece(c).presence));
     for (s, &h) in homes.iter().enumerate() {
         put(&mut g, h, &presence(s), 1);
-        set_res(&mut g, s, Resource::Ambassadors, 0);
+        set_res(&mut g, s, Resource::Ambassadors, 1);
     }
     // One factory a country, so its troop asks nothing (024).
     for c in 0..2 {
@@ -224,11 +224,9 @@ fn purge_the_unaligned_sacrifices_a_presence_that_is_on_the_board() {
     }
     row(&mut g, &["purge_the_unaligned"]);
     let cost = adversary::project_cost(&rules.world(), &g, "purge_the_unaligned");
-    // Each seat's only answer is its one presence: picked for it.
+    // A last presence is never offered (027): each seat's ambassador goes.
     with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, cost)).unwrap();
     assert_eq!(g.pile(PROJECTS_DONE), ["purge_the_unaligned"]);
-    assert_eq!(homes.map(|h| total(&g, &presence(0)) + total(&g, &presence(1)) + g.tokens(h, NODE)), [0, 0]);
-    assert_eq!(g.stats.counters["alignment.sacrificed_presence"], 2);
-    // It leaves the game: not to the reserve.
-    assert_eq!((g.resource(0, Resource::PresenceReserve), g.resource(1, Resource::PresenceReserve)), (0, 0));
+    assert_eq!((total(&g, &presence(0)), total(&g, &presence(1))), (1, 1));
+    assert_eq!(g.stats.counters["alignment.sacrificed_ambassadors"], 2);
 }

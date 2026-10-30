@@ -106,7 +106,6 @@ fn the_view_follows_every_variant_and_keeps_bookkeeping_out_of_globals() {
     // Flags shown elsewhere: game-wide keys, but still never globals.
     const FLAGS: &[&str] = &[
         "adversary.peek",
-        "adversary.starved",
         "adversary.first_project",
         "adversary.first_corruption",
         "economy.bonus_insight",

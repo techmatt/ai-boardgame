@@ -47,6 +47,14 @@ pub struct Forced {
     pub never_tag: Option<Tag>,
     /// Event-hoarder (023): keep and play only events.
     pub events_only: bool,
+    /// Exploit check (027): no counter paid and no card that counters a threat.
+    pub ignore_threats: bool,
+    /// Exploit check (027): stay on the setup hex and defend it: no presence,
+    /// only the remove, ambassador and hardening standard actions.
+    pub turtle: bool,
+    /// Exploit check (027): only free cities: Diplomacy cards, the ambassador,
+    /// move and remove standard actions, no counters, no presence, no powers.
+    pub free_only: bool,
     /// Keep by plan (off: the wrapped agent's heuristic decides keeps).
     pub plan_keep: bool,
     /// Rounds the keep plan looks at: this round's action phase and the
@@ -84,6 +92,9 @@ impl Forced {
             only_tag,
             never_tag,
             events_only,
+            ignore_threats,
+            turtle,
+            free_only,
             plan_keep,
             plan_rounds: _,
             plan_reserve: _,
@@ -101,7 +112,15 @@ impl Forced {
             || only_tag.is_some()
             || never_tag.is_some()
             || *events_only
+            || *ignore_threats
+            || *turtle
+            || *free_only
             || *plan_keep
+    }
+
+    /// Whether this seat places no presence beyond setup.
+    fn stays_put(&self) -> bool {
+        self.no_presence || self.turtle || self.free_only
     }
 
     /// Whether the card restrictions (mono-tag, ignore-X, event-hoarder)
@@ -114,7 +133,14 @@ impl Forced {
         (self.only_tag.is_none() || has(&self.only_tag))
             && !has(&self.never_tag)
             && (!self.events_only || d.is_event())
+            && (!self.free_only || d.tags.contains(&Tag::Diplomacy))
+            && (!self.ignore_threats || !counters_threats(&d.effects))
     }
+}
+
+/// Whether `ops` counter a threat or make one cheaper.
+fn counters_threats(ops: &[Op]) -> bool {
+    ops.iter().any(|o| matches!(o, Op::CounterThreat | Op::Jam { .. }))
 }
 
 pub struct Policy {
@@ -173,16 +199,21 @@ impl Policy {
         let f = &self.forced;
         match a {
             Action::Tier { tier: 2, .. } => f.tier1_only,
-            Action::Power { .. } => f.no_powers,
-            Action::Pay { .. } => f.no_counters,
-            Action::Standard { act, .. } => f.no_presence && (act == "presence" || act == "presence_buy"),
+            Action::Power { .. } => f.no_powers || f.free_only,
+            Action::Pay { .. } => f.no_counters || f.ignore_threats || f.free_only,
+            Action::Standard { act, .. } => {
+                let presence = act == "presence" || act == "presence_buy";
+                (f.no_presence && presence)
+                    || (f.turtle && !matches!(act.as_str(), "remove" | "ambassador" | "harden" | "harden_buy" | "chips"))
+                    || (f.free_only && !matches!(act.as_str(), "remove" | "ambassador" | "move" | "chips"))
+            }
             Action::Play { card, .. } => {
                 let d = cards::def(world, card);
-                (f.no_presence && places_presence(&d.effects)) || !f.allows(d)
+                (f.stays_put() && places_presence(&d.effects)) || !f.allows(d)
             }
             Action::Keep { card, .. } => !f.allows(cards::def(world, card)),
             Action::Growth { seat, option } => {
-                f.no_presence
+                f.stays_put()
                     && ai::board(world, *seat as usize)
                         .growth
                         .get(*option as usize)

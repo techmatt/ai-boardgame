@@ -144,6 +144,9 @@ macro_rules! with_policy_params {
             ("only_tag", 0.0, "dominance check (023): keep and play only this tag (1-6: science, industry, cyber, power, diplomacy, security)"),
             ("never_tag", 0.0, "dominance check (023): never keep or play this tag (1-6 as only_tag)"),
             ("events_only", 0.0, "dominance check (023): keep and play only events"),
+            ("ignore_threats", 0.0, "exploit check (027): no counters, no card that counters a threat"),
+            ("turtle", 0.0, "exploit check (027): no presence beyond setup; only remove, ambassador and hardening actions"),
+            ("free_only", 0.0, "exploit check (027): only Diplomacy cards and the ambassador, move and remove actions"),
         ]
     };
 }
@@ -390,6 +393,9 @@ impl AgentSpec {
             only_tag: tag("only_tag"),
             never_tag: tag("never_tag"),
             events_only: on("events_only"),
+            ignore_threats: on("ignore_threats"),
+            turtle: on("turtle"),
+            free_only: on("free_only"),
             plan_keep: on("plan_keep"),
             plan_rounds: num("plan_rounds") as usize,
             plan_reserve: num("plan_reserve") as i64,
@@ -548,6 +554,9 @@ mod tests {
             "engine:only_tag=3",
             "engine:never_tag=6",
             "engine:events_only=1",
+            "engine:ignore_threats=1",
+            "engine:turtle=1",
+            "engine:free_only=1",
         ] {
             assert_eq!(AgentSpec::parse(spec).unwrap().label(), spec);
             replay_and_repeat(spec, 60, false);
@@ -655,17 +664,17 @@ mod tests {
             w.clock = clock;
             eval::Eval::new(&r, w).value(&r, g)
         };
-        // Round 4, one Unity tip (4 Sway: 1 a round), 8 tips (32 Sway) for
-        // the outright win: 28 rounds needed. Two cards left (the face-up
-        // one and one in the deck): 2 action phases after this one. 26 short.
+        // Round 4, one Unity tip (4 Sway: 1 a round), 4 tips (16 Sway) for
+        // the last bar drop: 12 rounds needed. Two cards left (the face-up
+        // one and one in the deck): 2 action phases after this one. 10 short.
         g.round = 4;
         g.vars.insert("alignment.unity_tips".into(), 1);
         assert_eq!(g.pile("adversary.next").len(), 1);
         let deck = g.pile("adversary.deck").to_vec();
         g.piles.insert("adversary.deck".into(), deck[..1].to_vec());
-        assert!((value(0.0, &g) - value(2.0, &g) - 2.0 * 26.0).abs() < 1e-9);
-        // On course (8 tips by round 4): no cost.
-        g.vars.insert("alignment.unity_tips".into(), 8);
+        assert!((value(0.0, &g) - value(2.0, &g) - 2.0 * 10.0).abs() < 1e-9);
+        // On course (4 tips by round 4): no cost.
+        g.vars.insert("alignment.unity_tips".into(), 4);
         assert_eq!(value(0.0, &g), value(2.0, &g));
         // The engine watches the deck by default; greedy doesn't (its
         // games, the difficulty calibration, are unchanged).
