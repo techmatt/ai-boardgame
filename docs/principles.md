@@ -92,6 +92,32 @@ is simpler and should give similar balance. Where determinization or hidden-info
 handling gets in the way, it may be dropped. Today's agents still determinize (018 did
 not need to drop it).
 
+## Dominance checks (a standing gate; Matt, 2026-10-29)
+
+> Balance should require thought, not an obvious heuristic dominating.
+
+Each check is a fixed, simple policy: mostly the engine agent with one behaviour
+forced (`engine:<check>=1` in an experiment spec; `crates/aic-sim/src/agents/policy.rs`).
+The strategy-health gate runs them beside the engine at d0, d2 and d4
+(`experiments/screen-022-dominance.json`, summarised by `scripts/cards/screen_022.py`).
+
+- **Healthy:** every check loses ground to the engine at d2 and above, and none matches
+  it at d4. Report each check's gap (engine win % minus the check's) with its noise.
+- **When one doesn't lose:** the check names a rule or price that makes thinking
+  unnecessary. Fix it when the fix is a number or a content change; otherwise report
+  the structural cause.
+- **The list grows:** a new mechanic adds the obvious fixed policy for it.
+
+| Check (since) | Spec | Policy |
+|---|---|---|
+| keep-all (022) | `keep_all=1` | keeps every drafted card it can afford |
+| keep-cheapest-k (022) | `keep_k=2` | keeps only its k cheapest drafted cards (k = 2) |
+| tier-1-only (022) | `tier1_only=1` | never drafts from tier 2 |
+| tier-2-rush (022) | `tier2_rush=1` | drafts from tier 2 whenever it can afford the keep |
+| no-powers (022) | `no_powers=1` | never uses an AI-board power |
+| no-counters (022) | `no_counters=1` | never pays toward a threat's counter |
+| no-presence (022) | `no_presence=1` | places no presence beyond setup (no standard action, card or growth that places one) |
+
 Weigh each measure's cost against the decision it informs: screen cheaply first, and run expensive measures only on finalists.
 
 Calibrate by reasoning first: before simulating, think through when each decision, card

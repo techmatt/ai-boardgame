@@ -192,3 +192,47 @@ fn blackout_and_sabotage_last_into_the_next_rounds_production() {
     assert!(track > 0);
     assert_eq!(gain(&g, &b, 1), gain(&twin, &bt, 1) - track);
 }
+
+/// 022 (D11): a threat dealt after the counter phase (a Discord tip in
+/// production) waits beside the row: it executes next round, after a
+/// counter phase in which it could be paid.
+#[test]
+fn a_threat_dealt_after_the_counter_phase_executes_next_round() {
+    let (rules, mut g) = threat_lab();
+    deal(&mut g, "supply_raid", 1);
+    // Deal one extra as if in the execute phase (after the counter phase).
+    g.phase = 1;
+    with_cx(&rules, |cx| threats::deal_extra(&mut g, cx, 1));
+    g.phase = 0;
+    let late = g.pile("threats.on.0")[0].clone();
+    assert_eq!(g.var(&format!("threats.late.{late}")), 1);
+    let pass_round = |g: &mut GameState| {
+        for s in 0..2 {
+            rules.apply_mut(g, &Action::Pass { seat: s }, None).unwrap();
+        }
+        answer_all(&rules, g);
+    };
+    pass_round(&mut g);
+    assert_eq!(g.round, 2);
+    assert_eq!(g.stats.counters["threats.executed"], 1);
+    assert_eq!(g.pile("threats.on.0"), [late.clone()]);
+    pass_round(&mut g);
+    assert_eq!(g.stats.counters["threats.executed"], 2);
+    assert!(g.pile("threats.on.0").is_empty());
+    assert_eq!(g.var(&format!("threats.late.{late}")), 0);
+}
+
+/// 022 (D12): the tier-2 deck covers the largest round's deal (4 countries,
+/// difficulty 1+), and a deal the deck can't supply is counted.
+#[test]
+fn the_tier_2_deck_covers_four_countries_and_a_short_deal_is_counted() {
+    let base = Rules::new(&baseline()).unwrap();
+    let w = base.world();
+    let tier2 = crate::content().threats.iter().filter(|t| t.tier == 2).count() as i64;
+    let most = 4 * w.int("threats.per_country") + w.int("adversary.extra_threats");
+    assert!(tier2 > most, "{tier2} tier-2 threats for a deal of {most}");
+    let (rules, mut g) = threat_lab();
+    g.piles.insert("threats.deck.1".into(), vec!["blackout".into()]);
+    with_cx(&rules, |cx| threats::deal_extra(&mut g, cx, 3));
+    assert_eq!(g.stats.counters["threats.short"], 2);
+}

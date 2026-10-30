@@ -140,3 +140,40 @@ fn off_variants_remove_threats_alignment_and_the_draft() {
         .iter()
         .all(|a| !matches!(a, Action::Tier { .. } | Action::Draft { .. })));
 }
+
+#[test]
+fn playing_a_card_pays_its_insight_and_lowers_its_income() {
+    // 022: insight to play, shared with keeps; `lowers` cuts an income for good.
+    let (rules, mut g) = lab_actions();
+    for c in ["fab_line", "fusion_plant"] {
+        g.piles.get_mut("cards.deck.1").unwrap().retain(|x| x != c);
+        g.piles.get_mut("cards.deck.2").unwrap().retain(|x| x != c);
+    }
+    g.piles.insert("cards.hand.1".into(), vec!["fab_line".into()]);
+    set_res(&mut g, 1, "credits", 20);
+    let playable = |g: &GameState| {
+        rules
+            .legal_actions(g)
+            .iter()
+            .any(|a| matches!(a, Action::Play { seat: 1, card } if card == "fab_line"))
+    };
+    set_res(&mut g, 1, "insight", 0);
+    assert!(!playable(&g), "Fab Line costs 1 insight");
+    set_res(&mut g, 1, "insight", 2);
+    assert!(playable(&g));
+    rules
+        .apply_mut(&mut g, &Action::Play { seat: 1, card: "fab_line".into() }, None)
+        .unwrap();
+    assert_eq!(g.resource(1, "insight"), 1);
+    // Fusion Plant lowers credit income by 1, through the production key.
+    let w = rules.world();
+    let d = crate::modules::cards::def(&w, "fusion_plant");
+    assert_eq!(d.lowers, vec![("credits".to_string(), 1)]);
+    assert_eq!(d.insight, 2);
+    let before = crate::modules::economy::income(&w, &g, 1)[0];
+    let mut c = crate::modules::cards::def(&w, "fusion_plant").clone();
+    c.lowers = vec![("credits".into(), before + 1)];
+    assert!(!crate::modules::cards::lowers_ok(&w, &g, 1, &c), "can't lower an income below 0");
+    c.lowers = vec![("credits".into(), 1)];
+    assert!(crate::modules::cards::lowers_ok(&w, &g, 1, &c));
+}

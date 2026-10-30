@@ -5,6 +5,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 4,
+  "insight": 1,
   "tags": [
    "industry"
   ],
@@ -28,6 +29,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 5,
+  "insight": 1,
   "tags": [
    "industry"
   ],
@@ -55,6 +57,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 6,
+  "insight": 1,
   "tags": [
    "industry",
    "power"
@@ -73,6 +76,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 5,
+  "insight": 1,
   "tags": [
    "industry"
   ],
@@ -91,6 +95,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 3,
+  "insight": 1,
   "tags": [
    "power"
   ],
@@ -109,6 +114,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 3,
+  "insight": 1,
   "tags": [
    "power"
   ],
@@ -134,6 +140,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 4,
+  "insight": 1,
   "tags": [
    "power"
   ],
@@ -160,6 +167,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 5,
+  "insight": 1,
   "tags": [
    "cyber"
   ],
@@ -185,6 +193,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 6,
+  "insight": 1,
   "tags": [
    "science",
    "cyber"
@@ -210,6 +219,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 4,
+  "insight": 1,
   "tags": [
    "cyber",
    "security"
@@ -227,6 +237,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 4,
+  "insight": 1,
   "tags": [
    "security"
   ],
@@ -253,6 +264,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 5,
+  "insight": 1,
   "tags": [
    "security",
    "diplomacy"
@@ -271,6 +283,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 4,
+  "insight": 1,
   "tags": [
    "diplomacy"
   ],
@@ -287,6 +300,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 5,
+  "insight": 1,
   "tags": [
    "diplomacy"
   ],
@@ -329,6 +343,7 @@
   "tier": 1,
   "kind": "program",
   "cost": 2,
+  "insight": 1,
   "tags": [
    "industry"
   ],
@@ -345,6 +360,7 @@
   "tier": 1,
   "kind": "program",
   "cost": 3,
+  "insight": 1,
   "tags": [
    "industry"
   ],
@@ -468,6 +484,7 @@
   "tier": 1,
   "kind": "event",
   "cost": 2,
+  "insight": 1,
   "tags": [
    "security"
   ],
@@ -486,6 +503,7 @@
   "tier": 1,
   "kind": "event",
   "cost": 3,
+  "insight": 1,
   "tags": [
    "security"
   ],
@@ -658,6 +676,13 @@
   "tier": 2,
   "kind": "building",
   "cost": 9,
+  "insight": 2,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
   "antimatter": 1,
   "needs": [
    [
@@ -686,6 +711,7 @@
   "tier": 2,
   "kind": "building",
   "cost": 8,
+  "insight": 2,
   "antimatter": 1,
   "needs": [
    [
@@ -720,6 +746,13 @@
   "tier": 2,
   "kind": "building",
   "cost": 10,
+  "insight": 2,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
   "needs": [
    [
     "security",
@@ -753,6 +786,13 @@
   "tier": 2,
   "kind": "building",
   "cost": 7,
+  "insight": 2,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
   "needs": [
    [
     "power",
@@ -781,6 +821,7 @@
   "tier": 2,
   "kind": "building",
   "cost": 13,
+  "insight": 2,
   "needs": [
    [
     "industry",
@@ -807,6 +848,7 @@
   "tier": 2,
   "kind": "event",
   "cost": 4,
+  "insight": 2,
   "antimatter": 1,
   "text": "Remove every adversary ambassador and troop in one hex.",
   "effects": [
@@ -824,6 +866,7 @@
   "tier": 2,
   "kind": "program",
   "cost": 5,
+  "insight": 2,
   "needs": [
    [
     "diplomacy",
@@ -851,6 +894,7 @@
   "tier": 2,
   "kind": "program",
   "cost": 6,
+  "insight": 2,
   "needs": [
    [
     "industry",
@@ -876,6 +920,7 @@
   "tier": 2,
   "kind": "event",
   "cost": 3,
+  "insight": 2,
   "antimatter": 1,
   "text": "Counter any one threat.",
   "effects": [
@@ -894,6 +939,7 @@
   "tier": 2,
   "kind": "event",
   "cost": 5,
+  "insight": 2,
   "needs": [
    [
     "cyber",
@@ -918,6 +964,7 @@
   "tier": 0,
   "kind": "building",
   "cost": 3,
+  "insight": 1,
   "text": "Build a factory on an empty open hex touching a city; +1 credit income.",
   "effects": [
    {
@@ -969,6 +1016,7 @@
   "tier": 0,
   "kind": "building",
   "cost": 4,
+  "insight": 1,
   "text": "+1 building slot (takes no slot itself).",
   "passives": [
    {
@@ -988,6 +1036,7 @@
   "tier": 0,
   "kind": "building",
   "cost": 3,
+  "insight": 1,
   "text": "Once a round, pay 1 energy to harden 2 buildings in a country where you have a presence.",
   "ability": {
    "cost": [
@@ -1015,6 +1064,7 @@
   "tier": 0,
   "kind": "event",
   "cost": 1,
+  "insight": 1,
   "text": "Remove 3 worth of adversary pieces in a hex within your reach.",
   "effects": [
    {
@@ -1073,6 +1123,7 @@
   "tier": 2,
   "kind": "event",
   "cost": 8,
+  "insight": 2,
   "antimatter": 2,
   "text": "Discard one visible adversary project, with its compute (placeholder).",
   "effects": [
@@ -1093,6 +1144,7 @@
   "tier": 2,
   "kind": "event",
   "cost": 4,
+  "insight": 2,
   "antimatter": 1,
   "text": "Remove a node within your reach (placeholder, 019: the tier-2 way to remove a node).",
   "effects": [
@@ -1129,6 +1181,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 3,
+  "insight": 1,
   "tags": [
    "science"
   ],
@@ -1162,6 +1215,7 @@
   "tier": 1,
   "kind": "program",
   "cost": 2,
+  "insight": 1,
   "tags": [
    "diplomacy"
   ],
@@ -1194,6 +1248,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 3,
+  "insight": 1,
   "tags": [
    "industry"
   ],
@@ -1227,6 +1282,7 @@
   "tier": 1,
   "kind": "program",
   "cost": 2,
+  "insight": 1,
   "tags": [
    "security"
   ],
@@ -1278,6 +1334,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 3,
+  "insight": 1,
   "tags": [
    "science",
    "diplomacy"
@@ -1334,6 +1391,7 @@
   "tier": 2,
   "kind": "program",
   "cost": 4,
+  "insight": 2,
   "tags": [
    "diplomacy",
    "cyber"

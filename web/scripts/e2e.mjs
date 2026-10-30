@@ -181,9 +181,11 @@ try {
   })()`);
   check(named.names.every((n) => n && named.label.includes(n.split(' ')[0]) && named.strip.includes(n)),
     `countries named on the board and strip (${named.names.join(', ')})`);
-  check(named.boards.every((b) => b && b.length === 1) && named.rows.length === named.boards.length
-    && named.rows.every((r) => r.rows === 1 && r.current === 1 && r.open >= 1 && r.steps > r.open && r.t2 > 0),
-    `each seat's AI board drawn with its presence track (${named.rows.map((r) => `${r.open}/${r.steps} uncovered`).join(', ')})`);
+  // 021: a board has two tracks (presence and the second presence track); at the start
+  // only the first has an uncovered (and current) step.
+  check(named.boards.every((b) => b && b.length >= 1) && named.rows.length === named.boards.length
+    && named.rows.every((r, i) => r.rows === named.boards[i].length && r.current >= 1 && r.current <= r.rows && r.open >= 1 && r.steps > r.open && r.t2 > 0),
+    `each seat's AI board drawn with its tracks (${named.rows.map((r) => `${r.rows} tracks, ${r.open}/${r.steps} uncovered`).join('; ')})`);
   const bookkeeping = /^(ai\.track\.|threats\.paid\.|threats\.jam\.|cards\.(tier|picked|next_discount|civic_used|unpowered)\.|adversary\.removed_troop\.|board\.(blackout|sabotage|shelter|project|project_done|track)\.)/;
   check(!named.keys.some((k) => bookkeeping.test(k)) && named.raw === 0,
     `no bookkeeping vars among the globals (${named.keys.length} globals)`);
@@ -284,6 +286,35 @@ try {
   check(!words.place && !words.id, `log, prompt and buttons name hexes and cards in words${words.place || words.id ? ` (saw ${words.place ?? words.id})` : ''}`);
   check(/rules r\d+/.test(words.version), `the header shows the rules revision (${words.version})`);
   check(words.seek < 100, `stepping through ${end.n} actions stays fast (slowest seek ${words.seek.toFixed(0)} ms)`);
+
+  // 022 (D4, D7): Page Up / Page Down move by rounds, the speed menu, and the log's
+  // per-phase groups outline their hexes on hover.
+  const key = async (k, code) => {
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code: k, windowsVirtualKeyCode: code });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code: k, windowsVirtualKeyCode: code });
+  };
+  await js(`(() => { document.activeElement?.blur(); window.aic.seek(0); })()`);
+  await key('PageDown', 34);
+  const r1 = await js(`(() => { const f = window.aic.timeline.frames, c = window.aic.timeline.cursor; return { c, r: f[c].snap.state.round, prev: c > 0 ? f[c - 1].snap.state.round : -1 }; })()`);
+  await key('PageDown', 34);
+  const r2 = await js(`(() => { const f = window.aic.timeline.frames, c = window.aic.timeline.cursor; return { c, r: f[c].snap.state.round }; })()`);
+  await key('PageUp', 33);
+  const r3 = await js('window.aic.timeline.cursor');
+  check(r1.c > 0 && r1.r === r1.prev + 1 && r2.r === r1.r + 1 && r3 === r1.c,
+    `Page Down jumps to the next round (step ${r1.c}, round ${r1.r}; then round ${r2.r}) and Page Up back (step ${r3})`);
+  const speeds = await js(`[...document.querySelectorAll('#speed option')].map((o) => o.textContent).join(' ')`);
+  check(speeds === '1x 4x 16x', `the autoplay speed menu offers 1x 4x 16x (${speeds})`);
+  const groups = await js(`(() => {
+    const g = [...document.querySelectorAll('#tab-log details.pgroup[data-hexes]')];
+    const d = g[g.length - 1];
+    if (!d) return { n: 0 };
+    d.querySelector('summary').dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    const want = d.dataset.hexes.split(' ');
+    const hl = [...document.querySelectorAll('#board .hex.hl')].map((e) => e.dataset.hex);
+    return { n: g.length, ok: want.every((h) => hl.includes(h)) && hl.length === want.length };
+  })()`);
+  check(groups.n > 0 && groups.ok, `the log groups automatic phases (${groups.n} groups with hexes) and a heading's hover outlines its hexes`);
+  await js(`(() => { document.body.dispatchEvent(new MouseEvent('mousemove', { bubbles: true })); window.aic.seek(window.aic.timeline.last); })()`);
 
   // Undo by replay, and the saved session survives a reload.
   await js(`document.getElementById('undo').click()`);

@@ -323,7 +323,7 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
         }
         "harden" => {
             if cards::has_passive(w, g, seat, |p| matches!(p, Passive::HardenAction)) {
-                all.filter(|&h| reach(h) && has_building(g, h)).collect()
+                all.filter(|&h| reach(h) && hardenable(g, h)).collect()
             } else {
                 Vec::new()
             }
@@ -563,6 +563,11 @@ fn produce_units(g: &mut GameState, cx: &mut Cx) -> Res {
         if g.tokens(h, ADV_AMBASSADOR) > 0 || corrupted(g, h) {
             if !corrupted(g, h) {
                 adversary::remove(g, cx, h, 1);
+            } else if let Some(s) = player_ambassador(g, h) {
+                // 022 (D1): a player ambassador on an adversary-owned factory
+                // is used up for Unity; the troop is still made (locked).
+                cx.add_tokens(g, h, &ambassador(s), -1);
+                alignment::sway(g, cx, Side::Unity, w.int("board.factory_unity"));
             }
             for _ in 0..per {
                 adversary::place_troop(g, cx, h);
@@ -814,6 +819,13 @@ fn troop_targets_on(g: &GameState, h: usize) -> Vec<String> {
         out.push(presence(s));
     }
     out
+}
+
+/// Whether a hardening token on hex `h` can protect something: a
+/// player-owned building that is not corrupted (what troops strike; 022:
+/// hardening went on any building, the adversary's too, where nothing used it).
+pub fn hardenable(g: &GameState, h: usize) -> bool {
+    has_building(g, h) && cube_owner(g, h).is_some() && !corrupted(g, h)
 }
 
 /// Whether hex `h` holds anything an adversary troop targets.

@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use crate::action::Action;
-use crate::content::{CardDef, Passive, ANY_TAG};
+use crate::content::{CardDef, Passive, ANY_TAG, RESOURCES};
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -17,7 +17,7 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{ai, alignment, effects};
+use super::{ai, alignment, economy, effects};
 
 const DRAFT_PARAMS: &[ParamSpec] = &[
     ParamSpec::int("deal", 0, 10, "cards each player drafts from each round after the first, choosing each one's tier"),
@@ -386,6 +386,8 @@ fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static s
         || g.resource(seat, "antimatter") < d.antimatter
         || g.resource(seat, "energy") < d.energy
         || g.resource(seat, HARDWARE) < d.hardware
+        || g.resource(seat, "insight") < d.insight
+        || !lowers_ok(w, g, seat, d)
     {
         return Some("unaffordable");
     }
@@ -396,6 +398,21 @@ fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static s
         return Some("no target");
     }
     None
+}
+
+/// Whether seat `s` has the income card `d` lowers (022): each `lowers`
+/// resource's income at least the amount.
+pub fn lowers_ok(w: &World, g: &GameState, seat: usize, d: &CardDef) -> bool {
+    if d.lowers.is_empty() {
+        return true;
+    }
+    let income = economy::income(w, g, seat);
+    d.lowers.iter().all(|(r, n)| {
+        RESOURCES
+            .iter()
+            .position(|x| x == r)
+            .is_some_and(|i| income[i] >= *n)
+    })
 }
 
 /// The AI's resource discount on card `d` for seat `s`: (resource, credits
@@ -708,6 +725,14 @@ impl Cards {
         cx.add_resource(g, seat, "antimatter", -d.antimatter);
         cx.add_resource(g, seat, "energy", -d.energy);
         cx.add_resource(g, seat, HARDWARE, -d.hardware);
+        if d.insight > 0 {
+            cx.add_resource(g, seat, "insight", -d.insight);
+            cx.tally(g, "cards.insight_played", d.insight);
+            cx.per_round(g, "cards.insight_played", d.insight);
+        }
+        for (r, n) in &d.lowers {
+            cx.add_key(g, economy::production_key(seat, r), -n);
+        }
         if d.hardware > 0 {
             cx.tally(g, "board.hardware_spent", d.hardware);
         }
@@ -988,6 +1013,10 @@ impl Module for Cards {
                     }
                     cx.add_resource(g, s, "insight", -ins);
                     cx.add_resource(g, s, "credits", -cr);
+                    if ins > 0 {
+                        cx.tally(g, "cards.insight_kept", ins);
+                        cx.per_round(g, "cards.insight_kept", ins);
+                    }
                     if g.round > 1 && cr > 0 {
                         cx.tally(g, "cards.insight_bought", cr / self.insight_credits);
                     }
@@ -1037,10 +1066,13 @@ impl Module for Cards {
             if !d.tags.is_empty() {
                 bits.push(d.tags.join("/"));
             }
-            for (n, r) in [(d.energy, "energy"), (d.hardware, "hardware"), (d.antimatter, "antimatter")] {
+            for (n, r) in [(d.insight, "insight"), (d.energy, "energy"), (d.hardware, "hardware"), (d.antimatter, "antimatter")] {
                 if n > 0 {
                     bits.push(format!("+{n} {r}"));
                 }
+            }
+            for (r, n) in &d.lowers {
+                bits.push(format!("-{n} {r} income"));
             }
             if !d.needs.is_empty() {
                 let needs: Vec<String> = d.needs.iter().map(|(t, n)| format!("{n} {t}")).collect();

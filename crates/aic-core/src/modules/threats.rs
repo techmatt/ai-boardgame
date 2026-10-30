@@ -33,7 +33,7 @@ const PHASES: &[PhaseSpec] = &[
     ),
     PhaseSpec::auto(
         "execute",
-        "refund partial payments, then uncountered threats execute in order",
+        "refund partial payments, then uncountered threats execute in order (one dealt after the counter phase waits a round)",
     ),
 ];
 
@@ -109,6 +109,28 @@ fn jam_key(threat: &str) -> String {
     format!("threats.jam.{threat}")
 }
 
+/// The round a threat was dealt in, if it came after that round's counter
+/// phase (it waits beside the row and executes next round, 022).
+fn late_key(threat: &str) -> String {
+    format!("threats.late.{threat}")
+}
+
+/// Whether the counter phase has passed this round (the current phase is
+/// after the round's `threats.counter`).
+fn after_counter(g: &GameState) -> bool {
+    g.config
+        .round
+        .iter()
+        .position(|p| p.split('+').any(|q| q == "threats.counter"))
+        .is_some_and(|i| g.phase > i)
+}
+
+/// Whether `threat` was dealt this round after the counter phase: it skips
+/// this round's execution.
+fn waits(g: &GameState, threat: &str) -> bool {
+    g.var(&late_key(threat)) == g.round as i64
+}
+
 fn def<'w>(w: &World<'w>, id: &str) -> &'w ThreatDef {
     &w.content.threats[w.content.threat_index(id).expect("threat in content")]
 }
@@ -145,13 +167,18 @@ fn deal_pile(shared: bool, c: usize) -> String {
 
 /// Deals the top threat of the `tier` deck onto `to`, counted under
 /// `threats.dealt` whichever module is running. False if the deck is empty
-/// (no reshuffle here: the caller refills first if it may).
+/// (no reshuffle here: the caller refills first if it may, and counts what
+/// it could not deal under `threats.short`). A threat dealt after the counter
+/// phase is stamped with the round: it executes next round, not this one.
 fn deal(g: &mut GameState, cx: &mut Cx, tier: u8, to: &str) -> bool {
     let Some(id) = g.pile(&deck(tier)).first().cloned() else {
         return false;
     };
     cx.move_card(g, &id, &deck(tier), to, false).unwrap();
     cx.tally(g, "threats.dealt", 1);
+    if after_counter(g) {
+        cx.set_key(g, late_key(&id), g.round as i64);
+    }
     true
 }
 
@@ -214,6 +241,7 @@ fn clear(g: &mut GameState, cx: &mut Cx, threat: &str, scope: Option<usize>) {
     let w = cx.world;
     let t = def(&w, threat);
     cx.set_key(g, jam_key(threat), 0);
+    cx.set_key(g, late_key(threat), 0);
     cx.move_card(g, threat, &pile_of(scope), &discard(t.tier), true)
         .expect("active threat");
 }
@@ -239,8 +267,10 @@ pub fn deal_extra(g: &mut GameState, cx: &mut Cx, n: i64) {
     };
     let tier = adversary::threat_tier(&w, g);
     let countries = w.map.countries.len().max(1);
-    for k in 0..n.max(0) as usize {
-        if !deal(g, cx, tier, &deal_pile(shared, k % countries)) {
+    let n = n.max(0);
+    for k in 0..n {
+        if !deal(g, cx, tier, &deal_pile(shared, k as usize % countries)) {
+            cx.tally(g, "threats.short", n - k);
             return;
         }
     }
@@ -367,9 +397,12 @@ impl Module for Threats {
             let first = (g.round.max(1) as usize - 1) % n.max(1);
             for c in 0..n {
                 let more = (0..extra).filter(|k| (first + k) % n == c).count() as i64;
-                for _ in 0..self.per_country + more {
+                let want = self.per_country + more;
+                for k in 0..want {
                     self.refill(g, cx, tier);
                     if !deal(g, cx, tier, &deal_pile(self.shared, c)) {
+                        // 022: a short deal is counted, not silent.
+                        cx.tally(g, "threats.short", want - k);
                         break;
                     }
                 }
@@ -377,13 +410,17 @@ impl Module for Threats {
             return Ok(());
         }
         // Execute: anything fully paid is countered, partial payments come
-        // back, then each threat in order.
+        // back, then each threat in order. A threat dealt after this round's
+        // counter phase waits a round (022: it executed at once, uncounterable).
         for (t, _) in active(g) {
             if !try_complete(g, cx, &t) {
                 refund(g, cx, &t);
             }
         }
         for (t, scope) in active(g) {
+            if waits(g, &t) {
+                continue;
+            }
             let d = def(&w, &t);
             cx.note(None, || match scope {
                 Some(c) => format!("Threat {} executes in {}", d.name, country_name(&w, c)),
@@ -494,7 +531,7 @@ impl Module for Threats {
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
         // Payments and jams belong to a threat card: shown in its text.
-        out.bookkeeping(&["threats.paid.", "threats.jam."]);
+        out.bookkeeping(&["threats.paid.", "threats.jam.", "threats.late."]);
         let show = |t: &str| {
             let d = def(w, t);
             let req = requirement(w, g, t);
@@ -518,6 +555,9 @@ impl Module for Threats {
             let jam = g.var(&jam_key(t));
             if jam > 0 {
                 extra.push_str(&format!(" Jammed: needs {jam} less of each."));
+            }
+            if waits(g, t) {
+                extra.push_str(" Dealt after the counter phase: executes next round.");
             }
             CardView {
                 id: t.to_string(),

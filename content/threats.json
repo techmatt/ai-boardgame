@@ -305,5 +305,112 @@
     "amount": 3
    }
   ]
+ },
+ {
+  "id": "conscription",
+  "name": "Conscription",
+  "tier": 2,
+  "text": "Each player here discards 2 cards or pays 6 energy; the adversary gains 2 compute.",
+  "counter": [
+   [
+    "antimatter",
+    1
+   ]
+  ],
+  "effects": [
+   {
+    "op": "requisition",
+    "resource": "energy",
+    "amount": 6,
+    "cards": 2
+   },
+   {
+    "op": "compute",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "fifth_column",
+  "name": "Fifth column",
+  "tier": 2,
+  "text": "3 adversary ambassadors land on player-owned pieces here (presence, aligned cities, owned buildings; players choose each); the adversary gains 3 compute.",
+  "counter": [
+   [
+    "antimatter",
+    1
+   ],
+   [
+    "energy",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "ambassadors",
+    "at": "player_buildings",
+    "count": 3
+   },
+   {
+    "op": "compute",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "insurrection",
+  "name": "Insurrection",
+  "tier": 2,
+  "text": "3 adversary ambassadors land on clean cities here (players choose each); sway 1 toward Discord.",
+  "counter": [
+   [
+    "antimatter",
+    1
+   ],
+   [
+    "credits",
+    3
+   ]
+  ],
+  "effects": [
+   {
+    "op": "ambassadors",
+    "at": "clean_cities",
+    "count": 3
+   },
+   {
+    "op": "discord",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "siege",
+  "name": "Siege",
+  "tier": 2,
+  "text": "An adversary troop lands on a factory here (players choose; with no factory, on a city), and each player here loses an ambassador (from supply, else from the board); the adversary gains 2 compute.",
+  "counter": [
+   [
+    "energy",
+    5
+   ],
+   [
+    "credits",
+    2
+   ]
+  ],
+  "effects": [
+   {
+    "op": "troop",
+    "count": 1
+   },
+   {
+    "op": "lose_ambassador"
+   },
+   {
+    "op": "compute",
+    "amount": 2
+   }
+  ]
  }
 ]

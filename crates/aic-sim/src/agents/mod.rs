@@ -42,6 +42,7 @@
 
 pub mod determinize;
 pub mod eval;
+pub mod policy;
 pub mod search;
 
 use std::collections::BTreeMap;
@@ -108,6 +109,16 @@ pub const LADDER: &[(&str, &[Param])] = &[
                 2.0,
                 "levels of an action's own choices resolved best-first before scoring",
             ),
+            // 022: keeping by plan, and the dominance checks' forced behaviours.
+            ("plan_keep", 1.0, "keep by a sketch of the next rounds (0: the heuristic keeps)"),
+            ("plan_rounds", 3.0, "rounds the keep plan sketches, this one included"),
+            ("keep_all", 0.0, "dominance check: keep every drafted card"),
+            ("keep_k", 0.0, "dominance check: keep only the k cheapest drafted cards (0: off)"),
+            ("tier1_only", 0.0, "dominance check: never draft from tier 2"),
+            ("tier2_rush", 0.0, "dominance check: draft from tier 2 whenever the keep is affordable"),
+            ("no_powers", 0.0, "dominance check: never use an AI-board power"),
+            ("no_counters", 0.0, "dominance check: never counter a threat"),
+            ("no_presence", 0.0, "dominance check: place no presence beyond setup"),
         ],
     ),
     (
@@ -170,6 +181,16 @@ pub const LADDER: &[(&str, &[Param])] = &[
                 1.0,
                 "rounds each playout looks past the current one",
             ),
+            // 022: keeping by plan, and the dominance checks' forced behaviours.
+            ("plan_keep", 1.0, "keep by a sketch of the next rounds (0: the heuristic keeps)"),
+            ("plan_rounds", 3.0, "rounds the keep plan sketches, this one included"),
+            ("keep_all", 0.0, "dominance check: keep every drafted card"),
+            ("keep_k", 0.0, "dominance check: keep only the k cheapest drafted cards (0: off)"),
+            ("tier1_only", 0.0, "dominance check: never draft from tier 2"),
+            ("tier2_rush", 0.0, "dominance check: draft from tier 2 whenever the keep is affordable"),
+            ("no_powers", 0.0, "dominance check: never use an AI-board power"),
+            ("no_counters", 0.0, "dominance check: never counter a threat"),
+            ("no_presence", 0.0, "dominance check: place no presence beyond setup"),
         ],
     ),
 ];
@@ -286,8 +307,39 @@ impl AgentSpec {
         w
     }
 
-    /// A fresh agent for one game.
+    /// The forced behaviours (022): keeping by plan and the dominance checks.
+    pub fn forced(&self) -> policy::Forced {
+        let on = |k: &str| self.params.get(k).is_some_and(|v| *v > 0.0);
+        policy::Forced {
+            keep_all: on("keep_all"),
+            keep_k: self.params.get("keep_k").map_or(0, |v| *v as usize),
+            tier1_only: on("tier1_only"),
+            tier2_rush: on("tier2_rush"),
+            no_powers: on("no_powers"),
+            no_counters: on("no_counters"),
+            no_presence: on("no_presence"),
+            plan_keep: on("plan_keep"),
+            plan_rounds: self.params.get("plan_rounds").map_or(3, |v| *v as usize),
+        }
+    }
+
+    /// A fresh agent for one game: the search agent, wrapped in its keep
+    /// policy and forced behaviours when it has any (022).
     pub fn build(&self, rules: &Rules, game_seed: u64) -> Box<dyn Agent + Send> {
+        let inner = self.build_search(rules, game_seed);
+        let forced = self.forced();
+        if forced
+            == (policy::Forced {
+                plan_rounds: forced.plan_rounds,
+                ..policy::Forced::default()
+            })
+        {
+            return inner;
+        }
+        Box::new(policy::Policy::new(inner, forced))
+    }
+
+    fn build_search(&self, rules: &Rules, game_seed: u64) -> Box<dyn Agent + Send> {
         let rng = agent_rng(game_seed, &self.kind);
         let ev = eval::Eval::new(rules, self.weights());
         match self.kind.as_str() {
@@ -401,6 +453,17 @@ mod tests {
         for spec in [GREEDY, BEAM, ROLLOUT, ENGINE] {
             replay_and_repeat(spec, 30, false);
         }
+    }
+
+    /// 022: the dominance checks parse, label and replay (into round 3,
+    /// past two keeps).
+    #[test]
+    fn dominance_checks_replay_and_repeat() {
+        for spec in ["engine:keep_all=1", "engine:keep_k=2", "engine:tier2_rush=1", "greedy:no_presence=1"] {
+            assert_eq!(AgentSpec::parse(spec).unwrap().label(), spec);
+            replay_and_repeat(spec, 60, false);
+        }
+        assert!(AgentSpec::parse("random:keep_all=1").is_err());
     }
 
     // Slow lane: whole games, one test per agent so they run side by side

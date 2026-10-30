@@ -5,7 +5,7 @@
 import { renderBoard } from './board';
 import {
   aiBoard, checkRecord, legalActions, load, recordText, resolveConfig, rulesRevision, version, view as engineView,
-  type Action, type CardView, type View,
+  type Action, type CardView, type GameEvent, type View,
 } from './engine';
 import {
   actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, kindName, placeNames, setCountryNames, strong, tokenColour, tokenName,
@@ -42,6 +42,7 @@ const ui = {
   scrub: $<HTMLInputElement>('scrub'),
   step: $('step'),
   play: $<HTMLButtonElement>('play'),
+  speed: $<HTMLSelectElement>('speed'),
   tip: $('tip'),
   recordDialog: $<HTMLDialogElement>('record-dialog'),
   recordText: $<HTMLTextAreaElement>('record-text'),
@@ -360,16 +361,47 @@ function renderPiles() {
 /** The timeline and frames whose entries the log shows (see `renderLog`). */
 let logBuilt: { tl: Timeline; frames: unknown[] } | null = null;
 
-function logEntry(f: Timeline['frames'][number], i: number): string {
+const evItem = (e: GameEvent) => {
+  const hs = hexesIn(e).map(hexKey).join(' ');
+  return `<li class="ev ${escapeHtml(e.type)}"${hs ? ` data-hexes="${hs}"` : ''}>${escapeHtml(eventText(e))}</li>`;
+};
+
+/**
+ * A step's events by phase (022, D7): the engine marks each phase it enters with a
+ * `phase_started` event and each new round with `round_started`; the events before the
+ * first mark belong to the phase the action was taken in (`before`, the step's phase).
+ */
+function phaseGroups(events: GameEvent[], before: string): { label: string; round: boolean; events: GameEvent[] }[] {
+  const groups = [{ label: before, round: false, events: [] as GameEvent[] }];
+  for (const e of events) {
+    if (e.type === 'phase_started') groups.push({ label: shortPhase(String(e.phase)), round: false, events: [] });
+    else if (e.type === 'round_started') groups.push({ label: `Round ${e.round}`, round: true, events: [] });
+    else groups[groups.length - 1].events.push(e);
+  }
+  if (!groups[0].events.length) groups.shift();
+  return groups;
+}
+
+function logEntry(f: Timeline['frames'][number], i: number, prev: Timeline['frames'][number] | undefined): string {
   const head = f.action ? `#${i} ${escapeHtml(actionLabel(f.action, true, true, { config: f.snap.state.config }))}` : '#0 setup';
   const hexes = [...(f.action ? hexesIn(f.action) : []), ...f.events.flatMap(hexesIn)].map(hexKey);
-  const evs = f.events
-    .map((e) => {
-      const hs = hexesIn(e).map(hexKey).join(' ');
-      return `<li class="ev ${escapeHtml(e.type)}"${hs ? ` data-hexes="${hs}"` : ''}>${escapeHtml(eventText(e))}</li>`;
-    })
-    .join('');
-  return `<div class="entry" data-step="${i}" data-hexes="${[...new Set(hexes)].join(' ')}"><div class="head">${head}</div>${evs ? `<ul>${evs}</ul>` : ''}</div>`;
+  const ps = prev?.snap.state;
+  const before = ps ? shortPhase(ps.config.round[ps.phase] ?? 'setup') : 'setup';
+  const groups = phaseGroups(f.events, before);
+  let body: string;
+  // A step that stays in one phase lists its events as they are; one that runs through
+  // phases (the adversary's turn after the last pass) gets a folded group per phase,
+  // whose heading outlines the hexes that phase changed when hovered.
+  if (groups.length <= 1) body = f.events.length ? `<ul>${f.events.map(evItem).join('')}</ul>` : '';
+  else {
+    body = groups.map((g) => {
+      if (!g.events.length) return `<div class="pgroup empty${g.round ? ' round' : ''}">${escapeHtml(g.label)}</div>`;
+      const hs = [...new Set(g.events.flatMap(hexesIn).map(hexKey))].join(' ');
+      const n = g.events.length;
+      return `<details class="pgroup${g.round ? ' round' : ''}"${hs ? ` data-hexes="${hs}"` : ''}><summary>${escapeHtml(g.label)} <small>${n} event${n === 1 ? '' : 's'}${hs ? ` · ${hs.split(' ').length} hex${hs.split(' ').length === 1 ? '' : 'es'}` : ''}</small></summary><ul>${g.events.map(evItem).join('')}</ul></details>`;
+    }).join('');
+  }
+  return `<div class="entry" data-step="${i}" data-hexes="${[...new Set(hexes)].join(' ')}"><div class="head">${head}</div>${body}</div>`;
 }
 
 /**
@@ -387,7 +419,7 @@ function renderLog() {
   while (keep < had.length && keep < tl.frames.length && had[keep] === tl.frames[keep]) keep++;
   while (ui.log.children.length > keep) ui.log.lastElementChild!.remove();
   if (tl.frames.length > keep) {
-    ui.log.insertAdjacentHTML('beforeend', tl.frames.slice(keep).map((f, j) => logEntry(f, keep + j)).join(''));
+    ui.log.insertAdjacentHTML('beforeend', tl.frames.slice(keep).map((f, j) => logEntry(f, keep + j, tl.frames[keep + j - 1])).join(''));
   }
   logBuilt.frames = [...tl.frames];
   const entries = ui.log.children;
@@ -519,6 +551,8 @@ ui.board.addEventListener('click', (e) => {
 });
 
 ui.log.addEventListener('click', (e) => {
+  // A phase heading folds or unfolds its group; it doesn't move the timeline.
+  if ((e.target as Element).closest('summary')) return;
   const entry = (e.target as Element).closest('[data-step]') as HTMLElement | null;
   if (entry) seek(Number(entry.dataset.step));
 });
@@ -582,19 +616,65 @@ $('back').onclick = () => tl && seek(tl.cursor - 1);
 $('fwd').onclick = () => tl && seek(tl.cursor + 1);
 $('end').onclick = () => tl && seek(tl.last);
 ui.scrub.oninput = () => seek(Number(ui.scrub.value));
+
+/** The step where the round shown at `i` began (its `round_started` frame, or 0). */
+function roundStart(i: number): number {
+  const r = tl.frames[i].snap.state.round;
+  while (i > 0 && tl.frames[i - 1].snap.state.round === r) i--;
+  return i;
+}
+
+/**
+ * Page Up / Page Down (022, D4): back to the start of the shown round, or of the round
+ * before when already there; on to the start of the next round, or the last step.
+ */
+function jumpRound(dir: -1 | 1) {
+  if (dir < 0) {
+    const s = roundStart(tl.cursor);
+    seek(s < tl.cursor || s === 0 ? s : roundStart(s - 1));
+  } else {
+    const r = tl.frame.snap.state.round;
+    let i = tl.cursor;
+    while (i < tl.last && tl.frames[i].snap.state.round === r) i++;
+    seek(i);
+  }
+}
+
+/** Autoplay speed (022, D4): 1x is 4 steps a second; 16x moves 4 steps a tick. */
+const SPEED_KEY = 'aic.speed';
+let speed = Number(localStorage.getItem(SPEED_KEY)) || 1;
+if (![1, 4, 16].includes(speed)) speed = 1;
+ui.speed.value = String(speed);
+
+function startAutoplay() {
+  const perTick = Math.max(1, speed / 4);
+  autoplay = window.setInterval(() => {
+    if (tl.atEnd) stopAutoplay();
+    else {
+      tl.seek(Math.min(tl.last, tl.cursor + perTick));
+      tl.save();
+    }
+    render();
+  }, 250 / Math.min(speed, 4));
+}
+
+ui.speed.onchange = () => {
+  speed = Number(ui.speed.value) || 1;
+  localStorage.setItem(SPEED_KEY, String(speed));
+  if (autoplay !== null) {
+    stopAutoplay();
+    startAutoplay();
+  }
+  // Give the keys (Space, arrows, Page Up/Down) back to the timeline.
+  ui.speed.blur();
+};
+
 ui.play.onclick = () => {
   if (!tl) return;
   if (autoplay !== null) stopAutoplay();
   else {
     if (tl.atEnd) tl.seek(0);
-    autoplay = window.setInterval(() => {
-      if (tl.atEnd) stopAutoplay();
-      else {
-        tl.seek(tl.cursor + 1);
-        tl.save();
-      }
-      render();
-    }, 250);
+    startAutoplay();
   }
   render();
 };
@@ -614,6 +694,8 @@ document.addEventListener('keydown', (e) => {
     ArrowRight: () => seek(tl.cursor + 1),
     Home: () => seek(0),
     End: () => seek(tl.last),
+    PageUp: () => jumpRound(-1),
+    PageDown: () => jumpRound(1),
     ' ': () => ui.play.click(),
     Escape: () => {
       armed = null;

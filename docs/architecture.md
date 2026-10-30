@@ -305,8 +305,9 @@ Content is data in `content/`, composed from code primitives:
 
 - **Player cards** (`cards.json`, 021): a `tier` (1 or 2; 0 for an AI's unique card or
   starting building), a `kind` (`building`, `program`: stays in the play area, or
-  `event`: discarded), a credit `cost` and optional `energy`, `hardware` and
-  `antimatter` costs, 1-3 `tags` (`content::TAGS`), `needs` (tags in play), `effects`
+  `event`: discarded), a credit `cost` and optional `insight` (022: to play, shared
+  with keeps), `energy`, `hardware` and `antimatter` costs and `lowers` (022: incomes
+  the play lowers for good, `[["credits", 1]]`), 1-3 `tags` (`content::TAGS`), `needs` (tags in play), `effects`
   ([`Effect`]: on play, or when built), `passives` ([`Passive`]: a building's standing
   effects), an `ability` (once a round; buildings and programs; its cost may name
   `"tokens"`, spent from the card), `upkeep`, `replaces` (a tag: built over one of your

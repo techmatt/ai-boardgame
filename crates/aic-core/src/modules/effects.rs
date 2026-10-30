@@ -301,17 +301,19 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                     w.map.countries[c]
                         .hexes
                         .iter()
-                        .any(|&h| has_building(g, h) && in_reach(&w, g, seat, h))
+                        .any(|&h| board::hardenable(g, h) && in_reach(&w, g, seat, h))
                 })
                 .collect();
             let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt = format!("Seat {seat}: harden {count} buildings in which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
-                let hexes: Vec<usize> = w.map.countries[cs[i]]
+                // 022: only buildings a token can protect, each at most once
+                // ("harden 2 buildings" is two buildings; fewer if fewer exist).
+                let mut hexes: Vec<usize> = w.map.countries[cs[i]]
                     .hexes
                     .iter()
                     .copied()
-                    .filter(|&h| has_building(g, h) && in_reach(&w, g, seat, h))
+                    .filter(|&h| board::hardenable(g, h) && in_reach(&w, g, seat, h))
                     .collect();
                 for k in 0..*count {
                     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
@@ -319,9 +321,10 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                         "Seat {seat}: hardening {} of {count} on which building?",
                         k + 1
                     );
-                    if let Some(j) = cx.choose(seat, &prompt, opts)? {
-                        cx.add_tokens(g, hexes[j], HARDEN, 1);
-                    }
+                    let Some(j) = cx.choose(seat, &prompt, opts)? else {
+                        break;
+                    };
+                    cx.add_tokens(g, hexes.remove(j), HARDEN, 1);
                 }
             }
         }

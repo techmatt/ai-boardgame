@@ -56,11 +56,16 @@
     </main>
 
     <footer id="timeline">
-      <button type="button" id="first" title="Start (Home)">⏮</button>
+      <button type="button" id="first" title="Start (Home); Page Up for the previous round">⏮</button>
       <button type="button" id="back" title="Step back (←)">◀</button>
-      <button type="button" id="play" title="Play forward (Space)">▶ play</button>
+      <button type="button" id="play" title="Play forward (Space); Page Up / Page Down jump to the previous / next round">▶ play</button>
+      <select id="speed" title="Autoplay speed (1x is 4 steps a second)">
+        <option value="1">1x</option>
+        <option value="4">4x</option>
+        <option value="16">16x</option>
+      </select>
       <button type="button" id="fwd" title="Step forward (→)">▶</button>
-      <button type="button" id="end" title="Last step (End)">⏭</button>
+      <button type="button" id="end" title="Last step (End); Page Down for the next round">⏭</button>
       <input type="range" id="scrub" min="0" max="0" value="0" />
       <span id="step"></span>
     </footer>

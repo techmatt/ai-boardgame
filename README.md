@@ -6,7 +6,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 
 - [docs/principles.md](docs/principles.md): design pillars, difficulty targets, lenses,
   measures.
-- [docs/rules.md](docs/rules.md): what the code implements: **rules revision 12** (021: card primitives and the resource model: players have no compute, city energy cubes, hardware as a building cost, the opening deal of 8, a draft with the tier chosen card by card, keeps paid in insight, tags on every card in play, programs that stay and events, building slots that stack and splay down, token engines, AI-board powers paid by sacrificing tags; 020: bug fixes from the bug hunt: Blackout and Sabotage hit the next round, only a lone presence leaks, no no-op move, Purge the Unaligned takes a real presence; 019: adversary troops march 2 steps a round toward player presence and destroy it, nodes removed only by tier-2 effects, Unity makes nodes stop counting; 018: the structural fixes and calibration, troops used up when they strike; 017: the adversary project deck, one-shot Alignment cards; on 016: presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the purge), on the 014
+- [docs/rules.md](docs/rules.md): what the code implements: **rules revision 13** (022: insight costs on cards shared with keeps, keeping by plan, the dominance checks and 020's deferred calls; 021: card primitives and the resource model: players have no compute, city energy cubes, hardware as a building cost, the opening deal of 8, a draft with the tier chosen card by card, keeps paid in insight, tags on every card in play, programs that stay and events, building slots that stack and splay down, token engines, AI-board powers paid by sacrificing tags; 020: bug fixes from the bug hunt: Blackout and Sabotage hit the next round, only a lone presence leaks, no no-op move, Purge the Unaligned takes a real presence; 019: adversary troops march 2 steps a round toward player presence and destroy it, nodes removed only by tier-2 effects, Unity makes nodes stop counting; 018: the structural fixes and calibration, troops used up when they strike; 017: the adversary project deck, one-shot Alignment cards; on 016: presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the purge), on the 014
   board model, Militarist against Builder and Protector, 1–4 countries, with every
   default and deviation.
 - [docs/ruleset-v0.md](docs/ruleset-v0.md): the v0 design draft as handed over.
@@ -26,8 +26,8 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history and does not replay. `archive/`: specs the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces with their cities, ocean, setup buildings and megaproject), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, `alignment.json` (the Unity and Discord decks), all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects and 021's cards, r12 (2 countries, difficulty 0; 018 calibrated it, 019 and 021 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. (021 removed the `cards.variant=free_keep` opt-in: keeps cost insight.) The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
-| `scripts/` | `wasm-smoke.mjs`: plays one game through the wasm package in Node (current). `wasm-parity.mjs` (020): replays aic-sim records of every variant in wasm (current). `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline (current). `cards/`: `screen_021.py` (021), the r12 card and resource summary with its strategy-health gate (current). `board/`: `screen_019.py` (019), the r10 troop and node summary with the strategy-health gate (current); `screen_018.py` (018), the r9 calibration summary (reads r10 too); `screen_017.py` (017), the r8 screen summary (reads r9 too); `screen_016.py` (016), the r7 screen summary (reads r8 too); `screen_summary.py` (014), the board screen summary (current). `alignment/` (013): the Alignment screen summary (current: the alignment counters it reads still exist). `bench/` (012): `same_results.py`, compares two experiment outputs (current). `tune/` (007–008): `sweep.py`, `log_table.py` and `engine_sweep.py` (`sweep.py` still runs on r9: 018 used it). `payback/` (009): content patches and summaries for r3's payback sweep, not checked against r6 (see [experiments/history.md](experiments/history.md)). |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects and 021's cards repriced with insight in 022, r13 (2 countries, difficulty 0; 018 calibrated it, 019, 021 and 022 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. (021 removed the `cards.variant=free_keep` opt-in: keeps cost insight.) The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
+| `scripts/` | `wasm-smoke.mjs`: plays one game through the wasm package in Node (current). `wasm-parity.mjs` (020): replays aic-sim records of every variant in wasm (current). `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline (current). `cards/`: `screen_022.py` (022), the r13 insight and dominance summary with the dominance gate (current); `screen_021.py` (021), the r12 card and resource summary with its strategy-health gate (reads r13 too). `board/`: `screen_019.py` (019), the r10 troop and node summary with the strategy-health gate (current); `screen_018.py` (018), the r9 calibration summary (reads r10 too); `screen_017.py` (017), the r8 screen summary (reads r9 too); `screen_016.py` (016), the r7 screen summary (reads r8 too); `screen_summary.py` (014), the board screen summary (current). `alignment/` (013): the Alignment screen summary (current: the alignment counters it reads still exist). `bench/` (012): `same_results.py`, compares two experiment outputs (current). `tune/` (007–008): `sweep.py`, `log_table.py` and `engine_sweep.py` (`sweep.py` still runs on r9: 018 used it). `payback/` (009): content patches and summaries for r3's payback sweep, not checked against r6 (see [experiments/history.md](experiments/history.md)). |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
 Core source map: `rules.rs` (config compilation, round/phase loop, apply, choice
@@ -113,7 +113,7 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 ```sh
 cargo build --workspace
 cargo test --workspace                             # fast lane: ~4 s once built, ~13 s after an edit in aic-sim (rebuild included); after every change
-cargo test-all                                     # full run, slow lane included: ~80 s once built at r12 (021: the aic-sim slow tests, search-agent games, ran 77 s with bigger hands; r11 ~30 s), ~2 min after an edit; before every commit
+cargo test-all                                     # full run, slow lane included: ~100 s once built at r13 (022: the aic-sim slow tests, search-agent games, 87 s; r12 ~80 s, r11 ~30 s), ~2.7 min after an edit (164 s measured); before every commit
 cargo test-slow                                    # the slow lane alone: ~28 s (most of it the beam game, ~18 s, and the rollout game, ~10 s)
 cargo build --release -p aic-sim                   # ~12 s
 wasm-pack build crates/aic-wasm --target web       # ~20 s cold, ~9 s warm -> crates/aic-wasm/pkg (git-ignored)
@@ -264,7 +264,7 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
   (`blocker` 2); Alignment (Unity and Discord tips made, each bucket's fill as a share of
   its next tip, the bar level, and each visible adversary project's fill as a share of
   its cost, `project` 8, 017); the players' board (presence
-  4, nodes −6, owned factories 4 (an adversary-owned one −4), hardware 2, cities/bases/stations in reach 0.5, owned stations 5 (a corrupted one −5),
+  4, nodes −25 (022, 020's D9: was −6, and agents made nodes when an equal free choice existed), owned factories 4 (an adversary-owned one −4), hardware 2, cities/bases/stations in reach 0.5, owned stations 5 (a corrupted one −5),
   megaproject cubes 2 (adversary's −1), factories 0.5, hardening 1, player ambassadors
   5 in supply (018: was 3, below their 6-credit cost, so agents never bought one) / 2.5 on the board, and toward freeing a corrupted city `freeing` 0.8 ×
   `corrupted` × share of `free_city_at`); track income, resources, cards in hand and
@@ -278,6 +278,20 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
 | `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all), `choices` 2 (levels of an action's own choices resolved before scoring it; with 1, placing presence, which asks a hex, looks worthless and beam stops growing its engine) |
 | `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `choices` 2, `candidates` 3, `rollouts` 4, `horizon` 2 |
 | `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and board production (aligned cities' energy, less what adversary ambassadors divert; presence compute is track income) `w.production` of that (014: 1 won 65% at d0 against 37% with 0 on the checkpoint's map; level within noise at d1–d3 on the map since edited); the rounds left are the adversary deck's clock (deck plus the face-up card), cut short by when the team is on course to win (Unity Sway still needed for the outright Unity win at its rate so far, `w.unity_rate_start`, `w.win_lag`) and discounted by danger (`w.risk` per unpaid threat per country, supply slack ≤ 2 against the next build, 2 or fewer cities not corrupted); a building without income earns `w.ability` per round left; a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.locked` for tier 2 not yet unlocked; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left; and the **deck clock** (011, `w.clock`): a penalty per round the team, at its Unity rate so far, would still be short of the outright Unity win (`alignment.unity_win`, 8 tips; with it 0, the last bar drop) when the deck runs out. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `locked` 0.5, `unity_rate_start` 2 (`opp_rate` still accepted), `win_lag` 1, `production` 1, `insight_wait` 0, `clock` 30 |
+
+**Keeping by plan and the dominance checks (022, `agents/policy.rs`).** Greedy and
+engine keep drafted cards by a plan (`plan_keep` 1; 0 lets the heuristic decide keeps,
+as before 022): at its first keep of the round a seat sketches this round's action phase
+and the next two (credits, insight, hardware, energy and antimatter from what it holds and
+its income; insight resets each round, the rest carries over), fills each round's
+budget with the cards it would play (hand plus the candidates) in value-per-cost order
+(value: the card's printed cost in credits, antimatter 3, insight 2, a lowered income
+point 3, plus 1; cost: what this seat pays, its building discount off), and keeps each
+drafted card, best ratio first, only if the plan with it is worth more than without it
+(a play waiting a round is worth 15% less). The dominance checks are the same agents with
+one behaviour forced: `keep_all=1`, `keep_k=2`, `tier1_only=1`, `tier2_rush=1`,
+`no_powers=1`, `no_counters=1`, `no_presence=1` (`docs/principles.md`, *Dominance
+checks*).
 
 Any agent can use horizon mode (`greedy:w.horizon=1,...`); `engine` only changes the
 defaults. Agent sweeps with strategy health (win %, buildings and tier-2 cards played per
@@ -334,6 +348,21 @@ cities corrupted at the end, destructions per war round, Unity and Discord tips,
 standard actions and how games ended; then adversary ambassadors on the board by round,
 and standard actions by kind. Committed with the report and records in
 `experiments/results/screen-014-board/` (`board.md`).
+
+**Insight and dominance screen (022, r13)**: two specs. `experiments/screen-022-cards.json`
+(`c2`, `c3` × d0–d4 × random, greedy, engine; 480 games) and
+`experiments/screen-022-dominance.json` (`c2`, `c3` × d0, d2, d4 × the engine and the seven
+dominance checks, `engine:keep_all=1` and so on; 768 games): `aic-sim experiment
+<spec> --quick --out out/<name>` (**~6 min** the cards screen and **~8.5 min** the
+dominance screen, run side by side on 12 threads; alone, about half that: engine games
+take 5–11 s each at c3), then `python scripts/cards/screen_022.py out/screen-022-cards
+out/screen-022-dominance`: win rates; the card economy per game (kept / played, insight
+spent on keeps / plays, credits left unspent, presence); by round (hand size after
+keeping, kept, played, insight on keeps and on plays, credits unspent; greedy and engine
+at d0 and d2, c2); and the **dominance table**: each check's gap to the engine with one
+standard error, and the gate (`docs/principles.md`, *Dominance checks*). Counters new in
+022: `cards.insight_kept`, `cards.insight_played` (also per round), `threats.short`.
+Committed in `experiments/results/screen-022-insight/`.
 
 **Card and resource screen (021, r12)**, `experiments/screen-021-cards.json` (`c2`, `c3` ×
 d0–d4 × random, greedy, engine; 480 games): `aic-sim experiment

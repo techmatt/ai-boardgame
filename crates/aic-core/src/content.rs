@@ -253,6 +253,15 @@ pub struct CardDef {
     /// Hardware a building needs (021: a requirement in the cost).
     #[serde(default)]
     pub hardware: i64,
+    /// Insight to play it (022: 0 for small programs and events, 1 by
+    /// default, 2 for big effects; shared with keeps).
+    #[serde(default)]
+    pub insight: i64,
+    /// Income it lowers for the rest of the game when played (022: a cost,
+    /// as in Terraforming Mars): your production of the resource falls by
+    /// the amount. Unplayable if that income is lower than the amount.
+    #[serde(default)]
+    pub lowers: Vec<Cost>,
     #[serde(default)]
     pub tags: Vec<String>,
     /// Printed keywords, for reading the card (021): `hack`, `token`, ...
@@ -1009,7 +1018,7 @@ impl Content {
                     c.id
                 ));
             }
-            for (r, _) in c.upkeep.iter() {
+            for (r, _) in c.upkeep.iter().chain(&c.lowers) {
                 resource(r, &what)?;
             }
             for (r, _) in c.ability.iter().flat_map(|a| &a.cost) {

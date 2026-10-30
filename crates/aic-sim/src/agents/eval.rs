@@ -204,8 +204,9 @@ impl Default for Weights {
             // 017: chosen by hand, not swept.
             project: 8.0,
             data_centre: 4.0,
-            // 016: chosen by hand for the r7 board, not swept.
-            node: 6.0,
+            // 022 (020's D9): a node is permanent since 019; at 6 agents made
+            // nodes answering the spread when an equal free option existed.
+            node: 25.0,
             owned_factory: 4.0,
             hardware: 2.0,
             reach: 0.5,
@@ -325,9 +326,11 @@ impl Eval {
             .cards
             .iter()
             .map(|c| {
-                // 021: no insight to play; energy and hardware at about a credit each.
+                // 022: insight to play as printed; energy and hardware at about
+                // a credit each; lowered income at 3 a point.
                 let cost = c.cost + ANTIMATTER_COST * c.antimatter + c.energy + c.hardware
-                    + INSIGHT_COST * c.tier.min(1) as i64;
+                    + INSIGHT_COST * c.insight
+                    + 3 * c.lowers.iter().map(|(_, n)| n).sum::<i64>();
                 (c.id.clone(), cost.max(0) as f64)
             })
             .collect();
@@ -792,8 +795,8 @@ impl Eval {
             let mut play = |id: &str| -> f64 {
                 let d = cards::def(&world, id);
                 let mut p = 1.0;
-                // 021: playing costs no insight (keeps do).
-                let insight = 0;
+                // 022: playing costs insight again (shared with keeps).
+                let insight = d.insight;
                 insight_queue += insight;
                 let insight_need = if w.insight_wait > 0.0 {
                     insight_queue

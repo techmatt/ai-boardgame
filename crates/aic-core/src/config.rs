@@ -25,7 +25,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "RawModuleConfig")]
 pub struct ModuleConfig {
     pub module: String,
     pub variant: String,
@@ -38,16 +38,71 @@ pub struct ModuleConfig {
     pub cards: Vec<String>,
 }
 
+/// A module config as read, its parameters still JSON values, so a bad value
+/// is reported with its key (022: serde's untagged-enum error named none).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawModuleConfig {
+    module: String,
+    variant: String,
+    #[serde(default)]
+    params: BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    cards: Vec<String>,
+}
+
+impl TryFrom<RawModuleConfig> for ModuleConfig {
+    type Error = String;
+
+    fn try_from(r: RawModuleConfig) -> Result<Self, String> {
+        let params = r
+            .params
+            .iter()
+            .map(|(k, v)| {
+                let p = ParamValue::from_json(v).map_err(|e| format!("{}.{k}: {e}", r.module))?;
+                Ok((k.clone(), p))
+            })
+            .collect::<Result<_, String>>()?;
+        Ok(ModuleConfig {
+            module: r.module,
+            variant: r.variant,
+            params,
+            cards: r.cards,
+        })
+    }
+}
+
 /// A tunable value. Integers only: every number must be printable on a card
 /// or a board track. A list is a per-round schedule or a table.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum ParamValue {
     Int(i64),
     List(Vec<i64>),
 }
 
+impl<'de> Deserialize<'de> for ParamValue {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let v = serde_json::Value::deserialize(d)?;
+        ParamValue::from_json(&v).map_err(serde::de::Error::custom)
+    }
+}
+
 impl ParamValue {
+    /// An integer or a list of integers; anything else (a string, a
+    /// decimal, null) is an error that shows the value.
+    pub fn from_json(v: &serde_json::Value) -> Result<ParamValue, String> {
+        let parsed = match v {
+            serde_json::Value::Array(xs) => xs
+                .iter()
+                .map(|x| x.as_i64())
+                .collect::<Option<Vec<i64>>>()
+                .map(ParamValue::List),
+            _ => v.as_i64().map(ParamValue::Int),
+        };
+        parsed.ok_or_else(|| format!("expected an integer or a list of integers, got {v}"))
+    }
+
     /// Parses `3` or `1,2,3` (a trailing comma forces a one-element list).
     pub fn parse(s: &str) -> Result<ParamValue, String> {
         let s = s.trim();

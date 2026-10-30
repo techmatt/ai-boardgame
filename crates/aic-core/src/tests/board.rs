@@ -722,7 +722,12 @@ fn standard_actions_are_offered_only_when_affordable_and_targeted() {
     // Removing a node is no standard action (019: only tier-2 effects remove nodes).
     put(&mut g, d, NODE, 1);
     assert!(!standard_offered(&rules, &g, 0).contains("node"));
-    // Only the Protector (seat 1) may harden.
+    // Only the Protector (seat 1) may harden, and only a building it can
+    // protect (022: a player-owned one; none at setup).
+    assert!(!standard_offered(&rules, &g, 1).contains("harden"));
+    let p1 = presence_of(&g, 1)[0];
+    put(&mut g, p1, STATION, 1);
+    put(&mut g, p1, &cube(1), 1);
     assert!(standard_offered(&rules, &g, 1).contains("harden"));
     assert!(!standard_offered(&rules, &g, 0).contains("harden"));
     assert!(rules
@@ -798,6 +803,9 @@ fn standard_actions_cost_what_the_config_says() {
     );
 
     let mut g = g0.clone();
+    let p1 = presence_of(&g, 1)[0];
+    put(&mut g, p1, STATION, 1);
+    put(&mut g, p1, &cube(1), 1);
     act(&rules, &mut g, std_act(1, "harden"));
     // 021: hardening costs energy.
     assert_eq!((spent(&g, 1), total(&g, HARDEN)), ((1, 0, 0), 1));
@@ -1260,6 +1268,22 @@ fn an_adversary_factory_makes_adversary_troops() {
     assert_eq!((g.tokens(f, TROOP), g.tokens(b0, UNIT)), (1, 1));
 }
 
+/// 022 (D1): a player ambassador on an adversary-owned factory is used up
+/// for `factory_unity` Unity, and the factory still makes its troop.
+#[test]
+fn a_player_ambassador_on_an_adversary_factory_is_used_up_for_unity() {
+    let (rules, mut g) = lab(&["board.bases"]);
+    let m = &rules.map;
+    let f = m.numbered(0, piece(0).factories[0]);
+    put(&mut g, f, FACTORY, 1);
+    put(&mut g, f, ADV_CUBE, 1);
+    put(&mut g, f, &ambassador(0), 1);
+    let unity = g.var("alignment.unity");
+    run(&rules, &mut g);
+    assert_eq!((g.tokens(f, TROOP), g.tokens(f, &ambassador(0))), (1, 0));
+    assert_eq!(g.var("alignment.unity") - unity, 1);
+}
+
 #[test]
 fn a_troop_at_a_base_absorbs_a_strike_next_to_it() {
     let (rules, mut g) = lab(&["board.march"]);
@@ -1542,4 +1566,55 @@ fn troops_walk_around_ocean_rather_than_stall() {
     answer_all(&rules, &mut g);
     assert_eq!(g.tokens(t, TROOP), 0, "the troop left {t}");
     assert!(g.stats.counters["board.troop_moves"] >= 1);
+}
+
+/// 022 (D10): hardening goes only on buildings a token can protect (a
+/// player-owned one, not the adversary's), and "harden 2" is two
+/// different buildings (fewer if fewer exist).
+#[test]
+fn hardening_goes_on_different_buildings_a_token_can_protect() {
+    use crate::content::{CountryRule, Effect};
+    use crate::modules::effects;
+    let (rules, mut g0) = lab(&[]);
+    let m = &rules.map;
+    let me = m.numbered(0, piece(0).presence);
+    put(&mut g0, me, &presence(0), 1);
+    let near: Vec<usize> = m.hexes[me]
+        .neighbours
+        .iter()
+        .copied()
+        .filter(|&h| kind(m, h) != HexKind::Ocean && m.hexes[h].country == 0)
+        .collect();
+    let (a, b, adv) = (near[0], near[1], near[2]);
+    put(&mut g0, a, STATION, 1);
+    put(&mut g0, a, &cube(0), 1);
+    put(&mut g0, adv, FACTORY, 1);
+    put(&mut g0, adv, ADV_CUBE, 1);
+    let harden = [Effect::Harden {
+        count: 2,
+        in_country: CountryRule::Any,
+    }];
+    let run = |g: &mut GameState, picks: Vec<crate::state::Pick>| {
+        let mut choices = module::Choices::new(picks);
+        let mut cx = module::Cx {
+            world: rules.world(),
+            module: "test",
+            purposes: &[],
+            events: None,
+            choices: &mut choices,
+        };
+        effects::run(g, &mut cx, 0, &harden, &mut effects::Ctx::default()).unwrap();
+    };
+    // One building it can protect: one token, not two on it, none on the
+    // adversary's factory.
+    let mut g = g0.clone();
+    run(&mut g, Vec::new());
+    assert_eq!((g.tokens(a, HARDEN), g.tokens(adv, HARDEN)), (1, 0));
+    // Two: one token each.
+    let mut g = g0.clone();
+    put(&mut g, b, FACTORY, 1);
+    put(&mut g, b, &cube(0), 1);
+    let o = modules::common::hex_opt(&rules.world(), b);
+    run(&mut g, vec![crate::state::Pick { option: o.option, target: o.target }]);
+    assert_eq!((g.tokens(a, HARDEN), g.tokens(b, HARDEN)), (1, 1));
 }

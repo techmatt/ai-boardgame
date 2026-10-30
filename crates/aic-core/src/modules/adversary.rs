@@ -172,9 +172,17 @@ pub fn card_text(c: &AdversaryCard) -> String {
     )
 }
 
-/// This round's twists.
+/// This round's twists. Before this round's build step (a Discord tip in
+/// the Sway phase) this round's card is still the face-up one: read it (022:
+/// that read last round's card, and none in round 1).
 pub fn twists<'w>(w: &World<'w>, g: &GameState) -> Vec<&'w Twist> {
-    g.pile(CURRENT)
+    let before_build = g
+        .config
+        .round
+        .iter()
+        .position(|p| p.split('+').any(|q| q == "adversary.build"))
+        .is_some_and(|i| g.phase < i);
+    g.pile(if before_build { NEXT } else { CURRENT })
         .iter()
         .flat_map(|id| card(w, id).twists.iter())
         .collect()

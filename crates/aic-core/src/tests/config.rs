@@ -216,3 +216,23 @@ fn off_switches_and_degenerate_values() {
     assert!(e.contains("it has: board"), "{e}");
 }
 
+
+/// 022 (D14): a parameter value that is not an integer or a list of them is
+/// reported with its key and the value, not serde's untagged-enum message.
+#[test]
+fn a_bad_parameter_value_names_its_key() {
+    let json = BASELINE.replacen("\"unit_cap\": 3", "\"unit_cap\": \"3\"", 1);
+    assert_ne!(json, BASELINE);
+    let err = Config::from_json(&json).unwrap_err();
+    assert!(
+        err.contains(r#"board.unit_cap: expected an integer or a list of integers, got "3""#),
+        "{err}"
+    );
+    for (bad, shown) in [("2.5", "2.5"), ("null", "null"), ("[1, \"x\"]", "[1,\"x\"]")] {
+        let json = BASELINE.replacen("\"unit_cap\": 3", &format!("\"unit_cap\": {bad}"), 1);
+        let err = Config::from_json(&json).unwrap_err();
+        let want = format!("board.unit_cap: expected an integer or a list of integers, got {shown}");
+        assert!(err.contains(&want), "{err}");
+    }
+    assert!(Config::from_json(BASELINE).is_ok());
+}

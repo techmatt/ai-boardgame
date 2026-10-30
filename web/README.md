@@ -73,7 +73,8 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   (stage, difficulty, adversary compute, threat tier and fronts, the adversary ambassadors and troops on the board, then deck →
   next round's card, face up → this round's card → discard, each card with its stage,
   text and escalation/war marks; under it the adversary's projects (017: each visible
-  project with its compute bar, ongoing ones, the resolved count and the deck)); the countries strip with each country's name, its
+  project a two-line box, name and compute bar then its effect text, cut at the end of
+  the second line, all of it on hover; ongoing ones, the resolved count and the deck)); the countries strip with each country's name, its
   cities (clean, aligned, corrupted), adversary pieces and corp units, its megaproject
   card (one box per cube place, filled by owner: purple for the adversary, the seat's
   colour for a player; "completed" once done), its round flags (blackout, sabotage,
@@ -98,13 +99,23 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   folded under *Unlabelled tracks* below the piles; in the baseline there are none.
 - **Undo** (Ctrl+Z) drops the last action. Every state is a replay of config + seed +
   actions, so undo never has to reverse anything.
-- **Timeline:** ⏮ ◀ ▶ ⏭, the slider, ← → Home End, and Space to auto-play. Clicking an
+- **Timeline:** ⏮ ◀ ▶ ⏭, the slider, ← → Home End, and Space to auto-play. The menu by
+  *play* sets the autoplay speed: 1x (4 steps a second), 4x or 16x (kept in
+  `localStorage`; it applies at once while playing). **Page Up / Page Down** jump to the
+  start of the shown round (again: the round before) and to the start of the next round
+  (or the last step), in a record or a game being played. Clicking an
   event-log entry jumps to that step. Acting from an earlier step drops the later
   actions, after asking first.
 - **Hover** a hex, token, value, card or action button for its details; a hex's details
   list the troop arrows from and to it (the arrows themselves let the mouse through).
   Hovering a log entry outlines the hexes it touched. Hexes changed by the shown step
   have an amber outline.
+- **Log phases:** a step that runs through phases (the adversary's whole turn after the
+  last pass, a new round) lists its events in one folded group per phase, headed by the
+  phase name with its event and hex counts; phases with no events show as a grey line.
+  Hovering a group's heading outlines the hexes that phase changed; clicking it unfolds
+  the group without moving the timeline. A step that stays in one phase lists its events
+  flat.
 - **The header** shows the engine version and the rules revision it plays. A saved
   session started with an older copy of its config file, or one that no longer loads,
   says so in the error bar; so does a record from another rules revision.
@@ -154,6 +165,8 @@ checks the following:
   any line) and its action lines and the step label name cards in words (no
   `snake_case` ids), the header shows the rules revision, and stepping through the
   game stays under 100 ms a step;
+- (022) Page Down / Page Up move between round starts, the speed menu offers 1x 4x 16x,
+  and hovering a phase group's heading in the log outlines exactly its hexes;
 - a 4-country game (64 hexes) still fits at 1366×768 and 1920×1080;
 - the shared threat row (`configs/shared_row.json`), if that config exists;
 - loading the record and stepping through it, if one was given.

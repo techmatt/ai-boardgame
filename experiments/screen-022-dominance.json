@@ -1,0 +1,36 @@
+{
+  "name": "screen-022-dominance",
+  "note": "022 dominance checks (r13): the engine against seven fixed policies (the engine with one behaviour forced) at d0, d2 and d4, 2 and 3 countries. Each check should lose ground to the engine at d2 and above, and none match it at d4.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    2,
+    4
+  ],
+  "agents": [
+    "engine",
+    "engine:keep_all=1",
+    "engine:keep_k=2",
+    "engine:tier1_only=1",
+    "engine:tier2_rush=1",
+    "engine:no_powers=1",
+    "engine:no_counters=1",
+    "engine:no_presence=1"
+  ],
+  "games": 16,
+  "records": 0
+}

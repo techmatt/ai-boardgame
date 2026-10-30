@@ -315,6 +315,15 @@ pre.tab { font: 0.85em/1.3 ui-monospace, Consolas, monospace; white-space: pre-w
 .entry ul { margin: 0; padding-left: 1.1em; color: #555; }
 .entry .ev.game_ended { color: var(--warn); font-weight: bold; }
 .entry .ev.round_started { color: var(--accent); }
+/* 022 (D7): a step that runs through phases, one folded group per phase; hovering a
+   group outlines the hexes it changed. */
+.entry .pgroup { margin-left: 0.4em; }
+.entry .pgroup summary { cursor: pointer; color: #4a4a6a; font-weight: 600; }
+.entry .pgroup summary small { color: var(--muted); font-weight: normal; }
+.entry .pgroup[data-hexes] summary:hover { color: #d81b60; }
+.entry .pgroup.empty { color: #aaa; padding-left: 1.1em; font-size: 0.92em; }
+.entry .pgroup.round, .entry .pgroup.round summary { color: var(--accent); }
+.entry .pgroup ul { padding-left: 1.6em; }
 
 /* ---------- timeline ---------- */
 
@@ -327,6 +336,7 @@ pre.tab { font: 0.85em/1.3 ui-monospace, Consolas, monospace; white-space: pre-w
   color: #eee;
 }
 #scrub { flex: 1; min-width: 0; }
+#speed { border: 1px solid var(--line); border-radius: 4px; padding: 0.1em 0.2em; }
 #step { min-width: 22em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
 
 /* ---------- hover card, dialog ---------- */
@@ -353,15 +363,17 @@ pre.tab { font: 0.85em/1.3 ui-monospace, Consolas, monospace; white-space: pre-w
 #record-msg { min-height: 1.2em; color: var(--accent); }
 .hex .zone-mark { fill: none; stroke: #6d4c41; stroke-width: 0.04; stroke-dasharray: 0.05 0.035; }
 /* 017: the adversary's project row under the adversary cards. */
-/* One line: name, compute bar, then the text cut short (hover the project for all of it). */
-.projects-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 0.6em; margin-top: 0.2em; font-size: 0.85em; white-space: nowrap; }
-.projects-row .stitle { font-weight: 600; color: #8e1b1b; flex: none; }
-.projects-row .project { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: nowrap; font-size: 1em; align-items: center; gap: 0.3em; overflow: hidden; line-height: 1.3; }
-.projects-row .project .tname { flex: none; display: inline-flex; align-items: center; }
+/* Each project a two-line box (022, D3): name and compute bar, then the effect text
+   running on and cut at the end of the second line (hover the project for all of it). */
+.projects-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 0.6em; margin-top: 0.2em; font-size: 0.85em; }
+.projects-row .stitle { font-weight: 600; color: #8e1b1b; flex: none; white-space: nowrap; }
+.projects-row .project { flex: 1 1 0; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 1em; line-height: 1.3; height: calc(2.6em + 2px); border: 1px solid #e3cfcf; border-radius: 3px; padding: 0 0.3em; background: #fff; }
+.projects-row .project .tname { display: inline; margin-right: 0.3em; white-space: nowrap; }
 .projects-row .project .tname b { color: #8e1b1b; margin-right: 0.3em; }
-.projects-row .project .prog { min-width: 5.5em; }
-.projects-row .project .ttext { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #444; font-size: 0.92em; }
-.projects-row .agroup, .projects-row .adeck { flex: none; color: var(--muted); }
+.projects-row .project .prog { min-width: 5.5em; height: 1.2em; vertical-align: -0.25em; }
+.projects-row .project .prog .ptext { line-height: 1.2em; }
+.projects-row .project .ttext { display: inline; color: #444; font-size: 0.92em; }
+.projects-row .agroup, .projects-row .adeck { flex: none; color: var(--muted); white-space: nowrap; }
 
 /* Short screens (1366x768 and the like): the strips above and below the board take
    tighter lines and the adversary cards one line of text (hover for all of it), so
@@ -370,7 +382,11 @@ pre.tab { font: 0.85em/1.3 ui-monospace, Consolas, monospace; white-space: pre-w
   :root { line-height: 1.2; }
   #phase-bar { padding: 0.15em 0.7em; gap: 0.15em 0.8em; }
   #phase-bar .order { gap: 0.1em; }
-  .phase { line-height: 1.15; }
+  /* Smaller phase chips keep the round order to fewer lines: the two-line project
+     boxes (022, D3) take a line from the board. */
+  .phase { line-height: 1.15; font-size: 0.76em; padding: 0 0.2em; }
+  #phase-bar .order { gap: 0.05em; }
+  #phase-bar .arrow { font-size: 0.8em; }
   #status { padding: 0.15em 0.7em; gap: 0.1em; }
   #pipeline { padding: 0.1em 0.7em 0.15em; }
   .phead { margin-bottom: 0.1em; }
@@ -379,6 +395,9 @@ pre.tab { font: 0.85em/1.3 ui-monospace, Consolas, monospace; white-space: pre-w
   #countries { padding: 0.2em 0.7em; }
   .country { padding: 0.1em 0.45em; }
   .threat { line-height: 1.2; }
+  .projects-row { margin-top: 0; }
+  #prompt.choice { font-size: 1em; padding: 0.15em 0.7em; }
+  .projects-row .project { line-height: 1.2; height: calc(2.4em + 2px); }
 }
 
 /* 019: each adversary troop's next target. */

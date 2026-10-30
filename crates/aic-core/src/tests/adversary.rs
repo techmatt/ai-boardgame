@@ -343,3 +343,26 @@ fn the_players_lose_when_the_supply_starves_or_every_city_is_corrupted() {
     let o = g.outcome.as_ref().expect("a loss");
     assert_eq!((o.won, o.reason.as_str()), (false, "cities"));
 }
+
+/// 022 (D13): before this round's build step (a Discord tip in the Sway
+/// phase resolving Buildup or Offensive) the round's twists are the face-up
+/// card's, the one about to become this round's; after it, the current card's.
+#[test]
+fn twists_before_the_build_step_are_the_face_up_cards() {
+    use crate::content::Twist;
+    let (rules, mut g) = lab(&["alignment.sway", "adversary.build"]);
+    let w = rules.world();
+    g.piles
+        .insert(CURRENT.into(), vec!["adv_s1_probing_strikes".into()]);
+    g.piles
+        .insert(NEXT.into(), vec!["adv_s1_long_patrols".into()]);
+    let reach = |g: &GameState| {
+        adversary::twists(&w, g)
+            .iter()
+            .any(|t| matches!(t, Twist::Reach { .. }))
+    };
+    g.phase = 0;
+    assert!(reach(&g), "the Sway phase reads the face-up card");
+    g.phase = 2;
+    assert!(!reach(&g), "after the build step, this round's card");
+}
