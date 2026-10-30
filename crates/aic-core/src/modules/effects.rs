@@ -517,7 +517,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             }
         }
         Op::DrainProject { amount } => {
-            let ids: Vec<String> = adversary::projects(g)
+            let ids: Vec<crate::key::Key> = adversary::projects(g)
                 .into_iter()
                 .filter(|p| g.var(&adversary::project_key(p)) > 0)
                 .collect();
@@ -572,10 +572,10 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
         Op::Sway { side, amount } => alignment::sway(g, cx, *side, *amount),
         Op::NextRoundInsight { amount } => economy::add_bonus_insight(g, cx, *amount),
         Op::NextBuildingDiscount { amount } => {
-            cx.add_key(g, cards::next_discount(seat), *amount)
+            cx.add_key(g, cards::next_discount(seat).into(), *amount)
         }
         Op::Production { resource, amount } => {
-            cx.add_key(g, economy::production_key(seat, *resource), *amount)
+            cx.add_key(g, economy::production_key(seat, *resource).into(), *amount)
         }
         Op::AddTokens { kind, amount } => {
             let ids = cards::token_cards(&w, g, seat, Some(*kind));

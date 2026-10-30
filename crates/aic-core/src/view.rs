@@ -20,6 +20,7 @@ use serde::Serialize;
 
 use crate::content::Content;
 use crate::hex::Hex;
+use crate::key::Key;
 use crate::state::{GameState, Outcome};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -468,7 +469,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
                 .tokens
                 .iter()
                 .map(|(k, &n)| Token {
-                    kind: k.clone(),
+                    kind: k.to_string(),
                     count: n,
                 })
                 .collect(),
@@ -477,7 +478,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
     let kinds: std::collections::BTreeSet<&str> = g
         .hexes
         .iter()
-        .flat_map(|h| h.tokens.keys().map(String::as_str))
+        .flat_map(|h| h.tokens.keys().map(Key::as_str))
         .collect();
     let countries = rules
         .map
@@ -541,7 +542,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
     let globals = g
         .vars
         .iter()
-        .map(|(k, &n)| engine(k.clone(), k, n, "a module track (vars)"))
+        .map(|(k, &n)| engine(k.to_string(), k, n, "a module track (vars)"))
         .collect();
     let phase = rules.phase(g).map(|p| PhaseView {
         index: g.phase,
@@ -596,7 +597,7 @@ pub(crate) fn finish(view: &mut View, g: &GameState, content: &Content) {
             .iter()
             .filter(|id| !shown(id))
             .map(|id| CardView {
-                id: id.clone(),
+                id: id.to_string(),
                 name: content.name_of(id).unwrap_or(id).to_string(),
                 text: String::new(),
                 status: "used".to_string(),

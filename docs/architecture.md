@@ -31,9 +31,12 @@ rules themselves are in [rules.md](rules.md).
 - **Fixed-width draws**: `Stream` exposes only `below(n)`, written out on `u32`. rand samples `usize` from a `u64` on 64-bit targets and from a `u32` on
   wasm32, which made native and browser games differ. Never draw a `usize` through
   rand.
-- **No hash-order leaks**: every map is a `BTreeMap`, and iteration follows seat, piece
-  or `Dir::ALL` order. Never `HashMap`/`HashSet` in anything that reaches the state or
-  results.
+- **No hash-order leaks**: every map is ordered (a `BTreeMap`, or in the state a
+  `FlatMap`, 030: `key.rs`), and iteration follows seat, piece or `Dir::ALL` order. Never
+  `HashMap`/`HashSet` in anything that reaches the state or results. A state's names are
+  `Key`s: interned, one word to copy, ordered and written as their text, so the JSON is
+  what `String`s and `BTreeMap`s wrote. The interner is the core's one global: a cache
+  of which pointer stands for a string, never iterated, so no game can see it.
 - **Serializable state**: `GameState` round-trips through JSON. The seed and the RNG
   positions are decimal strings, because they don't fit JavaScript numbers.
 - **Exact replay**: config + seed + action list rebuild the identical state. The sim

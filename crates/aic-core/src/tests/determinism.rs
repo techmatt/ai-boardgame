@@ -143,15 +143,16 @@ fn malformed_and_mismatched_states_are_errors_not_panics() {
         .apply_mut(&mut g.clone(), &Action::Pass { seat: 0 }, None)
         .is_err());
     let mut bad = g.clone();
-    std::sync::Arc::make_mut(&mut bad.pending.as_mut().unwrap().snapshot)
+    let p = std::sync::Arc::make_mut(bad.pending.as_mut().unwrap());
+    std::sync::Arc::make_mut(&mut p.snapshot)
         .seats
         .pop();
     assert!(rules.check_state(&bad).is_err());
     let mut bad = g.clone();
-    bad.pending.as_mut().unwrap().ask.seat = 9;
+    std::sync::Arc::make_mut(bad.pending.as_mut().unwrap()).ask.seat = 9;
     assert!(rules.check_state(&bad).is_err());
     let mut bad = g.clone();
-    bad.pending.as_mut().unwrap().ask.options.truncate(1);
+    std::sync::Arc::make_mut(bad.pending.as_mut().unwrap()).ask.options.truncate(1);
     assert!(rules.check_state(&bad).is_err());
 
     let config = baseline();

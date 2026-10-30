@@ -154,7 +154,15 @@ pub fn presence_of(g: &GameState, seat: usize) -> Vec<usize> {
 }
 
 pub fn presence_count(g: &GameState, seat: usize) -> i64 {
-    presence_of(g, seat).len() as i64
+    let k = presence(seat);
+    (0..g.hexes.len()).filter(|&h| g.tokens(h, k) > 0).count() as i64
+}
+
+/// Whether seat `s` has a presence on the board: [`presence_count`] above 0,
+/// stopping at the first.
+pub fn has_presence(g: &GameState, seat: usize) -> bool {
+    let k = presence(seat);
+    (0..g.hexes.len()).any(|h| g.tokens(h, k) > 0)
 }
 
 /// Whether hex `h` is within seat `s`'s reach (1 of one of its presence).

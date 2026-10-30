@@ -5,6 +5,7 @@
 //! and the board conditions for winning and losing.
 
 use crate::content::{AdversaryCard, Op, ProjectCard};
+use crate::key::{Key, KeyBuf};
 use crate::module::{Build, Cx, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::rng::shuffle;
 use crate::state::GameState;
@@ -104,12 +105,12 @@ pub fn level(w: &World, n: i64) -> bool {
 }
 
 /// Compute on visible project `id`.
-pub fn project_key(id: &str) -> String {
-    format!("adversary.project.{id}")
+pub fn project_key(id: &str) -> KeyBuf {
+    KeyBuf::new("adversary.project.").text(id)
 }
 
 /// The visible projects, in row order.
-pub fn projects(g: &GameState) -> Vec<String> {
+pub fn projects(g: &GameState) -> Vec<Key> {
     g.pile(PROJECTS).to_vec()
 }
 
@@ -259,12 +260,12 @@ impl Module for Adversary {
         }
         let mut deck = Vec::new();
         for stage in 1..=3u8 {
-            let mut ids: Vec<String> = w
+            let mut ids: Vec<Key> = w
                 .content
                 .adversary
                 .iter()
                 .filter(|c| c.stage == stage)
-                .map(|c| c.id.clone())
+                .map(|c| Key::new(&c.id))
                 .collect();
             shuffle(&mut ids, cx.rng(g, "adversary"));
             let mut n = self.stage_cards[stage as usize - 1];
@@ -278,12 +279,12 @@ impl Module for Adversary {
         // The project deck: each stage shuffled on its own, cheap on top.
         let mut deck = Vec::new();
         for stage in 1..=2u8 {
-            let mut ids: Vec<String> = w
+            let mut ids: Vec<Key> = w
                 .content
                 .projects
                 .iter()
                 .filter(|c| c.stage == stage)
-                .map(|c| c.id.clone())
+                .map(|c| Key::new(&c.id))
                 .collect();
             shuffle(&mut ids, cx.rng(g, "adversary"));
             let n = self.project_cards[stage as usize - 1];
@@ -543,7 +544,7 @@ pub fn peek(g: &mut GameState, cx: &mut Cx, n: i64) {
 /// Deals a new row of projects from the top of the project deck.
 fn deal_projects(g: &mut GameState, cx: &mut Cx) {
     let n = cx.world.int("adversary.project_row") as usize;
-    let ids: Vec<String> = g.pile(PROJECT_DECK).iter().take(n).cloned().collect();
+    let ids: Vec<Key> = g.pile(PROJECT_DECK).iter().take(n).cloned().collect();
     for id in ids {
         cx.move_card(g, &id, PROJECT_DECK, PROJECTS, false)
             .expect("top of the project deck");
@@ -571,7 +572,7 @@ pub fn gain_compute(g: &mut GameState, cx: &mut Cx, n: i64) -> Res {
             cx.tally(g, "adversary.compute_lost", 1);
             continue;
         };
-        cx.add_key(g, project_key(&id), 1);
+        cx.add_key(g, project_key(&id).into(), 1);
         cx.per_round(g, OPS, 1);
         if g.var(&project_key(&id)) >= project_cost(&w, g, &id) {
             resolve_project(g, cx, &id)?;
@@ -588,7 +589,7 @@ pub fn gain_compute(g: &mut GameState, cx: &mut Cx, n: i64) -> Res {
 fn resolve_project(g: &mut GameState, cx: &mut Cx, id: &str) -> Res {
     let w = cx.world;
     let p = project(&w, id);
-    cx.set_key(g, project_key(id), 0);
+    cx.set_key(g, project_key(id).into(), 0);
     let to = if p.ongoing {
         PROJECTS_ONGOING
     } else {
@@ -627,7 +628,7 @@ fn resolve_project(g: &mut GameState, cx: &mut Cx, id: &str) -> Res {
 pub fn drain_project(g: &mut GameState, cx: &mut Cx, id: &str, n: i64) {
     let k = n.min(g.var(&project_key(id))).max(0);
     if k > 0 {
-        cx.add_key(g, project_key(id), -k);
+        cx.add_key(g, project_key(id).into(), -k);
         cx.tally(g, "adversary.compute_drained", k);
     }
 }
@@ -636,7 +637,7 @@ pub fn drain_project(g: &mut GameState, cx: &mut Cx, id: &str, n: i64) {
 /// new one.
 pub fn discard_project(g: &mut GameState, cx: &mut Cx, id: &str) {
     let w = cx.world;
-    cx.set_key(g, project_key(id), 0);
+    cx.set_key(g, project_key(id).into(), 0);
     cx.move_card(g, id, PROJECTS, PROJECTS_DONE, false)
         .expect("visible project");
     cx.tally(g, "adversary.projects_discarded", 1);
@@ -1083,8 +1084,14 @@ pub fn purge_count(w: &World, g: &GameState, level: i64) -> i64 {
     n
 }
 
+/// Whether [`purge_count`] is 0, stopping at the first piece: every action asks.
 pub fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
-    purge_count(w, g, level) == 0
+    !(0..g.hexes.len()).any(|h| {
+        (is_city(w, h) && corrupted(g, h))
+            || (level < 3 && g.tokens(h, NODE) > 0)
+            || (level < 1 && g.tokens(h, ADV_AMBASSADOR) > 0)
+            || (level < 2 && g.tokens(h, TROOP) > 0)
+    })
 }
 
 pub fn win_text(level: i64) -> String {
@@ -1103,6 +1110,6 @@ pub fn win_text(level: i64) -> String {
 /// 027). (The deck running out ends the game in the build step, and the
 /// Discord deck running out in the tip.)
 pub fn loss(g: &GameState) -> Option<(&'static str, String)> {
-    let gone = (0..g.seats.len()).find(|&s| presence_count(g, s) == 0)?;
+    let gone = (0..g.seats.len()).find(|&s| !has_presence(g, s))?;
     Some(("presence", format!("seat {gone} has no presence left on the board")))
 }

@@ -322,4 +322,12 @@ fn print_timing(games: &[experiment::GameResult], wall_s: f64, report_s: f64) {
             .collect();
         eprintln!("search (of agents + probes): {}", line.join(", "));
     }
+    if let Some((allocs, bytes)) = prof::allocated() {
+        let n = games.len().max(1) as f64;
+        eprintln!(
+            "allocated: {:.0} k allocations and {:.0} MB a game",
+            allocs as f64 / n / 1e3,
+            bytes as f64 / n / 1e6
+        );
+    }
 }

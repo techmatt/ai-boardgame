@@ -4,8 +4,6 @@
 //! keyed by the game seed and a hash of the purpose name. Adding, removing or
 //! reordering modules therefore never shifts the numbers another module sees.
 
-use std::collections::BTreeMap;
-
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -117,7 +115,7 @@ impl<'de> Deserialize<'de> for Stream {
 
 /// All streams of a game, by purpose. Created at `new_game` for every
 /// purpose the configured module variants declare; nothing else may draw.
-pub type RngStreams = BTreeMap<String, Stream>;
+pub type RngStreams = crate::key::Table<std::sync::Arc<Stream>>;
 
 /// Fisher-Yates, written out so the sequence never depends on a library's
 /// shuffle implementation.

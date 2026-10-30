@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 
 use crate::action::Action;
 use crate::content::{CardDef, DiscountOn, Op, Tag, TagOrAny, TokenKind};
+use crate::key::{Key, KeyBuf};
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -73,43 +74,43 @@ const PHASES: &[PhaseSpec] = &[
     ),
 ];
 
-pub fn hand(seat: usize) -> String {
-    format!("cards.hand.{seat}")
+pub fn hand(seat: usize) -> KeyBuf {
+    KeyBuf::new("cards.hand.").num(seat)
 }
 
 /// Seat `s`'s active buildings: the top card of each slot's stack, and
 /// slotless buildings.
-pub fn built(seat: usize) -> String {
-    format!("cards.built.{seat}")
+pub fn built(seat: usize) -> KeyBuf {
+    KeyBuf::new("cards.built.").num(seat)
 }
 
 /// The cards splayed under seat `s`'s active building `top`, bottom first:
 /// their effects are off, their tags still count.
-pub fn under(seat: usize, top: &str) -> String {
-    format!("cards.under.{seat}.{top}")
+pub fn under(seat: usize, top: &str) -> KeyBuf {
+    KeyBuf::new("cards.under.").num(seat).text(".").text(top)
 }
 
 /// Seat `s`'s play area: programs played (their tags count).
-pub fn played(seat: usize) -> String {
-    format!("cards.played.{seat}")
+pub fn played(seat: usize) -> KeyBuf {
+    KeyBuf::new("cards.played.").num(seat)
 }
 
 /// Tokens on seat `s`'s card `card` (021: tokens live only on cards).
-pub fn tokens_key(seat: usize, card: &str) -> String {
-    format!("cards.tokens.{seat}.{card}")
+pub fn tokens_key(seat: usize, card: &str) -> KeyBuf {
+    KeyBuf::new("cards.tokens.").num(seat).text(".").text(card)
 }
 
 /// Prefix of every seat's draft packet pile.
 pub const PACKETS: &str = "cards.packet.";
 
 /// The draft hand in front of seat `s`.
-pub fn packet(seat: usize) -> String {
-    format!("{PACKETS}{seat}")
+pub fn packet(seat: usize) -> KeyBuf {
+    KeyBuf::new(PACKETS).num(seat)
 }
 
 /// Cards seat `s` has drafted this round and not yet kept.
-pub fn drafted(seat: usize) -> String {
-    format!("cards.drafted.{seat}")
+pub fn drafted(seat: usize) -> KeyBuf {
+    KeyBuf::new("cards.drafted.").num(seat)
 }
 
 fn deck(tier: u8) -> String {
@@ -125,8 +126,8 @@ fn picked_key(seat: usize) -> String {
 }
 
 /// Credits seat `s`'s next building this round costs less (a one-off discount).
-pub fn next_discount(seat: usize) -> String {
-    format!("cards.next_discount.{seat}")
+pub fn next_discount(seat: usize) -> KeyBuf {
+    KeyBuf::new("cards.next_discount.").num(seat)
 }
 
 /// Set once seat `s`'s Aegis Dome Array has saved a building this round (module `board`).
@@ -134,8 +135,8 @@ pub fn civic_used(seat: usize) -> String {
     format!("cards.civic_used.{seat}")
 }
 
-fn unpowered(seat: usize, card: &str) -> String {
-    format!("cards.unpowered.{seat}.{card}")
+fn unpowered(seat: usize, card: &str) -> KeyBuf {
+    KeyBuf::new("cards.unpowered.").num(seat).text(".").text(card)
 }
 
 /// Drafted cards `seat` has kept this round.
@@ -217,7 +218,7 @@ pub fn has_passive(w: &World, g: &GameState, seat: usize, f: impl Fn(&Op) -> boo
 
 /// Every card seat `s` has in play whose tags count: active buildings, the
 /// cards splayed under them, and programs in the play area.
-pub fn in_play(g: &GameState, seat: usize) -> Vec<String> {
+pub fn in_play(g: &GameState, seat: usize) -> Vec<Key> {
     let mut out = Vec::new();
     for top in g.pile(&built(seat)) {
         out.extend(g.pile(&under(seat, top)).iter().cloned());
@@ -237,7 +238,7 @@ pub fn tags(w: &World, g: &GameState, seat: usize, tag: Tag) -> i64 {
 
 /// Cards seat `s` has in play holding tokens of `kind` (active buildings
 /// and programs), in that order.
-pub fn token_cards(w: &World, g: &GameState, seat: usize, kind: Option<TokenKind>) -> Vec<String> {
+pub fn token_cards(w: &World, g: &GameState, seat: usize, kind: Option<TokenKind>) -> Vec<Key> {
     g.pile(&built(seat))
         .iter()
         .chain(g.pile(&played(seat)).iter())
@@ -258,7 +259,7 @@ pub fn add_tokens(g: &mut GameState, cx: &mut Cx, seat: usize, card: &str, n: i6
     if n == 0 {
         return;
     }
-    cx.add_key(g, k, n);
+    cx.add_key(g, k.into(), n);
     if n > 0 {
         cx.tally(g, "cards.tokens_gained", n);
         cx.per_round(g, "cards.tokens_gained", n);
@@ -284,7 +285,7 @@ pub fn upkeep(g: &mut GameState, cx: &mut Cx, seat: usize) {
                 cx.add_resource(g, seat, *r, -n);
             }
         }
-        cx.set_key(g, unpowered(seat, &id), (!ok) as i64);
+        cx.set_key(g, unpowered(seat, &id).into(), (!ok) as i64);
     }
     for p in passives(&w, g, seat) {
         if let Op::ConvertUpkeep {
@@ -321,7 +322,7 @@ pub fn capacity(w: &World, g: &GameState, seat: usize) -> i64 {
 }
 
 /// Active buildings that take a slot (each the top of a stack).
-fn slotted(w: &World, g: &GameState, seat: usize) -> Vec<String> {
+fn slotted(w: &World, g: &GameState, seat: usize) -> Vec<Key> {
     g.pile(&built(seat))
         .iter()
         .filter(|id| !def(w, id).slotless)
@@ -331,7 +332,7 @@ fn slotted(w: &World, g: &GameState, seat: usize) -> Vec<String> {
 
 /// Stacks a building `d` may be built over: tops carrying its `replaces`
 /// tag, or any slotted top.
-fn stack_targets(w: &World, g: &GameState, seat: usize, d: &CardDef) -> Vec<String> {
+fn stack_targets(w: &World, g: &GameState, seat: usize, d: &CardDef) -> Vec<Key> {
     slotted(w, g, seat)
         .into_iter()
         .filter(|top| {
@@ -430,7 +431,18 @@ pub fn discount_room(
     seat: usize,
     d: &CardDef,
 ) -> Option<(Resource, i64, i64)> {
-    let cost = play_cost(w, g, seat, d);
+    discount_room_at(w, g, seat, d, play_cost(w, g, seat, d))
+}
+
+/// [`discount_room`] with [`play_cost`] already known (a caller pricing a whole
+/// hand works it out once).
+pub fn discount_room_at(
+    w: &World,
+    g: &GameState,
+    seat: usize,
+    d: &CardDef,
+    cost: i64,
+) -> Option<(Resource, i64, i64)> {
     ai::board(w, seat).discounts.iter().find_map(|x| {
         let applies = match x.tag {
             DiscountOn::Building => d.is_building(),
@@ -508,7 +520,7 @@ fn ability_blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'
 pub struct Source {
     pub label: String,
     /// The pile the cards leave, and the cards (a stack: all of it).
-    pub cards: Vec<(String, String)>,
+    pub cards: Vec<(String, Key)>,
     pub tags: Vec<Tag>,
 }
 
@@ -519,17 +531,17 @@ pub fn sources(w: &World, g: &GameState, seat: usize) -> Vec<Source> {
     for id in g.pile(&played(seat)) {
         out.push(Source {
             label: format!("program {id}"),
-            cards: vec![(played(seat), id.clone())],
+            cards: vec![(played(seat).to_string(), id.clone())],
             tags: def(w, id).tags.clone(),
         });
     }
     for top in g.pile(&built(seat)) {
-        let mut cards: Vec<(String, String)> = g
+        let mut cards: Vec<(String, Key)> = g
             .pile(&under(seat, top))
             .iter()
-            .map(|c| (under(seat, top), c.clone()))
+            .map(|c| (under(seat, top).to_string(), c.clone()))
             .collect();
-        cards.push((built(seat), top.clone()));
+        cards.push((built(seat).to_string(), top.clone()));
         let tags = cards
             .iter()
             .flat_map(|(_, c)| def(w, c).tags.iter().copied())
@@ -558,7 +570,7 @@ pub fn sources(w: &World, g: &GameState, seat: usize) -> Vec<Source> {
             if !tags.is_empty() {
                 out.push(Source {
                     label: format!("hand {id}"),
-                    cards: vec![(hand(seat), id.clone())],
+                    cards: vec![(hand(seat).to_string(), id.clone())],
                     tags,
                 });
             }
@@ -652,8 +664,8 @@ pub fn sacrifice_for(g: &mut GameState, cx: &mut Cx, seat: usize, cost: &[(TagOr
         need.pay(&src.tags);
         given += src.tags.len() as i64;
         for (pile, card) in &src.cards {
-            cx.set_key(g, tokens_key(seat, card), 0);
-            cx.set_key(g, unpowered(seat, card), 0);
+            cx.set_key(g, tokens_key(seat, card).into(), 0);
+            cx.set_key(g, unpowered(seat, card).into(), 0);
             discard(g, cx, card, pile);
             cx.tally(g, "cards.sacrificed", 1);
         }
@@ -676,7 +688,7 @@ pub fn draw(g: &mut GameState, cx: &mut Cx, seat: usize, n: i64) -> Res {
 }
 
 /// The top card of a tier's deck, reshuffling its discards if it is empty.
-fn top_of(g: &mut GameState, cx: &mut Cx, tier: u8) -> Option<String> {
+fn top_of(g: &mut GameState, cx: &mut Cx, tier: u8) -> Option<Key> {
     if g.pile(&deck(tier)).is_empty() {
         let mut cards = g.pile(&discard_pile(tier)).to_vec();
         if cards.is_empty() {
@@ -745,7 +757,7 @@ impl Cards {
             cx.per_round(g, "cards.insight_played", d.insight);
         }
         for (r, n) in &d.lowers {
-            cx.add_key(g, economy::production_key(seat, *r), -n);
+            cx.add_key(g, economy::production_key(seat, *r).into(), -n);
         }
         if d.chips > 0 {
             cx.tally(g, "board.chips_spent", d.chips);
@@ -753,7 +765,7 @@ impl Cards {
         cx.count(g, &format!("played.{id}"), 1);
         cx.per_round(g, "cards.played", 1);
         if d.is_building() {
-            cx.set_key(g, next_discount(seat), 0);
+            cx.set_key(g, next_discount(seat).into(), 0);
             if !d.slotless {
                 // A new slot while one is free (not for a replacement), or
                 // over one of your buildings: it splays down.
@@ -778,7 +790,7 @@ impl Cards {
                         cx.move_card(g, &c, &under(seat, &old), &under(seat, id), false)?;
                     }
                     cx.move_card(g, &old, &built(seat), &under(seat, id), false)?;
-                    cx.set_key(g, unpowered(seat, &old), 0);
+                    cx.set_key(g, unpowered(seat, &old).into(), 0);
                     cx.tally(g, "cards.replaced", 1);
                     cx.per_round(g, "cards.replaced", 1);
                 }
@@ -800,12 +812,12 @@ impl Module for Cards {
             .filter_map(|s| ai::board(&w, s).start.as_deref())
             .collect();
         for tier in [1, 2] {
-            let mut ids: Vec<String> = self
+            let mut ids: Vec<Key> = self
                 .cards
                 .iter()
                 .map(|&i| &w.content.cards[i])
                 .filter(|c| c.tier == tier && !starts.contains(&c.id.as_str()))
-                .map(|c| c.id.clone())
+                .map(|c| Key::new(&c.id))
                 .collect();
             shuffle(&mut ids, cx.rng(g, "cards"));
             cx.set_pile(g, &deck(tier), ids);
@@ -815,7 +827,7 @@ impl Module for Cards {
             let selected =
                 |id: &str| w.content.card_index(id).is_some_and(|i| self.cards.contains(&i));
             for id in &b.cards {
-                let taken = (0..s).any(|o| g.pile(&hand(o)).contains(id));
+                let taken = (0..s).any(|o| g.pile(&hand(o)).iter().any(|c| c == id));
                 if selected(id) && !taken {
                     cx.move_card(g, id, "", &hand(s), false).unwrap();
                 }
@@ -823,7 +835,7 @@ impl Module for Cards {
             // The board's starting building (021), one copy: a repeated AI's
             // second seat has none.
             if let Some(id) = &b.start {
-                let taken = (0..s).any(|o| g.pile(&built(o)).contains(id));
+                let taken = (0..s).any(|o| g.pile(&built(o)).iter().any(|c| c == id));
                 if selected(id) && !taken {
                     cx.move_card(g, id, "", &built(s), false).unwrap();
                 }
@@ -836,7 +848,7 @@ impl Module for Cards {
             for id in g.seats[s].exhausted.clone() {
                 cx.refresh(g, s, &id);
             }
-            cx.set_key(g, next_discount(s), 0);
+            cx.set_key(g, next_discount(s).into(), 0);
             cx.set_key(g, civic_used(s), 0);
             cx.set_key(g, kept_key(s), 0);
         }
@@ -998,7 +1010,7 @@ impl Module for Cards {
                 cx.set_key(g, picked_key(s), 1);
                 if all_picked(g) {
                     let n = g.seats.len();
-                    let packets: Vec<Vec<String>> =
+                    let packets: Vec<Vec<Key>> =
                         (0..n).map(|p| g.pile(&packet(p)).to_vec()).collect();
                     // As in Terraforming Mars, the direction alternates by round.
                     let step = if g.round % 2 == 1 { 1 } else { n - 1 };

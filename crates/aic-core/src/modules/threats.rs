@@ -5,6 +5,7 @@
 
 use crate::action::Action;
 use crate::content::{Op, Resource, Side, Spot, ThreatDef};
+use crate::key::{Key, KeyBuf};
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -97,8 +98,8 @@ fn on(country: usize) -> String {
 }
 
 /// Prefix of every payment toward `threat` (by any seat, in any resource).
-pub fn paid_prefix(threat: &str) -> String {
-    format!("threats.paid.{threat}.")
+pub fn paid_prefix(threat: &str) -> KeyBuf {
+    KeyBuf::new("threats.paid.").text(threat).text(".")
 }
 
 fn paid_key(threat: &str, seat: usize, resource: Resource) -> String {
@@ -137,10 +138,10 @@ fn def<'w>(w: &World<'w>, id: &str) -> &'w ThreatDef {
 
 /// Active threats in execution order, each with its scope (its country, or
 /// `None` for a shared-row threat).
-pub fn active(g: &GameState) -> Vec<(String, Option<usize>)> {
-    let mut out: Vec<(String, Option<usize>)> =
+pub fn active(g: &GameState) -> Vec<(Key, Option<usize>)> {
+    let mut out: Vec<(Key, Option<usize>)> =
         g.pile(ROW).iter().map(|t| (t.clone(), None)).collect();
-    let mut on: Vec<(usize, &Vec<String>)> = g
+    let mut on: Vec<(usize, &std::sync::Arc<Vec<Key>>)> = g
         .piles
         .iter()
         .filter_map(|(k, v)| Some((k.strip_prefix("threats.on.")?.parse().ok()?, v)))
@@ -370,12 +371,12 @@ impl Module for Threats {
     fn setup(&self, g: &mut GameState, cx: &mut Cx) {
         let w = cx.world;
         for tier in [1, 2] {
-            let mut ids: Vec<String> = w
+            let mut ids: Vec<Key> = w
                 .content
                 .threats
                 .iter()
                 .filter(|t| t.tier == tier)
-                .map(|t| t.id.clone())
+                .map(|t| Key::new(&t.id))
                 .collect();
             shuffle(&mut ids, cx.rng(g, "threats"));
             cx.set_pile(g, &deck(tier), ids);
@@ -619,7 +620,7 @@ pub fn lose_tokens(g: &mut GameState, cx: &mut Cx, scope: Option<usize>, amount:
     let w = cx.world;
     for s in seats_in_scope(&w, g, scope) {
         for _ in 0..amount {
-            let cards: Vec<String> = cards::token_cards(&w, g, s, None)
+            let cards: Vec<Key> = cards::token_cards(&w, g, s, None)
                 .into_iter()
                 .filter(|c| g.var(&cards::tokens_key(s, c)) > 0)
                 .collect();
@@ -759,8 +760,8 @@ pub fn discard_most_expensive(g: &mut GameState, cx: &mut Cx, scope: Option<usiz
         let Some(top) = hand.iter().map(|c| cost(c)).max() else {
             continue;
         };
-        let tied: Vec<String> = hand.into_iter().filter(|c| cost(c) == top).collect();
-        let opts = tied.iter().map(|c| opt(c.clone())).collect();
+        let tied: Vec<Key> = hand.into_iter().filter(|c| cost(c) == top).collect();
+        let opts = tied.iter().map(|c| opt(c.as_str())).collect();
         let prompt = format!("Purge protocols: seat {s} discards which card?");
         if let Some(i) = cx.choose(s, &prompt, opts)? {
             cards::discard(g, cx, &tied[i], &cards::hand(s));

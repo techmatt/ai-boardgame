@@ -1,7 +1,13 @@
 //! Opt-in timing of the search's hot calls: build with `--features profile`
-//! and `experiment` prints where the agents' time went (rules apply, the
-//! state copy included; legal-action generation; the heuristic;
-//! determinization). Off, [`time`] is the call itself and costs nothing.
+//! and `experiment` prints where the agents' time went, with call counts, and
+//! what the process allocated. Off, [`time`] is the call itself and costs
+//! nothing.
+//!
+//! Parts nest: `line` holds the planner's rollouts whole, and the rest of its
+//! time shows up again under `apply`, `apply_mut`, `legal` and `eval`. `clone`
+//! is timed on a throwaway copy beside each `apply` (030), so `apply` less
+//! `clone` is the rules; that copy adds its own time to the run, and the
+//! timers cost about 50 ns a call.
 //!
 //! Each worker thread adds to its own counters and merges them into the
 //! process total with [`flush`] when it runs out of games.
@@ -9,17 +15,27 @@
 #[derive(Clone, Copy)]
 pub enum Part {
     Apply,
+    ApplyMut,
+    #[cfg_attr(not(feature = "profile"), allow(dead_code))]
+    Clone,
     Legal,
     Eval,
     Determinize,
+    Line,
+    Sync,
+    Policy,
 }
 
 #[cfg_attr(not(feature = "profile"), allow(dead_code))]
-pub const PARTS: [&str; 4] = ["apply", "legal", "eval", "determinize"];
+pub const PARTS: [&str; 9] = [
+    "apply", "apply_mut", "clone", "legal", "eval", "determinize", "line", "sync", "policy",
+];
 
 #[cfg(feature = "profile")]
 mod on {
+    use std::alloc::{GlobalAlloc, Layout};
     use std::cell::RefCell;
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
     use std::sync::Mutex;
 
     pub type Totals = [(f64, u64); super::PARTS.len()];
@@ -28,7 +44,33 @@ mod on {
         pub static LOCAL: RefCell<Totals> = const { RefCell::new([(0.0, 0); super::PARTS.len()]) };
     }
     pub static TOTAL: Mutex<Totals> = Mutex::new([(0.0, 0); super::PARTS.len()]);
+
+    pub static ALLOCS: AtomicU64 = AtomicU64::new(0);
+    pub static BYTES: AtomicU64 = AtomicU64::new(0);
+
+    /// mimalloc, counted.
+    pub struct Counting;
+
+    // SAFETY: passes every call straight to mimalloc.
+    unsafe impl GlobalAlloc for Counting {
+        unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+            ALLOCS.fetch_add(1, Relaxed);
+            BYTES.fetch_add(l.size() as u64, Relaxed);
+            mimalloc::MiMalloc.alloc(l)
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            mimalloc::MiMalloc.dealloc(p, l)
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
+            ALLOCS.fetch_add(1, Relaxed);
+            BYTES.fetch_add(n as u64, Relaxed);
+            mimalloc::MiMalloc.realloc(p, l, n)
+        }
+    }
 }
+
+#[cfg(feature = "profile")]
+pub use on::Counting;
 
 /// Runs `f`, adding its time to `part` when profiling.
 #[inline(always)]
@@ -78,6 +120,17 @@ pub fn totals() -> Option<Vec<(&'static str, f64, u64)>> {
                 .map(|(n, (ms, c))| (*n, *ms, *c))
                 .collect(),
         )
+    }
+    #[cfg(not(feature = "profile"))]
+    None
+}
+
+/// What the process allocated so far: `(allocations, bytes)`.
+pub fn allocated() -> Option<(u64, u64)> {
+    #[cfg(feature = "profile")]
+    {
+        use std::sync::atomic::Ordering::Relaxed;
+        Some((on::ALLOCS.load(Relaxed), on::BYTES.load(Relaxed)))
     }
     #[cfg(not(feature = "profile"))]
     None

@@ -8,6 +8,7 @@
 
 use crate::action::Action;
 use crate::content::{Op, RoundFlag, Side};
+use crate::key::KeyBuf;
 use crate::module::{
     scheduled, Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -107,16 +108,17 @@ pub fn shelter(g: &mut GameState, cx: &mut Cx, country: usize) {
 }
 
 /// Cubes on country `c`'s megaproject: `None` for the adversary's.
-pub fn project_key(c: usize, owner: Option<usize>) -> String {
+pub fn project_key(c: usize, owner: Option<usize>) -> KeyBuf {
+    let k = KeyBuf::new("board.project.").num(c).text(".");
     match owner {
-        Some(s) => format!("board.project.{c}.{s}"),
-        None => format!("board.project.{c}.adversary"),
+        Some(s) => k.num(s),
+        None => k.text("adversary"),
     }
 }
 
 /// Set once country `c`'s megaproject has completed.
-pub fn project_done(c: usize) -> String {
-    format!("board.project_done.{c}")
+pub fn project_done(c: usize) -> KeyBuf {
+    KeyBuf::new("board.project_done.").num(c)
 }
 
 /// A standard action. `Action::Standard` carries its [`name`](Self::name).
@@ -195,8 +197,8 @@ pub fn war_round(w: &World, g: &GameState) -> bool {
 
 /// Presence tokens seat `s` has taken off its AI board's track (the
 /// starting one included); AI boards read their uncovered spaces from it.
-pub fn track_key(seat: usize) -> String {
-    format!("board.track.{seat}")
+pub fn track_key(seat: usize) -> KeyBuf {
+    KeyBuf::new("board.track.").num(seat)
 }
 
 pub fn track_taken(g: &GameState, seat: usize) -> usize {
@@ -204,8 +206,8 @@ pub fn track_taken(g: &GameState, seat: usize) -> usize {
 }
 
 /// Tokens seat `s` has taken off its board's second presence track (021).
-pub fn track2_key(seat: usize) -> String {
-    format!("board.track2.{seat}")
+pub fn track2_key(seat: usize) -> KeyBuf {
+    KeyBuf::new("board.track2.").num(seat)
 }
 
 pub fn track2_taken(g: &GameState, seat: usize) -> usize {
@@ -287,9 +289,9 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
         cx.add_resource(g, seat, Resource::PresenceReserve, -1);
         cx.tally(g, "board.presence_from_reserve", 1);
     } else if second {
-        cx.add_key(g, track2_key(seat), 1);
+        cx.add_key(g, track2_key(seat).into(), 1);
     } else {
-        cx.add_key(g, track_key(seat), 1);
+        cx.add_key(g, track_key(seat).into(), 1);
     }
     cx.add_tokens(g, hexes[j], &presence(seat), 1);
     cx.tally(g, "board.presence_placed", 1);
@@ -441,7 +443,7 @@ fn std_resolve(
         }
         StandardAction::Energy => cx.add_resource(g, s, Resource::Energy, 1),
         StandardAction::Drain => {
-            let ids: Vec<String> = adversary::projects(g)
+            let ids: Vec<crate::key::Key> = adversary::projects(g)
                 .into_iter()
                 .filter(|p| g.var(&adversary::project_key(p)) > 0)
                 .collect();
@@ -650,9 +652,9 @@ pub fn last_presence_safe(w: &World, g: &GameState, s: usize) -> bool {
 fn return_to_track(g: &mut GameState, cx: &mut Cx, s: usize) {
     let (t1, t2) = (track_taken(g, s), track2_taken(g, s));
     if t2 > t1 || (t1 <= 1 && t2 > 0) {
-        cx.add_key(g, track2_key(s), -1);
+        cx.add_key(g, track2_key(s).into(), -1);
     } else if t1 > 1 {
-        cx.add_key(g, track_key(s), -1);
+        cx.add_key(g, track_key(s).into(), -1);
     }
 }
 
@@ -1314,7 +1316,7 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             }
             continue;
         }
-        cx.add_key(g, project_key(c, to), cubes);
+        cx.add_key(g, project_key(c, to).into(), cubes);
         complete_project(g, cx, c);
     }
     // An adversary ambassador on a presence (with no other piece to divert)
@@ -1359,12 +1361,12 @@ fn complete_project(g: &mut GameState, cx: &mut Cx, c: usize) {
     }
     for (s, &n) in mine.iter().enumerate() {
         cx.add_resource(g, s, Resource::Credits, n * w.int("board.project_credits"));
-        cx.set_key(g, project_key(c, Some(s)), 0);
+        cx.set_key(g, project_key(c, Some(s)).into(), 0);
     }
     let per = w.int("board.project_discord_per");
     alignment::sway(g, cx, Side::Discord, adv / per);
-    cx.set_key(g, project_key(c, None), 0);
-    cx.set_key(g, project_done(c), 1);
+    cx.set_key(g, project_key(c, None).into(), 0);
+    cx.set_key(g, project_done(c).into(), 1);
     cx.tally(g, "board.projects_completed", 1);
     cx.note(None, || format!("{} completes", p.name));
 }
@@ -1394,7 +1396,7 @@ impl Module for Board {
             let c = home_country(&w, s);
             let n = w.content.map.countries[c].presence;
             cx.add_tokens(g, w.map.numbered(c, n), &presence(s), 1);
-            cx.set_key(g, track_key(s), 1);
+            cx.set_key(g, track_key(s).into(), 1);
             cx.add_resource(g, s, Resource::Ambassadors, w.int("board.start_ambassadors"));
         }
     }

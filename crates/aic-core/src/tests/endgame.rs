@@ -20,7 +20,7 @@ const HOLD: [&str; 3] = ["board.hold_base=3", "board.hold_min=2", "board.free_le
 
 fn empty_deck(g: &mut GameState, side: &str) {
     for tier in 1..=2 {
-        g.piles.insert(format!("alignment.deck.{side}.{tier}"), Vec::new());
+        g.piles.insert(format!("alignment.deck.{side}.{tier}").into(), Vec::new().into());
     }
 }
 
@@ -28,7 +28,7 @@ fn empty_deck(g: &mut GameState, side: &str) {
 fn a_discord_tip_with_an_empty_deck_loses_and_nothing_reshuffles() {
     let (rules, mut g) = action_only(&[]);
     empty_deck(&mut g, "discord");
-    g.piles.insert("alignment.resolved.discord".into(), vec!["blight".into()]);
+    g.piles.insert("alignment.resolved.discord".into(), vec!["blight".into()].into());
     fill_bucket(&rules, &mut g, Side::Discord);
     give(&rules, &mut g);
     let o = g.outcome.as_ref().expect("a loss");
@@ -40,7 +40,7 @@ fn a_discord_tip_with_an_empty_deck_loses_and_nothing_reshuffles() {
 fn drawing_the_last_unity_card_wins_outright() {
     let (rules, mut g) = action_only(&[]);
     empty_deck(&mut g, "unity");
-    g.piles.insert("alignment.deck.unity.1".into(), vec!["civil_defense".into()]);
+    g.piles.insert("alignment.deck.unity.1".into(), vec!["civil_defense".into()].into());
     fill_bucket(&rules, &mut g, Side::Unity);
     give(&rules, &mut g);
     let o = g.outcome.as_ref().expect("a win");
@@ -64,7 +64,7 @@ fn the_supply_is_a_cap_not_a_loss() {
     let city = rules.map.numbered(0, piece(0).corrupted[0]);
     put(&mut g, city, ADV_CUBE, 1);
     g.vars.insert(SUPPLY.into(), 1);
-    g.piles.insert(NEXT.into(), vec!["adv_s1_long_patrols".into()]);
+    g.piles.insert(NEXT.into(), vec!["adv_s1_long_patrols".into()].into());
     run(&rules, &mut g);
     assert_eq!(g.tokens(city, ADV_AMBASSADOR), 1);
     assert!(!g.is_over());
@@ -83,7 +83,7 @@ fn every_corrupted_city_is_no_loss() {
 fn a_card_brings_arrivals_to_every_site_it_names_a_round_ahead() {
     let (rules, mut g) = lab_with(&["adversary.build"], &["adversary.arrivals=1"]);
     g.vars.insert(SUPPLY.into(), 40);
-    g.piles.insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()]);
+    g.piles.insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()].into());
     let w = rules.world();
     let plan = crate::modules::plan::next_build(&w, &g);
     let coast = hexes_where(&rules.map, |h| rules.map.hexes[h].coastal);
@@ -237,7 +237,7 @@ fn presence_on_track(g: &mut GameState, s: usize, hexes: &[usize]) {
     for &h in hexes {
         put(g, h, presence(s), 1);
     }
-    g.vars.insert(board::track_key(s), hexes.len() as i64);
+    g.vars.insert(board::track_key(s).into(), hexes.len() as i64);
 }
 
 #[test]
@@ -255,7 +255,7 @@ fn a_destroyed_presence_covers_its_track_space_again() {
     assert_eq!(g.resource(0, Resource::PresenceReserve), 0);
     assert!(credits(&ai::track_income(&w, &g, 0)) < credits(&income), "the space's income is gone");
     // The first space never covers: its token starts on the board.
-    g.vars.insert(board::track_key(0), 1);
+    g.vars.insert(board::track_key(0).into(), 1);
     with_cx(&rules, |cx| board::lose_presence(&mut g, cx, b, 0, "test"));
     assert_eq!(board::track_taken(&g, 0), 1);
 }
@@ -265,8 +265,8 @@ fn a_returned_presence_comes_off_the_second_track_when_it_is_further_along() {
     let (rules, mut g) = lab_with(&[], &["board.presence_returns=2"]);
     let a = rules.map.numbered(0, piece(0).presence);
     put(&mut g, a, presence(0), 1);
-    g.vars.insert(board::track_key(0), 1);
-    g.vars.insert(board::track2_key(0), 1);
+    g.vars.insert(board::track_key(0).into(), 1);
+    g.vars.insert(board::track2_key(0).into(), 1);
     with_cx(&rules, |cx| board::lose_presence(&mut g, cx, a, 0, "test"));
     assert_eq!((board::track_taken(&g, 0), board::track2_taken(&g, 0)), (1, 0));
 }
@@ -308,7 +308,7 @@ fn removing_a_node_clears_a_hack_on_its_hex() {
     let (rules, mut g) = lab(&[]);
     let h = rules.map.numbered(0, piece(0).cities[0]);
     put(&mut g, h, NODE, 1);
-    g.vars.insert(adversary::cut_key(h), 1);
+    g.vars.insert(adversary::cut_key(h).into(), 1);
     with_cx(&rules, |cx| adversary::remove_node(&mut g, cx, h));
     assert_eq!(g.var(&adversary::cut_key(h)), 0);
 }
@@ -322,7 +322,7 @@ fn a_lost_last_presence_comes_before_a_unity_tip_in_the_same_check() {
         put(&mut g, h, &presence(1), 0);
     }
     empty_deck(&mut g, "unity");
-    g.piles.insert("alignment.deck.unity.1".into(), vec!["civil_defense".into()]);
+    g.piles.insert("alignment.deck.unity.1".into(), vec!["civil_defense".into()].into());
     fill_bucket(&rules, &mut g, Side::Discord);
     fill_bucket(&rules, &mut g, Side::Unity);
     give(&rules, &mut g);

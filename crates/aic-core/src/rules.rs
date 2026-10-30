@@ -11,6 +11,7 @@ use crate::config::{Config, ModuleConfig, ParamValue};
 use crate::content::{content, Content};
 use crate::event::Event;
 use crate::hash::fnv1a64;
+use crate::key::{FastMap, Key, Table};
 use crate::map::Map;
 use crate::module::{
     end_game, Build, Choices, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, Res,
@@ -34,9 +35,9 @@ pub struct Rules {
     content: &'static Content,
     modules: Vec<Instance>,
     /// Every module's resolved parameters, `"<module>.<param>"`.
-    params: BTreeMap<String, ParamValue>,
+    params: FastMap<ParamValue>,
     /// Each configured module's variant, by module id.
-    variants: BTreeMap<String, String>,
+    variants: FastMap<String>,
 }
 
 /// One phase of the round: one module's phase, or several modules'
@@ -132,13 +133,13 @@ impl Rules {
             resolve_params(def.id, variant.params, mc)?;
             to_build.push((def, variant, cards));
         }
-        let mut params = BTreeMap::new();
+        let mut params = FastMap::default();
         for mc in &resolved.modules {
             for (k, v) in &mc.params {
                 params.insert(format!("{}.{k}", mc.module), v.clone());
             }
         }
-        let variants: BTreeMap<String, String> = resolved
+        let variants: FastMap<String> = resolved
             .modules
             .iter()
             .map(|mc| (mc.module.clone(), mc.variant.clone()))
@@ -284,23 +285,25 @@ impl Rules {
     }
 
     pub fn new_game_logged(&self, seed: u64, mut events: Option<&mut Vec<Event>>) -> GameState {
-        let mut rng = BTreeMap::new();
+        let mut rng = Table::default();
         for i in &self.modules {
             for p in i.variant.rng {
-                rng.insert(p.to_string(), Stream::new(seed, p));
+                rng.insert((*p).into(), Arc::new(Stream::new(seed, p)));
             }
         }
         let n = self.config.countries as usize;
         let seat = Seat::default();
         let mut g = GameState {
             seed,
-            config: self.config.clone(),
+            // A game's own copy: every state clone counts a reference to it, and
+            // one count shared by all workers is a cache line they fight over (030).
+            config: Arc::new((*self.config).clone()),
             round: 0,
             phase: self.round.len(),
             seats: vec![seat; n],
-            hexes: vec![HexState::default(); self.map.hexes.len()],
-            vars: BTreeMap::new(),
-            piles: BTreeMap::new(),
+            hexes: vec![Arc::new(HexState::default()); self.map.hexes.len()],
+            vars: Table::default(),
+            piles: Table::default(),
             pending: None,
             rng,
             stats: Stats::default(),
@@ -330,7 +333,7 @@ impl Rules {
             .iter()
             .flat_map(|i| i.variant.rng.iter().copied())
             .collect();
-        let have: BTreeSet<&str> = g.rng.keys().map(String::as_str).collect();
+        let have: BTreeSet<&str> = g.rng.keys().map(Key::as_str).collect();
         if want != have {
             return Err(format!(
                 "state RNG streams {have:?} do not match the config's {want:?}"
@@ -464,7 +467,7 @@ impl Rules {
                     mut made,
                     snapshot,
                     ..
-                } = *g.pending.take().unwrap();
+                } = Arc::unwrap_or_clone(g.pending.take().unwrap());
                 made.push(pick);
                 *g = (*snapshot).clone();
                 self.resolve(g, Snap::Shared(snapshot), trigger, made, events)
@@ -741,7 +744,7 @@ impl Rules {
 /// Stops a resolution at the question it asked, to go on from `snapshot`
 /// once it is answered.
 fn park(g: &mut GameState, trigger: Trigger, ch: Choices, snapshot: Arc<GameState>) {
-    g.pending = Some(Box::new(Pending {
+    g.pending = Some(Arc::new(Pending {
         trigger,
         made: ch.made,
         ask: ch.asked.expect("a halted choice records its question"),

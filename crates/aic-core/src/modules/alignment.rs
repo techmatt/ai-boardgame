@@ -10,6 +10,7 @@
 
 use crate::action::Action;
 use crate::content::{AlignmentCard, Op, Resource, Side};
+use crate::key::Key;
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -344,7 +345,7 @@ impl Alignment {
     /// count has reached its first threshold, else tier 1; the other tier
     /// if that deck is empty. Neither deck ever reshuffles (027): they are
     /// the game's clocks.
-    fn draw(&self, g: &GameState, w: &World, side: Side, tips: i64) -> Option<(String, String)> {
+    fn draw(&self, g: &GameState, w: &World, side: Side, tips: i64) -> Option<(Key, String)> {
         let first = match side {
             Side::Unity => w.list("alignment.unity_ease")[0],
             Side::Discord => w.int("alignment.discord_tier2"),
@@ -406,7 +407,7 @@ impl Alignment {
 
 /// Whether some seat has no presence on the board.
 fn presence_gone(g: &GameState) -> bool {
-    (0..g.seats.len()).any(|s| presence_count(g, s) == 0)
+    (0..g.seats.len()).any(|s| !has_presence(g, s))
 }
 
 impl Module for Alignment {
@@ -418,12 +419,12 @@ impl Module for Alignment {
             cx.set_key(g, bucket(side).into(), 0);
             cx.set_key(g, tips_key(side).into(), 0);
             for tier in [1u8, 2] {
-                let mut ids: Vec<String> = w
+                let mut ids: Vec<Key> = w
                     .content
                     .alignment
                     .iter()
                     .filter(|c| c.side == side && c.tier == tier)
-                    .map(|c| c.id.clone())
+                    .map(|c| Key::new(&c.id))
                     .collect();
                 shuffle(&mut ids, cx.rng(g, "alignment"));
                 // Difficulty 4: the Discord deck, the clock, is shorter.

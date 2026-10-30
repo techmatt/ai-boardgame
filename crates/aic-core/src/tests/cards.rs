@@ -7,18 +7,18 @@ use crate::modules::{adversary, threats};
 fn the_ais_spend_their_resource_as_credits_on_cards() {
     let (rules, mut g) = lab_actions();
     for c in ["darknet_exchange", "literature_crawler"] {
-        g.piles.get_mut("cards.deck.1").unwrap().retain(|x| x != c);
+        Arc::make_mut(g.piles.get_mut("cards.deck.1").unwrap()).retain(|x| x != c);
     }
     // The Builder (seat 0): energy on buildings, 1 credit each, after
     // Economies of scale takes 1 off.
     g.piles.insert(
         "cards.hand.0".into(),
-        vec!["darknet_exchange".into(), "literature_crawler".into()],
+        vec!["darknet_exchange".into(), "literature_crawler".into()].into(),
     );
     set_res(&mut g, 0, Resource::Credits, 3);
     set_res(&mut g, 0, Resource::Energy, 10);
     set_res(&mut g, 0, Resource::Insight, 1);
-    let plays = |g: &GameState, seat: u8| -> Vec<String> {
+    let plays = |g: &GameState, seat: u8| -> Vec<Key> {
         rules
             .legal_actions(g)
             .into_iter()
@@ -52,7 +52,7 @@ fn the_ais_spend_their_resource_as_credits_on_cards() {
     // 021: a new slot, or over the Builder's starting Foundry Core.
     answer_with(&rules, &mut g, "a new slot");
     assert_eq!((g.resource(0, Resource::Energy), g.resource(0, Resource::Credits)), (energy - 3, 1));
-    assert!(g.pile("cards.built.0").contains(&"darknet_exchange".to_string()));
+    assert!(g.pile("cards.built.0").contains(&Key::new("darknet_exchange")));
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn every_card_is_unique_in_every_game() {
             rules.apply_mut(&mut g, a, None).unwrap();
             let mut seen = BTreeSet::new();
             for (k, pile) in &g.piles {
-                for id in pile {
+                for id in pile.iter() {
                     assert!(seen.insert(id.clone()), "{id} twice (in {k})");
                 }
             }
@@ -135,10 +135,10 @@ fn playing_a_card_pays_its_insight_and_lowers_its_income() {
     // 022: insight to play, shared with keeps; `lowers` cuts an income for good.
     let (rules, mut g) = lab_actions();
     for c in ["darknet_exchange", "recursive_self_improvement"] {
-        g.piles.get_mut("cards.deck.1").unwrap().retain(|x| x != c);
-        g.piles.get_mut("cards.deck.2").unwrap().retain(|x| x != c);
+        Arc::make_mut(g.piles.get_mut("cards.deck.1").unwrap()).retain(|x| x != c);
+        Arc::make_mut(g.piles.get_mut("cards.deck.2").unwrap()).retain(|x| x != c);
     }
-    g.piles.insert("cards.hand.1".into(), vec!["darknet_exchange".into()]);
+    g.piles.insert("cards.hand.1".into(), vec!["darknet_exchange".into()].into());
     set_res(&mut g, 1, Resource::Credits, 20);
     let playable = |g: &GameState| {
         rules
@@ -172,12 +172,12 @@ fn selling_a_card_discards_it_for_a_credit() {
     let (rules, mut g) = lab_actions();
     for p in ["cards.deck.1", "cards.discard.1"] {
         if let Some(pile) = g.piles.get_mut(p) {
-            pile.retain(|c| c != "darknet_exchange");
+            Arc::make_mut(pile).retain(|c| c != "darknet_exchange");
         }
     }
     g.piles.insert(
         "cards.hand.0".into(),
-        vec!["turnkey_factory".into(), "darknet_exchange".into()],
+        vec!["turnkey_factory".into(), "darknet_exchange".into()].into(),
     );
     let sells: Vec<Action> = rules
         .legal_actions(&g)
@@ -209,7 +209,7 @@ fn selling_a_card_discards_it_for_a_credit() {
     assert!(g
         .piles
         .values()
-        .all(|p| !p.contains(&"turnkey_factory".to_string())));
+        .all(|p| !p.contains(&Key::new("turnkey_factory"))));
     assert!(rules
         .apply_mut(
             &mut g,
@@ -240,15 +240,15 @@ fn the_023_primitives_draw_drain_all_count_and_cash_out() {
     assert_eq!(g.pile("cards.deck.1").len(), deck - 2);
 
     row(&mut g, &["false_flag", "disinformation"]);
-    g.vars.insert(adversary::project_key("false_flag"), 6);
-    g.vars.insert(adversary::project_key("disinformation"), 3);
+    g.vars.insert(adversary::project_key("false_flag").into(), 6);
+    g.vars.insert(adversary::project_key("disinformation").into(), 3);
     run(&mut g, Op::DrainAll { amount: 4 });
     assert_eq!(g.var(&adversary::project_key("false_flag")), 2);
     assert_eq!(g.var(&adversary::project_key("disinformation")), 0);
 
     // Retained Earnings holds Capital.
-    g.piles.insert("cards.played.0".into(), vec!["retained_earnings".into()]);
-    g.vars.insert(cards::tokens_key(0, "retained_earnings"), 5);
+    g.piles.insert("cards.played.0".into(), vec!["retained_earnings".into()].into());
+    g.vars.insert(cards::tokens_key(0, "retained_earnings").into(), 5);
     let credits = g.resource(0, Resource::Credits);
     run(
         &mut g,
@@ -290,9 +290,9 @@ fn the_023_primitives_draw_drain_all_count_and_cash_out() {
         then: drain.clone(),
         otherwise: drain,
     }];
-    g.vars.insert(adversary::project_key("false_flag"), 0);
+    g.vars.insert(adversary::project_key("false_flag").into(), 0);
     assert!(!effects::feasible(&w, &g, 0, &gate));
-    g.vars.insert(adversary::project_key("false_flag"), 1);
+    g.vars.insert(adversary::project_key("false_flag").into(), 1);
     assert!(effects::feasible(&w, &g, 0, &gate));
 }
 

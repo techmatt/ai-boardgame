@@ -28,6 +28,7 @@ use rand_chacha::ChaCha8Rng;
 use super::eval::{Eval, Weights};
 use super::policy::{Forced, Policy};
 use super::search::{greedy_scores, pick, undoes, Greedy};
+use crate::prof::{self, Part};
 
 /// The phase the planner searches.
 const ACTION_PHASE: &str = "cards.play+";
@@ -63,7 +64,6 @@ struct Line {
 }
 
 pub struct Planner {
-    weights: Weights,
     forced: Forced,
     ev: Eval,
     rng: ChaCha8Rng,
@@ -88,8 +88,7 @@ fn idea(a: &Action) -> Option<String> {
 impl Planner {
     pub fn new(rules: &Rules, weights: Weights, forced: Forced, rng: ChaCha8Rng, cfg: PlannerCfg) -> Self {
         Planner {
-            ev: Eval::new(rules, weights.clone()),
-            weights,
+            ev: Eval::new(rules, weights),
             forced,
             rng,
             cfg,
@@ -102,17 +101,16 @@ impl Planner {
     /// A fresh rollout policy: the engine with this planner's forced
     /// behaviours, guessing from a seed of the state's own actions count, so
     /// a line repeats.
-    fn policy(&self, rules: &Rules, g: &GameState) -> Box<dyn Agent + Send> {
-        let ev = Eval::new(rules, self.weights.clone());
+    fn policy(&self, g: &GameState) -> Box<dyn Agent + Send> {
         let rng = ChaCha8Rng::seed_from_u64(g.seed ^ g.stats.actions as u64);
-        let inner = Box::new(Greedy::new(ev, rng, self.cfg.samples, 1, self.cfg.choices).pruned(self.cfg.prune));
+        let inner = Box::new(Greedy::new(self.ev.clone(), rng, self.cfg.samples, 1, self.cfg.choices).pruned(self.cfg.prune));
         Box::new(Policy::new(inner, self.forced.clone()))
     }
 
     /// Plays `g` on with the rollout policy to the first decision of round
     /// `stop` or the end of the game, adding its moves to `actions`.
     fn play_on(&self, rules: &Rules, g: &mut GameState, stop: u32, actions: &mut Vec<Action>) {
-        let mut agent = self.policy(rules, g);
+        let mut agent = self.policy(g);
         let mut legal = Vec::new();
         while !g.is_over() && g.round < stop {
             rules.legal_actions_into(g, &mut legal);
@@ -120,7 +118,7 @@ impl Planner {
                 break;
             }
             let i = if legal.len() == 1 { 0 } else { agent.choose(rules, g, &legal) };
-            if rules.apply_mut(g, &legal[i], None).is_err() {
+            if prof::time(Part::ApplyMut, || rules.apply_mut(g, &legal[i], None)).is_err() {
                 break;
             }
             actions.push(legal[i].clone());
@@ -129,41 +127,45 @@ impl Planner {
 
     /// The line from `state` opening with `first`, or the engine's own.
     fn line_from(&self, rules: &Rules, state: &GameState, first: Option<&Action>, stop: u32) -> Option<Line> {
-        let mut end = state.clone();
-        let mut actions = Vec::new();
-        if let Some(a) = first {
-            rules.apply_mut(&mut end, a, None).ok()?;
-            actions.push(a.clone());
-        }
-        self.play_on(rules, &mut end, stop, &mut actions);
-        Some(Line {
-            actions,
-            next: 0,
-            cursor: state.clone(),
-            value: self.ev.value(rules, &end),
-            end,
-            stop,
+        prof::time(Part::Line, || {
+            let mut end = state.clone();
+            let mut actions = Vec::new();
+            if let Some(a) = first {
+                rules.apply_mut(&mut end, a, None).ok()?;
+                actions.push(a.clone());
+            }
+            self.play_on(rules, &mut end, stop, &mut actions);
+            Some(Line {
+                actions,
+                next: 0,
+                cursor: state.clone(),
+                value: self.ev.value(rules, &end),
+                end,
+                stop,
+            })
         })
     }
 
     /// Moves the line on to `state`, dropping it if the table is not the one
     /// it expected (a forced behaviour outside the planner took another move).
     fn sync(&mut self, rules: &Rules, state: &GameState) {
-        let Some(l) = &mut self.line else { return };
-        while l.cursor.stats.actions < state.stats.actions {
-            let done = match l.actions.get(l.next) {
-                Some(a) => rules.apply_mut(&mut l.cursor, a, None).is_ok(),
-                None => false,
-            };
-            if !done {
-                self.line = None;
-                return;
+        prof::time(Part::Sync, || {
+            let Some(l) = &mut self.line else { return };
+            while l.cursor.stats.actions < state.stats.actions {
+                let done = match l.actions.get(l.next) {
+                    Some(a) => rules.apply_mut(&mut l.cursor, a, None).is_ok(),
+                    None => false,
+                };
+                if !done {
+                    self.line = None;
+                    return;
+                }
+                l.next += 1;
             }
-            l.next += 1;
-        }
-        if l.cursor != *state {
-            self.line = None;
-        }
+            if l.cursor != *state {
+                self.line = None;
+            }
+        })
     }
 
     /// The line to beat at `state`: the one being followed, run on to `stop`

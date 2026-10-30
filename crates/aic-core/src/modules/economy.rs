@@ -5,6 +5,7 @@
 
 use crate::action::Action;
 use crate::content::{Op, PerResource, Resource, RoundFlag, RESOURCES};
+use crate::key::KeyBuf;
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -49,8 +50,8 @@ pub const BONUS_INSIGHT: &str = "economy.bonus_insight";
 
 /// Seat `s`'s printed production of `resource` raised by one-time permanent
 /// gains (021).
-pub fn production_key(seat: usize, resource: Resource) -> String {
-    format!("economy.production.{seat}.{resource}")
+pub fn production_key(seat: usize, resource: Resource) -> KeyBuf {
+    KeyBuf::new("economy.production.").num(seat).text(".").text(resource.name())
 }
 
 /// Insight seat `s` loses next round (021: an adversary ambassador on its presence).

@@ -24,6 +24,8 @@ fn hidden(key: &str) -> bool {
 /// `g` after `a`, or `None` if the rules refuse it (a guess of the hidden
 /// cards can, rarely, make a replayed choice impossible).
 fn step(rules: &Rules, g: &GameState, a: &Action) -> Option<GameState> {
+    #[cfg(feature = "profile")]
+    drop(prof::time(Part::Clone, || g.clone()));
     prof::time(Part::Apply, || rules.apply_to(g, a, None)).ok()
 }
 
@@ -311,7 +313,7 @@ fn same_table(a: &GameState, b: &GameState) -> bool {
     {
         return false;
     }
-    let keys: std::collections::BTreeSet<&String> = a.piles.keys().chain(b.piles.keys()).collect();
+    let keys: std::collections::BTreeSet<&aic_core::Key> = a.piles.keys().chain(b.piles.keys()).collect();
     keys.into_iter().all(|k| {
         if hidden(k) {
             a.pile(k).len() == b.pile(k).len()

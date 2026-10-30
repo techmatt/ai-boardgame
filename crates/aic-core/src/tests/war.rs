@@ -23,7 +23,7 @@ fn the_clock_sets_production_and_war_steps_and_the_war_twist() {
     assert_eq!(production, [1, 3, 5, 6, 7, 8]);
     g.round = 1;
     g.piles
-        .insert(CURRENT.into(), vec!["adv_s2_border_war".into()]);
+        .insert(CURRENT.into(), vec!["adv_s2_border_war".into()].into());
     assert!(board::war_round(&w, &g));
     let v = rules.view(&g);
     assert_eq!(

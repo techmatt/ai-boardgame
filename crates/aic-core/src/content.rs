@@ -7,13 +7,14 @@
 //! change; a new card, threat, adversary card, AI board or Alignment card
 //! that only combines existing ops is a data change.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
 use crate::hash::fnv1a64;
 use crate::hex::{Dir, Hex};
+use crate::key::FastMap;
 pub use crate::op::{Cond, CountryRule, DamageAt, Op, RoundFlag, Slot, Spot};
 pub use crate::vocab::{
     DiscountOn, PerResource, Resource, Side, Tag, TagOrAny, TokenKind, RESOURCES, TAGS,
@@ -50,10 +51,23 @@ pub struct Content {
     pub alignment: Vec<AlignmentCard>,
     /// The adversary's project deck (module `adversary`, 017).
     pub projects: Vec<ProjectCard>,
-    /// Card id -> index into `cards`, for [`Content::card_index`] (rules and
-    /// agents look cards up by id constantly). Built by `parse`.
+    /// Id -> index into each list, for [`Content::card_index`] and the like
+    /// (rules and agents look things up by id constantly). Built by `parse`.
     #[serde(skip)]
-    card_ix: BTreeMap<String, usize>,
+    card_ix: FastMap<usize>,
+    #[serde(skip)]
+    threat_ix: FastMap<usize>,
+    #[serde(skip)]
+    project_ix: FastMap<usize>,
+    #[serde(skip)]
+    alignment_ix: FastMap<usize>,
+    #[serde(skip)]
+    adversary_ix: FastMap<usize>,
+}
+
+/// Each id's first place in a list.
+fn index_of<T>(list: &[T], id: impl Fn(&T) -> &str) -> FastMap<usize> {
+    list.iter().enumerate().rev().map(|(i, x)| (id(x).to_string(), i)).collect()
 }
 
 // ---------- map ----------
@@ -481,14 +495,17 @@ impl Content {
             ais: p("ais.json", ais)?,
             alignment: p("alignment.json", alignment)?,
             projects: p("projects.json", projects)?,
-            card_ix: BTreeMap::new(),
+            card_ix: FastMap::default(),
+            threat_ix: FastMap::default(),
+            project_ix: FastMap::default(),
+            alignment_ix: FastMap::default(),
+            adversary_ix: FastMap::default(),
         };
-        c.card_ix = c
-            .cards
-            .iter()
-            .enumerate()
-            .map(|(i, d)| (d.id.clone(), i))
-            .collect();
+        c.card_ix = index_of(&c.cards, |x| &x.id);
+        c.threat_ix = index_of(&c.threats, |x| &x.id);
+        c.project_ix = index_of(&c.projects, |x| &x.id);
+        c.alignment_ix = index_of(&c.alignment, |x| &x.id);
+        c.adversary_ix = index_of(&c.adversary, |x| &x.id);
         c.check()?;
         Ok(c)
     }
@@ -728,19 +745,19 @@ impl Content {
     }
 
     pub fn threat_index(&self, id: &str) -> Option<usize> {
-        self.threats.iter().position(|c| c.id == id)
+        self.threat_ix.get(id).copied()
     }
 
     pub fn project_index(&self, id: &str) -> Option<usize> {
-        self.projects.iter().position(|c| c.id == id)
+        self.project_ix.get(id).copied()
     }
 
     pub fn alignment_index(&self, id: &str) -> Option<usize> {
-        self.alignment.iter().position(|c| c.id == id)
+        self.alignment_ix.get(id).copied()
     }
 
     pub fn adversary_index(&self, id: &str) -> Option<usize> {
-        self.adversary.iter().position(|c| c.id == id)
+        self.adversary_ix.get(id).copied()
     }
 
     pub fn layout(&self, countries: u8) -> Option<&LayoutDef> {

@@ -24,14 +24,11 @@ pub(super) fn pick(rules: &Rules, g: &mut GameState, h: usize) {
 /// Plays `card` for `seat` out of its deck, funded to afford it.
 fn play_card(rules: &Rules, g: &mut GameState, seat: u8, card: &str) {
     for tier in [1, 2] {
-        if let Some(p) = g.piles.get_mut(&format!("cards.deck.{tier}")) {
-            p.retain(|c| c != card);
+        if let Some(p) = g.piles.get_mut(format!("cards.deck.{tier}").as_str()) {
+            Arc::make_mut(p).retain(|c| c != card);
         }
     }
-    g.piles
-        .get_mut(&format!("cards.hand.{seat}"))
-        .unwrap()
-        .push(card.into());
+    Arc::make_mut(g.piles.get_mut(format!("cards.hand.{seat}").as_str()).unwrap()).push(card.into());
     let s = seat as usize;
     set_res(g, s, Resource::Credits, 30);
     set_res(g, s, Resource::Insight, 5);
@@ -54,7 +51,7 @@ fn only_a_tier_2_ultimate_frees_a_city_outright() {
     for x in others {
         put(&mut g, x, ADV_CUBE, 0);
     }
-    g.piles.get_mut("cards.hand.0").unwrap().push("back_channel_talks".into());
+    Arc::make_mut(g.piles.get_mut("cards.hand.0").unwrap()).push("back_channel_talks".into());
     set_res(&mut g, 0, Resource::Credits, 30);
     set_res(&mut g, 0, Resource::Insight, 5);
     let plays = rules.legal_actions(&g);
@@ -80,7 +77,7 @@ fn clearing_a_city_takes_the_ambassadors_next_to_it_first() {
     let mut k = g.clone();
     put(&mut k, n, ADV_AMBASSADOR, 3);
     // It needs a Diplomacy tag in play.
-    k.piles.entry(crate::modules::cards::played(0)).or_default().push("consular_pouch".into());
+    Arc::make_mut(k.piles.entry(crate::modules::cards::played(0)).or_default()).push("consular_pouch".into());
     play_card(&rules, &mut k, 0, "liberation_accords");
     pick(&rules, &mut k, h);
     answer_all(&rules, &mut k);

@@ -4,6 +4,7 @@
 
 use crate::action::Action;
 use crate::content::{AiBoard, Resource, Uncover};
+use crate::key::Key;
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -271,14 +272,15 @@ impl Module for Ai {
                 .map(|id| {
                     // A board two seats play has one copy of each card (rules.md
                     // §7): say who holds it (020: the second seat read "gone").
+                    let key = Key::new(id);
                     let other = (0..g.seats.len()).find(|&o| {
-                        o != s && (g.pile(&cards::hand(o)).contains(id) || cards::in_play(g, o).contains(id))
+                        o != s && (g.pile(&cards::hand(o)).contains(&key) || cards::in_play(g, o).contains(&key))
                     });
-                    let status = if g.pile(&hand).contains(id) {
+                    let status = if g.pile(&hand).contains(&key) {
                         "in hand".to_string()
-                    } else if g.pile(&built).contains(id) {
+                    } else if g.pile(&built).contains(&key) {
                         "built".to_string()
-                    } else if cards::in_play(g, s).contains(id) {
+                    } else if cards::in_play(g, s).contains(&key) {
                         "in play".to_string()
                     } else if let Some(o) = other {
                         format!("with seat {o}")

@@ -7,11 +7,13 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use crate::action::Action;
 use crate::config::ParamValue;
 use crate::content::Content;
 use crate::event::Event;
+use crate::key::{FastMap, Key};
 use crate::map::Map;
 use crate::rng::Stream;
 use crate::vocab::Resource;
@@ -220,9 +222,9 @@ pub struct World<'a> {
     pub map: &'a Map,
     pub content: &'a Content,
     /// Every module's resolved parameters, keyed `"<module>.<param>"`.
-    pub params: &'a BTreeMap<String, ParamValue>,
+    pub params: &'a FastMap<ParamValue>,
     /// Each configured module's variant, by module id.
-    pub variants: &'a BTreeMap<String, String>,
+    pub variants: &'a FastMap<String>,
 }
 
 impl World<'_> {
@@ -353,10 +355,11 @@ impl<'a> Cx<'a> {
         if next == cur {
             return 0;
         }
+        let tokens = &mut Arc::make_mut(&mut g.hexes[hex]).tokens;
         if next == 0 {
-            g.hexes[hex].tokens.remove(kind);
+            tokens.remove(kind);
         } else {
-            *g.hexes[hex].tokens.entry(kind.to_string()).or_insert(0) = next;
+            tokens.insert(kind.into(), next);
         }
         let at = self.world.map.hexes[hex].hex;
         self.emit(|| Event::TokensChanged {
@@ -387,7 +390,7 @@ impl<'a> Cx<'a> {
     /// round: entry `r` is round `r`, entry 0 setup.
     pub fn per_round(&mut self, g: &mut GameState, key: &str, n: i64) {
         let r = g.round as usize;
-        let v = g.stats.per_round.entry(key.to_string()).or_default();
+        let v = Arc::make_mut(g.stats.per_round.entry(key).or_default());
         if v.len() <= r {
             v.resize(r + 1, 0);
         }
@@ -405,18 +408,18 @@ impl<'a> Cx<'a> {
     /// Adds to a counter by its full key (shared rules code counting for
     /// the module that owns the rule).
     pub fn tally(&mut self, g: &mut GameState, key: &str, n: i64) {
-        *g.stats.counters.entry(key.to_string()).or_insert(0) += n;
+        *g.stats.counters.entry(key).or_insert(0) += n;
     }
 
     /// Raises a counter by its full key to `n` if it is lower (a peak).
     pub fn peak(&mut self, g: &mut GameState, key: &str, n: i64) {
-        let e = g.stats.counters.entry(key.to_string()).or_insert(0);
+        let e = g.stats.counters.entry(key).or_insert(0);
         *e = (*e).max(n);
     }
 
     /// Sets a counter by its full key to `n` (a level; the last one set stays).
     pub fn level(&mut self, g: &mut GameState, key: &str, n: i64) {
-        g.stats.counters.insert(key.to_string(), n);
+        g.stats.counters.insert(key.into(), n);
     }
 
     /// Sets any module's track by its full key (shared rules code acting
@@ -424,9 +427,9 @@ impl<'a> Cx<'a> {
     /// `board.shelter` flag).
     pub fn set_key(&mut self, g: &mut GameState, key: String, v: i64) {
         let old = if v == 0 {
-            g.vars.remove(&key).unwrap_or(0)
+            g.vars.remove(key.as_str()).unwrap_or(0)
         } else {
-            g.vars.insert(key.clone(), v).unwrap_or(0)
+            g.vars.insert((&key).into(), v).unwrap_or(0)
         };
         if old == v {
             return;
@@ -462,17 +465,17 @@ impl<'a> Cx<'a> {
                 .iter()
                 .position(|c| c == card)
                 .ok_or_else(|| format!("{card} is not in {from}"))?;
-            pile.remove(i);
+            Arc::make_mut(pile).remove(i);
             if pile.is_empty() {
                 g.piles.remove(from);
             }
         }
         if !to.is_empty() {
-            let pile = g.piles.entry(to.to_string()).or_default();
+            let pile = Arc::make_mut(g.piles.entry(to).or_default());
             if top {
-                pile.insert(0, card.to_string());
+                pile.insert(0, card.into());
             } else {
-                pile.push(card.to_string());
+                pile.push(card.into());
             }
         }
         self.emit(|| Event::CardMoved {
@@ -484,11 +487,11 @@ impl<'a> Cx<'a> {
     }
 
     /// Replaces a pile's order (a shuffle). No event: the order is hidden.
-    pub fn set_pile(&mut self, g: &mut GameState, key: &str, cards: Vec<String>) {
+    pub fn set_pile(&mut self, g: &mut GameState, key: &str, cards: Vec<Key>) {
         if cards.is_empty() {
             g.piles.remove(key);
         } else {
-            g.piles.insert(key.to_string(), cards);
+            g.piles.insert(key.into(), Arc::new(cards));
         }
     }
 
@@ -497,12 +500,12 @@ impl<'a> Cx<'a> {
     pub fn exhaust(&mut self, g: &mut GameState, seat: usize, card: &str) {
         let ex = &mut g.seats[seat].exhausted;
         if let Err(at) = ex.binary_search_by(|c| c.as_str().cmp(card)) {
-            ex.insert(at, card.to_string());
+            ex.insert(at, card.into());
         }
     }
 
     pub fn refresh(&mut self, g: &mut GameState, seat: usize, card: &str) {
-        g.seats[seat].exhausted.retain(|c| c != card);
+        g.seats[seat].exhausted.retain(|c| c.as_str() != card);
     }
 
     /// The stream for one of this variant's declared purposes. Drawing from
@@ -514,9 +517,7 @@ impl<'a> Cx<'a> {
                 self.module
             );
         }
-        g.rng
-            .get_mut(purpose)
-            .expect("declared purposes have streams")
+        Arc::make_mut(g.rng.get_mut(purpose).expect("declared purposes have streams"))
     }
 
     /// Ends the game (first call wins).

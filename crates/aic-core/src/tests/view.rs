@@ -28,7 +28,7 @@ fn the_view_shows_the_board_the_fronts_the_projects_and_the_next_card() {
         let want: Vec<(String, i64)> = g.hexes[h.index]
             .tokens
             .iter()
-            .map(|(k, &n)| (k.clone(), n))
+            .map(|(k, &n)| (k.to_string(), n))
             .collect();
         let have: Vec<(String, i64)> = h.tokens.iter().map(|t| (t.kind.clone(), t.count)).collect();
         assert_eq!(have, want);

@@ -52,10 +52,10 @@ fn stations_fill_the_megaproject_and_its_completion_pays_out() {
     put(&mut g, rival, STATION, 1);
     put(&mut g, rival, ADV_CUBE, 1);
     assert_eq!(piece(0).project.cubes, 7);
-    g.vars.insert(board::project_key(0, Some(0)), 3);
-    g.vars.insert(board::project_key(0, Some(1)), 1);
-    g.vars.insert(board::project_key(0, None), 2);
-    g.vars.remove(&board::project_key(1, None));
+    g.vars.insert(board::project_key(0, Some(0)).into(), 3);
+    g.vars.insert(board::project_key(0, Some(1)).into(), 1);
+    g.vars.insert(board::project_key(0, None).into(), 2);
+    g.vars.remove(board::project_key(1, None).as_str());
     let (c0, c1, discord) = (
         g.resource(0, Resource::Credits),
         g.resource(1, Resource::Credits),

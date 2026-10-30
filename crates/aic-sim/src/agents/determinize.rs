@@ -22,8 +22,10 @@
 //! A pending choice's snapshot gets the same guess, so answering it replays
 //! the partly resolved step consistently.
 
+use std::sync::Arc;
+
 use aic_core::modules::adversary;
-use aic_core::{GameState, Rules};
+use aic_core::{GameState, Key, Rules};
 use rand::seq::SliceRandom;
 use rand::RngCore;
 use rand_chacha::ChaCha8Rng;
@@ -49,6 +51,7 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
     let original = g.pending.is_some().then(|| g.clone());
     for key in SHUFFLED {
         if let Some(pile) = g.piles.get_mut(key) {
+            let pile = Arc::make_mut(pile);
             // Sorted first, so the guess depends on the contents (public)
             // and the agent's RNG, never on the true order.
             pile.sort_unstable();
@@ -57,13 +60,13 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
     }
     resample_adversary_deck(rules, g, rng);
     shuffle_project_stages(rules, g, rng);
-    let seeds: Vec<(String, u64)> = g.rng.keys().map(|k| (k.clone(), rng.next_u64())).collect();
+    let seeds: Vec<(Key, u64)> = g.rng.keys().map(|k| (*k, rng.next_u64())).collect();
     for (purpose, seed) in &seeds {
         g.rng
-            .insert(purpose.clone(), aic_core::rng::Stream::new(*seed, purpose));
+            .insert(*purpose, Arc::new(aic_core::rng::Stream::new(*seed, purpose)));
     }
-    if let (Some(p), Some(original)) = (g.pending.as_mut(), &original) {
-        let snap = std::sync::Arc::make_mut(&mut p.snapshot);
+    if let (Some(p), Some(original)) = (g.pending.as_mut().map(Arc::make_mut), &original) {
+        let snap = Arc::make_mut(&mut p.snapshot);
         // Usually the step that asked has not drawn, so its snapshot's
         // hidden piles are the same as the state's: give them the same
         // guess. A step may draw before it asks: then the snapshot's pile is the drawn
@@ -80,17 +83,17 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
             let (was, now) = (snap.pile(key), original.pile(key));
             if was == now {
                 match g.piles.get(key) {
-                    Some(v) => snap.piles.insert(key.to_string(), v.clone()),
+                    Some(v) => snap.piles.insert(key.into(), v.clone()),
                     None => snap.piles.remove(key),
                 };
             } else if was.len() > now.len() && was.ends_with(now) {
                 let mut pile = was[..was.len() - now.len()].to_vec();
-                pile.extend(g.piles.get(key).into_iter().flatten().cloned());
-                snap.piles.insert(key.to_string(), pile);
+                pile.extend(g.piles.get(key).iter().flat_map(|v| v.iter()).cloned());
+                snap.piles.insert(key.into(), Arc::new(pile));
             } else if was.len() > now.len() && was.starts_with(now) {
-                let mut pile: Vec<String> = g.piles.get(key).cloned().unwrap_or_default();
+                let mut pile = g.piles.get(key).map_or_else(Vec::new, |v| v.to_vec());
                 pile.extend(was[now.len()..].iter().cloned());
-                snap.piles.insert(key.to_string(), pile);
+                snap.piles.insert(key.into(), Arc::new(pile));
             } else if key == adversary::DECK {
                 resample_adversary_deck(rules, snap, rng);
             } else if key == adversary::PROJECT_DECK {
@@ -111,7 +114,7 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
         if !drawn_out {
             for (purpose, seed) in &seeds {
                 snap.rng
-                    .insert(purpose.clone(), aic_core::rng::Stream::new(*seed, purpose));
+                    .insert(*purpose, Arc::new(aic_core::rng::Stream::new(*seed, purpose)));
             }
         }
     }
@@ -124,6 +127,7 @@ fn shuffle_project_stages(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng
     let Some(deck) = g.piles.get_mut(adversary::PROJECT_DECK) else {
         return;
     };
+    let deck = Arc::make_mut(deck);
     let stage = |id: &str| {
         w.content
             .project_index(id)
@@ -157,13 +161,13 @@ fn resample_adversary_deck(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rn
         seen.extend(g.pile(key).iter().map(|s| s.as_str()));
     }
     let mut out = deck[..peek].to_vec();
-    let mut pools: Vec<Vec<String>> = (1..=3u8)
+    let mut pools: Vec<Vec<Key>> = (1..=3u8)
         .map(|s| {
-            let mut v: Vec<String> = content
+            let mut v: Vec<Key> = content
                 .adversary
                 .iter()
                 .filter(|c| c.stage == s && !seen.contains(&c.id.as_str()))
-                .map(|c| c.id.clone())
+                .map(|c| Key::new(&c.id))
                 .collect();
             v.shuffle(rng);
             v
@@ -174,7 +178,7 @@ fn resample_adversary_deck(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rn
         // The pool always has a card: the true one is in it.
         out.push(pools[s - 1].pop().unwrap_or_else(|| id.clone()));
     }
-    g.piles.insert(adversary::DECK.to_string(), out);
+    g.piles.insert(adversary::DECK.into(), Arc::new(out));
 }
 
 #[cfg(test)]
@@ -195,12 +199,12 @@ mod tests {
                 assert_eq!(g.vars, h.vars);
                 assert_eq!(g.seats, h.seats);
                 for (k, v) in &g.piles {
-                    let mut a = v.clone();
+                    let mut a = v.to_vec();
                     let mut b = h.pile(k).to_vec();
                     if k == adversary::DECK {
                         // Same stage at every position.
                         let w = r.world();
-                        let st = |id: &String| {
+                        let st = |id: &Key| {
                             w.content.adversary[w.content.adversary_index(id).unwrap()].stage
                         };
                         assert_eq!(
@@ -212,7 +216,7 @@ mod tests {
                     if k == adversary::PROJECT_DECK {
                         // Same stage at every position, same contents.
                         let w = r.world();
-                        let st = |id: &String| {
+                        let st = |id: &Key| {
                             w.content.projects[w.content.project_index(id).unwrap()].stage
                         };
                         assert_eq!(
@@ -243,26 +247,26 @@ mod tests {
             let w = r.world();
             let st = |id: &str| w.content.adversary[w.content.adversary_index(id).unwrap()].stage;
             let last = a.pile(adversary::DECK).last().unwrap().clone();
-            let all: Vec<String> = a.piles.values().flatten().cloned().collect();
+            let all: Vec<Key> = a.piles.values().flat_map(|p| p.iter()).cloned().collect();
             let other = w
                 .content
                 .adversary
                 .iter()
-                .find(|c| c.stage == st(&last) && !all.contains(&c.id))
-                .map(|c| c.id.clone());
+                .find(|c| c.stage == st(&last) && !all.contains(&Key::new(&c.id)))
+                .map(|c| Key::new(&c.id));
             // The same hidden difference on the table and, mid-resolution,
             // on the pending choice's snapshot (one table, seen twice).
             let hide = |g: &mut GameState| {
                 for key in SHUFFLED {
                     if let Some(p) = g.piles.get_mut(key) {
-                        p.reverse();
+                        Arc::make_mut(p).reverse();
                     }
                 }
                 for (purpose, s) in g.rng.iter_mut() {
-                    *s = aic_core::rng::Stream::new(seed + 1000, purpose);
+                    *s = Arc::new(aic_core::rng::Stream::new(seed + 1000, purpose));
                 }
                 if let (Some(other), Some(deck)) = (&other, g.piles.get_mut(adversary::DECK)) {
-                    for id in deck.iter_mut().filter(|id| **id == last) {
+                    for id in Arc::make_mut(deck).iter_mut().filter(|id| **id == last) {
                         *id = other.clone();
                     }
                 }
@@ -270,7 +274,7 @@ mod tests {
             let mut b = a.clone();
             hide(&mut b);
             if let Some(p) = b.pending.as_mut() {
-                hide(std::sync::Arc::make_mut(&mut p.snapshot));
+                hide(Arc::make_mut(&mut Arc::make_mut(p).snapshot));
             }
             assert_ne!(a, b);
             let mut ga = a.clone();

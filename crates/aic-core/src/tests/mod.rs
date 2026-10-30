@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use rand::{RngCore, SeedableRng};
 
@@ -101,7 +102,7 @@ fn lab_with(phases: &[&str], sets: &[&str]) -> (Rules, GameState) {
     let mut g = rules.new_game(1);
     assert!(g.pending.is_none() && !g.is_over());
     for h in g.hexes.iter_mut() {
-        h.tokens.clear();
+        Arc::make_mut(h).tokens.clear();
     }
     (rules, g)
 }
@@ -123,9 +124,9 @@ fn run(rules: &Rules, g: &mut GameState) {
 
 fn put(g: &mut GameState, h: usize, kind: &str, n: i64) {
     if n == 0 {
-        g.hexes[h].tokens.remove(kind);
+        Arc::make_mut(&mut g.hexes[h]).tokens.remove(kind);
     } else {
-        g.hexes[h].tokens.insert(kind.to_string(), n);
+        Arc::make_mut(&mut g.hexes[h]).tokens.insert(kind.into(), n);
     }
 }
 
@@ -253,8 +254,8 @@ fn pass_round(rules: &Rules, g: &mut GameState) {
 fn next_alignment_card(g: &mut GameState, side: Side, card: &str) {
     for tier in [1, 2] {
         g.piles.insert(
-            format!("alignment.deck.{}.{tier}", side.name()),
-            vec![card.to_string()],
+            format!("alignment.deck.{}.{tier}", side.name()).into(),
+            vec![card.into()].into(),
         );
     }
 }
@@ -262,7 +263,7 @@ fn next_alignment_card(g: &mut GameState, side: Side, card: &str) {
 /// Fills `side`'s bucket from the Undecided so the next action tips it.
 fn fill_bucket(rules: &Rules, g: &mut GameState, side: Side) {
     let cap = crate::modules::alignment::capacity(&rules.world(), g, side);
-    g.vars.insert(format!("alignment.{}", side.name()), cap);
+    g.vars.insert(format!("alignment.{}", side.name()).into(), cap);
     let u = g.var("alignment.undecided");
     g.vars
         .insert("alignment.undecided".into(), (u - cap).max(0));

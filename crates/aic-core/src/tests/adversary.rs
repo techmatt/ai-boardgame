@@ -31,7 +31,7 @@ fn the_build_step_grows_corrupted_cities_and_the_factories_next_to_them() {
 
     let mut g = g0.clone();
     g.piles
-        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()]);
+        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()].into());
     run(&rules, &mut g);
     assert_eq!(
         (
@@ -49,7 +49,7 @@ fn the_build_step_grows_corrupted_cities_and_the_factories_next_to_them() {
     // Factory Drive: factories next to clean cities build too.
     let mut g = g0.clone();
     g.piles
-        .insert(NEXT.into(), vec!["adv_s1_factory_drive".into()]);
+        .insert(NEXT.into(), vec!["adv_s1_factory_drive".into()].into());
     run(&rules, &mut g);
     assert_eq!(
         g.tokens(near, ADV_AMBASSADOR),
@@ -61,7 +61,7 @@ fn the_build_step_grows_corrupted_cities_and_the_factories_next_to_them() {
     // escalation puts an ambassador on every military base.
     let mut g = g0.clone();
     g.piles
-        .insert(NEXT.into(), vec!["adv_s2_mobilisation".into()]);
+        .insert(NEXT.into(), vec!["adv_s2_mobilisation".into()].into());
     run(&rules, &mut g);
     assert_eq!(g.tokens(city, ADV_AMBASSADOR), 3);
     for f in &m.fronts {
@@ -278,11 +278,11 @@ fn nodes_start_on_the_stations_and_make_adversary_compute() {
     // Round 1's build has run: 3 compute a node (024).
     assert_eq!(g.var(adversary::COMPUTE), 6);
     g.piles
-        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()]);
+        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()].into());
     run(&rules, &mut g);
     assert_eq!(g.var(adversary::COMPUTE), 12);
     put(&mut g, m.numbered(0, piece(0).stations[0]), NODE, 0);
-    g.piles.insert(NEXT.into(), vec!["adv_s1_war_drums".into()]);
+    g.piles.insert(NEXT.into(), vec!["adv_s1_war_drums".into()].into());
     run(&rules, &mut g);
     assert_eq!(g.var(adversary::COMPUTE), 15);
 }
@@ -299,7 +299,7 @@ fn the_players_lose_when_the_next_round_has_no_adversary_card() {
     // The last card is face up: its round plays, the one after is lost.
     g.piles.remove(DECK);
     g.piles
-        .insert(NEXT.into(), vec!["adv_s3_occupation".into()]);
+        .insert(NEXT.into(), vec!["adv_s3_occupation".into()].into());
     run(&rules, &mut g);
     assert!(!g.is_over());
     assert_eq!(g.pile(CURRENT), ["adv_s3_occupation"]);
@@ -325,9 +325,9 @@ fn twists_before_the_build_step_are_the_face_up_cards() {
     let (rules, mut g) = lab(&["alignment.sway", "adversary.build"]);
     let w = rules.world();
     g.piles
-        .insert(CURRENT.into(), vec!["adv_s1_probing_strikes".into()]);
+        .insert(CURRENT.into(), vec!["adv_s1_probing_strikes".into()].into());
     g.piles
-        .insert(NEXT.into(), vec!["adv_s1_long_patrols".into()]);
+        .insert(NEXT.into(), vec!["adv_s1_long_patrols".into()].into());
     let reach = |g: &GameState| {
         adversary::twists(&w, g)
             .iter()

@@ -462,8 +462,8 @@ fn simulate(
         ops_max = ops_max.max(rounds_ops.iter().copied().max().unwrap_or(0) as u32);
         setup_ops += setup as u64;
         for (k, v) in &rec.stats.counters {
-            *counters.entry(k.clone()).or_insert(0.0) += *v as f64;
-            *reached.entry(k.clone()).or_insert(0.0) += 1.0;
+            *counters.entry(k.to_string()).or_insert(0.0) += *v as f64;
+            *reached.entry(k.to_string()).or_insert(0.0) += 1.0;
         }
     }
     for (k, v) in counters.iter_mut() {

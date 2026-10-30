@@ -16,7 +16,7 @@
 use aic_core::content::{CardDef, Op, Resource, Tag};
 use aic_core::modules::{ai, cards, common, economy, effects};
 use aic_core::module::World;
-use aic_core::{fnv1a64, Action, Agent, GameState, Rules};
+use aic_core::{fnv1a64, Action, Agent, GameState, Key, Rules};
 
 use super::credit_equivalent;
 
@@ -161,7 +161,7 @@ pub struct Policy {
     inner: Box<dyn Agent + Send>,
     forced: Forced,
     /// This round's keep set for a seat: (round, seat, cards).
-    keeps: Vec<(u32, usize, Vec<String>)>,
+    keeps: Vec<(u32, usize, Vec<Key>)>,
 }
 
 impl Policy {
@@ -175,7 +175,7 @@ impl Policy {
 
     /// The cards seat `s` keeps this round, worked out at its first keep
     /// decision of the round.
-    fn keep_set(&mut self, rules: &Rules, g: &GameState, s: usize) -> Vec<String> {
+    fn keep_set(&mut self, rules: &Rules, g: &GameState, s: usize) -> Vec<Key> {
         let round = g.round;
         if let Some((_, _, set)) = self.keeps.iter().find(|(r, x, _)| *r == round && *x == s) {
             return set.clone();
@@ -186,7 +186,7 @@ impl Policy {
         let set = if self.forced.keep_none {
             Vec::new()
         } else if self.forced.keep_random {
-            let coin = |id: &String| fnv1a64(format!("{}:{round}:{id}", g.seed).as_bytes()) & 1 == 0;
+            let coin = |id: &Key| fnv1a64(format!("{}:{round}:{id}", g.seed).as_bytes()) & 1 == 0;
             drafted.into_iter().filter(coin).collect()
         } else if self.forced.keep_all {
             drafted
@@ -204,7 +204,7 @@ impl Policy {
         } else {
             plan_keeps(&world, g, s, &self.forced)
         };
-        let set: Vec<String> = set
+        let set: Vec<Key> = set
             .into_iter()
             .filter(|id| self.forced.allows(cards::def(&world, id)))
             .collect();
@@ -262,7 +262,7 @@ impl Agent for Policy {
                 || self.forced.keep_random);
         if keeps {
             if let Some(s) = legal.first().map(|a| a.seat() as usize) {
-                let set = self.keep_set(rules, g, s);
+                let set = crate::prof::time(crate::prof::Part::Policy, || self.keep_set(rules, g, s));
                 if let Some(i) = legal.iter().position(
                     |a| matches!(a, Action::Keep { seat, card } if *seat as usize == s && set.contains(card)),
                 ) {
@@ -366,9 +366,9 @@ struct Budget {
 
 /// The drafted cards seat `s` keeps: each, best value per cost first, if
 /// the plan with it is worth more than the plan without it.
-pub fn plan_keeps(w: &World, g: &GameState, s: usize, f: &Forced) -> Vec<String> {
+pub fn plan_keeps(w: &World, g: &GameState, s: usize, f: &Forced) -> Vec<Key> {
     let mut drafted = g.pile(&cards::drafted(s)).to_vec();
-    let order = |ids: &mut Vec<String>| {
+    let order = |ids: &mut Vec<Key>| {
         ids.sort_by(|a, b| {
             ratio(w, g, s, b)
                 .total_cmp(&ratio(w, g, s, a))
@@ -376,7 +376,7 @@ pub fn plan_keeps(w: &World, g: &GameState, s: usize, f: &Forced) -> Vec<String>
         })
     };
     order(&mut drafted);
-    let mut kept: Vec<String> = Vec::new();
+    let mut kept: Vec<Key> = Vec::new();
     let mut best = plan_value(w, g, s, &kept, f);
     for c in drafted {
         let mut with = kept.clone();
@@ -398,7 +398,7 @@ fn plan_value_checked(
     w: &World,
     g: &GameState,
     s: usize,
-    kept: &[String],
+    kept: &[Key],
     c: &str,
     f: &Forced,
 ) -> Option<f64> {
@@ -406,7 +406,7 @@ fn plan_value_checked(
     planned.iter().any(|p| p == c).then_some(v)
 }
 
-fn plan_value(w: &World, g: &GameState, s: usize, kept: &[String], f: &Forced) -> f64 {
+fn plan_value(w: &World, g: &GameState, s: usize, kept: &[Key], f: &Forced) -> f64 {
     plan(w, g, s, kept, f).map_or(f64::NEG_INFINITY, |(v, _)| v)
 }
 
@@ -439,9 +439,9 @@ fn plan(
     w: &World,
     g: &GameState,
     s: usize,
-    kept: &[String],
+    kept: &[Key],
     f: &Forced,
-) -> Option<(f64, Vec<String>)> {
+) -> Option<(f64, Vec<Key>)> {
     let (rounds, reserve) = (f.plan_rounds, f.plan_reserve);
     let res = |r: Resource| g.resource(s, r).max(0);
     let income = economy::income(w, g, s);
@@ -468,14 +468,14 @@ fn plan(
             return None;
         }
     }
-    let mut pool: Vec<String> = g.pile(&cards::hand(s)).to_vec();
+    let mut pool: Vec<Key> = g.pile(&cards::hand(s)).to_vec();
     pool.extend(kept.iter().cloned());
     pool.sort_by(|a, b| {
         ratio(w, g, s, b)
             .total_cmp(&ratio(w, g, s, a))
             .then_with(|| a.cmp(b))
     });
-    let mut planned: Vec<String> = Vec::new();
+    let mut planned: Vec<Key> = Vec::new();
     let mut total = 0.0;
     let mut b = now;
     for round in 0..rounds.max(1) {

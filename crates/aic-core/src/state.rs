@@ -5,7 +5,6 @@
 //! (observation for the simulator; rules never read it). Geometry lives in
 //! [`crate::Map`].
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -13,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::action::Action;
 use crate::config::Config;
 use crate::hex::Hex;
+use crate::key::{FlatMap, Key, Table};
 use crate::rng::{as_string, RngStreams};
 use crate::vocab::Resource;
 
@@ -30,18 +30,21 @@ pub struct GameState {
     /// Index into `config.round` of the current phase.
     pub phase: usize,
     pub seats: Vec<Seat>,
-    /// Per-hex contents, aligned with `Map::hexes`.
-    pub hexes: Vec<HexState>,
+    /// Per-hex contents, aligned with `Map::hexes`. Each hex, each pile, each
+    /// RNG stream and each per-round counter is shared between copies of a
+    /// state until one changes it (`Arc::make_mut`): an action touches a few
+    /// and a search copies all of them (030).
+    pub hexes: Vec<Arc<HexState>>,
     /// Global tracks owned by modules, keyed `"<module>.<name>"`.
-    pub vars: BTreeMap<String, i64>,
+    pub vars: Table<i64>,
     /// Ordered card piles (decks, discards, hands, slots, building rows),
     /// keyed `"<module>.<name>"`; index 0 is the top. Missing means empty.
     #[serde(default)]
-    pub piles: BTreeMap<String, Vec<String>>,
+    pub piles: Table<Arc<Vec<Key>>>,
     /// A choice the players must make before the game goes on: the rules
     /// stopped in the middle of resolving something (see [`Pending`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pending: Option<Box<Pending>>,
+    pub pending: Option<Arc<Pending>>,
     pub rng: RngStreams,
     pub stats: Stats,
     pub outcome: Option<Outcome>,
@@ -51,12 +54,12 @@ pub struct GameState {
 /// by the same team agent; hands are open.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Seat {
-    pub resources: BTreeMap<Resource, i64>,
+    pub resources: FlatMap<Resource, i64>,
     /// Passed in the current decision phase.
     pub passed: bool,
     /// Ids of this seat's used (face-down) cards, sorted. Set and refreshed
     /// by the module that owns each card, via `Cx::exhaust` / `Cx::refresh`.
-    pub exhausted: Vec<String>,
+    pub exhausted: Vec<Key>,
 }
 
 /// A choice in the middle of resolving a phase or an action ("players
@@ -112,7 +115,7 @@ pub struct Opt {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct HexState {
-    pub tokens: BTreeMap<String, i64>,
+    pub tokens: Table<i64>,
 }
 
 /// Counters the simulator aggregates. Filled by the engine and modules;
@@ -123,11 +126,11 @@ pub struct Stats {
     /// Per-round counters, keyed `"<module>.<name>"`: entry `r` is round
     /// `r`, entry 0 setup (017). `adversary.ops` counts adversary operations
     /// (token placements and moves), a proxy for table time.
-    pub per_round: BTreeMap<String, Vec<i64>>,
+    pub per_round: Table<Arc<Vec<i64>>>,
     /// Player actions applied, passes included.
     pub actions: u32,
     /// Free-form counters, keyed `"<module>.<name>"`.
-    pub counters: BTreeMap<String, i64>,
+    pub counters: Table<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,7 +147,11 @@ pub struct Outcome {
 
 impl GameState {
     pub fn tokens(&self, hex: usize, kind: &str) -> i64 {
-        self.hexes[hex].tokens.get(kind).copied().unwrap_or(0)
+        // A scan, not a search: a hex holds a few kinds, names of other lengths
+        // are refused without reading them, and rules and heuristics ask for
+        // tens of thousands of these a position.
+        let found = self.hexes[hex].tokens.iter().find(|(k, _)| k.as_str() == kind);
+        found.map_or(0, |(_, n)| *n)
     }
 
     pub fn resource(&self, seat: usize, r: Resource) -> i64 {
@@ -156,7 +163,7 @@ impl GameState {
     }
 
     /// A card pile (empty if absent).
-    pub fn pile(&self, key: &str) -> &[String] {
+    pub fn pile(&self, key: &str) -> &[Key] {
         self.piles.get(key).map_or(&[], |v| v.as_slice())
     }
 

@@ -66,7 +66,7 @@ fn cube_on(g: &GameState, h: usize) -> Option<String> {
         .tokens
         .keys()
         .find(|k| k.starts_with("cube:"))
-        .cloned()
+        .map(|k| k.to_string())
 }
 
 #[test]

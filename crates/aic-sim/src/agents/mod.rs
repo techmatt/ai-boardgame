@@ -641,11 +641,11 @@ mod tests {
                 let mut b = a.clone();
                 for (k, p) in b.piles.iter_mut() {
                     if k.starts_with("cards.deck.") || k.starts_with("threats.deck.") {
-                        p.reverse();
+                        std::sync::Arc::make_mut(p).reverse();
                     }
                 }
                 for (purpose, s) in b.rng.iter_mut() {
-                    *s = aic_core::rng::Stream::new(seed + 77, purpose);
+                    *s = std::sync::Arc::new(aic_core::rng::Stream::new(seed + 77, purpose));
                 }
                 r.legal_actions_into(&a, &mut legal);
                 let ia = spec.build(&r, 9).choose(&r, &a, &legal);
@@ -704,7 +704,7 @@ mod tests {
         g.vars.insert("alignment.unity_tips".into(), 1);
         assert_eq!(g.pile("adversary.next").len(), 1);
         let deck = g.pile("adversary.deck").to_vec();
-        g.piles.insert("adversary.deck".into(), deck[..1].to_vec());
+        g.piles.insert("adversary.deck".into(), deck[..1].to_vec().into());
         assert!((value(0.0, &g) - value(2.0, &g) - 2.0 * 18.0).abs() < 1e-9);
         // On course (4 tips by round 4): no cost.
         g.vars.insert("alignment.unity_tips".into(), 4);

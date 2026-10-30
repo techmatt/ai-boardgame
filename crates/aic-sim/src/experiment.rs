@@ -405,7 +405,7 @@ pub fn end_reason(outcome: Option<&Outcome>) -> String {
 /// The generic per-round counter (017), split: adversary operations during
 /// setup (entry 0), and in each round since (entry r, round r).
 pub fn adversary_ops(stats: &Stats) -> (i64, &[i64]) {
-    match stats.per_round.get("adversary.ops").map(Vec::as_slice) {
+    match stats.per_round.get("adversary.ops").map(|v| v.as_slice()) {
         Some([setup, rounds @ ..]) => (*setup, rounds),
         _ => (0, &[]),
     }
@@ -542,12 +542,12 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         if g.round != offered_round && legal.iter().any(|a| matches!(a, Action::Draft { .. })) {
             offered_round = g.round;
             picks.iter_mut().for_each(|p| *p = 0);
-            for (k, pile) in g.piles.range(cards::PACKETS.to_string()..) {
+            for (k, pile) in g.piles.from_key(cards::PACKETS) {
                 if !k.starts_with(cards::PACKETS) {
                     break;
                 }
-                for c in pile {
-                    r.cards.entry(c.clone()).or_default().offered += 1;
+                for c in pile.iter() {
+                    r.cards.entry(c.to_string()).or_default().offered += 1;
                 }
             }
         }
@@ -582,12 +582,12 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
             Action::Draft { seat, card } => {
                 let s = *seat as usize;
                 picks[s] += 1;
-                let e = r.cards.entry(card.clone()).or_default();
+                let e = r.cards.entry(card.to_string()).or_default();
                 e.drafted += 1;
                 e.pick_sum += picks[s];
             }
-            Action::Keep { card, .. } => r.cards.entry(card.clone()).or_default().kept += 1,
-            Action::Play { card, .. } => r.cards.entry(card.clone()).or_default().played += 1,
+            Action::Keep { card, .. } => r.cards.entry(card.to_string()).or_default().kept += 1,
+            Action::Play { card, .. } => r.cards.entry(card.to_string()).or_default().played += 1,
             Action::Give { .. } => r.gives += 1,
             Action::Pay { .. } => r.pays += 1,
             Action::Withdraw { .. } => r.withdraws += 1,
@@ -595,7 +595,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         }
         // A draw's card is only known once drawn, and any effect of any step
         // may draw, for any seat: whatever is new in a hand, bar a keep's card.
-        let mut hands: Vec<Vec<String>> = (0..g.seats.len())
+        let mut hands: Vec<Vec<aic_core::Key>> = (0..g.seats.len())
             .map(|s| g.pile(&cards::hand(s)).to_vec())
             .collect();
         if let Action::Keep { seat, card } = &a {
@@ -610,7 +610,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
                     Some(k) => {
                         before.swap_remove(k);
                     }
-                    None => r.cards.entry(c.clone()).or_default().drawn += 1,
+                    None => r.cards.entry(c.to_string()).or_default().drawn += 1,
                 }
             }
         }
@@ -629,7 +629,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
     r.adversary_ops = (0..g.round as usize)
         .map(|i| round_ops.get(i).copied().unwrap_or(0) as u32)
         .collect();
-    r.counters = g.stats.counters.clone();
+    r.counters = g.stats.counters.iter().map(|(k, v)| (k.to_string(), *v)).collect();
     // 021: the card and economy per-round counters, as `<key>.rNN` (summed
     // over seats), for the screen's by-round tables.
     for (k, v) in &g.stats.per_round {

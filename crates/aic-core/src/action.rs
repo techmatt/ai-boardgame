@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::hex::Hex;
+use crate::key::Key;
 use crate::vocab::Resource;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -23,21 +24,21 @@ pub enum Action {
     /// Draft: the next card of your draft hand comes from this tier (module `cards`, 021: card by card).
     Tier { seat: u8, tier: u8 },
     /// Draft: take a card from the hand in front of you (module `cards`).
-    Draft { seat: u8, card: String },
+    Draft { seat: u8, card: Key },
     /// Draft: buy a drafted card into your hand (module `cards`).
-    Keep { seat: u8, card: String },
+    Keep { seat: u8, card: Key },
     /// Pick a growth option of your AI board (module `ai`).
     Growth { seat: u8, option: u8 },
     /// Play a card from your hand (module `cards`).
-    Play { seat: u8, card: String },
+    Play { seat: u8, card: Key },
     /// Use a building's once-a-round ability (module `cards`).
-    Use { seat: u8, card: String },
+    Use { seat: u8, card: Key },
     /// Use an AI-board power, paid by sacrificing played cards' tags (module `ai`, 021).
     Power { seat: u8, power: u8 },
     /// Put `amount` of a resource on a threat's counter (module `threats`).
     Pay {
         seat: u8,
-        threat: String,
+        threat: Key,
         resource: Resource,
         amount: i64,
     },
@@ -45,7 +46,7 @@ pub enum Action {
     /// (module `threats`).
     Withdraw {
         seat: u8,
-        threat: String,
+        threat: Key,
         resource: Resource,
     },
     /// Give 1 insight to another seat (module `economy`).
@@ -55,7 +56,7 @@ pub enum Action {
     /// A standard action (module `board`): deliberately poorly priced.
     Standard { seat: u8, act: String },
     /// Sell a card from your hand (module `board`).
-    Sell { seat: u8, card: String },
+    Sell { seat: u8, card: Key },
 }
 
 impl Action {

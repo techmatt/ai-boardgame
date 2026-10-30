@@ -63,10 +63,17 @@ Current:
 - `bench/same_results.py` (012): compares two experiment outputs. `--map OLD=NEW` (026)
   renames in the old output first, for a rename that must play the same.
 - `bench/same_play.py` (025): proves a refactor left play unchanged: a matrix of configs,
-  countries, difficulties and variants on the old and new binaries, ~15 min a run on 12
-  threads; every saved game replays on the new binary. Keep a copy of the old binary.
-  Takes `--map` too (026): records are then compared by field, since a renamed state's
-  fingerprint moves.
+  countries, difficulties and variants, with every agent but the beam (030: rollout and
+  planner too, which are what a speedup is for), on the old and new binaries, ~20 min a
+  run on 12 threads; every saved game replays on the new binary. Keep a copy of the old
+  binary. Takes `--map` too (026): records are then compared by field, since a renamed
+  state's fingerprint moves.
+- `bench/speed.py` (030): games a minute per agent. `pair OLD NEW --out FILE` runs each
+  row on both binaries in turn, so the ratio holds on a busy machine: use it for a before
+  and after. `table SIM --out FILE` is one binary's rates (`rollout` alone takes ~20 min;
+  `--only "planner c2"` for a row, and both keep the file's other rows). `check SIM` is
+  the standing check (about a minute, on a quiet machine): fails at 1.3 ×
+  `scripts/bench/speed_baseline.json`, `--update` to move the baseline.
 - `tune/` (007-008): `sweep.py`, `log_table.py`, `engine_sweep.py`.
 
 Historical, kept for the record and not expected to run on current rules:
@@ -239,8 +246,9 @@ node scripts/wasm-parity.mjs [games]               # 020: native = wasm over the
 search-agent games, the greedy experiment grid, and more seeds of the replay checks
 whose first seed runs in the fast lane. `test-all` and `test-slow` are cargo aliases
 (`.cargo/config.toml`) for `cargo test --workspace -- --include-ignored` and
-`-- --ignored`; one slow test runs with `cargo test -p aic-sim -- --ignored <name>`. A
-new test that takes more than about a second goes in the slow lane, ideally with a
+`-- --ignored`; one slow test runs with `cargo test -p aic-sim -- --ignored <name>`.
+Anything after an alias goes to the test binary: `cargo test-all -j 3` stops in a second
+with "Unrecognized option: 'j'". A new test that takes more than about a second goes in the slow lane, ideally with a
 cheaper fast-lane twin (fewer seeds, fewer actions). Times measured on this 12-thread
 machine with nothing else heavy running (lanes remeasured in 025); the first build of the test profile takes about 40 s.
 
@@ -395,10 +403,11 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
 
 | `planner` | 028 (`agents/planner.rs`): the engine, with a shortlist of alternatives in the action phase each rolled out to the first decision of round `horizon` rounds on, with the engine as the policy, and the best line by the heuristic taken. A line runs on the real state (**full information**, Matt, 2026-10-29), so it is the game that follows; each decision inside it is still scored on a guess, because scored on open decks the one-step heuristic wins 19% against 59% (it drafts by printed cost). Draft and keeps follow the engine. **Speed:** the line being followed is reused, so a decision pays only for its alternatives. | `horizon` 2, `alts` 2 a decision, `budget` 8 a round, `margin` 40 (only actions this close to the engine's best), `choices` 2, `samples` 1, `prune` 6 (actions each seat keeps through a phase of a rollout, after the phase's first full scoring). Its keep and dominance parameters are the engine's: `planner:never_tag=2` holds the check in its rollouts too. `--quick` keeps it. |
 
-**Planner speed (028, r16 d2, one thread's time a game; 12 threads run 12 at once):** 19 s at
-2 countries and 56 s at 3, against the engine's 2.9 s and 8.6 s: about 37 and 13 games a minute
-on 12 threads, against 250 and 84. A 32-seed d2 screen at both sizes with both agents takes
-about 4 min at r16, about 7 at r17 (thread time, 12 free threads). `budget` 8 with `prune` 0 cost twice that and won no more within noise.
+**Planner speed (030, r17 d2, one thread's time a game):** 11.9 s at 2 countries and 33.6 s at 3,
+against the engine's 1.3 s and 4.5 s. A 32-seed d2 screen at both sizes with both agents
+(`experiments/screen-028.json`, 128 games) takes **about 2.5 min** on 12 threads: 153 s and
+27 min of thread time, against 352 s and 60 min before 030, on the same busy machine.
+`budget` 8 with `prune` 0 cost twice that and won no more within noise (028).
 
 **Keeping by plan and the dominance checks (022, `agents/policy.rs`).** Greedy and
 engine keep drafted cards by a plan (`plan_keep` 1; 0 lets the heuristic decide keeps,
@@ -608,14 +617,40 @@ spent, adversary compute made, and standard actions by kind. Committed in
 runs on the 014 board. Committed results from r5 and earlier are history: their game
 records do not replay.
 
-**Speed.** The agents are 99% of a run: search clones game states by the hundred
-thousand. `aic-sim` uses **mimalloc** (on 12 threads Windows' heap serialized the
-clones), and searches call `Rules::apply_to` (one state copy, not two). To see the
-split: every run prints it (`time: ...` on stderr, and in the report's *Timing*);
-`cargo build --release -p aic-sim --features profile` adds the search's own split
-(apply, legal, heuristic, determinization) with call counts. `python
+**Speed.** The agents are 99% of a run, and since 030 nearly all of that is the
+heuristic and the rules, not state copies: a clone is 1.8 µs (it was 21), because names
+are interned `Key`s, maps are sorted `FlatMap`s and hexes, piles, RNG streams and
+per-round counters are shared until written (`crates/aic-core/src/key.rs`, *No hash-order
+leaks* in docs/architecture.md). `aic-sim` uses **mimalloc** (on 12 threads Windows'
+heap serialized the clones), and searches call `Rules::apply_to` (one state copy, not
+two). Legal-action generation is 0.1% of a run: caching it buys nothing. The box has 12
+threads on 6 cores: 12 workers give about 6 × one, and that is the ceiling.
+
+To see the split: every run prints it (`time: ...` on stderr, and in the report's
+*Timing*); `cargo build --release -p aic-sim --features profile` adds the search's own
+split (apply, clone, legal, heuristic, determinization, planner lines) with call counts,
+and allocations a game, from `experiment`. For a long screen, `cargo build --profile
+fast -p aic-sim` (`target/fast/`) is 8% faster than release and takes minutes to build.
+There is no sampling profiler here: to go finer, copy the tree and add timers to the
+copy. Timers in the core break its no-clock rule.
+
+Thread time a game at d2, r17 (030), old and new binaries under the same load, from the
+32-seed screen below (12 threads run about 11 at once):
+
+| | before | after | × |
+|---|---|---|---|
+| engine c2 | 2.43 s | 1.30 s | 1.87 |
+| engine c3 | 10.1 s | 4.50 s | 2.25 |
+| planner c2 | 22.2 s | 11.9 s | 1.87 |
+| planner c3 | 77.7 s | 33.6 s | 2.32 |
+
+Random is 2.4 × at c2, on 1 thread and on 12 (`speed.py pair`). Compare two binaries with
+`pair`, not two `table` runs: a test suite elsewhere on the box halved a whole table.
+
+`planner:budget=4` runs 25-29% faster and wins 19 and 28 points fewer at 2 and 3 countries;
+`prune=3` and `alts=1` save nothing (32 seeds, d2): leave them. `python
 scripts/bench/same_results.py DIR_A DIR_B` compares two experiment output directories,
-timing aside: the check that a speed-up changed no game.
+timing aside: the check that a speed-up changed no game. `same_play.py` is the wider one.
 
 **Results as they go.** Every finished game is appended to `DIR/games.jsonl` (a header
 line with the spec, engine, rules revision and content hash, then one game per line,

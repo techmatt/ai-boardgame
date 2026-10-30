@@ -24,3 +24,10 @@ opt-level = 1
 
 [profile.release.package.aic-wasm]
 opt-level = "s"
+
+# For long screens: 8% faster than release (030), for a build of minutes rather
+# than seconds. `cargo build --profile fast -p aic-sim`: target/fast/aic-sim.
+[profile.fast]
+inherits = "release"
+lto = "fat"
+codegen-units = 1

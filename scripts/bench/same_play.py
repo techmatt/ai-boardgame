@@ -5,7 +5,8 @@
         # SIM: the new binary
 
 The matrix covers both configs, 1-4 countries, three difficulties, the off and still
-variants, with the random, greedy and engine agents, saving every game. `compare` checks:
+variants, with the random, greedy, engine, rollout and planner agents (030), and one
+dominance check under the planner, saving every game. `compare` checks:
 
 - summaries match, timing and the content hash aside (renaming ops moves the hash);
 - first-game traces (actions and events) match, wall time and the content hash aside;
@@ -16,8 +17,9 @@ variants, with the random, greedy and engine agents, saving every game. `compare
 The state's JSON holds the name, so fingerprints move and old records can't replay; each
 record is compared with the new one instead, field by field, hashes and fingerprint aside.
 
-Exits 1 on any difference. About 15 min for each `run` on 12 threads (025); build the old
-binary first and copy it aside. For experiment specs use `same_results.py`.
+Exits 1 on any difference. About 25 min for each `run` on 12 threads (030, before its
+speedups); build the old binary first and copy it aside. For experiment specs use
+`same_results.py`.
 """
 
 import glob
@@ -60,6 +62,10 @@ def run(sim, out):
                 play(sim, out, f"{cfg}-c{c}-d{d}-greedy", "greedy", 8, cfg, sets)
         play(sim, out, f"{cfg}-c2-d2-engine", "engine", 6, cfg, ["countries=2", "adversary.difficulty=2"])
         play(sim, out, f"{cfg}-c3-d1-engine", "engine", 4, cfg, ["countries=3", "adversary.difficulty=1"])
+        play(sim, out, f"{cfg}-c2-d2-rollout", "rollout", 2, cfg, ["countries=2", "adversary.difficulty=2"])
+        play(sim, out, f"{cfg}-c2-d2-planner", "planner", 6, cfg, ["countries=2", "adversary.difficulty=2"])
+        play(sim, out, f"{cfg}-c3-d2-planner", "planner", 3, cfg, ["countries=3", "adversary.difficulty=2"])
+    play(sim, out, "v-planner-never_tag", "planner:never_tag=2", 3, "baseline", ["adversary.difficulty=2"])
     for v in ("threats.variant=off", "alignment.variant=still", "alignment.variant=off", "cards.variant=off"):
         play(sim, out, "v-" + v, "greedy", 6, "baseline", [v])
 

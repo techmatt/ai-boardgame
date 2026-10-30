@@ -187,9 +187,9 @@ fn standard_projects_turn_credits_into_energy_presence_hardening_and_drains() {
     assert_eq!(g.tokens(p, HARDEN), 1);
 
     // A drain needs compute on a project.
-    g.piles.insert(PROJECTS.into(), vec!["market_crash".into()]);
+    g.piles.insert(PROJECTS.into(), vec!["market_crash".into()].into());
     assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "drain"), None).is_err());
-    g.vars.insert(adversary::project_key("market_crash"), 5);
+    g.vars.insert(adversary::project_key("market_crash").into(), 5);
     rules.apply_mut(&mut g, &std_act(0, "drain"), None).unwrap();
     answer_all(&rules, &mut g);
     assert_eq!(g.var(&adversary::project_key("market_crash")), 5 - w.int("board.drain_amount"));
@@ -333,10 +333,10 @@ fn placing_presence_takes_the_next_track_token_and_uncovers_its_income() {
     assert_eq!(presence_of(&g, 0).len(), 3);
     // The tracks run out after their last spaces (021: both of them).
     g.vars
-        .insert(board::track_key(0), ai::board(&w, 0).presence.len() as i64);
+        .insert(board::track_key(0).into(), ai::board(&w, 0).presence.len() as i64);
     assert!(standard_offered(&rules, &g, 0).contains("presence"));
     g.vars
-        .insert(board::track2_key(0), ai::board(&w, 0).presence2.len() as i64);
+        .insert(board::track2_key(0).into(), ai::board(&w, 0).presence2.len() as i64);
     assert!(!standard_offered(&rules, &g, 0).contains("presence"));
 }
 

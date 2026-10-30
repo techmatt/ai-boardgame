@@ -22,9 +22,7 @@
 //! be paid for before the game ends; and resources lose their value as the
 //! end nears (nothing is left to buy).
 
-use std::collections::BTreeMap;
-
-use aic_core::content::{Op, Resource, Side, RESOURCES};
+use aic_core::content::{CardDef, Op, Resource, Side, RESOURCES};
 use aic_core::modules::common::{
     self, ADV_AMBASSADOR, ADV_CUBE, FACTORY, HARDEN, STATION, TROOP,
 };
@@ -321,43 +319,39 @@ struct Forecast {
     corrupt_at: i64,
 }
 
-/// A [`Weights`] bound to one game's rules, with per-card values cached.
+/// A [`Weights`] bound to one game's rules, with the parameters it reads
+/// cached. Cheap to clone (030): each of a planner's rollouts has its own.
+#[derive(Clone)]
 pub struct Eval {
     pub w: Weights,
-    card_value: BTreeMap<String, f64>,
     seats: usize,
     /// Unity tip count the team aims for: the deck's last card.
     target_tips: i64,
     corrupt_at: i64,
     city_energy: i64,
     aligned_bonus: i64,
+    tip_per_player: i64,
 }
 
 impl Eval {
     pub fn new(rules: &Rules, w: Weights) -> Eval {
         let world = rules.world();
-        let card_value = world
-            .content
-            .cards
-            .iter()
-            .map(|c| (c.id.clone(), credit_equivalent(c, c.cost).max(0) as f64))
-            .collect();
         let seats = rules.config.countries as usize;
         // 028: the Unity deck's last card wins, and it comes before the last bar drop.
         let target_tips = world.list("alignment.unity_cards").iter().sum();
         Eval {
             w,
-            card_value,
             seats,
             target_tips,
             corrupt_at: world.int("adversary.corrupt_at"),
             city_energy: world.list("board.corp_energy").first().copied().unwrap_or(1),
             aligned_bonus: world.int("board.aligned_bonus"),
+            tip_per_player: world.int("alignment.tip_per_player"),
         }
     }
 
-    fn cost(&self, id: &str) -> f64 {
-        self.card_value.get(id).copied().unwrap_or(0.0)
+    fn cost(d: &CardDef) -> f64 {
+        credit_equivalent(d, d.cost).max(0) as f64
     }
 
     /// Adversary cards still to come: the face-up one and the deck.
@@ -520,13 +514,18 @@ impl Eval {
             }
         }
         v -= w.corrupted * corrupted as f64;
-        let thin = (0..self.seats).map(|s| common::presence_count(g, s)).min().unwrap_or(0);
+        let mut thin = i64::MAX;
         for s in 0..self.seats {
-            match common::presence_count(g, s) {
+            let count = common::presence_count(g, s);
+            thin = thin.min(count);
+            match count {
                 ..=1 => v -= w.presence_danger,
                 2 => v -= 0.5 * w.presence_danger,
                 _ => {}
             }
+        }
+        if self.seats == 0 {
+            thin = 0;
         }
         v += w.reach * reach as f64;
         // The Discord deck: the tip that finds it empty loses.
@@ -577,7 +576,7 @@ impl Eval {
         for share in unpaid {
             v -= w.threat * share;
         }
-        v -= self.clock_penalty(rules, g);
+        v -= self.clock_penalty(g);
         v
     }
 
@@ -596,8 +595,8 @@ impl Eval {
             let prefix = threats::paid_prefix(&t);
             let paid: i64 = g
                 .vars
-                .range(prefix.clone()..)
-                .take_while(|(k, _)| k.starts_with(&prefix))
+                .from_key(prefix.as_str())
+                .take_while(|(k, _)| k.starts_with(prefix.as_str()))
                 .map(|(_, &n)| n)
                 .sum();
             out.push(1.0 - (paid as f64 / req as f64).min(1.0));
@@ -621,8 +620,8 @@ impl Eval {
     ) -> f64 {
         let w = &self.w;
         let clock = Self::cards_left(g) as f64;
-        let (points, bar) = self.unity_progress(rules, g);
-        let to_win = ((bar - points).max(0.0) / self.unity_rate(rules, g)).ceil() + w.win_lag;
+        let (points, bar) = self.unity_progress(g);
+        let to_win = ((bar - points).max(0.0) / self.unity_rate(g)).ceil() + w.win_lag;
         let rounds = clock.min(to_win).max(0.0);
         let world = rules.world();
         let countries = world.map.countries.len().max(1) as f64;
@@ -648,9 +647,8 @@ impl Eval {
 
     /// Unity so far, in Sway (each tip counts a full bucket at the base
     /// size), and the Sway the target (the outright Unity win) needs.
-    fn unity_progress(&self, rules: &Rules, g: &GameState) -> (f64, f64) {
-        let world = rules.world();
-        let per = (world.int("alignment.tip_per_player") * g.seats.len() as i64) as f64;
+    fn unity_progress(&self, g: &GameState) -> (f64, f64) {
+        let per = (self.tip_per_player * g.seats.len() as i64) as f64;
         let tips = g.var(alignment::tips_key(Side::Unity)) as f64;
         let points = tips * per + g.var(alignment::bucket(Side::Unity)) as f64;
         (points, self.target_tips as f64 * per)
@@ -659,9 +657,9 @@ impl Eval {
     /// Unity gained per round so far, in Sway (`unity_rate_start` before the
     /// team has a record of its own). Sway held may include this round's, so
     /// this round counts as played.
-    fn unity_rate(&self, rules: &Rules, g: &GameState) -> f64 {
+    fn unity_rate(&self, g: &GameState) -> f64 {
         let w = &self.w;
-        let points = self.unity_progress(rules, g).0;
+        let points = self.unity_progress(g).0;
         if g.round > 1 {
             (points / g.round as f64).max(w.unity_rate_start * 0.25)
         } else {
@@ -677,13 +675,13 @@ impl Eval {
     /// loses); this round's points count as they are scored, not as a round
     /// still to come, so in the last round every point short costs
     /// `clock` / rate.
-    fn clock_penalty(&self, rules: &Rules, g: &GameState) -> f64 {
+    fn clock_penalty(&self, g: &GameState) -> f64 {
         if self.w.clock == 0.0 {
             return 0.0;
         }
         let clock = Self::cards_left(g) as f64;
-        let (points, top) = self.unity_progress(rules, g);
-        let need = (top - points).max(0.0) / self.unity_rate(rules, g);
+        let (points, top) = self.unity_progress(g);
+        let need = (top - points).max(0.0) / self.unity_rate(g);
         self.w.clock * (need - clock).max(0.0)
     }
 
@@ -708,21 +706,22 @@ impl Eval {
             let mut cards: Vec<f64> = g
                 .pile(&cards::hand(s))
                 .iter()
-                .map(|id| w.hand + w.hand_cost * self.cost(id))
+                .map(|id| w.hand + w.hand_cost * Self::cost(cards::def(&world, id)))
                 .chain(
                     g.pile(&cards::drafted(s))
                         .iter()
-                        .map(|id| w.drafted * (w.hand + w.hand_cost * self.cost(id))),
+                        .map(|id| w.drafted * (w.hand + w.hand_cost * Self::cost(cards::def(&world, id)))),
                 )
                 .chain(g.pile(&cards::packet(s)).iter().map(|id| {
-                    let keep = keep_insight(&world, cards::def(&world, id).tier);
-                    let v = w.hand + w.hand_cost * (self.cost(id) - w.packet_keep * keep);
+                    let d = cards::def(&world, id);
+                    let keep = keep_insight(&world, d.tier);
+                    let v = w.hand + w.hand_cost * (Self::cost(d) - w.packet_keep * keep);
                     w.drafted * v.max(0.0)
                 }))
                 .collect();
             *v += Self::capped(&mut cards, w.hand_cap);
             for id in g.pile(&cards::built(s)) {
-                *v += w.built + w.built_cost * self.cost(id);
+                *v += w.built + w.built_cost * Self::cost(cards::def(&world, id));
             }
             self.in_play_value(rules, g, s, v);
         }
@@ -828,7 +827,7 @@ impl Eval {
                             | Op::IncomeIfTags { .. }
                     )
                 });
-                v += w.built + w.built_cost * self.cost(id);
+                v += w.built + w.built_cost * Self::cost(d);
                 if !pays {
                     v += w.ability * left;
                 }
@@ -864,7 +863,7 @@ impl Eval {
                     // The AI's discount: energy or compute spent as credits.
                     (
                         res(Resource::Credits)
-                            + cards::discount_room(&world, g, s, d)
+                            + cards::discount_room_at(&world, g, s, d, cards::discounted_cost(d, discount))
                                 .map_or(0, |(_, rate, k)| rate * k),
                         cards::discounted_cost(d, discount),
                         earn_credits,
@@ -885,7 +884,7 @@ impl Eval {
                         p = f64::min(p, (1.0 - rounds / (left + 1.0)).max(0.0));
                     }
                 }
-                p * (w.hand + w.hand_cost * self.cost(id))
+                p * (w.hand + w.hand_cost * Self::cost(d))
             };
             let mut cards: Vec<f64> = g.pile(&cards::hand(s)).iter().map(|id| play(id)).collect();
             for id in g.pile(&cards::drafted(s)) {

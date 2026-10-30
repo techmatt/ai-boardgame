@@ -8,7 +8,7 @@ use crate::modules::common::{presence, presence_of, NODE};
 
 pub(super) fn row(g: &mut GameState, ids: &[&str]) {
     g.piles
-        .insert(PROJECTS.into(), ids.iter().map(|s| s.to_string()).collect());
+        .insert(PROJECTS.into(), ids.iter().map(|s| Key::new(s)).collect::<Vec<_>>().into());
 }
 
 #[test]
@@ -16,7 +16,7 @@ fn setup_deals_three_cheap_projects_from_a_staged_deck() {
     let rules = Rules::new(&baseline()).unwrap();
     let w = rules.world();
     let g = rules.new_game(3);
-    let all: Vec<String> = g
+    let all: Vec<Key> = g
         .pile(PROJECTS)
         .iter()
         .chain(g.pile(PROJECT_DECK))
@@ -67,8 +67,9 @@ fn a_new_row_is_dealt_when_all_three_have_resolved() {
             "total_offensive",
             "armoured_columns",
         ]
-        .map(String::from)
-        .to_vec(),
+        .map(Key::new)
+        .to_vec()
+        .into(),
     );
     set_res(&mut g, 0, Resource::Credits, 10);
     with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, 11)).unwrap();
@@ -84,7 +85,7 @@ fn a_new_row_is_dealt_when_all_three_have_resolved() {
     assert_eq!(g.var(&adversary::project_key("recruitment_drive")), 1);
     // An ongoing project goes into play and acts every round's build.
     g.vars
-        .insert(adversary::project_key("recruitment_drive"), 19);
+        .insert(adversary::project_key("recruitment_drive").into(), 19);
     with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, 1)).unwrap();
     assert_eq!(g.pile(PROJECTS_ONGOING), ["recruitment_drive"]);
 }
@@ -93,9 +94,9 @@ fn a_new_row_is_dealt_when_all_three_have_resolved() {
 fn an_ongoing_project_acts_in_the_build() {
     let (rules, mut g) = lab(&["adversary.build"]);
     g.piles
-        .insert(PROJECTS_ONGOING.into(), vec!["recruitment_drive".into()]);
+        .insert(PROJECTS_ONGOING.into(), vec!["recruitment_drive".into()].into());
     g.piles
-        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()]);
+        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()].into());
     run(&rules, &mut g);
     // Every clean city (lab: all of them) gains an adversary ambassador.
     assert_eq!(total(&g, ADV_AMBASSADOR), cities(&rules.map).len() as i64);
@@ -114,7 +115,7 @@ fn a_player_ambassador_on_a_node_stops_its_compute_and_stays() {
     put(&mut g, a, &ambassador(0), 1);
     let before = g.var(adversary::COMPUTE);
     g.piles
-        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()]);
+        .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()].into());
     run(&rules, &mut g);
     assert_eq!(g.var(adversary::COMPUTE), before + 3);
     assert_eq!(g.tokens(a, &ambassador(0)), 1);
@@ -150,10 +151,10 @@ fn an_uncountered_threat_puts_its_compute_on_a_project() {
 fn security_cards_drain_or_discard_a_project() {
     let (rules, mut g) = lab_actions();
     row(&mut g, &["false_flag", "disinformation"]);
-    g.vars.insert(adversary::project_key("false_flag"), 6);
+    g.vars.insert(adversary::project_key("false_flag").into(), 6);
     g.piles.insert(
         "cards.hand.0".into(),
-        vec!["flash_exploit".into(), "killswitch_directive".into()],
+        vec!["flash_exploit".into(), "killswitch_directive".into()].into(),
     );
     set_res(&mut g, 0, Resource::Credits, 30);
     set_res(&mut g, 0, Resource::Insight, 5);
@@ -191,7 +192,7 @@ fn node_takedown_removes_a_node_in_reach() {
         .unwrap();
     let near = m.hexes[p].neighbours[0];
     put(&mut g, far, NODE, 1);
-    g.piles.insert("cards.hand.0".into(), vec!["node_severance".into()]);
+    g.piles.insert("cards.hand.0".into(), vec!["node_severance".into()].into());
     set_res(&mut g, 0, Resource::Credits, 30);
     set_res(&mut g, 0, Resource::Insight, 5);
     set_res(&mut g, 0, Resource::Antimatter, 2);

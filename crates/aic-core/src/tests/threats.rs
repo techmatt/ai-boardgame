@@ -11,14 +11,11 @@ pub(super) fn threat_lab() -> (Rules, GameState) {
 /// Puts `threat` on country `c` (out of its deck).
 pub(super) fn deal(g: &mut GameState, threat: &str, c: usize) {
     for t in [1, 2] {
-        if let Some(p) = g.piles.get_mut(&format!("threats.deck.{t}")) {
-            p.retain(|x| x != threat);
+        if let Some(p) = g.piles.get_mut(format!("threats.deck.{t}").as_str()) {
+            Arc::make_mut(p).retain(|x| x != threat);
         }
     }
-    g.piles
-        .entry(format!("threats.on.{c}"))
-        .or_default()
-        .push(threat.into());
+    Arc::make_mut(g.piles.entry(format!("threats.on.{c}")).or_default()).push(threat.into());
 }
 
 #[test]
@@ -83,7 +80,7 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
     assert_eq!(g.resource(0, Resource::Credits), 6);
     assert!(g
         .pile("threats.discard.1")
-        .contains(&"sabotage".to_string()));
+        .contains(&Key::new("sabotage")));
     assert!(board::flagged(&g, RoundFlag::Sabotage, 0));
     assert_eq!(g.var("alignment.discord"), discord + 1);
 }
@@ -107,12 +104,9 @@ fn jamming_a_threat_down_to_what_is_paid_counters_it() {
             None,
         )
         .unwrap();
+    Arc::make_mut(g.piles.get_mut("cards.deck.1").unwrap()).retain(|c| c != "threat_triage");
     g.piles
-        .get_mut("cards.deck.1")
-        .unwrap()
-        .retain(|c| c != "threat_triage");
-    g.piles
-        .insert("cards.hand.0".into(), vec!["threat_triage".into()]);
+        .insert("cards.hand.0".into(), vec!["threat_triage".into()].into());
     set_res(&mut g, 0, Resource::Insight, 1);
     act(
         &rules,
@@ -125,7 +119,7 @@ fn jamming_a_threat_down_to_what_is_paid_counters_it() {
     assert!(g.pile("threats.on.0").is_empty());
     assert!(g
         .pile("threats.discard.1")
-        .contains(&"requisition".to_string()));
+        .contains(&Key::new("requisition")));
     assert_eq!(g.resource(0, Resource::Credits), 6);
 }
 
@@ -248,7 +242,7 @@ fn the_tier_2_deck_covers_four_countries_and_a_short_deal_is_counted() {
     let most = 4 * w.int("threats.per_country") + w.int("adversary.extra_threats");
     assert!(tier2 > most, "{tier2} tier-2 threats for a deal of {most}");
     let (rules, mut g) = threat_lab();
-    g.piles.insert("threats.deck.1".into(), vec!["blackout".into()]);
+    g.piles.insert("threats.deck.1".into(), vec!["blackout".into()].into());
     with_cx(&rules, |cx| threats::deal_extra(&mut g, cx, 3));
     assert_eq!(g.stats.counters["threats.short"], 2);
 }

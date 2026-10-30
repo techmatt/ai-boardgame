@@ -18,15 +18,15 @@ fn the_build_forecast_matches_the_build_step() {
         let rules = Rules::new(&c).unwrap();
         for seed in 0..3 {
             let mut g0 = rules.new_game(seed);
-            let players: Vec<String> = (0..g0.seats.len()).map(|s| ambassador(s).to_string()).collect();
+            let players: Vec<Key> = (0..g0.seats.len()).map(|s| Key::new(ambassador(s))).collect();
             for h in g0.hexes.iter_mut() {
-                h.tokens.retain(|k, _| !players.contains(k));
+                Arc::make_mut(h).tokens.retain(|k, _| !players.contains(k));
             }
             g0.vars.insert(SUPPLY.into(), 1000);
             g0.piles.remove(CURRENT);
             for id in &cards {
                 let mut g = g0.clone();
-                g.piles.insert(NEXT.into(), vec![id.clone()]);
+                g.piles.insert(NEXT.into(), vec![id.into()].into());
                 let want = plan::next_build(&rules.world(), &g);
                 run(&rules, &mut g);
                 let got: Vec<(usize, i64)> = (0..g.hexes.len())

@@ -20,8 +20,13 @@ use cli::{load, parse_args, rules, Options};
 /// The search clones game states by the hundred thousand, and the system
 /// allocator serializes them across workers: on 12 threads a state clone
 /// took 134 us against 24 us on one (012). mimalloc keeps a heap per thread.
+#[cfg(not(feature = "profile"))]
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[cfg(feature = "profile")]
+#[global_allocator]
+static ALLOC: prof::Counting = prof::Counting;
 
 fn main() {
     let o = parse_args();
