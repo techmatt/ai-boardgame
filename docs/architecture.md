@@ -78,7 +78,7 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
 ## Config
 
 A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the baseline
-game, rules revision 11 (2 countries, difficulty 0);
+game (r12 since 021), rules revision 11 (2 countries, difficulty 0);
 [`configs/shared_row.json`](../configs/shared_row.json) differs only in the threat
 variant. Abridged:
 
@@ -142,8 +142,8 @@ variant. Abridged:
     (`threats.variant=off`,
     `alignment.variant=off`, `cards.variant=off`): it keeps the module's phases and
     the parameters other modules read, and does nothing. See rules.md §9.
-- **`aic-sim show <config>`** prints the resolved config, its hash and every tunable
-  (card-derived ones included), with its range.
+- **`aic-sim show <config>`** prints the resolved config, its hash and every tunable,
+  with its range.
 
 ## Modules
 
@@ -204,8 +204,8 @@ Each variant is a `VariantDef` (in `module.rs`), holding:
 - `phases`: `PhaseSpec { name, kind: Auto | Decision, doc }`, the phases it contributes
   to the round;
 - `rng`: the RNG purposes it draws from;
-- `uses_cards`: whether it plays content cards. If it does, every `{"param": ...}` in a
-  selected card's cost becomes a required integer parameter of this module (0–1000);
+- `uses_cards`: whether it plays content cards (021: card costs are plain numbers; the
+  `{"param": ...}` costs that became tunables are gone, 015's call 7);
 - `build`: turns validated params into a `Box<dyn Module>` with typed fields.
 
 A `Module` implements whichever of these hooks it needs:
@@ -303,21 +303,27 @@ other. Order matters the way it does at a table where the team talks it through.
 
 Content is data in `content/`, composed from code primitives:
 
-- **Player cards** (`cards.json`): a `tier` (1 or 2; 0 for an AI's unique card), a
-  `kind` (`building` or `program`), a credit `cost`, an `insight` cost and an optional
-  `antimatter` cost, `effects` ([`Effect`]: on play, or when built), `passives`
-  ([`Passive`]: standing effects), an `ability` (once a round), `upkeep`, `tags`,
-  `needs`, `slotless` (a building that takes no slot) and `unique` (the AI board it
-  belongs to). List the id in the `cards` module's config `cards`. A cost written as
-  `{"param": "name"}` becomes a tunable.
+- **Player cards** (`cards.json`, 021): a `tier` (1 or 2; 0 for an AI's unique card or
+  starting building), a `kind` (`building`, `program`: stays in the play area, or
+  `event`: discarded), a credit `cost` and optional `energy`, `hardware` and
+  `antimatter` costs, 1-3 `tags` (`content::TAGS`), `needs` (tags in play), `effects`
+  ([`Effect`]: on play, or when built), `passives` ([`Passive`]: a building's standing
+  effects), an `ability` (once a round; buildings and programs; its cost may name
+  `"tokens"`, spent from the card), `upkeep`, `replaces` (a tag: built over one of your
+  buildings whose top card carries it), `tokens` (`{kind, per_round}`, a type from
+  `content::TOKEN_KINDS`), `keywords` (printed words, read by nothing yet), `slotless`
+  and `unique`. List the id in the `cards` module's config `cards`.
 - **Threats** (`threats.json`): `counter` costs and `effects` ([`ThreatOp`], with
   `Spot`s naming the pieces they hit).
 - **Adversary cards** (`adversary.json`): stage, text, `twists` ([`Twist`]), escalation.
 - **Adversary projects** (`projects.json`, 017): `stage` (1 cheap, 2 big), `cost` per
   player, `ongoing`, `text` and `effects` ([`AlignOp`], the same primitives as the
   Alignment cards).
-- **AI boards** (`ais.json`): slots, credit production, resource `discounts`, innate
-  passives, the presence track (`presence`: what each space uncovers) and flat `income`, growth options (lists of `Effect`) and unique cards.
+- **AI boards** (`ais.json`): credit production, resource `discounts`, innate
+  passives, the presence track (`presence`: what each space uncovers, `keep2` the tier-2
+  keep upgrade) and flat `income`, growth options (lists of `Effect`), unique cards, a
+  `start` building and `powers` (021: `{name, text, tags, cost, effects}`; `tags` may
+  name `any`). Slots are a config list, `ai.slots`.
 - **Alignment cards** (`alignment.json`, the Unity and Discord decks): `side` (`unity`
   or `discord`), `tier` (1 or 2), `text`, `effects` ([`AlignOp`]: resolved when its
   side's bucket tips) and `steps` (017: from `at` tips of its side, other `effects`).
@@ -417,9 +423,9 @@ In the baseline:
   `adversary.project_deck` (count only). Bookkeeping: `adversary.project.*` (each
   visible project's compute), `adversary.first_project`.
 - `ai` adds each seat's board (`ai.board`: name, text, innate rule, the presence track
-  with every step, tier-2 and antimatter marks, printed slots, the AI's unique cards and
-  where they are), tier-2 unlock and credit production. Bookkeeping: `ai.track.*` (the
-  tracks' `uncovered`).
+  with every step, keep-upgrade (`tier2` key) and resource marks, slots, the AI's unique
+  cards and where they are, and its powers with their cost and status, `ready` or why
+  not), and credit production. Bookkeeping: `ai.track.*`, `ai.power_used.*`.
 - `board` shows its per-country flags (blackout, sabotage, shelter) and each country's
   megaproject (cubes by owner, against its size) as country values, the war round and
   fronts and the clock's step as globals, each seat's presence on the board and left
@@ -428,12 +434,16 @@ In the baseline:
   next target and how many marches away (`View.arrows`, 019, drawn as arrows); bookkeeping
   `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`.
 - `economy` adds each seat's income per resource and the next round's bonus insight
-  (bookkeeping `economy.bonus_insight`, shown as its own global while >0); `cards`
-  adds hand, buildings (`n/slots`), draft hand and drafted cards with statuses, tags,
-  next-building discount, drafting tier, Civic Shelter used, and the decks.
-  Bookkeeping: `cards.tier.*`, `cards.picked.*`, `cards.next_discount.*`,
-  `cards.civic_used.*`, `cards.unpowered.*` (a building's `unpowered` status),
-  `cards.kept_round.*` (cards kept this round, for `free_keep`).
+  (bookkeeping `economy.bonus_insight`, shown as its own global while >0;
+  `economy.production.*`, one-time permanent gains, counted in the income;
+  `economy.insight_debt.*`); `cards` adds hand, buildings (`n/slots`; a stacked one's
+  text names the cards splayed under it, status `stacked`), programs in play, draft
+  hand and drafted cards (status: the keep price, `keep 1 insight`), tokens in each
+  token card's text, tags, next-building discount, Civic Shelter used, and the decks.
+  Bookkeeping: `cards.picked.*`, `cards.next_discount.*`, `cards.civic_used.*`,
+  `cards.unpowered.*`, `cards.kept_round.*`, `cards.tokens.*`. Piles (021):
+  `cards.built.<s>` (active buildings), `cards.under.<s>.<top>` (splayed under `top`,
+  bottom first), `cards.played.<s>` (programs).
 
 So the globals hold only game-wide tracks (the Alignment track and tips, the
 adversary supply and stage, the war round and what modules derive).

@@ -166,9 +166,11 @@ export interface AiBoardDef {
   id: string;
   name: string;
   text: string;
-  slots: number;
+  slots?: number;
   innate: { name: string; text: string };
   growth: { name: string }[];
+  /** AI-board powers (021). */
+  powers?: { name: string; text?: string; tags: [string, number][] }[];
 }
 export interface Content { cards: CardDef[]; threats: ThreatDef[]; adversary: AdversaryDef[]; ais: AiBoardDef[] }
 

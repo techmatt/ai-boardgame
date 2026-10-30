@@ -562,7 +562,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         }
         // A draw's card is only known once drawn: whatever is new in the hand.
         let hand_before = match &a {
-            Action::Draw { seat, .. } => {
+            Action::Tier { seat, .. } => {
                 Some((*seat, g.pile(&cards::hand(*seat as usize)).to_vec()))
             }
             _ => None,
@@ -604,6 +604,17 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         .map(|i| ops.get(i).copied().unwrap_or(0) as u32)
         .collect();
     r.counters = g.stats.counters.clone();
+    // 021: the card and economy per-round counters, as `<key>.rNN` (summed
+    // over seats), for the screen's by-round tables.
+    for (k, v) in &g.stats.per_round {
+        if k.starts_with("cards.") || k.starts_with("ai.") || k.starts_with("economy.") {
+            for (i, n) in v.iter().enumerate().skip(1) {
+                if *n != 0 {
+                    r.counters.insert(format!("{k}.r{i:02}"), *n);
+                }
+            }
+        }
+    }
     r.build = build_signature(rules, &g);
     r.final_state = Some(Box::new(g));
     r.ms = ms_since(start);

@@ -26,7 +26,6 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
     deal(&mut g, "sabotage", 0);
     deal(&mut g, "blackout", 1);
     for s in 0..2 {
-        set_res(&mut g, s, "compute", 5);
         set_res(&mut g, s, "energy", 5);
     }
     let legal = rules.legal_actions(&g);
@@ -44,33 +43,33 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
         resource: resource.into(),
         amount,
     };
-    // Blackout: 2 compute. Pay 1, withdraw, then pay in full.
+    // Blackout: 2 energy (021: was compute). Pay 1, withdraw, then pay in full.
     rules
-        .apply_mut(&mut g, &pay(1, "blackout", "compute", 1), None)
+        .apply_mut(&mut g, &pay(1, "blackout", "energy", 1), None)
         .unwrap();
-    assert_eq!(g.resource(1, "compute"), 4);
+    assert_eq!(g.resource(1, "energy"), 4);
     let withdraw = Action::Withdraw {
         seat: 1,
         threat: "blackout".into(),
-        resource: "compute".into(),
+        resource: "energy".into(),
     };
     rules.apply_mut(&mut g, &withdraw, None).unwrap();
-    assert_eq!(g.resource(1, "compute"), 5);
+    assert_eq!(g.resource(1, "energy"), 5);
     assert!(rules
-        .apply_mut(&mut g, &pay(1, "blackout", "compute", 3), None)
+        .apply_mut(&mut g, &pay(1, "blackout", "energy", 3), None)
         .is_err());
     assert!(rules
-        .apply_mut(&mut g, &pay(0, "blackout", "compute", 1), None)
+        .apply_mut(&mut g, &pay(0, "blackout", "energy", 1), None)
         .is_err());
     rules
-        .apply_mut(&mut g, &pay(1, "blackout", "compute", 2), None)
+        .apply_mut(&mut g, &pay(1, "blackout", "energy", 2), None)
         .unwrap();
     assert!(g.pile("threats.on.1").is_empty());
     assert_eq!(g.pile("threats.discard.1")[0], "blackout");
-    assert_eq!(g.resource(1, "compute"), 3);
-    // Sabotage: 2 compute + 1 energy. Pay only the compute; it comes back.
+    assert_eq!(g.resource(1, "energy"), 3);
+    // Sabotage: 2 energy + 1 credit. Pay only the energy; it comes back.
     rules
-        .apply_mut(&mut g, &pay(0, "sabotage", "compute", 2), None)
+        .apply_mut(&mut g, &pay(0, "sabotage", "energy", 2), None)
         .unwrap();
     assert_eq!(g.pile("threats.on.0"), ["sabotage"]);
     let discord = g.var("alignment.discord");
@@ -80,7 +79,7 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
             .unwrap();
     }
     assert!(g.pending.is_none());
-    assert_eq!(g.resource(0, "compute"), 5);
+    assert_eq!(g.resource(0, "energy"), 5);
     assert!(g
         .pile("threats.discard.1")
         .contains(&"sabotage".to_string()));
@@ -112,7 +111,7 @@ fn jamming_a_threat_down_to_what_is_paid_counters_it() {
     assert!(g
         .pile("threats.discard.1")
         .contains(&"requisition".to_string()));
-    assert_eq!(g.resource(0, "credits"), 7);
+    assert_eq!(g.resource(0, "credits"), 8);
 }
 
 #[test]
@@ -162,10 +161,13 @@ fn difficulty_1_raises_the_counters_and_deals_more_threats() {
 #[test]
 fn blackout_and_sabotage_last_into_the_next_rounds_production() {
     let round = [ACTIONS, "board.produce", "economy.upkeep", "threats.execute", "board.cleanup"];
-    let rules = Rules::new(&lab_config(&round)).unwrap();
+    let mut c = lab_config(&round);
+    // 021: no neutral city's energy offered for sale (that would ask).
+    c.apply_override("board.city_energy_credits=20").unwrap();
+    let rules = Rules::new(&c).unwrap();
     let mut g = rules.new_game(3);
-    deal(&mut g, "blackout", 1);
-    deal(&mut g, "sabotage", 0);
+    deal(&mut g, "blackout", 0);
+    deal(&mut g, "sabotage", 1);
     let pass_round = |g: &mut GameState| {
         for s in 0..2 {
             rules.apply_mut(g, &Action::Pass { seat: s }, None).unwrap();
@@ -176,19 +178,17 @@ fn blackout_and_sabotage_last_into_the_next_rounds_production() {
     pass_round(&mut g);
     pass_round(&mut twin);
     assert_eq!(g.round, 2);
-    assert!(board::flagged(&g, "blackout", 1) && board::flagged(&g, "sabotage", 0));
-    let before = |g: &GameState| (0..2).map(|s| (g.resource(s, "compute"), g.resource(s, "energy"))).collect::<Vec<_>>();
+    assert!(board::flagged(&g, "blackout", 0) && board::flagged(&g, "sabotage", 1));
+    let before = |g: &GameState| (0..2).map(|s| g.resource(s, "energy")).collect::<Vec<_>>();
     let (b, bt) = (before(&g), before(&twin));
     pass_round(&mut g);
     pass_round(&mut twin);
     assert_eq!(g.round, 3);
     assert!(!board::flagged(&g, "blackout", 1) && !board::flagged(&g, "sabotage", 0));
-    // Round 2's upkeep paid seat 0 (presence in country 0) no compute, and round
-    // 2's production less energy (country 1's cities made none).
-    let gain = |g: &GameState, b: &[(i64, i64)], s: usize| (g.resource(s, "compute") - b[s].0, g.resource(s, "energy") - b[s].1);
-    let track = crate::modules::economy::income(&rules.world(), &twin, 0)[1];
+    // 021: round 2's upkeep paid seat 1 (presence in sabotaged country 1) no
+    // energy; its twin got its energy income.
+    let gain = |g: &GameState, b: &[i64], s: usize| g.resource(s, "energy") - b[s];
+    let track = crate::modules::economy::income(&rules.world(), &twin, 1)[crate::content::ENERGY];
     assert!(track > 0);
-    assert_eq!(gain(&g, &b, 0).0, gain(&twin, &bt, 0).0 - track);
-    let energy = |g: &GameState, b: &[(i64, i64)]| gain(g, b, 0).1 + gain(g, b, 1).1;
-    assert!(energy(&g, &b) < energy(&twin, &bt), "the Blackout cost no energy");
+    assert_eq!(gain(&g, &b, 1), gain(&twin, &bt, 1) - track);
 }

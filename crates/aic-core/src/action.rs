@@ -19,7 +19,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         target: Option<Hex>,
     },
-    /// Draft: choose which tier to be dealt from (module `cards`).
+    /// Draft: the next card of your draft hand comes from this tier (module `cards`, 021: card by card).
     Tier { seat: u8, tier: u8 },
     /// Draft: take a card from the hand in front of you (module `cards`).
     Draft { seat: u8, card: String },
@@ -31,8 +31,8 @@ pub enum Action {
     Play { seat: u8, card: String },
     /// Use a building's once-a-round ability (module `cards`).
     Use { seat: u8, card: String },
-    /// Pay compute to draw a card from a tier's deck (module `cards`).
-    Draw { seat: u8, tier: u8 },
+    /// Use an AI-board power, paid by sacrificing played cards' tags (module `ai`, 021).
+    Power { seat: u8, power: u8 },
     /// Put `amount` of a resource on a threat's counter (module `threats`).
     Pay {
         seat: u8,
@@ -68,7 +68,7 @@ impl Action {
             | Action::Growth { seat, .. }
             | Action::Play { seat, .. }
             | Action::Use { seat, .. }
-            | Action::Draw { seat, .. }
+            | Action::Power { seat, .. }
             | Action::Pay { seat, .. }
             | Action::Withdraw { seat, .. }
             | Action::Give { seat, .. }

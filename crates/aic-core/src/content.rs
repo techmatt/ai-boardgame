@@ -36,11 +36,12 @@ const FILES: [&str; 7] = [
 ];
 
 /// Player resources, in display order.
-pub const RESOURCES: [&str; 5] = ["credits", "compute", "energy", "antimatter", "insight"];
+/// (021: players have no compute; compute is the adversary's, `adversary.compute`.)
+pub const RESOURCES: [&str; 5] = ["credits", "hardware", "energy", "antimatter", "insight"];
 
 /// Positions in [`RESOURCES`], the order of income and production arrays.
 pub const CREDITS: usize = 0;
-pub const COMPUTE: usize = 1;
+pub const HARDWARE: usize = 1;
 pub const ENERGY: usize = 2;
 pub const ANTIMATTER: usize = 3;
 pub const INSIGHT: usize = 4;
@@ -48,7 +49,7 @@ pub const INSIGHT: usize = 4;
 // The positions above name the right resources (checked at compile time).
 const _: () = {
     assert!(str_eq(RESOURCES[CREDITS], "credits"));
-    assert!(str_eq(RESOURCES[COMPUTE], "compute"));
+    assert!(str_eq(RESOURCES[HARDWARE], "hardware"));
     assert!(str_eq(RESOURCES[ENERGY], "energy"));
     assert!(str_eq(RESOURCES[ANTIMATTER], "antimatter"));
     assert!(str_eq(RESOURCES[INSIGHT], "insight"));
@@ -70,8 +71,16 @@ const fn str_eq(a: &str, b: &str) -> bool {
     true
 }
 
-/// Card tags.
-pub const TAGS: [&str; 5] = ["economy", "cyber", "power", "unity", "discord"];
+/// Card tags (021). A card carries 1-3.
+pub const TAGS: [&str; 6] = ["science", "industry", "cyber", "power", "diplomacy", "security"];
+
+/// Token types (021): tokens live only on cards that print their type.
+/// Datasets (Science), Followers (Diplomacy), Capital (Industry), Agents
+/// (Security); a Cyber type is still to come.
+pub const TOKEN_KINDS: [&str; 4] = ["datasets", "followers", "capital", "agents"];
+
+/// A power's tag cost that any tag pays.
+pub const ANY_TAG: &str = "any";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -209,27 +218,15 @@ impl CountryPiece {
 
 // ---------- player cards ----------
 
-/// A number in content: a literal, or `{"param": "name"}` naming a tunable
-/// of the module that uses the content (for cards, `cards`). Card costs
-/// accept either; other content numbers are literals.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Amount {
-    Lit(i64),
-    Param { param: String },
-}
-
-impl Default for Amount {
-    fn default() -> Self {
-        Amount::Lit(0)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CardKind {
+    /// Goes into a building slot; building over one splays it down (021).
     Building,
+    /// Resolves and stays in your play area: its tags count (021).
     Program,
+    /// Resolves and is discarded: its tags don't stay (021).
+    Event,
 }
 
 /// A resource and an amount, written `["energy", 2]`.
@@ -247,13 +244,28 @@ pub struct CardDef {
     pub tier: u8,
     pub kind: CardKind,
     /// Credits.
-    pub cost: Amount,
+    pub cost: i64,
     #[serde(default)]
-    pub antimatter: Amount,
-    /// Insight to play it.
-    pub insight: Amount,
+    pub antimatter: i64,
+    /// Energy to play it (Power cards, 021).
+    #[serde(default)]
+    pub energy: i64,
+    /// Hardware a building needs (021: a requirement in the cost).
+    #[serde(default)]
+    pub hardware: i64,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Printed keywords, for reading the card (021): `hack`, `token`, ...
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    /// A building that must be built over one of yours whose top card
+    /// carries this tag (021: tier-2 replacement).
+    #[serde(default)]
+    pub replaces: Option<String>,
+    /// The token type this card holds, and how many it gains a round while
+    /// in play (021: token engines).
+    #[serde(default)]
+    pub tokens: Option<TokenSpec>,
     /// Tags you must have (on your buildings) to play it.
     #[serde(default)]
     pub needs: Vec<TagCount>,
@@ -280,6 +292,18 @@ pub struct CardDef {
     pub unique: Option<String>,
 }
 
+/// A card's token type and its gain a round (in upkeep, while the card is
+/// an active building or in your play area).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TokenSpec {
+    pub kind: String,
+    #[serde(default)]
+    pub per_round: i64,
+}
+
+/// A once-a-round ability. `cost` may name `"tokens"`: spent from the card's
+/// own tokens (021: spend at a rate).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ability {
@@ -425,6 +449,32 @@ pub enum Effect {
     NextBuildingDiscount {
         amount: i64,
     },
+    /// A one-time permanent gain (021): your printed production of
+    /// `resource` rises by `amount` for the rest of the game.
+    Production {
+        resource: String,
+        amount: i64,
+    },
+    /// Add `amount` tokens to one of your cards in play holding `kind` (021).
+    AddTokens {
+        kind: String,
+        amount: i64,
+    },
+    /// A hack (021): a node within your reach makes no compute in the next build.
+    CutNode,
+    /// Movement add-on (021): move one of your ambassadors on the board up to
+    /// `range` hexes onto a piece (or not at all).
+    MoveOne {
+        range: i64,
+    },
+    /// Spread (021, rare): each of your ambassadors on the board may move 1
+    /// hex onto an adjacent piece.
+    Spread,
+    /// Consolidate (021): move up to `max` of your ambassadors within your
+    /// reach onto one piece in your reach.
+    Consolidate {
+        max: i64,
+    },
     If {
         cond: Cond,
         then: Vec<Effect>,
@@ -482,6 +532,11 @@ pub enum Passive {
     /// Once a round, prevent the first building destruction in a country
     /// where you have a presence.
     CivicShelter,
+    /// While you have this building, cards discarded from hand that carry
+    /// `tag` (or any tag, `"any"`) count as those tags for AI-board powers (021).
+    TagsFromHand {
+        tag: String,
+    },
     /// In upkeep, convert `amount` `from` into `gain` `to` (if you have it).
     ConvertUpkeep {
         from: String,
@@ -571,6 +626,11 @@ pub enum ThreatOp {
     Compute {
         amount: i64,
     },
+    /// Each player in scope loses `amount` tokens from their cards (021;
+    /// their choice of card).
+    LoseTokens {
+        amount: i64,
+    },
 }
 
 fn one() -> i64 {
@@ -584,7 +644,7 @@ fn one() -> i64 {
 pub enum RoundFlag {
     /// Cities in the country make no energy.
     Blackout,
-    /// Data centres in the country make no compute.
+    /// Players with presence in the country make no energy in upkeep (021: was compute).
     Sabotage,
     /// Buildings in the country can't be destroyed.
     Shelter,
@@ -767,8 +827,6 @@ pub struct AiBoard {
     pub name: String,
     #[serde(default)]
     pub text: String,
-    /// Building slots.
-    pub slots: i64,
     pub innate: Innate,
     /// Credit production every round, before cards raise it.
     pub credits: i64,
@@ -781,9 +839,19 @@ pub struct AiBoard {
     /// The presence track: one space per presence token. The first token
     /// starts on the board, so the first space is uncovered from setup.
     pub presence: Vec<Uncover>,
+    /// A second presence track (021): placing presence takes the next token
+    /// from the track its player chooses. Its first space is covered at setup.
+    #[serde(default)]
+    pub presence2: Vec<Uncover>,
     pub growth: Vec<Growth>,
     /// Unique cards, in hand at the start.
     pub cards: Vec<String>,
+    /// AI-board powers (021, locked: paid by sacrificing tags), each usable once a round.
+    #[serde(default)]
+    pub powers: Vec<Power>,
+    /// A building the board starts with in a slot, carrying its built-in tag (021).
+    #[serde(default)]
+    pub start: Option<String>,
     /// Sway toward Unity this board adds at the start of every round.
     #[serde(default)]
     pub unity: i64,
@@ -815,9 +883,25 @@ pub struct Uncover {
     /// Income every round once uncovered (insight raises the round's insight).
     #[serde(default)]
     pub income: Vec<Cost>,
-    /// Uncovering this space unlocks tier 2.
+    /// A board upgrade (021): keeping a tier-2 card costs
+    /// `cards.keep_tier2_upgraded` insight instead of `cards.keep_tier2`.
     #[serde(default)]
-    pub tier2: bool,
+    pub keep2: bool,
+}
+
+/// An AI-board power (021, locked: paid by sacrificing tags). `tags` is the
+/// tag cost (`"any"` for any tag), paid by discarding played cards that carry
+/// them; `cost` other resources; then `effects`. Once a round.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Power {
+    pub name: String,
+    #[serde(default)]
+    pub text: String,
+    pub tags: Vec<TagCount>,
+    #[serde(default)]
+    pub cost: Vec<Cost>,
+    pub effects: Vec<Effect>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -828,17 +912,8 @@ pub struct Growth {
 }
 
 impl CardDef {
-    /// Parameter names this card refers to, in first-use order.
-    pub fn params(&self) -> Vec<&str> {
-        let mut out: Vec<&str> = Vec::new();
-        for a in [&self.cost, &self.antimatter, &self.insight] {
-            if let Amount::Param { param } = a {
-                if !out.contains(&param.as_str()) {
-                    out.push(param);
-                }
-            }
-        }
-        out
+    pub fn is_event(&self) -> bool {
+        self.kind == CardKind::Event
     }
 
     pub fn is_building(&self) -> bool {
@@ -900,16 +975,33 @@ impl Content {
             if let Some(a) = &c.ability {
                 check_effects(&a.effects, &what)?;
             }
+            if c.tags.is_empty() || c.tags.len() > 3 {
+                return Err(format!("card {:?}: 1-3 tags", c.id));
+            }
+            if let Some(t) = &c.replaces {
+                tag(t, &what)?;
+            }
+            if let Some(t) = &c.tokens {
+                if !TOKEN_KINDS.contains(&t.kind.as_str()) {
+                    return Err(format!("{what}: unknown token type {:?}", t.kind));
+                }
+                if c.is_event() {
+                    return Err(format!("{what}: an event can't hold tokens"));
+                }
+            }
             if !c.is_building()
-                && (!c.passives.is_empty()
-                    || c.ability.is_some()
-                    || !c.upkeep.is_empty()
-                    || c.slotless)
+                && (!c.passives.is_empty() || !c.upkeep.is_empty() || c.slotless)
             {
                 return Err(format!(
-                    "card {:?}: only buildings have passives, abilities or upkeep",
+                    "card {:?}: only buildings have passives or upkeep",
                     c.id
                 ));
+            }
+            if c.is_event() && c.ability.is_some() {
+                return Err(format!("card {:?}: an event has no ability", c.id));
+            }
+            if c.replaces.is_some() && !c.is_building() {
+                return Err(format!("card {:?}: only a building replaces one", c.id));
             }
             if c.tier > 2 || (c.tier == 0) != c.unique.is_some() {
                 return Err(format!(
@@ -917,12 +1009,17 @@ impl Content {
                     c.id
                 ));
             }
-            for (r, _) in c
-                .upkeep
-                .iter()
-                .chain(c.ability.iter().flat_map(|a| &a.cost))
-            {
+            for (r, _) in c.upkeep.iter() {
                 resource(r, &what)?;
+            }
+            for (r, _) in c.ability.iter().flat_map(|a| &a.cost) {
+                if r == "tokens" {
+                    if c.tokens.is_none() {
+                        return Err(format!("{what}: spends tokens but holds none"));
+                    }
+                } else {
+                    resource(r, &what)?;
+                }
             }
         }
         for t in &self.threats {
@@ -1001,7 +1098,7 @@ impl Content {
             for (r, _) in b
                 .income
                 .iter()
-                .chain(b.presence.iter().flat_map(|u| u.income.iter()))
+                .chain(b.presence.iter().chain(&b.presence2).flat_map(|u| u.income.iter()))
             {
                 resource(r, &what)?;
             }
@@ -1013,6 +1110,26 @@ impl Content {
             }
             for gr in &b.growth {
                 check_effects(&gr.effects, &what)?;
+            }
+            for p in &b.powers {
+                check_effects(&p.effects, &what)?;
+                for (r, _) in &p.cost {
+                    resource(r, &what)?;
+                }
+                for (t, n) in &p.tags {
+                    if t != ANY_TAG {
+                        tag(t, &what)?;
+                    }
+                    if *n < 1 {
+                        return Err(format!("{what}: power tag counts are 1 or more"));
+                    }
+                }
+            }
+            if let Some(id) = &b.start {
+                match self.card_index(id) {
+                    Some(i) if self.cards[i].is_building() => {}
+                    _ => return Err(format!("{what}: start building {id:?} is not a building")),
+                }
             }
             check_passives(&b.innate.passives, &what)?;
         }
@@ -1165,6 +1282,12 @@ fn check_effects(effects: &[Effect], what: &str) -> Result<(), String> {
                 resource(from, what)?;
                 resource(to, what)?;
             }
+            Effect::Production { resource: r, .. } => resource(r, what)?,
+            Effect::AddTokens { kind, .. } => {
+                if !TOKEN_KINDS.contains(&kind.as_str()) {
+                    return Err(format!("{what}: unknown token type {kind:?}"));
+                }
+            }
             Effect::If {
                 then, otherwise, ..
             } => {
@@ -1200,6 +1323,11 @@ fn check_passives(passives: &[Passive], what: &str) -> Result<(), String> {
             Passive::ConvertUpkeep { from, to, .. } => {
                 resource(from, what)?;
                 resource(to, what)?;
+            }
+            Passive::TagsFromHand { tag: t } => {
+                if t != ANY_TAG {
+                    tag(t, what)?;
+                }
             }
             _ => {}
         }

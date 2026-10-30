@@ -24,9 +24,6 @@ use crate::view::{self, View, ViewOut};
 /// Hard stop for configs whose round never ends the game.
 pub const MAX_ROUNDS: u32 = 1000;
 
-/// Bounds for parameters that content cards refer to.
-const CARD_PARAM_MIN: i64 = 0;
-const CARD_PARAM_MAX: i64 = 1000;
 
 pub struct Rules {
     /// The resolved config: validated, lists normalized, `round` filled in.
@@ -137,7 +134,7 @@ impl Rules {
                     ));
                 }
             }
-            let specs = param_specs(variant, &cards, content);
+            let specs = param_specs(variant);
             resolve_params(def.id, &specs, mc)?;
             to_build.push((def, variant, cards, specs));
         }
@@ -816,9 +813,9 @@ struct Spec {
     doc: &'static str,
 }
 
-/// The variant's own parameters plus every parameter its cards refer to.
-fn param_specs(variant: &VariantDef, cards: &[usize], content: &Content) -> Vec<Spec> {
-    let mut specs: Vec<Spec> = variant
+/// The variant's parameters (021: cards no longer name parameters).
+fn param_specs(variant: &VariantDef) -> Vec<Spec> {
+    let specs: Vec<Spec> = variant
         .params
         .iter()
         .map(|p| Spec {
@@ -829,19 +826,6 @@ fn param_specs(variant: &VariantDef, cards: &[usize], content: &Content) -> Vec<
             doc: p.doc,
         })
         .collect();
-    for &i in cards {
-        for name in content.cards[i].params() {
-            if !specs.iter().any(|s| s.name == name) {
-                specs.push(Spec {
-                    name: name.to_string(),
-                    kind: ParamKind::Int,
-                    min: CARD_PARAM_MIN,
-                    max: CARD_PARAM_MAX,
-                    doc: "referred to by a card",
-                });
-            }
-        }
-    }
     specs
 }
 

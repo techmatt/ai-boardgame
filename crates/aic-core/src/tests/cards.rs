@@ -9,8 +9,7 @@ fn the_ais_spend_their_resource_as_credits_on_cards() {
         g.piles.get_mut("cards.deck.1").unwrap().retain(|x| x != c);
     }
     // The Builder (seat 0): energy on buildings, 1 credit each, after
-    // Economies of scale takes 2 off. Fab Line costs 6: with 3 credits it
-    // spends 3 to 6 energy, the players choose.
+    // Economies of scale takes 1 off.
     g.piles.insert(
         "cards.hand.0".into(),
         vec!["fab_line".into(), "recon_sweep".into()],
@@ -31,7 +30,10 @@ fn the_ais_spend_their_resource_as_credits_on_cards() {
     // Not on a program: with no credits only the building is playable.
     set_res(&mut g, 0, "credits", 0);
     assert_eq!(plays(&g, 0), ["fab_line"]);
-    set_res(&mut g, 0, "credits", 3);
+    // 021: Fab Line costs 4, 3 after Economies of scale; with 1 credit at
+    // least 2 energy go in.
+    set_res(&mut g, 0, "credits", 1);
+    let energy = g.resource(0, "energy");
     rules
         .apply_mut(
             &mut g,
@@ -44,46 +46,32 @@ fn the_ais_spend_their_resource_as_credits_on_cards() {
         .unwrap();
     let p = g.pending.as_ref().expect("a discount choice");
     let opts: Vec<&str> = p.ask.options.iter().map(|o| o.option.as_str()).collect();
-    assert_eq!(
-        opts,
-        [
-            "spend 3 energy",
-            "spend 4 energy",
-            "spend 5 energy",
-            "spend 6 energy"
-        ]
-    );
-    answer_with(&rules, &mut g, "spend 4 energy");
-    assert_eq!((g.resource(0, "energy"), g.resource(0, "credits")), (6, 1));
+    assert_eq!(opts, ["spend 2 energy", "spend 3 energy"]);
+    answer_with(&rules, &mut g, "spend 3 energy");
+    // 021: a new slot, or over the Builder's starting Foundry Core.
+    answer_with(&rules, &mut g, "a new slot");
+    assert_eq!((g.resource(0, "energy"), g.resource(0, "credits")), (energy - 3, 1));
     assert!(g.pile("cards.built.0").contains(&"fab_line".to_string()));
-
-    // The Protector (seat 1): compute on cyber cards. Recon Sweep costs 2:
-    // with no credits both units must be compute, so nothing is asked.
-    g.piles.insert(
-        "cards.hand.1".into(),
-        vec!["recon_sweep".into(), "evacuate".into()],
-    );
-    set_res(&mut g, 1, "credits", 0);
-    set_res(&mut g, 1, "compute", 5);
-    set_res(&mut g, 1, "insight", 1);
-    assert_eq!(plays(&g, 1), ["recon_sweep"]);
-    act(
-        &rules,
-        &mut g,
-        Action::Play {
-            seat: 1,
-            card: "recon_sweep".into(),
-        },
-    );
-    // 2 spent, 1 gained by the card.
-    assert_eq!((g.resource(1, "compute"), g.resource(1, "credits")), (4, 0));
 }
 
 #[test]
 fn growth_and_draft_picks_cannot_be_passed() {
     let rules = Rules::new(&baseline()).unwrap();
     let mut g = rules.new_game(2);
-    advance_to(&rules, &mut g, "cards.draft");
+    // 021: round 1 is the opening (no draft); pass through its action phase
+    // (first-action play would pay and withdraw a threat counter forever).
+    for _ in 0..2000 {
+        if g.pending.is_none() && rules.phase(&g).is_some_and(|p| p.name == "cards.draft") {
+            break;
+        }
+        let legal = rules.legal_actions(&g);
+        let a = legal
+            .iter()
+            .find(|a| matches!(a, Action::Pass { .. }))
+            .unwrap_or(&legal[0])
+            .clone();
+        rules.apply_mut(&mut g, &a, None).unwrap();
+    }
     let legal = rules.legal_actions(&g);
     assert!(
         legal.iter().all(|a| matches!(a, Action::Draft { .. })),
@@ -145,10 +133,10 @@ fn off_variants_remove_threats_alignment_and_the_draft() {
     let rules = Rules::new(&baseline_with(&["cards.variant=off"])).unwrap();
     let mut g = rules.new_game(4);
     advance_to(&rules, &mut g, ACTIONS);
-    // Only the AIs' unique cards: nothing dealt, drafted or drawable.
+    // Only the AIs' unique cards: nothing dealt or drafted.
     assert!(g.pile("cards.hand.0").len() <= 3);
     assert!(rules
         .legal_actions(&g)
         .iter()
-        .all(|a| !matches!(a, Action::Draw { .. })));
+        .all(|a| !matches!(a, Action::Tier { .. } | Action::Draft { .. })));
 }

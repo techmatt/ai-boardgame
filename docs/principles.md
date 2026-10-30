@@ -24,6 +24,14 @@ The standards every module and every rules change is judged against.
 > thing costs on the order of 50, as in Terraforming Mars. Prefer "things produce 1"
 > wherever it works, for every resource.
 
+**021 (first rescale):** card costs halved (rounded up: 0-13 credits, Megastructure 13,
+Orbital Lance 10); credit production 10 / 9 a board plus a starting building's +1;
+base insight 3 a board (+1 on the first presence space), spent on keeps (1 a tier-1 card,
+3 a tier-2); the opening starts players on 20 credits. Reasoning: the average cost of what
+is played should sit near credit income ÷ insight income: about 11 credits ÷ 4 insight
+≈ 3, and tier-1 cards average 2-3 credits with tier 2 at 4-13. The flags below are 019's
+and stand for the rest.
+
 **Flagged (019), not rescaled:** the card rework will rescale cards, so these stand
 until then.
 

@@ -60,8 +60,8 @@ fn broken(rules: &Rules, g: &GameState) -> Vec<String> {
                 out.push(format!("seat {s}: {n} {r}"));
             }
         }
-        let track = ai::board(&w, s).presence.len();
-        let taken = board::track_taken(g, s);
+        let track = ai::board(&w, s).presence.len() + ai::board(&w, s).presence2.len();
+        let taken = board::track_taken(g, s) + board::track2_taken(g, s);
         let placed = total(g, &presence(s)) + g.resource(s, crate::modules::common::RESERVE);
         if taken > track {
             out.push(format!("seat {s}: {taken} presence taken off a track of {track}"));

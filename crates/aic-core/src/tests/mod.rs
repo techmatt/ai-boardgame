@@ -28,7 +28,7 @@ const BASELINE: &str = include_str!("../../../../configs/baseline.json");
 const SHARED_ROW: &str = include_str!("../../../../configs/shared_row.json");
 
 /// The action phase of the baseline round.
-const ACTIONS: &str = "cards.play+threats.counter+economy.give+alignment.act+board.act";
+const ACTIONS: &str = "cards.play+threats.counter+economy.give+alignment.act+board.act+ai.power";
 
 fn baseline() -> Config {
     Config::from_json(BASELINE).unwrap()
@@ -52,6 +52,8 @@ fn lab_config(round: &[&str]) -> Config {
         "alignment.undecided_per_player=50",
         "alignment.clear_win_stage=3",
         "alignment.unity_win=0",
+        // 021: no credits, so no neutral city's energy is bought unasked.
+        "ai.start_credits=0",
     ]);
     c.round = round.iter().map(|s| s.to_string()).collect();
     c
@@ -249,7 +251,6 @@ fn variant_matrix() -> Vec<Config> {
             "adversary.counter_bonus_all=1",
             "threats.variant=shared_row",
         ],
-        &["cards.variant=free_keep", "cards.free_keeps=1"],
         &["cards.variant=off"],
         &["board.clock=3"],
         &["countries=1"],
@@ -272,7 +273,7 @@ fn variant_matrix() -> Vec<Config> {
 
 // ---------- the golden game ----------
 
-const GOLDEN_FINGERPRINT: &str = "96754d2d13b3b289";
+const GOLDEN_FINGERPRINT: &str = "9ea699f5a495cac5";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).
@@ -294,6 +295,6 @@ fn golden_game() {
     assert!(g.is_over());
     assert_eq!(
         (RULES_REVISION, g.fingerprint().as_str()),
-        (11, GOLDEN_FINGERPRINT)
+        (12, GOLDEN_FINGERPRINT)
     );
 }

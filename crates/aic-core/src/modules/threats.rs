@@ -631,6 +631,24 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
             }
         }
         ThreatOp::Compute { amount } => adversary::gain_compute(g, cx, *amount)?,
+        ThreatOp::LoseTokens { amount } => {
+            // Each player in scope loses tokens off their cards, their choice.
+            for s in seats_in_scope(&w, g, scope) {
+                for _ in 0..*amount {
+                    let cards: Vec<String> = cards::token_cards(&w, g, s, None)
+                        .into_iter()
+                        .filter(|c| g.var(&cards::tokens_key(s, c)) > 0)
+                        .collect();
+                    let opts = cards.iter().map(|c| opt(c.clone())).collect();
+                    let prompt = format!("Seat {s}: lose a token from which card?");
+                    let Some(i) = cx.choose(s, &prompt, opts)? else {
+                        break;
+                    };
+                    cards::add_tokens(g, cx, s, &cards[i], -1);
+                    cx.tally(g, "threats.tokens_lost", 1);
+                }
+            }
+        }
         ThreatOp::Flag { name } => {
             // Threats execute after production and upkeep: the flag lasts through
             // the next round (cleanup counts it down), or it would never land (020).

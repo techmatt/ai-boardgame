@@ -258,8 +258,8 @@ fn experiment_filters_variants_and_turns_probes_on() {
   "configs": ["configs/baseline.json"],
   "variants": [
     {"name": "base", "set": []},
-    {"name": "keep0", "set": ["cards.keep_cost=0"]},
-    {"name": "keep2", "set": ["cards.keep_cost=2"]}
+    {"name": "keep0", "set": ["cards.keep_tier1=0"]},
+    {"name": "keep2", "set": ["cards.keep_tier1=2"]}
   ],
   "agents": ["random"],
   "games": 2,

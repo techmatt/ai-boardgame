@@ -10,7 +10,7 @@ use std::fmt::Debug;
 
 use crate::action::Action;
 use crate::config::ParamValue;
-use crate::content::{Amount, Content};
+use crate::content::Content;
 use crate::event::Event;
 use crate::map::Map;
 use crate::rng::Stream;
@@ -248,13 +248,6 @@ impl World<'_> {
         }
     }
 
-    /// A content number: a literal, or a parameter of the `cards` module.
-    pub fn amount(&self, a: &Amount) -> i64 {
-        match a {
-            Amount::Lit(v) => *v,
-            Amount::Param { param } => self.int(&format!("cards.{param}")),
-        }
-    }
 }
 
 /// The answers given so far while resolving one phase or action, and the

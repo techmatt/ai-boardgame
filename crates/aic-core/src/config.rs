@@ -159,19 +159,7 @@ impl Config {
             let def =
                 crate::modules::find(module).ok_or_else(|| format!("unknown module {module:?}"))?;
             if let Some(v) = def.variants.iter().find(|v| v.name == value) {
-                let content = crate::content::content();
-                let card_params: Vec<&str> = if v.uses_cards {
-                    m.cards
-                        .iter()
-                        .filter_map(|id| content.card_index(id))
-                        .flat_map(|i| content.cards[i].params())
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-                m.params.retain(|k, _| {
-                    v.params.iter().any(|p| p.name == k) || card_params.contains(&k.as_str())
-                });
+                m.params.retain(|k, _| v.params.iter().any(|p| p.name == k));
                 if !v.uses_cards {
                     m.cards.clear();
                 }

@@ -51,7 +51,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// mistaken for the same experiment. Recorded with every result. The
 /// `golden_game` test fails until it is bumped and the golden fingerprint
 /// updated (also in `scripts/wasm-smoke.mjs`).
-pub const RULES_REVISION: u32 = 11;
+pub const RULES_REVISION: u32 = 12;
 
 /// Starts a game: setup, then on to the first decision.
 pub fn new_game(config: &Config, seed: u64) -> Result<GameState, String> {

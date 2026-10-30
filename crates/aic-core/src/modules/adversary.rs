@@ -30,6 +30,7 @@ const PARAMS: &[ParamSpec] = &[
     ParamSpec::int("build_bonus", 0, 5, "difficulty 3+: ambassadors each corrupted city gains on top of city_build"),
     ParamSpec::int("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
     ParamSpec::int("supply_reduction", 0, 20, "difficulty 4+: ambassador supply smaller by this per country"),
+    ParamSpec::int("troop_health", 0, 10, "removal a card must spend on an adversary troop (an ambassador takes 1)"),
     ParamSpec::int("node_compute", 0, 5, "adversary compute each node makes a round (none with a player ambassador on it)"),
     ParamSpec::list("project_cards", 0, 20, "adversary projects dealt from stage 1 (cheap) and stage 2 (big), cheap on top"),
     ParamSpec::int("project_row", 1, 6, "adversary projects visible at once; a new row is dealt when all have resolved"),
@@ -89,6 +90,11 @@ const FIRST_PROJECT: &str = "adversary.first_project";
 const FIRST_CORRUPTION: &str = "adversary.first_corruption";
 
 /// Seat `s` removed an adversary troop this round (card conditions).
+/// Set on a node's hex by a hack (021): it makes no compute in the next build.
+pub fn cut_key(h: usize) -> String {
+    format!("adversary.cut.{h}")
+}
+
 pub fn removed_troop(seat: usize) -> String {
     format!("adversary.removed_troop.{seat}")
 }
@@ -341,7 +347,12 @@ impl Module for Adversary {
                     if n == 0 {
                         continue;
                     }
-                    if player_ambassador(g, h).is_some() {
+                    let cut = cut_key(h);
+                    if g.var(&cut) > 0 {
+                        // A hack cut it off (021): no compute this build.
+                        cx.set_key(g, cut, 0);
+                        blocked += n;
+                    } else if player_ambassador(g, h).is_some() {
                         blocked += n;
                     } else {
                         made += n;
@@ -520,6 +531,7 @@ impl Module for Adversary {
             FIRST_PROJECT,
             "adversary.removed_troop.",
             "adversary.project.",
+            "adversary.cut.",
         ]);
     }
 }
@@ -883,7 +895,7 @@ pub fn spread(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> Res {
 /// Removal cost of an adversary piece: an ambassador 1, a troop `board.troop_health`.
 fn cost(w: &World, kind: &str) -> i64 {
     if kind == TROOP {
-        w.int("board.troop_health")
+        w.int("adversary.troop_health")
     } else {
         1
     }

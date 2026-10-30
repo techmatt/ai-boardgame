@@ -21,7 +21,7 @@ const games = process.argv[2] ?? '3';
 const VARIANTS = [
   [], ['threats.variant=shared_row'], ['threats.variant=off'], ['alignment.variant=still'],
   ['alignment.variant=off'], ['alignment.momentum_every=2', 'alignment.antimatter_discord=0'],
-  ['adversary.difficulty=4'], ['cards.variant=free_keep', 'cards.free_keeps=1'], ['cards.variant=off'],
+  ['adversary.difficulty=4'], ['cards.variant=off'],
   ['board.clock=3'], ['countries=1'], ['countries=3'], ['countries=4'],
   ['adversary.difficulty=4', 'adversary.counter_bonus_all=1', 'threats.variant=shared_row'],
   ['countries=3', 'adversary.difficulty=4', 'alignment.variant=still'],

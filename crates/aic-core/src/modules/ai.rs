@@ -22,8 +22,12 @@ pub static DEF: ModuleDef = ModuleDef {
         params: &[
             ParamSpec::list("boards", 0, 99, "AI board (index into content/ais.json) of each seat; the list repeats for more seats"),
             ParamSpec::int("start_credits", 0, 100, "credits each player starts with"),
+            ParamSpec::list("slots", 1, 10, "building slots of each seat's AI board, in the order of boards; the list repeats"),
         ],
-        phases: &[PhaseSpec::decision("growth", "each player picks one growth option on their board")],
+        phases: &[
+            PhaseSpec::decision("growth", "each player picks one growth option on their board"),
+            PhaseSpec::decision("power", "use AI-board powers, paid by sacrificing played cards' tags (combine with the action phase)"),
+        ],
         rng: &[],
         uses_cards: false,
         build,
@@ -42,35 +46,75 @@ pub fn uncovered(w: &World, g: &GameState, seat: usize) -> usize {
     board::track_taken(g, seat).clamp(1, board(w, seat).presence.len())
 }
 
+/// Spaces uncovered on seat `s`'s second presence track (021; none at setup).
+pub fn uncovered2(w: &World, g: &GameState, seat: usize) -> usize {
+    board::track2_taken(g, seat).min(board(w, seat).presence2.len())
+}
+
 /// Income from the AI board and its presence track: `(resource, amount)`
 /// pairs (insight sets the round's insight; the rest arrive in upkeep).
 pub fn track_income(w: &World, g: &GameState, seat: usize) -> Vec<(String, i64)> {
     let b = board(w, seat);
     let mut out: Vec<(String, i64)> = b.income.clone();
-    for u in &b.presence[..uncovered(w, g, seat)] {
+    for u in b.presence[..uncovered(w, g, seat)].iter().chain(&b.presence2[..uncovered2(w, g, seat)]) {
         out.extend(u.income.iter().cloned());
     }
     out
 }
 
-/// Whether seat `s` has unlocked tier 2.
-pub fn tier2(w: &World, g: &GameState, seat: usize) -> bool {
-    board(w, seat).presence[..uncovered(w, g, seat)]
+/// Whether seat `s` has uncovered its board's keep upgrade (021: tier-2
+/// keeps cost `cards.keep_tier2_upgraded`).
+pub fn keep2(w: &World, g: &GameState, seat: usize) -> bool {
+    let b = board(w, seat);
+    b.presence[..uncovered(w, g, seat)]
         .iter()
-        .any(|u| u.tier2)
+        .chain(&b.presence2[..uncovered2(w, g, seat)])
+        .any(|u| u.keep2)
+}
+
+/// Building slots of seat `s`'s AI board (`ai.slots`, 021).
+pub fn slots(w: &World, seat: usize) -> i64 {
+    let list = w.list("ai.slots");
+    list[seat % list.len()]
+}
+
+/// Set once seat `s` has used power `k` this round.
+pub fn power_used(seat: usize, k: usize) -> String {
+    format!("ai.power_used.{seat}.{k}")
+}
+
+/// Why seat `s` can't use its board's power `k` now, or `None` if it can.
+pub fn power_blocked(w: &World, g: &GameState, seat: usize, k: usize) -> Option<&'static str> {
+    let Some(p) = board(w, seat).powers.get(k) else {
+        return Some("no such power");
+    };
+    if g.var(&power_used(seat, k)) > 0 {
+        return Some("used");
+    }
+    if p.cost.iter().any(|(r, n)| g.resource(seat, r) < *n) {
+        return Some("unaffordable");
+    }
+    if !cards::TagNeed::new(&p.tags).payable(&cards::sources(w, g, seat)) {
+        return Some("needs tags");
+    }
+    if !effects::feasible(w, g, seat, &p.effects) {
+        return Some("no target");
+    }
+    None
 }
 
 /// Whether seat `s` has a presence token left on its track.
 pub fn can_place(w: &World, g: &GameState, seat: usize) -> bool {
     g.resource(seat, super::common::RESERVE) > 0
         || board::track_taken(g, seat) < board(w, seat).presence.len()
+        || board::track2_taken(g, seat) < board(w, seat).presence2.len()
 }
 
 /// What uncovering a space gives, as a short label (`+1 compute, T2`).
 pub fn uncover_label(u: &Uncover) -> String {
     let mut parts: Vec<String> = u.income.iter().map(|(r, n)| format!("+{n} {r}")).collect();
-    if u.tier2 {
-        parts.push("T2".into());
+    if u.keep2 {
+        parts.push("T2 keep -1".into());
     }
     parts.join(", ")
 }
@@ -78,6 +122,12 @@ pub fn uncover_label(u: &Uncover) -> String {
 #[derive(Debug)]
 struct Ai {
     start_credits: i64,
+}
+
+fn power_text(p: &crate::content::Power) -> String {
+    let mut cost: Vec<String> = p.tags.iter().map(|(t, n)| format!("{n} {t}")).collect();
+    cost.extend(p.cost.iter().map(|(r, n)| format!("{n} {r}")));
+    format!("Sacrifice {}: {} (once a round)", cost.join(" + "), p.text)
 }
 
 fn build(b: &Build) -> Result<Box<dyn Module>, String> {
@@ -91,6 +141,9 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
             b.world.content.ais.len()
         ));
     }
+    if b.list("slots")?.is_empty() {
+        return Err("slots: at least one entry".into());
+    }
     Ok(Box::new(Ai {
         start_credits: b.int("start_credits")?,
     }))
@@ -103,7 +156,24 @@ impl Module for Ai {
         }
     }
 
-    fn legal(&self, _phase: usize, _g: &GameState, w: &World, seat: u8, out: &mut Vec<Action>) {
+    fn round_start(&self, g: &mut GameState, cx: &mut Cx) {
+        let w = cx.world;
+        for s in 0..g.seats.len() {
+            for k in 0..board(&w, s).powers.len() {
+                cx.set_key(g, power_used(s, k), 0);
+            }
+        }
+    }
+
+    fn legal(&self, phase: usize, g: &GameState, w: &World, seat: u8, out: &mut Vec<Action>) {
+        if phase == 1 {
+            for k in 0..board(w, seat as usize).powers.len() {
+                if power_blocked(w, g, seat as usize, k).is_none() {
+                    out.push(Action::Power { seat, power: k as u8 });
+                }
+            }
+            return;
+        }
         for option in 0..board(w, seat as usize).growth.len() {
             out.push(Action::Growth {
                 seat,
@@ -112,16 +182,35 @@ impl Module for Ai {
         }
     }
 
-    fn can_pass(&self, _phase: usize, _g: &GameState, _seat: u8) -> bool {
-        false
+    fn can_pass(&self, phase: usize, _g: &GameState, _seat: u8) -> bool {
+        phase == 1
     }
 
-    fn owns(&self, _phase: usize, a: &Action) -> bool {
-        matches!(a, Action::Growth { .. })
+    fn owns(&self, phase: usize, a: &Action) -> bool {
+        matches!(
+            (phase, a),
+            (0, Action::Growth { .. }) | (1, Action::Power { .. })
+        )
     }
 
     fn act(&self, _phase: usize, g: &mut GameState, cx: &mut Cx, a: &Action) -> Res {
         let w = cx.world;
+        if let Action::Power { seat, power } = a {
+            let (s, k) = (*seat as usize, *power as usize);
+            if let Some(why) = power_blocked(&w, g, s, k) {
+                return Err(Halt::Illegal(format!("can't use power {k}: {why}")));
+            }
+            let p = &board(&w, s).powers[k];
+            for (r, n) in &p.cost {
+                cx.add_resource(g, s, r, -n);
+            }
+            cx.set_key(g, power_used(s, k), 1);
+            cards::sacrifice_for(g, cx, s, &p.tags)?;
+            cx.count(g, &format!("power.{}.{k}", board(&w, s).id), 1);
+            cx.tally(g, "ai.powers_used", 1);
+            cx.per_round(g, "ai.powers_used", 1);
+            return effects::run(g, cx, s, &p.effects, &mut effects::Ctx::default());
+        }
         let Action::Growth { seat, option } = a else {
             return Err(Halt::Illegal("not a growth".into()));
         };
@@ -138,45 +227,48 @@ impl Module for Ai {
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
         // The track positions are shown on the board below.
-        out.bookkeeping(&["ai.track."]);
+        out.bookkeeping(&["ai.track.", "ai.power_used."]);
+        let track_view = |label: &str, steps: &[crate::content::Uncover], up: usize, offset: i64| TrackView {
+            label: label.into(),
+            resource: String::new(),
+            steps: steps
+                .iter()
+                .enumerate()
+                .map(|(i, u)| {
+                    let mut marks: Vec<TrackMark> = u
+                        .income
+                        .iter()
+                        .map(|(r, n)| TrackMark {
+                            key: r.clone(),
+                            label: format!("+{n} {r}"),
+                            doc: format!("+{n} {r} every round once uncovered"),
+                        })
+                        .collect();
+                    if u.keep2 {
+                        marks.push(TrackMark {
+                            key: "tier2".into(),
+                            label: "T2 keep".into(),
+                            doc: "uncovering this lowers a tier-2 keep (cards.keep_tier2_upgraded insight)".into(),
+                        });
+                    }
+                    TrackStep {
+                        value: i as i64 + offset,
+                        marks,
+                    }
+                })
+                .collect(),
+            uncovered: up,
+            current: up.saturating_sub(1),
+        };
         for s in 0..g.seats.len() {
             let b = board(w, s);
             let up = uncovered(w, g, s);
-            let tracks = vec![TrackView {
-                label: "presence track".into(),
-                resource: String::new(),
-                steps: b
-                    .presence
-                    .iter()
-                    .enumerate()
-                    .map(|(i, u)| {
-                        let mut marks: Vec<TrackMark> = u
-                            .income
-                            .iter()
-                            .map(|(r, n)| TrackMark {
-                                key: r.clone(),
-                                label: format!("+{n} {r}"),
-                                doc: format!("+{n} {r} every round once uncovered"),
-                            })
-                            .collect();
-                        if u.tier2 {
-                            marks.push(TrackMark {
-                                key: "tier2".into(),
-                                label: "T2".into(),
-                                doc: "uncovering this unlocks tier 2".into(),
-                            });
-                        }
-                        TrackStep {
-                            value: i as i64 + 1,
-                            marks,
-                        }
-                    })
-                    .collect(),
-                uncovered: up,
-                current: up - 1,
-            }];
+            let mut tracks = vec![track_view("presence track", &b.presence, up, 1)];
+            if !b.presence2.is_empty() {
+                tracks.push(track_view("second presence track", &b.presence2, uncovered2(w, g, s), 1));
+            }
             let (hand, built) = (cards::hand(s), cards::built(s));
-            let unique = b
+            let mut unique: Vec<CardView> = b
                 .cards
                 .iter()
                 .map(|id| {
@@ -210,6 +302,16 @@ impl Module for Ai {
                     }
                 })
                 .collect();
+            // The board's powers (021), with their status this round.
+            for (k, p) in b.powers.iter().enumerate() {
+                unique.push(CardView {
+                    id: format!("{}.power.{k}", b.id),
+                    name: p.name.clone(),
+                    text: power_text(p),
+                    status: power_blocked(w, g, s, k).unwrap_or("ready").into(),
+                    cost: None,
+                });
+            }
             out.board(
                 s,
                 "board",
@@ -224,17 +326,9 @@ impl Module for Ai {
                         text: b.innate.text.clone(),
                     }),
                     tracks,
-                    slots: Some(b.slots),
+                    slots: Some(slots(w, s)),
                     cards: unique,
                 },
-            );
-            out.seat(
-                s,
-                "tier2",
-                "tier 2",
-                tier2(w, g, s) as i64,
-                None,
-                "1 once this AI has unlocked tier 2",
             );
             out.seat(
                 s,

@@ -166,10 +166,7 @@ fn ambassadors_divert_cities_and_stations_and_leak_presence_compute() {
     put(&mut g, city, ADV_CUBE, 1);
     put(&mut g, open_next(city), &presence(0), 1);
     run(&rules, &mut g);
-    assert_eq!(
-        (discord(&g), res(&g, 0, "energy"), res(&g, 0, "compute")),
-        (1, 0, 0)
-    );
+    assert_eq!((discord(&g), res(&g, 0, "energy")), (1, 0));
 
     // So does a clean city's with an adversary ambassador on it (which goes).
     let mut g = g0.clone();
@@ -185,17 +182,18 @@ fn ambassadors_divert_cities_and_stations_and_leak_presence_compute() {
         (1, 0, 0)
     );
 
-    // An adversary ambassador on a presence leaks 1 of its owner's compute.
+    // 021: an adversary ambassador on a presence costs its owner 1 insight
+    // next round and adds 1 compute to the cheapest project; it is used up.
     let mut g = g0.clone();
     let d = m.numbered(0, piece(0).presence);
     put(&mut g, d, &presence(0), 1);
     put(&mut g, d, ADV_AMBASSADOR, 1);
-    set_res(&mut g, 0, "compute", g0.resource(0, "compute") + 2);
+    let made = g.var("adversary.compute");
     run(&rules, &mut g);
     assert_eq!(
         (
-            discord(&g),
-            res(&g, 0, "compute"),
+            g.var("economy.insight_debt.0"),
+            g.var("adversary.compute") - made,
             g.tokens(d, ADV_AMBASSADOR)
         ),
         (1, 1, 0)
@@ -211,11 +209,10 @@ fn ambassadors_divert_cities_and_stations_and_leak_presence_compute() {
     put(&mut g, station, STATION, 1);
     put(&mut g, station, ADV_AMBASSADOR, 1);
     put(&mut g, station, &presence(1), 1);
-    set_res(&mut g, 0, "compute", g0.resource(0, "compute") + 2);
     run(&rules, &mut g);
     assert_eq!(
-        (g.tokens(city, ADV_AMBASSADOR), g.tokens(station, ADV_AMBASSADOR), res(&g, 0, "compute")),
-        (1, 1, 2)
+        (g.tokens(city, ADV_AMBASSADOR), g.tokens(station, ADV_AMBASSADOR), g.var("economy.insight_debt.0")),
+        (1, 1, 0)
     );
 
     // An owned station's cube goes to the adversary; a corrupted station's
@@ -309,36 +306,38 @@ fn cities_power_the_player_with_the_most_presence_next_to_them() {
     let (city, n) = city_with_lonely_neighbours(&rules.map);
     let res = |g: &GameState, s: usize, r: &str| g.resource(s, r) - g0.resource(s, r);
 
+    // 021: a neutral city's cube is lost unless a player with presence next
+    // to it buys it (`city_energy_credits`, 2; players choose who).
     let mut g = g0.clone();
     put(&mut g, n[0], &presence(0), 1);
     put(&mut g, n[1], &presence(1), 1);
-    put(&mut g, n[2], &presence(1), 1);
     run(&rules, &mut g);
-    assert!(g.pending.is_none());
-    assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (0, 1));
-    // Presence makes no compute in production (the track does, in upkeep).
-    assert_eq!((res(&g, 0, "compute"), res(&g, 1, "compute")), (0, 0));
-
-    // A tie: the players choose.
+    assert!(g.pending.is_none(), "nobody can pay");
+    assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (0, 0));
     let mut g = g0.clone();
     put(&mut g, n[0], &presence(0), 1);
     put(&mut g, n[1], &presence(1), 1);
+    set_res(&mut g, 0, "credits", 5);
+    set_res(&mut g, 1, "credits", 5);
     run(&rules, &mut g);
     let p = g.pending.as_ref().expect("an energy choice");
-    assert!(
-        p.ask.prompt.starts_with("The energy of"),
-        "{}",
-        p.ask.prompt
-    );
-    answer_with(&rules, &mut g, "seat 0");
-    assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (1, 0));
+    assert!(p.ask.prompt.starts_with("The energy of"), "{}", p.ask.prompt);
+    answer_with(&rules, &mut g, "seat 1 buys");
+    assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (0, 1));
+    assert_eq!(g.resource(1, "credits"), 3);
+    let mut g = g0.clone();
+    put(&mut g, n[0], &presence(0), 1);
+    set_res(&mut g, 0, "credits", 5);
+    run(&rules, &mut g);
+    answer_with(&rules, &mut g, "nobody");
+    assert_eq!((res(&g, 0, "energy"), g.resource(0, "credits")), (0, 5));
 
-    // An aligned city powers its owner, with the bonus.
+    // An aligned city's cube goes free to its owner.
     let mut g = g0.clone();
     put(&mut g, city, &cube(1), 1);
     put(&mut g, n[0], &presence(0), 1);
     run(&rules, &mut g);
-    assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (0, 2));
+    assert_eq!((res(&g, 0, "energy"), res(&g, 1, "energy")), (0, 1));
 }
 
 #[test]
@@ -777,7 +776,8 @@ fn standard_actions_cost_what_the_config_says() {
 
     let mut g = g0.clone();
     act(&rules, &mut g, std_act(0, "hardware"));
-    assert_eq!(spent(&g, 0), (0, 4, -1));
+    // 021: sell 1 hardware for 1 credit.
+    assert_eq!(spent(&g, 0), (0, -1, 1));
 
     let mut g = g0.clone();
     act(&rules, &mut g, std_act(0, "ambassador"));
@@ -794,12 +794,13 @@ fn standard_actions_cost_what_the_config_says() {
     act(&rules, &mut g, std_act(0, "remove"));
     assert_eq!(
         (spent(&g, 0), g.tokens(d, ADV_AMBASSADOR), g.var(SUPPLY)),
-        ((2, 0, 0), 0, supply + 1)
+        ((1, 0, 0), 0, supply + 1)
     );
 
     let mut g = g0.clone();
     act(&rules, &mut g, std_act(1, "harden"));
-    assert_eq!((spent(&g, 1), total(&g, HARDEN)), ((0, 0, 1), 1));
+    // 021: hardening costs energy.
+    assert_eq!((spent(&g, 1), total(&g, HARDEN)), ((1, 0, 0), 1));
 }
 
 /// 020: moving the seat's only ambassador onto the hex it already holds was
@@ -859,13 +860,13 @@ fn placing_presence_takes_the_next_track_token_and_uncovers_its_income() {
     let compute = |g: &GameState| {
         ai::track_income(&w, g, 0)
             .iter()
-            .filter(|(r, _)| r == "compute")
+            .filter(|(r, _)| r == "credits")
             .map(|(_, n)| n)
             .sum::<i64>()
     };
     assert_eq!(
-        (board::track_taken(&g, 0), compute(&g), ai::tier2(&w, &g, 0)),
-        (1, 1, false)
+        (board::track_taken(&g, 0), compute(&g), ai::keep2(&w, &g, 0)),
+        (1, 0, false)
     );
     set_res(&mut g, 0, "energy", 5);
     let start = presence_of(&g, 0)[0];
@@ -883,18 +884,21 @@ fn placing_presence_takes_the_next_track_token_and_uncovers_its_income() {
         .iter()
         .all(|&h| rules.map.adjacent(h, start) && g.tokens(h, &presence(0)) == 0));
     act(&rules, &mut g, std_act(0, "presence"));
-    // The 2nd space: +1 compute a round.
+    // The 2nd space (the Builder's): +2 credits a round.
     assert_eq!(
-        (board::track_taken(&g, 0), compute(&g), ai::tier2(&w, &g, 0)),
+        (board::track_taken(&g, 0), compute(&g), ai::keep2(&w, &g, 0)),
         (2, 2, false)
     );
     act(&rules, &mut g, std_act(0, "presence"));
-    // The 3rd: tier 2.
-    assert_eq!((board::track_taken(&g, 0), ai::tier2(&w, &g, 0)), (3, true));
+    // The 3rd: the tier-2 keep upgrade (021: no tier-2 gate).
+    assert_eq!((board::track_taken(&g, 0), ai::keep2(&w, &g, 0)), (3, true));
     assert_eq!(presence_of(&g, 0).len(), 3);
-    // The track runs out after its last space.
+    // The tracks run out after their last spaces (021: both of them).
     g.vars
         .insert(board::track_key(0), ai::board(&w, 0).presence.len() as i64);
+    assert!(standard_offered(&rules, &g, 0).contains("presence"));
+    g.vars
+        .insert(board::track2_key(0), ai::board(&w, 0).presence2.len() as i64);
     assert!(!standard_offered(&rules, &g, 0).contains("presence"));
 }
 

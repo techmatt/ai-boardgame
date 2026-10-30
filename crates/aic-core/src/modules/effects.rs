@@ -61,13 +61,33 @@ fn movable_ambassadors(g: &GameState, seat: usize) -> i64 {
     g.resource(seat, AMBASSADORS) + board::ambassadors_on_board(g, seat)
 }
 
+/// Hexes holding seat `s`'s ambassadors on the board, in hex order.
+fn ambassador_hexes(g: &GameState, seat: usize) -> Vec<usize> {
+    let k = ambassador(seat);
+    (0..g.hexes.len()).filter(|&h| g.tokens(h, &k) > 0).collect()
+}
+
+/// Moves one of seat `s`'s ambassadors from hex `from` onto hex `to` (021:
+/// movement keywords); it arrives as in rules.md §2.
+fn walk(g: &mut GameState, cx: &mut Cx, seat: usize, from: usize, to: usize) {
+    cx.add_tokens(g, from, &ambassador(seat), -1);
+    board::place_ambassador(g, cx, seat, to);
+    cx.tally(g, "effects.ambassador_moves", 1);
+}
+
 /// Whether every targeted effect in `effects` has something to act on
 /// (a card is not offered when it would do nothing).
 pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bool {
     effects.iter().all(|e| match e {
         Effect::Damage { at, .. } => !damage_hexes(w, g, seat, *at).is_empty(),
         Effect::DamageCountry { .. } | Effect::DestroyAll => any_hex(g, |h| has_adversary(g, h)),
-        Effect::RemoveNode => any_hex(g, |h| g.tokens(h, NODE) > 0 && in_reach(w, g, seat, h)),
+        Effect::RemoveNode | Effect::CutNode => {
+            any_hex(g, |h| g.tokens(h, NODE) > 0 && in_reach(w, g, seat, h))
+        }
+        Effect::AddTokens { kind, .. } => !cards::token_cards(w, g, seat, Some(kind)).is_empty(),
+        Effect::Consolidate { .. } => ambassador_hexes(g, seat)
+            .iter()
+            .any(|&h| in_reach(w, g, seat, h)),
         Effect::RemoveAmbassadorsCountry { .. } => any_hex(g, |h| g.tokens(h, ADV_AMBASSADOR) > 0),
         Effect::BuildFactory => !factory_sites(w, g, seat).is_empty(),
         Effect::Cleanse { .. } => any_hex(g, |h| cleansable(w, g, h) && in_reach(w, g, seat, h)),
@@ -377,6 +397,102 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         Effect::NextRoundInsight { amount } => economy::add_bonus_insight(g, cx, *amount),
         Effect::NextBuildingDiscount { amount } => {
             cx.add_key(g, cards::next_discount(seat), *amount)
+        }
+        Effect::Production { resource, amount } => {
+            cx.add_key(g, economy::production_key(seat, resource), *amount)
+        }
+        Effect::AddTokens { kind, amount } => {
+            let ids = cards::token_cards(&w, g, seat, Some(kind));
+            let opts = ids.iter().map(|c| opt(c.clone())).collect();
+            let prompt = format!("Seat {seat}: add {amount} {kind} to which card?");
+            if let Some(i) = cx.choose(seat, &prompt, opts)? {
+                cards::add_tokens(g, cx, seat, &ids[i], *amount);
+            }
+        }
+        Effect::MoveOne { range } => {
+            let from = ambassador_hexes(g, seat);
+            let mut opts: Vec<_> = from.iter().map(|&h| hex_opt(&w, h)).collect();
+            opts.push(opt("stop"));
+            let prompt = format!("Seat {seat}: move which of your ambassadors (up to {range} hexes)?");
+            if let Some(i) = cx.choose(seat, &prompt, opts)? {
+                if let Some(&a) = from.get(i) {
+                    let dest: Vec<usize> = (0..g.hexes.len())
+                        .filter(|&h| {
+                            h != a && has_piece(&w, g, h) && w.map.distance(a, h) as i64 <= *range
+                        })
+                        .collect();
+                    let opts = dest.iter().map(|&h| hex_opt(&w, h)).collect();
+                    let prompt = format!("Seat {seat}: move it to which piece?");
+                    if let Some(j) = cx.choose(seat, &prompt, opts)? {
+                        walk(g, cx, seat, a, dest[j]);
+                    }
+                }
+            }
+        }
+        Effect::Spread => {
+            // Each ambassador on the board when it starts, in hex order.
+            let mut each: Vec<usize> = Vec::new();
+            for h in ambassador_hexes(g, seat) {
+                for _ in 0..g.tokens(h, &ambassador(seat)) {
+                    each.push(h);
+                }
+            }
+            for a in each {
+                let dest: Vec<usize> = w.map.hexes[a]
+                    .neighbours
+                    .iter()
+                    .copied()
+                    .filter(|&h| has_piece(&w, g, h))
+                    .collect();
+                let mut opts = vec![opt("stay")];
+                opts.extend(dest.iter().map(|&h| hex_opt(&w, h)));
+                let prompt = format!("Seat {seat}: spread your ambassador at {}?", hex_name(&w, a));
+                if let Some(j) = cx.choose(seat, &prompt, opts)? {
+                    if j > 0 && g.tokens(a, &ambassador(seat)) > 0 {
+                        walk(g, cx, seat, a, dest[j - 1]);
+                    }
+                }
+            }
+        }
+        Effect::Consolidate { max } => {
+            let dest: Vec<usize> = (0..g.hexes.len())
+                .filter(|&h| in_reach(&w, g, seat, h) && has_piece(&w, g, h))
+                .collect();
+            let opts = dest.iter().map(|&h| hex_opt(&w, h)).collect();
+            let prompt = format!("Seat {seat}: consolidate up to {max} ambassadors onto which piece?");
+            if let Some(i) = cx.choose(seat, &prompt, opts)? {
+                let to = dest[i];
+                for _ in 0..*max {
+                    let from: Vec<usize> = ambassador_hexes(g, seat)
+                        .into_iter()
+                        .filter(|&h| h != to && in_reach(&w, g, seat, h))
+                        .collect();
+                    if from.is_empty() {
+                        break;
+                    }
+                    let mut opts: Vec<_> = from.iter().map(|&h| hex_opt(&w, h)).collect();
+                    opts.push(opt("stop"));
+                    let prompt = format!("Seat {seat}: bring which ambassador to {}?", hex_name(&w, to));
+                    let Some(j) = cx.choose(seat, &prompt, opts)? else {
+                        break;
+                    };
+                    let Some(&a) = from.get(j) else {
+                        break;
+                    };
+                    walk(g, cx, seat, a, to);
+                }
+            }
+        }
+        Effect::CutNode => {
+            let hexes: Vec<usize> = (0..g.hexes.len())
+                .filter(|&h| g.tokens(h, NODE) > 0 && in_reach(&w, g, seat, h))
+                .collect();
+            let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+            let prompt = format!("Seat {seat}: cut off the node in which hex?");
+            if let Some(i) = cx.choose(seat, &prompt, opts)? {
+                cx.set_key(g, adversary::cut_key(hexes[i]), 1);
+                cx.tally(g, "effects.nodes_cut", 1);
+            }
         }
         Effect::If {
             cond: c,

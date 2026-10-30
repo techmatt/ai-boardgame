@@ -15,7 +15,7 @@ use crate::state::GameState;
 use crate::view::ViewOut;
 
 use super::common::*;
-use super::{adversary, ai, alignment, cards};
+use super::{adversary, ai, alignment, cards, economy};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "board",
@@ -27,11 +27,11 @@ pub static DEF: ModuleDef = ModuleDef {
         params: &[
             ParamSpec::int("start_corrupted", 0, 3, "cities per country that start corrupted"),
             ParamSpec::int("start_ambassadors", 0, 10, "player ambassadors each player starts with"),
-            ParamSpec::int("troop_health", 0, 10, "removal a card must spend on an adversary troop (an ambassador takes 1)"),
             ParamSpec::int("unit_cap", 0, 20, "corp units a base holds at most"),
             ParamSpec::int("factory_units", 0, 5, "troops each factory makes on a production step at each of its corp's bases"),
             ParamSpec::list("clock", 0, 3, "the printed round track, per round: 1 production, 2 war, 3 both (the last entry repeats)"),
-            ParamSpec::int("city_energy", 0, 10, "energy a city makes a round"),
+            ParamSpec::list("corp_energy", 0, 10, "energy cubes each city of country i makes a round (a megacorp parameter; the list repeats)"),
+            ParamSpec::int("city_energy_credits", 0, 20, "credits for a neutral city's energy cube, bought by a player with presence next to it"),
             ParamSpec::int("aligned_bonus", 0, 10, "extra energy an aligned city gives its owner"),
             ParamSpec::int("station_cubes", 0, 5, "megaproject cubes a research station makes a round"),
             ParamSpec::int("project_credits", 0, 50, "credits each player cube pays when a megaproject completes"),
@@ -49,11 +49,11 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_hardware", 0, 20, "standard action: hardware to build a research station"),
             ParamSpec::int("factory_hardware", 0, 5, "hardware a player-owned factory makes its owner on a production step"),
-            ParamSpec::int("hardware_credits", 1, 50, "standard action: credits for 1 hardware (at least 1: a free untargeted action has no limit)"),
+            ParamSpec::int("hardware_credits", 0, 50, "standard action: credits for selling 1 hardware"),
             ParamSpec::int("remove_energy", 0, 20, "standard action: energy to remove an adversary ambassador within reach"),
             ParamSpec::int("move_energy", 0, 20, "standard action: energy to move a player ambassador"),
             ParamSpec::int("ambassador_credits", 1, 50, "standard action: credits to gain a player ambassador (at least 1: a free untargeted action has no limit)"),
-            ParamSpec::int("harden_hardware", 1, 20, "standard action (Harden passive): hardware a hardening token (at least 1: free, it has no limit)"),
+            ParamSpec::int("harden_energy", 1, 20, "standard action (Harden passive): energy a hardening token (at least 1: free, it has no limit)"),
             ParamSpec::int("sell_credits", 0, 20, "standard action: credits for selling a card from hand"),
             ParamSpec::int("align_energy", 0, 20, "standard action: energy (and 1 ambassador) to align a clean city"),
         ],
@@ -140,6 +140,15 @@ pub fn track_taken(g: &GameState, seat: usize) -> usize {
     g.var(&track_key(seat)).max(0) as usize
 }
 
+/// Tokens seat `s` has taken off its board's second presence track (021).
+pub fn track2_key(seat: usize) -> String {
+    format!("board.track2.{seat}")
+}
+
+pub fn track2_taken(g: &GameState, seat: usize) -> usize {
+    g.var(&track2_key(seat)).max(0) as usize
+}
+
 /// Where seat `s` may place presence: a land hex holding no presence,
 /// adjacent to one of its own (with none left, any such hex in its home
 /// country).
@@ -175,11 +184,36 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
     }
     let hexes = presence_hexes(&w, g, seat);
     let reserve = g.resource(seat, RESERVE) > 0;
+    // 021: with two tracks the player chooses which one's next token to take.
+    let b = ai::board(&w, seat);
+    let (t1, t2) = (track_taken(g, seat), track2_taken(g, seat));
+    let mut tracks: Vec<(bool, &crate::content::Uncover)> = Vec::new();
+    if let Some(u) = b.presence.get(t1) {
+        tracks.push((false, u));
+    }
+    if let Some(u) = b.presence2.get(t2) {
+        tracks.push((true, u));
+    }
+    let mut second = false;
     let what = if reserve {
         "from your reserve".to_string()
     } else {
-        let next = &ai::board(&w, seat).presence[track_taken(g, seat)];
-        format!("uncovers {}", ai::uncover_label(next))
+        let opts = tracks
+            .iter()
+            .map(|(two, u)| {
+                opt(format!(
+                    "track {}: uncovers {}",
+                    if *two { 2 } else { 1 },
+                    ai::uncover_label(u)
+                ))
+            })
+            .collect();
+        let prompt = format!("Seat {seat}: take presence off which track?");
+        let Some(k) = cx.choose(seat, &prompt, opts)? else {
+            return Ok(false);
+        };
+        second = tracks[k].0;
+        format!("uncovers {}", ai::uncover_label(tracks[k].1))
     };
     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
     let prompt = format!("Seat {seat}: place presence ({what}) on which hex?");
@@ -189,6 +223,8 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
     if reserve {
         cx.add_resource(g, seat, RESERVE, -1);
         cx.tally(g, "board.presence_from_reserve", 1);
+    } else if second {
+        cx.add_key(g, track2_key(seat), 1);
     } else {
         cx.add_key(g, track_key(seat), 1);
     }
@@ -221,8 +257,8 @@ pub fn std_cost(w: &World, act: &str) -> (i64, i64, i64) {
         "move" => (i("move_energy"), 0, 0),
         "ambassador" => (0, i("ambassador_credits"), 0),
         "align" => (i("align_energy"), 0, 0),
-        "hardware" => (0, i("hardware_credits"), 0),
-        _ => (0, 0, i("harden_hardware")),
+        "hardware" => (0, 0, 1),
+        _ => (i("harden_energy"), 0, 0),
     }
 }
 
@@ -235,7 +271,7 @@ pub fn std_text(act: &str) -> &'static str {
         "move" => "move a player ambassador onto a piece in reach",
         "ambassador" => "gain a player ambassador",
         "align" => "align a clean city you can claim (1 ambassador)",
-        "hardware" => "buy 1 hardware",
+        "hardware" => "sell 1 hardware for credits",
         _ => "harden a building in reach (Harden passive)",
     }
 }
@@ -910,13 +946,17 @@ pub fn troop_plan(w: &World, g: &GameState, h: usize) -> Option<(usize, i64)> {
 /// and is removed. Diverted energy and compute sway toward Discord.
 fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
     let w = cx.world;
-    let energy = w.int("board.city_energy");
     let divert = w.int("board.divert_discord");
+    let price = w.int("board.city_energy_credits");
     for h in 0..g.hexes.len() {
         if !is_city(&w, h) {
             continue;
         }
         let c = w.map.hexes[h].country as usize;
+        let energy = {
+            let l = w.list("board.corp_energy");
+            l[c % l.len()]
+        };
         if flagged(g, RoundFlag::Blackout.name(), c) {
             continue;
         }
@@ -928,26 +968,34 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             alignment::sway(g, cx, Side::Discord, energy * divert);
             cx.tally(g, "board.energy_diverted", energy);
         } else if let Some(s) = cube_owner(g, h) {
+            // An aligned city's cube goes free to the player who aligned it.
             cx.add_resource(g, s, "energy", energy + w.int("board.aligned_bonus"));
         } else {
-            // The player with the most presence next to it; players choose on a tie.
-            let near: Vec<i64> = (0..g.seats.len())
-                .map(|s| {
-                    std::iter::once(h)
-                        .chain(w.map.hexes[h].neighbours.iter().copied())
-                        .filter(|&x| g.tokens(x, &presence(s)) > 0)
-                        .count() as i64
+            // A neutral city's cube: a player with presence next to it may buy
+            // it (players choose who), otherwise it is lost (021).
+            let buyers: Vec<usize> = (0..g.seats.len())
+                .filter(|&s| {
+                    g.resource(s, "credits") >= price
+                        && std::iter::once(h)
+                            .chain(w.map.hexes[h].neighbours.iter().copied())
+                            .any(|x| g.tokens(x, &presence(s)) > 0)
                 })
                 .collect();
-            let most = near.iter().copied().max().unwrap_or(0);
-            if most == 0 {
+            if buyers.is_empty() {
                 continue;
             }
-            let tied: Vec<usize> = (0..g.seats.len()).filter(|&s| near[s] == most).collect();
-            let opts = tied.iter().map(|&s| seat_opt(s)).collect();
-            let prompt = format!("The energy of {} goes to which player?", hex_name(&w, h));
+            let mut opts: Vec<_> = buyers.iter().map(|&s| opt(format!("seat {s} buys"))).collect();
+            opts.push(opt("nobody".to_string()));
+            let prompt = format!(
+                "The energy of {} ({energy}) can be bought for {price} credits: by whom?",
+                hex_name(&w, h)
+            );
             if let Some(i) = cx.choose(0, &prompt, opts)? {
-                cx.add_resource(g, tied[i], "energy", energy);
+                if let Some(&s) = buyers.get(i) {
+                    cx.add_resource(g, s, "credits", -price);
+                    cx.add_resource(g, s, "energy", energy);
+                    cx.tally(g, "board.city_energy_bought", energy);
+                }
             }
         }
     }
@@ -981,7 +1029,8 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
         complete_project(g, cx, c);
     }
     // An adversary ambassador on a presence (with no other piece to divert)
-    // leaks 1 of its owner's compute.
+    // costs its owner 1 insight next round and adds 1 compute to the cheapest
+    // adversary project; it is used up (021: it leaked the owner's compute).
     for h in 0..g.hexes.len() {
         let Some(s) = presence_owner(g, h) else {
             continue;
@@ -1000,11 +1049,9 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             continue;
         }
         adversary::remove(g, cx, h, 1);
-        if g.resource(s, "compute") > 0 {
-            cx.add_resource(g, s, "compute", -1);
-        }
-        alignment::sway(g, cx, Side::Discord, divert);
-        cx.tally(g, "board.compute_diverted", 1);
+        cx.add_key(g, economy::insight_debt(s), 1);
+        cx.tally(g, "board.presence_drained", 1);
+        adversary::gain_compute(g, cx, 1)?;
     }
     Ok(())
 }
@@ -1128,8 +1175,8 @@ impl Module for Board {
                     return Ok(());
                 }
                 if act == "hardware" {
-                    cx.add_resource(g, s, HARDWARE, 1);
-                    cx.tally(g, "board.hardware_bought", 1);
+                    cx.add_resource(g, s, "credits", w.int("board.hardware_credits"));
+                    cx.tally(g, "board.hardware_sold", 1);
                     return Ok(());
                 }
                 if act == "presence" {
@@ -1393,7 +1440,7 @@ impl Module for Board {
 fn flag_doc(f: RoundFlag) -> &'static str {
     match f {
         RoundFlag::Blackout => "Blackout: while this is up, cities here make no energy in production (an uncountered threat's lasts to the end of the next round)",
-        RoundFlag::Sabotage => "Sabotage: while this is up, players with presence here make no compute in upkeep (an uncountered threat's lasts to the end of the next round)",
+        RoundFlag::Sabotage => "Sabotage: while this is up, players with presence here make no energy in upkeep (an uncountered threat's lasts to the end of the next round)",
         RoundFlag::Shelter => "Shelter Order: buildings here can't be destroyed this round",
     }
 }

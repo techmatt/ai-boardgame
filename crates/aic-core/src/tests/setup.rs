@@ -63,7 +63,7 @@ fn setup_places_the_printed_pieces() {
             want.sort();
             assert_eq!(have, want, "seat {s}");
             assert_eq!(g.resource(s, AMBASSADORS), 1);
-            assert_eq!(g.resource(s, "credits"), 25);
+            assert_eq!(g.resource(s, "credits"), 20);
         }
         assert_eq!(
             total(&g, ADV_AMBASSADOR) + total(&g, TROOP) + total(&g, UNIT),

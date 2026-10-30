@@ -151,10 +151,12 @@ fn the_view_follows_every_variant_and_keeps_bookkeeping_out_of_globals() {
             }
             for s in &v.seats {
                 let b = s.board.as_ref().expect("every seat shows its AI board");
-                assert_eq!((b.key.as_str(), b.tracks.len()), ("ai.board", 1));
-                for t in &b.tracks {
-                    assert!((1..=t.steps.len()).contains(&t.uncovered));
-                    assert_eq!(t.current, t.uncovered - 1);
+                // 021: two presence tracks; the second has nothing uncovered at setup.
+                assert_eq!((b.key.as_str(), b.tracks.len()), ("ai.board", 2));
+                for (i, t) in b.tracks.iter().enumerate() {
+                    let least = if i == 0 { 1 } else { 0 };
+                    assert!((least..=t.steps.len()).contains(&t.uncovered));
+                    assert_eq!(t.current, t.uncovered.saturating_sub(1));
                 }
                 assert!(s.cards.iter().any(|c| c.key == "cards.hand"));
             }

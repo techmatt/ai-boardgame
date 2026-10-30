@@ -56,9 +56,11 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       return `play ${card}${cost(cardCost(cx.view, a.seat, 'cards.hand', a.card ?? ''), 'credits')}`;
     case 'use':
       return `use ${card}`;
-    case 'draw': {
-      const c = cx.config ? param(cx.config, 'cards', 'draw_cost') : undefined;
-      return `draw a tier-${a.tier} card${typeof c === 'number' ? ` (${c} compute)` : ''}`;
+    case 'power': {
+      // 021: an AI-board power, paid by sacrificing played cards' tags.
+      const p = cx.config && aiBoard(cx.config, a.seat)?.powers?.[Number(a.power)];
+      const tags = p ? p.tags.map(([t, n]) => `${n} ${t}`).join(' + ') : '';
+      return `power: ${p ? `${p.name} (sacrifice ${tags})` : `power ${a.power}`}`;
     }
     case 'pay':
       return `pay ${a.amount} ${a.resource} → ${threatName(String(a.threat))}`;

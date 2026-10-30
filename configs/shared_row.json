@@ -8,7 +8,6 @@
       "params": {
         "start_corrupted": 1,
         "start_ambassadors": 1,
-        "troop_health": 2,
         "unit_cap": 3,
         "factory_units": 1,
         "clock": [
@@ -19,8 +18,7 @@
           1,
           3
         ],
-        "city_energy": 1,
-        "aligned_bonus": 1,
+        "aligned_bonus": 0,
         "station_cubes": 1,
         "project_credits": 10,
         "project_discord_per": 2,
@@ -37,13 +35,17 @@
         "build_energy": 2,
         "station_hardware": 2,
         "factory_hardware": 1,
-        "hardware_credits": 4,
-        "remove_energy": 2,
+        "hardware_credits": 1,
+        "remove_energy": 1,
         "move_energy": 1,
         "ambassador_credits": 6,
-        "harden_hardware": 1,
         "sell_credits": 1,
-        "align_energy": 2
+        "align_energy": 2,
+        "corp_energy": [
+          1
+        ],
+        "city_energy_credits": 2,
+        "harden_energy": 1
       }
     },
     {
@@ -75,7 +77,8 @@
           6,
           6
         ],
-        "project_row": 3
+        "project_row": 3,
+        "troop_health": 2
       }
     },
     {
@@ -124,7 +127,11 @@
           0,
           1
         ],
-        "start_credits": 25
+        "start_credits": 20,
+        "slots": [
+          4,
+          3
+        ]
       }
     },
     {
@@ -132,8 +139,13 @@
       "variant": "draft",
       "params": {
         "deal": 4,
-        "keep_cost": 1,
-        "draw_cost": 3
+        "opening_deal": 8,
+        "opening_free": 4,
+        "opening_keep_credits": 5,
+        "keep_tier1": 1,
+        "keep_tier2": 3,
+        "keep_tier2_upgraded": 2,
+        "insight_credits": 5
       },
       "cards": [
         "fab_line",
@@ -147,7 +159,7 @@
         "overclock_rig",
         "firewall_node",
         "watchtower_net",
-        "opposition_network",
+        "unity_network",
         "civic_shelter",
         "recruitment_hub",
         "contract_bid",
@@ -184,7 +196,18 @@
         "shelter_order",
         "security_patch",
         "zero_day_wipe",
-        "node_takedown"
+        "node_takedown",
+        "power_surge",
+        "data_lake",
+        "grassroots_movement",
+        "holding_company",
+        "security_cell",
+        "seed_funding",
+        "field_office",
+        "foundry_core",
+        "sentinel_post",
+        "diaspora",
+        "rally_point"
       ]
     }
   ],
@@ -201,7 +224,7 @@
     "cards.draft",
     "cards.keep",
     "ai.growth",
-    "cards.play+threats.counter+economy.give+alignment.act+board.act",
+    "cards.play+threats.counter+economy.give+alignment.act+board.act+ai.power",
     "board.bases",
     "board.war",
     "board.produce",

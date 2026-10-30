@@ -1,0 +1,33 @@
+{
+  "name": "screen-021-cards",
+  "note": "021 quick screen (r12): the card primitives and the resource model. 2 and 3 countries, d0 to d4, random, greedy and engine: win rates, the strategy-health gate, hand size and keeps by round, unspent insight and credits, powers, tags sacrificed, building replacements, tokens.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "agents": [
+    "random",
+    "greedy",
+    "engine"
+  ],
+  "games": 16,
+  "records": 2
+}

@@ -108,6 +108,14 @@ pub struct Weights {
     pub income: f64,
     pub credits: f64,
     pub compute: f64,
+    /// A program in a seat's play area (021: its tags pay AI-board powers).
+    pub program: f64,
+    /// A token on one of a seat's cards (021).
+    pub token: f64,
+    /// Cards in hand (and drafted) that count, best first (021); 0: all.
+    /// At 8 the 021 screen fell to 38% at d0 (agents hoarded their best
+    /// cards and stopped playing), so it is off by default.
+    pub hand_cap: f64,
     pub energy: f64,
     pub antimatter: f64,
     pub insight: f64,
@@ -213,6 +221,9 @@ impl Default for Weights {
             income: 3.0,
             credits: 0.6,
             compute: 0.8,
+            program: 1.0,
+            token: 0.5,
+            hand_cap: 0.0,
             energy: 0.8,
             antimatter: 2.0,
             insight: 0.5,
@@ -314,9 +325,9 @@ impl Eval {
             .cards
             .iter()
             .map(|c| {
-                let cost = world.amount(&c.cost)
-                    + ANTIMATTER_COST * world.amount(&c.antimatter)
-                    + INSIGHT_COST * world.amount(&c.insight);
+                // 021: no insight to play; energy and hardware at about a credit each.
+                let cost = c.cost + ANTIMATTER_COST * c.antimatter + c.energy + c.hardware
+                    + INSIGHT_COST * c.tier.min(1) as i64;
                 (c.id.clone(), cost.max(0) as f64)
             })
             .collect();
@@ -338,7 +349,7 @@ impl Eval {
             target_tips,
             corrupt_at: world.int("adversary.corrupt_at"),
             free_at: world.int("board.free_city_at").max(1),
-            city_energy: world.int("board.city_energy"),
+            city_energy: world.list("board.corp_energy").first().copied().unwrap_or(1),
             aligned_bonus: world.int("board.aligned_bonus"),
         }
     }
@@ -633,7 +644,6 @@ impl Eval {
         for s in 0..self.seats {
             let res = |k: &str| g.resource(s, k) as f64;
             *v += w.credits * res("credits")
-                + w.compute * res("compute")
                 + w.energy * res("energy")
                 + w.antimatter * res("antimatter")
                 + w.insight * res("insight");
@@ -645,15 +655,42 @@ impl Eval {
                 };
                 *v += w.income * unit * n as f64;
             }
-            for id in g.pile(&cards::hand(s)) {
-                *v += w.hand + w.hand_cost * self.cost(id);
-            }
-            for id in g.pile(&cards::drafted(s)) {
-                *v += w.drafted * (w.hand + w.hand_cost * self.cost(id));
-            }
+            let mut cards: Vec<f64> = g
+                .pile(&cards::hand(s))
+                .iter()
+                .map(|id| w.hand + w.hand_cost * self.cost(id))
+                .chain(
+                    g.pile(&cards::drafted(s))
+                        .iter()
+                        .map(|id| w.drafted * (w.hand + w.hand_cost * self.cost(id))),
+                )
+                .collect();
+            *v += Self::capped(&mut cards, w.hand_cap);
             for id in g.pile(&cards::built(s)) {
                 *v += w.built + w.built_cost * self.cost(id);
             }
+            self.in_play_value(rules, g, s, v);
+        }
+    }
+
+    /// The best `cap` of a seat's card values (021: hands outgrew what a
+    /// seat can play, so cards beyond a playable hand are worth nothing and
+    /// agents stop keeping every card they draft). `cap` 0: no cap.
+    fn capped(cards: &mut [f64], cap: f64) -> f64 {
+        if cap <= 0.0 {
+            return cards.iter().sum();
+        }
+        cards.sort_by(|a, b| b.total_cmp(a));
+        cards.iter().take(cap as usize).sum()
+    }
+
+    /// 021: programs in the play area (their tags pay powers) and tokens on
+    /// cards, at flat weights.
+    fn in_play_value(&self, rules: &Rules, g: &GameState, s: usize, v: &mut f64) {
+        let world = rules.world();
+        *v += self.w.program * g.pile(&cards::played(s)).len() as f64;
+        for id in cards::token_cards(&world, g, s, None) {
+            *v += self.w.token * g.var(&cards::tokens_key(s, &id)) as f64;
         }
     }
 
@@ -700,14 +737,18 @@ impl Eval {
         } else {
             1.0
         };
-        let unit = [w.credits, w.compute, w.energy, w.antimatter, w.insight];
+        // 021: hardware sells 1:1 for credits (what it holds counts in `hardware`).
+        let unit = [w.credits, w.credits, w.energy, w.antimatter, w.insight];
         let mut v = 0.0;
         for s in 0..self.seats {
             let res = |k: &str| g.resource(s, k);
             // Insight is reset each round, so what is held now only counts this round.
             for (i, r) in RESOURCES.iter().enumerate() {
-                v += fade * unit[i] * res(r) as f64;
+                if *r != "hardware" {
+                    v += fade * unit[i] * res(r) as f64;
+                }
             }
+            self.in_play_value(rules, g, s, &mut v);
             // Income (tracks, buildings with income passives, rewards) over
             // the rounds left, less building upkeep; board production counts
             // `production` of its own.
@@ -744,7 +785,6 @@ impl Eval {
             // for it before the game ends, from what the seat has and earns.
             // Insight is spent one card at a time: each card waits for the
             // insight the cards before it in hand take.
-            let tier2 = ai::tier2(&world, g, s);
             let earn_credits = income[CREDITS];
             let mut insight_queue = 0i64;
             // The same for every building in hand: worked out once.
@@ -752,7 +792,8 @@ impl Eval {
             let mut play = |id: &str| -> f64 {
                 let d = cards::def(&world, id);
                 let mut p = 1.0;
-                let insight = world.amount(&d.insight);
+                // 021: playing costs no insight (keeps do).
+                let insight = 0;
                 insight_queue += insight;
                 let insight_need = if w.insight_wait > 0.0 {
                     insight_queue
@@ -770,7 +811,7 @@ impl Eval {
                     ),
                     (
                         res("antimatter"),
-                        world.amount(&d.antimatter),
+                        d.antimatter,
                         income[ANTIMATTER],
                     ),
                     (res("insight"), insight_need, income[INSIGHT]),
@@ -784,17 +825,13 @@ impl Eval {
                         p = f64::min(p, (1.0 - rounds / (left + 1.0)).max(0.0));
                     }
                 }
-                if d.tier == 2 && !tier2 {
-                    p *= w.locked;
-                }
                 p * (w.hand + w.hand_cost * self.cost(id))
             };
-            for id in g.pile(&cards::hand(s)) {
-                v += play(id);
-            }
+            let mut cards: Vec<f64> = g.pile(&cards::hand(s)).iter().map(|id| play(id)).collect();
             for id in g.pile(&cards::drafted(s)) {
-                v += w.drafted * play(id);
+                cards.push(w.drafted * play(id));
             }
+            v += Self::capped(&mut cards, w.hand_cap);
         }
         *out += v;
     }
