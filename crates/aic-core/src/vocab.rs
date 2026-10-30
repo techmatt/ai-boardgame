@@ -24,9 +24,6 @@ pub enum Resource {
     Credits,
     Energy,
     Insight,
-    /// Destroyed presence back beside the seat's board, placed before the
-    /// track's next token (018; rules bookkeeping, never printed on content).
-    PresenceReserve,
 }
 
 /// The player resources, in display order (the order of income arrays, see
@@ -49,7 +46,6 @@ impl Resource {
             Resource::Energy => "energy",
             Resource::Chips => "chips",
             Resource::Insight => "insight",
-            Resource::PresenceReserve => "presence_reserve",
         }
     }
 

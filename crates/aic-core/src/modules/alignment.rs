@@ -441,6 +441,11 @@ impl Module for Alignment {
                 cx.set_pile(g, &deck(side, tier), ids);
             }
         }
+        // Difficulty 4: the removed Discord cards count as tips made, so every
+        // printed step is still reached before the deck ends (034).
+        if adversary::level(&w, 4) {
+            cx.set_key(g, tips_key(Side::Discord).into(), w.int("adversary.discord_removed"));
+        }
     }
 
     fn round_start(&self, g: &mut GameState, cx: &mut Cx) {

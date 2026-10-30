@@ -1,0 +1,31 @@
+{
+  "name": "screen-034-curve",
+  "note": "034 curve (r19): the planner at d0-d4, both sizes (--quick --games 12).",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "agents": [
+    "planner"
+  ],
+  "games": 32,
+  "records": 0
+}

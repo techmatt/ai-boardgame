@@ -106,8 +106,7 @@ pub fn power_blocked(w: &World, g: &GameState, seat: usize, k: usize) -> Option<
 
 /// Whether seat `s` has a presence token left on its track.
 pub fn can_place(w: &World, g: &GameState, seat: usize) -> bool {
-    g.resource(seat, Resource::PresenceReserve) > 0
-        || board::track_taken(g, seat) < board(w, seat).presence.len()
+    board::track_taken(g, seat) < board(w, seat).presence.len()
         || board::track2_taken(g, seat) < board(w, seat).presence2.len()
 }
 
@@ -116,6 +115,9 @@ pub fn uncover_label(u: &Uncover) -> String {
     let mut parts: Vec<String> = u.income.iter().map(|(r, n)| format!("+{}", r.amount(*n))).collect();
     if u.keep2 {
         parts.push("T2 keep -1".into());
+    }
+    if u.extra > 0 {
+        parts.push(format!("costs {} energy more", u.extra));
     }
     parts.join(", ")
 }

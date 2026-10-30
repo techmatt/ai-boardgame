@@ -67,7 +67,26 @@
       "credits",
       2
      ]
-    ]
+    ],
+    "extra": 1
+   },
+   {
+    "income": [
+     [
+      "energy",
+      1
+     ]
+    ],
+    "extra": 2
+   },
+   {
+    "income": [
+     [
+      "credits",
+      1
+     ]
+    ],
+    "extra": 3
    },
    {
     "income": [
@@ -75,7 +94,8 @@
       "antimatter",
       1
      ]
-    ]
+    ],
+    "extra": 4
    }
   ],
   "growth": [
@@ -175,7 +195,35 @@
       "insight",
       1
      ]
-    ]
+    ],
+    "extra": 1
+   },
+   {
+    "income": [
+     [
+      "credits",
+      1
+     ]
+    ],
+    "extra": 3
+   },
+   {
+    "income": [
+     [
+      "chips",
+      1
+     ]
+    ],
+    "extra": 4
+   },
+   {
+    "income": [
+     [
+      "credits",
+      1
+     ]
+    ],
+    "extra": 5
    }
   ]
  },
@@ -246,7 +294,26 @@
       "credits",
       2
      ]
-    ]
+    ],
+    "extra": 1
+   },
+   {
+    "income": [
+     [
+      "credits",
+      1
+     ]
+    ],
+    "extra": 2
+   },
+   {
+    "income": [
+     [
+      "energy",
+      1
+     ]
+    ],
+    "extra": 3
    },
    {
     "income": [
@@ -254,7 +321,8 @@
       "antimatter",
       1
      ]
-    ]
+    ],
+    "extra": 4
    }
   ],
   "growth": [
@@ -355,7 +423,35 @@
       "insight",
       1
      ]
-    ]
+    ],
+    "extra": 1
+   },
+   {
+    "income": [
+     [
+      "credits",
+      1
+     ]
+    ],
+    "extra": 3
+   },
+   {
+    "income": [
+     [
+      "energy",
+      1
+     ]
+    ],
+    "extra": 4
+   },
+   {
+    "income": [
+     [
+      "credits",
+      1
+     ]
+    ],
+    "extra": 5
    }
   ]
  }

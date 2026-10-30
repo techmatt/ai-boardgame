@@ -521,6 +521,10 @@ impl Eval {
             match count {
                 ..=1 => v -= w.presence_danger,
                 2 => v -= 0.5 * w.presence_danger,
+                // 034: a token lost stays lost and a hit takes 2, so the danger
+                // starts sooner.
+                3 => v -= 0.25 * w.presence_danger,
+                4 => v -= 0.1 * w.presence_danger,
                 _ => {}
             }
         }
@@ -844,7 +848,7 @@ impl Eval {
                 let d = cards::def(&world, id);
                 let mut p = 1.0;
                 // 022: playing costs insight again (shared with keeps).
-                let insight = d.insight;
+                let insight = cards::play_insight(&world, g, s, d);
                 insight_queue += insight;
                 let insight_need = if w.insight_wait > 0.0 {
                     insight_queue
@@ -855,9 +859,9 @@ impl Eval {
                     // The AI's discount: energy or compute spent as credits.
                     (
                         res(Resource::Credits)
-                            + cards::discount_room_at(&world, g, s, d, cards::discounted_cost(d, discount))
+                            + cards::discount_room_at(&world, g, s, d, cards::discounted_cost(&world, d, discount))
                                 .map_or(0, |(_, rate, k)| rate * k),
-                        cards::discounted_cost(d, discount),
+                        cards::discounted_cost(&world, d, discount),
                         earn_credits,
                     ),
                     (

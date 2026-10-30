@@ -246,7 +246,7 @@ fn freeing_a_city_and_removing_a_node_sway_unity() {
     answer_hex(&rules, &mut g, city);
     answer_all(&rules, &mut g);
     assert_eq!(g.tokens(city, ADV_CUBE), 0);
-    assert_eq!(g.var("alignment.unity"), 4);
+    assert_eq!(g.var("alignment.unity"), 5);
     // No standard action removes a node (019); the Decommission Unity card does.
     put(&mut g, city, NODE, 1);
     assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "node"), None).is_err());
@@ -260,8 +260,8 @@ fn freeing_a_city_and_removing_a_node_sway_unity() {
     })
     .unwrap();
     assert_eq!(g.tokens(city, NODE), 0);
-    // Freeing a city sways 4 (024; 023: 5), removing a node 2 (the bucket tips
+    // Freeing a city sways 5 (034; 024: 4), removing a node 2 (the bucket tips
     // only once an action or phase finishes, so it holds both here).
-    assert_eq!(g.var("alignment.unity"), 6);
+    assert_eq!(g.var("alignment.unity"), 7);
 }
 

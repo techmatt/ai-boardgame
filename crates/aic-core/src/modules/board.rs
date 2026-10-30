@@ -50,7 +50,9 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("troop_spent", 0, 1, "1: an adversary troop that strikes a target is used up"),
             ParamSpec::int("troop_steps", 0, 5, "steps each adversary troop takes in the march: destroy a target on or next to it, else move 1 hex toward the nearest"),
             ParamSpec::int("troop_presence", 0, 4, "adversary troops strike presence from this stage of adversary card on (0: always, 4: never)"),
-            ParamSpec::int("presence_returns", 0, 2, "2: a destroyed presence goes back on its owner's track, covering a space; 1: to a destroyed pile, placed before the track; 0: out of the game"),
+            ParamSpec::int("presence_marker", 0, 1, "1: a destroyed presence leaves a corruption marker on its hex"),
+            ParamSpec::int("corruption_reach", 0, 1, "a city that corrupts destroys presence within this many hexes of it"),
+            ParamSpec::int("war_reach", 0, 1, "war that destroys a factory destroys presence within this many hexes of it"),
             ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence"),
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_chips", 0, 20, "standard action: chips to build a research station"),
@@ -62,7 +64,9 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("harden_energy", 1, 20, "standard action (Harden passive): energy a hardening token (at least 1: free, it has no limit)"),
             ParamSpec::int("sell_credits", 0, 20, "standard action: credits for selling a card from hand"),
             ParamSpec::int("align_energy", 0, 20, "standard action: energy (and 1 ambassador) to align a clean city"),
-            ParamSpec::int("presence_credits", 1, 50, "standard project: credits to place a presence"),
+            ParamSpec::int("presence_credits", 1, 50, "the rich action: credits to place a presence, before its rise and the step's extra"),
+            ParamSpec::int("presence_rise", 0, 20, "the rich action: credits more for each earlier use this round"),
+            ParamSpec::int("presence_stage", 1, 3, "the rich action: from this stage of adversary card on"),
             ParamSpec::int("harden_credits", 1, 50, "standard project: credits for a hardening token"),
             ParamSpec::int("energy_credits", 1, 50, "standard project: credits for 1 energy"),
             ParamSpec::int("drain_credits", 1, 50, "standard project: credits to drain compute from an adversary project"),
@@ -219,7 +223,7 @@ pub fn track2_taken(g: &GameState, seat: usize) -> usize {
 /// country).
 pub fn presence_hexes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
     let mine = presence(seat);
-    let free = |h: usize| !is_ocean(w, h) && presence_owner(g, h).is_none();
+    let free = |h: usize| !is_ocean(w, h) && presence_owner(g, h).is_none() && g.tokens(h, MARKER) == 0;
     if presence_count(g, seat) == 0 {
         let c = home_country(w, seat);
         return w.map.countries[c]
@@ -240,55 +244,88 @@ pub fn presence_hexes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
         .collect()
 }
 
+/// Seat `s`'s uses of the rich action this round (034).
+pub fn rich_key(seat: usize) -> KeyBuf {
+    KeyBuf::new("board.rich.").num(seat)
+}
+
+/// The cheapest next step's extra energy (034: printed on the track, each
+/// track's last steps cost more), or `None` with both tracks empty.
+fn cheapest_extra(w: &World, g: &GameState, seat: usize) -> Option<i64> {
+    let b = ai::board(w, seat);
+    let first = b.presence.get(track_taken(g, seat)).map(|u| u.extra);
+    let second = b.presence2.get(track2_taken(g, seat)).map(|u| u.extra);
+    first.into_iter().chain(second).min()
+}
+
+/// How a track's step extra is paid when a presence is placed.
+#[derive(Clone, Copy, PartialEq)]
+pub enum StepPay {
+    /// Cards and growth place at no extra.
+    Free,
+    /// The standard action: 1 energy a step.
+    Energy,
+    /// The rich action: `board.energy_credits` credits a step.
+    Credits,
+}
+
 /// Places one presence for `seat`: the next token off its track (uncovering
 /// the space under it) onto a hex next to its presence. Returns whether placed.
 pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> {
+    place_presence_paying(g, cx, seat, StepPay::Free)
+}
+
+/// [`place_presence`], with the track's step extra paid by `pay`: only tracks
+/// whose next step the seat can pay are offered.
+pub fn place_presence_paying(g: &mut GameState, cx: &mut Cx, seat: usize, pay: StepPay) -> Res<bool> {
     let w = cx.world;
     if !ai::can_place(&w, g, seat) {
         return Ok(false);
     }
     let hexes = presence_hexes(&w, g, seat);
-    let reserve = g.resource(seat, Resource::PresenceReserve) > 0;
     // 021: with two tracks the player chooses which one's next token to take.
     let b = ai::board(&w, seat);
     let (t1, t2) = (track_taken(g, seat), track2_taken(g, seat));
+    let can_pay = |u: &crate::content::Uncover| match pay {
+        StepPay::Free => true,
+        StepPay::Energy => g.resource(seat, Resource::Energy) >= u.extra,
+        StepPay::Credits => g.resource(seat, Resource::Credits) >= u.extra * w.int("board.energy_credits"),
+    };
     let mut tracks: Vec<(bool, &crate::content::Uncover)> = Vec::new();
-    if let Some(u) = b.presence.get(t1) {
+    if let Some(u) = b.presence.get(t1).filter(|u| can_pay(u)) {
         tracks.push((false, u));
     }
-    if let Some(u) = b.presence2.get(t2) {
+    if let Some(u) = b.presence2.get(t2).filter(|u| can_pay(u)) {
         tracks.push((true, u));
     }
-    let mut second = false;
-    let what = if reserve {
-        "from your destroyed pile".to_string()
-    } else {
-        let opts = tracks
-            .iter()
-            .map(|(two, u)| {
-                opt(format!(
-                    "track {}: uncovers {}",
-                    if *two { 2 } else { 1 },
-                    ai::uncover_label(u)
-                ))
-            })
-            .collect();
-        let prompt = format!("Seat {seat}: take presence off which track?");
-        let Some(k) = cx.choose(seat, &prompt, opts)? else {
-            return Ok(false);
-        };
-        second = tracks[k].0;
-        format!("uncovers {}", ai::uncover_label(tracks[k].1))
+    let opts = tracks
+        .iter()
+        .map(|(two, u)| {
+            opt(format!(
+                "track {}: uncovers {}",
+                if *two { 2 } else { 1 },
+                ai::uncover_label(u)
+            ))
+        })
+        .collect();
+    let prompt = format!("Seat {seat}: take presence off which track?");
+    let Some(k) = cx.choose(seat, &prompt, opts)? else {
+        return Ok(false);
     };
+    let second = tracks[k].0;
+    let extra = tracks[k].1.extra;
+    let what = format!("uncovers {}", ai::uncover_label(tracks[k].1));
     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
     let prompt = format!("Seat {seat}: place presence ({what}) on which hex?");
     let Some(j) = cx.choose(seat, &prompt, opts)? else {
         return Ok(false);
     };
-    if reserve {
-        cx.add_resource(g, seat, Resource::PresenceReserve, -1);
-        cx.tally(g, "board.presence_from_reserve", 1);
-    } else if second {
+    match pay {
+        StepPay::Free => {}
+        StepPay::Energy => cx.add_resource(g, seat, Resource::Energy, -extra),
+        StepPay::Credits => cx.add_resource(g, seat, Resource::Credits, -extra * w.int("board.energy_credits")),
+    }
+    if second {
         cx.add_key(g, track2_key(seat).into(), 1);
     } else {
         cx.add_key(g, track_key(seat).into(), 1);
@@ -313,7 +350,23 @@ fn build(_b: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Board))
 }
 
-/// A standard action's cost: (energy, credits, chips).
+/// What seat `s` pays for a standard action now: the rich action rises with
+/// each use this round; a presence also needs its cheapest step's extra.
+fn seat_cost(w: &World, g: &GameState, seat: usize, act: StandardAction) -> (i64, i64, i64) {
+    let (e, cr, chips) = std_cost(w, act);
+    let extra = cheapest_extra(w, g, seat).unwrap_or(0);
+    match act {
+        StandardAction::Presence => (e + extra, cr, chips),
+        StandardAction::PresenceBuy => (
+            e,
+            cr + g.var(&rich_key(seat)) * w.int("board.presence_rise") + extra * w.int("board.energy_credits"),
+            chips,
+        ),
+        _ => (e, cr, chips),
+    }
+}
+
+/// A standard action's printed cost: (energy, credits, chips).
 pub fn std_cost(w: &World, act: StandardAction) -> (i64, i64, i64) {
     let i = |k: &str| w.int(&format!("board.{k}"));
     match act {
@@ -337,13 +390,13 @@ pub fn std_text(act: StandardAction) -> &'static str {
     match act {
         StandardAction::Presence => "place a presence next to yours (uncovers your track's next space)",
         StandardAction::Station => "build a research station in reach (yours)",
-        StandardAction::Remove => "remove an adversary ambassador in reach",
+        StandardAction::Remove => "remove an adversary ambassador in reach, or else a corruption marker",
         StandardAction::Move => "move a player ambassador onto a piece in reach",
         StandardAction::Ambassador => "gain a player ambassador",
         StandardAction::Align => "align a clean city you can claim (1 ambassador)",
         StandardAction::Harden => "harden a building in reach (Harden passive)",
         StandardAction::Chips => "sell 1 chip for credits",
-        StandardAction::PresenceBuy => "standard project: place a presence next to yours",
+        StandardAction::PresenceBuy => "the rich action: place a presence next to yours; steep, and rises with each use a round",
         StandardAction::HardenBuy => "standard project: harden a building in reach",
         StandardAction::Energy => "standard project: gain 1 energy",
         StandardAction::Drain => "standard project: remove compute from an adversary project",
@@ -362,7 +415,8 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: StandardAction) -> Ve
     let all = 0..g.hexes.len();
     match act {
         StandardAction::Presence | StandardAction::PresenceBuy => {
-            if ai::can_place(w, g, seat) {
+            let open = act == StandardAction::Presence || g.var(adversary::STAGE) >= w.int("board.presence_stage");
+            if open && ai::can_place(w, g, seat) {
                 presence_hexes(w, g, seat)
             } else {
                 Vec::new()
@@ -372,7 +426,7 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: StandardAction) -> Ve
             .filter(|&h| buildable(w, g, h) && !w.map.hexes[h].industrial && reach(h))
             .collect(),
         StandardAction::Remove => all
-            .filter(|&h| reach(h) && g.tokens(h, ADV_AMBASSADOR) > 0)
+            .filter(|&h| reach(h) && (g.tokens(h, ADV_AMBASSADOR) > 0 || g.tokens(h, MARKER) > 0))
             .collect(),
         // Onto a piece in reach, from the supply or another hex: never onto the
         // hex the seat's only ambassador already holds (020: that charged the
@@ -438,8 +492,15 @@ fn std_resolve(
             cx.add_resource(g, s, Resource::Credits, w.int("board.chips_credits"));
             cx.tally(g, "board.chips_sold", 1);
         }
-        StandardAction::Presence | StandardAction::PresenceBuy => {
-            place_presence(g, cx, s)?;
+        StandardAction::Presence => {
+            place_presence_paying(g, cx, s, StepPay::Energy)?;
+        }
+        StandardAction::PresenceBuy => {
+            // The base price and the rise; the step's extra follows the track.
+            let rise = g.var(&rich_key(s)) * w.int("board.presence_rise");
+            cx.add_resource(g, s, Resource::Credits, -rise);
+            cx.add_key(g, rich_key(s).into(), 1);
+            place_presence_paying(g, cx, s, StepPay::Credits)?;
         }
         StandardAction::Energy => cx.add_resource(g, s, Resource::Energy, 1),
         StandardAction::Drain => {
@@ -461,7 +522,12 @@ fn std_resolve(
         }
         StandardAction::Remove => {
             if let Some(h) = on_hex(cx)? {
-                adversary::remove_piece(g, cx, Some(s), h, ADV_AMBASSADOR);
+                if g.tokens(h, ADV_AMBASSADOR) > 0 {
+                    adversary::remove_piece(g, cx, Some(s), h, ADV_AMBASSADOR);
+                } else {
+                    cx.add_tokens(g, h, MARKER, -1);
+                    cx.tally(g, "board.markers_removed", 1);
+                }
             }
         }
         StandardAction::Move => {
@@ -646,22 +712,10 @@ pub fn last_presence_safe(w: &World, g: &GameState, s: usize) -> bool {
     g.var(adversary::STAGE) < w.int("board.last_safe_stage") && presence_count(g, s) <= 1
 }
 
-/// A presence goes back on seat `s`'s tracks (028): it covers the furthest
-/// uncovered space, the first track's on a tie. The first track's first space
-/// stays uncovered (its token starts on the board).
-fn return_to_track(g: &mut GameState, cx: &mut Cx, s: usize) {
-    let (t1, t2) = (track_taken(g, s), track2_taken(g, s));
-    if t2 > t1 || (t1 <= 1 && t2 > 0) {
-        cx.add_key(g, track2_key(s).into(), -1);
-    } else if t1 > 1 {
-        cx.add_key(g, track_key(s).into(), -1);
-    }
-}
-
 /// Seat `s` loses its presence on hex `h`, unless it is safe as their last.
-/// By `presence_returns` it goes back on the track, covering the space again
-/// (028), to the destroyed pile (the resource `PresenceReserve`), or out of
-/// the game. The tally names `source`. Returns whether it went.
+/// It leaves the game, as in Spirit Island (034: what it uncovered stays
+/// uncovered), and leaves a corruption marker on the hex unless the hex has
+/// corruption already. The tally names `source`. Returns whether it went.
 pub fn lose_presence(g: &mut GameState, cx: &mut Cx, h: usize, s: usize, source: &str) -> bool {
     let w = cx.world;
     if last_presence_safe(&w, g, s) {
@@ -669,10 +723,10 @@ pub fn lose_presence(g: &mut GameState, cx: &mut Cx, h: usize, s: usize, source:
         return false;
     }
     cx.add_tokens(g, h, &presence(s), -1);
-    match w.int("board.presence_returns") {
-        2 => return_to_track(g, cx, s),
-        1 => cx.add_resource(g, s, Resource::PresenceReserve, 1),
-        _ => {}
+    let tainted = g.tokens(h, MARKER) > 0 || g.tokens(h, NODE) > 0 || corrupted(g, h);
+    if w.int("board.presence_marker") > 0 && !tainted {
+        cx.add_tokens(g, h, MARKER, 1);
+        cx.tally(g, "board.markers", 1);
     }
     cx.tally(g, "board.presence_lost", 1);
     cx.tally(g, &format!("board.presence_lost.{source}"), 1);
@@ -1020,9 +1074,12 @@ fn battle(g: &mut GameState, cx: &mut Cx) {
             };
             if destroy_building(g, cx, h, FACTORY, Cause::War) {
                 destroyed += 1;
-                // War that destroys a building takes the presence on its hex (027).
-                if let Some(s) = presence_owner(g, h) {
-                    lose_presence(g, cx, h, s, "war");
+                // War that destroys a building takes the presence on its hex
+                // (027) and, by `war_reach`, around it (034).
+                for x in within(&w, h, w.int("board.war_reach")) {
+                    if let Some(s) = presence_owner(g, x) {
+                        lose_presence(g, cx, x, s, "war");
+                    }
                 }
             }
         }
@@ -1404,7 +1461,7 @@ impl Module for Board {
     fn legal(&self, _phase: usize, g: &GameState, w: &World, seat: u8, out: &mut Vec<Action>) {
         let s = seat as usize;
         for act in STANDARD {
-            if !can_afford(g, s, std_cost(w, act)) {
+            if !can_afford(g, s, seat_cost(w, g, s, act)) {
                 continue;
             }
             if !std_targets(w, g, s, act).is_empty() {
@@ -1445,12 +1502,13 @@ impl Module for Board {
                 let Some(act) = StandardAction::parse(act) else {
                     return Err(Halt::Illegal("no such standard action".into()));
                 };
-                let cost = std_cost(&w, act);
                 let targets = std_targets(&w, g, s, act);
-                if !can_afford(g, s, cost) || targets.is_empty() {
+                if !can_afford(g, s, seat_cost(&w, g, s, act)) || targets.is_empty() {
                     return Err("can't take that standard action now".into());
                 }
-                let (e, cr, chips) = cost;
+                // The printed price; a presence's rise and extra follow in
+                // `std_resolve`, once the track is chosen.
+                let (e, cr, chips) = std_cost(&w, act);
                 cx.add_resource(g, s, Resource::Energy, -e);
                 cx.add_resource(g, s, Resource::Credits, -cr);
                 cx.add_resource(g, s, Resource::Chips, -chips);
@@ -1466,6 +1524,12 @@ impl Module for Board {
     fn after(&self, g: &mut GameState, cx: &mut Cx) -> Res {
         free_cities(g, cx);
         Ok(())
+    }
+
+    fn round_start(&self, g: &mut GameState, cx: &mut Cx) {
+        for s in 0..g.seats.len() {
+            cx.set_key(g, rich_key(s).into(), 0);
+        }
     }
 
     fn run(&self, phase: usize, g: &mut GameState, cx: &mut Cx) -> Res {
@@ -1523,7 +1587,7 @@ impl Module for Board {
             .map(|f| format!("board.{}.", f.name()))
             .collect();
         let mut keys: Vec<&str> = flags.iter().map(String::as_str).collect();
-        keys.extend(["board.project.", "board.project_done.", "board.track.", "board.track2."]);
+        keys.extend(["board.project.", "board.project_done.", "board.track.", "board.track2.", "board.rich."]);
         out.bookkeeping(&keys);
         for c in 0..w.map.countries.len() {
             for f in FLAGS {
@@ -1660,6 +1724,23 @@ impl Module for Board {
             out.standard(act.name(), e, cr, chips, &doc);
         }
         for s in 0..g.seats.len() {
+            // 034: what a presence costs this seat now, rise and step extra in.
+            out.seat(
+                s,
+                "presence_energy_now",
+                "next presence (energy)",
+                seat_cost(w, g, s, StandardAction::Presence).0,
+                None,
+                "the standard action at your cheapest track: printed price plus the step's extra",
+            );
+            out.seat(
+                s,
+                "presence_credits_now",
+                "next rich action (credits)",
+                seat_cost(w, g, s, StandardAction::PresenceBuy).1,
+                None,
+                "printed price, plus its rise this round and the step's extra",
+            );
             out.seat(
                 s,
                 "ambassadors_board",

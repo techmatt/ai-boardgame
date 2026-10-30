@@ -133,7 +133,7 @@
   "id": "agitators",
   "name": "Agitators",
   "tier": 1,
-  "text": "3 adversary ambassadors land on clean cities here (players choose each).",
+  "text": "3 adversary ambassadors land on clean cities here (players choose each); each player here destroys a presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -145,6 +145,10 @@
     "op": "ambassadors",
     "at": "clean_cities",
     "count": 3
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -152,7 +156,7 @@
   "id": "orbital_strike",
   "name": "Orbital strike",
   "tier": 1,
-  "text": "An adversary troop lands on a factory here (players choose); with no factory, on a city; the adversary gains 3 compute.",
+  "text": "An adversary troop lands on a factory here (players choose); with no factory, on a city; the adversary gains 3 compute; each player here destroys a presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -167,6 +171,10 @@
    {
     "op": "compute",
     "amount": 3
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -174,7 +182,7 @@
   "id": "defection",
   "name": "Defection",
   "tier": 1,
-  "text": "Each player here loses an ambassador (from supply, else from the board); sway 2 toward Discord.",
+  "text": "Each player here loses an ambassador (from supply, else from the board); sway 2 toward Discord; each player here destroys a presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -189,6 +197,10 @@
     "op": "sway",
     "side": "discord",
     "amount": 2
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -259,7 +271,7 @@
   "id": "station_seizure",
   "name": "Station seizure",
   "tier": 2,
-  "text": "A research station here that is not corrupted becomes corrupted (players choose); the adversary gains 4 compute.",
+  "text": "A research station here that is not corrupted becomes corrupted (players choose); the adversary gains 4 compute; each player here destroys a presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -273,6 +285,10 @@
    {
     "op": "compute",
     "amount": 4
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -280,7 +296,7 @@
   "id": "overrun",
   "name": "Overrun",
   "tier": 2,
-  "text": "The city here that is not corrupted (clean or aligned) with the most adversary ambassadors becomes corrupted (ties: lower hex number).",
+  "text": "The city here that is not corrupted (clean or aligned) with the most adversary ambassadors becomes corrupted (ties: lower hex number); each player here destroys a presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -290,6 +306,10 @@
   "effects": [
    {
     "op": "corrupt_city"
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -391,7 +411,7 @@
   "id": "fifth_column",
   "name": "Fifth column",
   "tier": 2,
-  "text": "4 adversary ambassadors land on player-owned pieces here (players choose each); the adversary gains 4 compute.",
+  "text": "4 adversary ambassadors land on player-owned pieces here (players choose each); the adversary gains 4 compute; each player here destroys a presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -407,6 +427,10 @@
    {
     "op": "compute",
     "amount": 4
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -414,7 +438,7 @@
   "id": "insurrection",
   "name": "Insurrection",
   "tier": 2,
-  "text": "4 adversary ambassadors land on clean cities here (players choose each); sway 2 toward Discord.",
+  "text": "4 adversary ambassadors land on clean cities here (players choose each); sway 2 toward Discord; each player here destroys a presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -431,6 +455,10 @@
     "op": "sway",
     "side": "discord",
     "amount": 2
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -438,7 +466,7 @@
   "id": "siege",
   "name": "Siege",
   "tier": 2,
-  "text": "2 adversary troops land on factories here (players choose; with no factory, on cities), and each player here destroys a presence of theirs here and loses an ambassador (from supply, else from the board); the adversary gains 3 compute.",
+  "text": "2 adversary troops land on factories here (players choose; with no factory, on cities), and each player here destroys 2 presence of theirs here and loses an ambassador (from supply, else from the board); the adversary gains 3 compute.",
   "counter": [
    [
     "credits",
@@ -455,7 +483,7 @@
    },
    {
     "op": "each_destroy_presence",
-    "count": 1
+    "count": 2
    },
    {
     "op": "compute",
@@ -467,7 +495,7 @@
   "id": "manhunt",
   "name": "Manhunt",
   "tier": 2,
-  "text": "Each player here destroys a presence of theirs here.",
+  "text": "Each player here destroys 2 presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -477,7 +505,7 @@
   "effects": [
    {
     "op": "each_destroy_presence",
-    "count": 1
+    "count": 2
    }
   ]
  }

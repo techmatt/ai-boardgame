@@ -321,8 +321,18 @@ impl Module for Adversary {
                     format!("Adversary card: {} ({})", c.name, card_text(c))
                 });
                 for t in &c.twists {
-                    if let Op::Sway { side, amount } = t {
-                        alignment::sway(g, cx, *side, *amount);
+                    match t {
+                        Op::Sway { side, amount } => alignment::sway(g, cx, *side, *amount),
+                        // 034: a card that makes every player destroy presence.
+                        Op::EachDestroyPresence { count } => {
+                            let hexes: Vec<usize> = (0..g.hexes.len()).collect();
+                            for s in 0..g.seats.len() {
+                                for _ in 0..*count {
+                                    board::destroy_own_presence(g, cx, s, &hexes, board::Cause::Effect("twist"))?;
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 build_all(g, cx, None)?;
@@ -373,7 +383,10 @@ impl Module for Adversary {
                 .max(1);
                 let cities: Vec<usize> = (0..g.hexes.len())
                     .filter(|&h| {
-                        is_city(&w, h) && !corrupted(g, h) && g.tokens(h, ADV_AMBASSADOR) >= at
+                        // 034: a corruption marker counts toward corrupting.
+                        is_city(&w, h)
+                            && !corrupted(g, h)
+                            && g.tokens(h, ADV_AMBASSADOR) + g.tokens(h, MARKER) >= at
                     })
                     .collect();
                 for h in cities {
@@ -783,8 +796,14 @@ pub fn corrupt_city(g: &mut GameState, cx: &mut Cx, h: usize) {
         let k = ambassador(s);
         let mine = g.tokens(h, &k);
         cx.add_tokens(g, h, &k, -mine);
-        if g.tokens(h, &presence(s)) > 0 {
-            board::lose_presence(g, cx, h, s, "corruption");
+    }
+    // The city's corruption replaces any marker on it.
+    let marked = g.tokens(h, MARKER);
+    cx.add_tokens(g, h, MARKER, -marked);
+    // 034: by `corruption_reach`, presence around the city goes too.
+    for x in within(&w, h, w.int("board.corruption_reach")) {
+        if let Some(s) = presence_owner(g, x) {
+            board::lose_presence(g, cx, x, s, "corruption");
         }
     }
     cx.tally(g, "adversary.corruptions", 1);

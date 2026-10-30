@@ -173,6 +173,7 @@ fn standard_projects_turn_credits_into_energy_presence_hardening_and_drains() {
 
     let before = presence_of(&g, 0).len();
     let credits = g.resource(0, Resource::Credits);
+    g.vars.insert(crate::modules::adversary::STAGE.into(), 2);
     rules.apply_mut(&mut g, &std_act(0, "presence_buy"), None).unwrap();
     answer_all(&rules, &mut g);
     assert_eq!(presence_of(&g, 0).len(), before + 1);

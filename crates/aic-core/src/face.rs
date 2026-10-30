@@ -100,7 +100,6 @@ fn icon(r: Resource) -> &'static str {
         Resource::Credits => "credits",
         Resource::Energy => "energy",
         Resource::Insight => "insight",
-        Resource::PresenceReserve => panic!("no card moves the presence reserve"),
     }
 }
 
@@ -116,7 +115,6 @@ fn noun(r: Resource, n: i64) -> &'static str {
         (Resource::Antimatter, _) => "antimatter",
         (Resource::Energy, _) => "energy",
         (Resource::Insight, _) => "insight",
-        (Resource::PresenceReserve, _) => panic!("no card moves the presence reserve"),
     }
 }
 

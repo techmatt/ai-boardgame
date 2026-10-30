@@ -448,6 +448,10 @@ pub struct Uncover {
     /// `cards.keep_tier2_upgraded` insight instead of `cards.keep_tier2`.
     #[serde(default)]
     pub keep2: bool,
+    /// Energy the standard action pays for this step on top of
+    /// `board.presence_energy` (034: each track's last steps cost more).
+    #[serde(default)]
+    pub extra: i64,
 }
 
 /// An AI-board power (021, locked: paid by sacrificing tags). `tags` is the

@@ -28,6 +28,10 @@ const WAIT: f64 = 0.15;
 pub struct Forced {
     /// Keep every drafted card it can afford.
     pub keep_all: bool,
+    /// Exploit check (034): spend every spare credit on the rich action.
+    pub rich_spend: bool,
+    /// Exploit check (034): draft, keep and play Science first, for its discounts.
+    pub science_rush: bool,
     /// Keep only its `keep_k` cheapest drafted cards (0: off).
     pub keep_k: usize,
     /// Sanity check (028): keep no drafted card.
@@ -92,6 +96,8 @@ impl Forced {
         let Forced {
             keep_all,
             keep_k,
+            rich_spend,
+            science_rush,
             keep_none,
             keep_random,
             tier1_only,
@@ -115,6 +121,8 @@ impl Forced {
         } = self;
         *keep_all
             || *keep_k > 0
+            || *rich_spend
+            || *science_rush
             || *keep_none
             || *keep_random
             || *tier1_only
@@ -190,6 +198,15 @@ impl Policy {
             drafted.into_iter().filter(coin).collect()
         } else if self.forced.keep_all {
             drafted
+        } else if self.forced.science_rush {
+            let world = rules.world();
+            let mut set = plan_keeps(&world, g, s, &self.forced);
+            for id in g.pile(&cards::drafted(s)) {
+                if cards::def(&world, id).tags.contains(&Tag::Science) && !set.contains(id) {
+                    set.push(id.clone());
+                }
+            }
+            set
         } else if self.forced.keep_k > 0 {
             let mut d = drafted;
             d.sort_by(|a, b| {
@@ -278,6 +295,19 @@ impl Agent for Policy {
         }
         if self.forced.unity_farm {
             if let Some(i) = farm(&world, g, legal) {
+                return i;
+            }
+        }
+        if self.forced.rich_spend && !pending {
+            if let Some(i) = legal.iter().position(|a| matches!(a, Action::Standard { act, .. } if act == "presence_buy")) {
+                return i;
+            }
+        }
+        if self.forced.science_rush && !pending {
+            let science = |id: &Key| cards::def(&world, id).tags.contains(&Tag::Science);
+            if let Some(i) = legal.iter().position(|a| {
+                matches!(a, Action::Draft { card, .. } | Action::Keep { card, .. } | Action::Play { card, .. } if science(card))
+            }) {
                 return i;
             }
         }
@@ -496,7 +526,7 @@ fn plan(
             let d = cards::def(w, id);
             let credits = cards::play_cost(w, g, s, d);
             let fits = b.credits >= credits
-                && b.insight >= d.insight
+                && b.insight >= cards::play_insight(w, g, s, d)
                 && b.chips >= d.chips
                 && b.energy >= d.energy
                 && b.antimatter >= d.antimatter
@@ -506,7 +536,7 @@ fn plan(
                 && d.needs.iter().all(|(t, n)| cards::tags(w, g, s, *t) >= *n);
             if fits {
                 b.credits -= credits;
-                b.insight -= d.insight;
+                b.insight -= cards::play_insight(w, g, s, d);
                 b.chips -= d.chips;
                 b.energy -= d.energy;
                 b.antimatter -= d.antimatter;

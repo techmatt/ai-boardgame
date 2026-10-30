@@ -29,8 +29,6 @@ fn an_op_in_the_wrong_list_fails_to_load() {
 
 #[test]
 fn ops_check_the_resources_they_name() {
-    let reserve = Op::Gain { resource: Resource::PresenceReserve, amount: 1 };
-    assert!(check_ops(&[reserve], Slot::Player, "test").is_err());
     let gives = Op::Gain { resource: Resource::Ambassadors, amount: 1 };
     assert!(check_ops(&[gives], Slot::Player, "test").is_ok());
     let income = Op::TeamIncome { resource: Resource::Energy, amount: 1 };
@@ -53,7 +51,7 @@ fn a_misspelt_word_does_not_load() {
 #[test]
 fn resources_order_as_their_words() {
     use Resource::*;
-    let all = [Ambassadors, Antimatter, Chips, Credits, Energy, Insight, PresenceReserve];
+    let all = [Ambassadors, Antimatter, Chips, Credits, Energy, Insight];
     assert!(all.windows(2).all(|p| p[0] < p[1] && p[0].name() < p[1].name()));
     assert_eq!((Chips.amount(1), Chips.amount(2)), ("1 chip".to_string(), "2 chips".to_string()));
     for r in all {

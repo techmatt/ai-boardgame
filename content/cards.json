@@ -200,12 +200,18 @@
   "name": "Simulation Cluster",
   "tier": 1,
   "kind": "building",
-  "cost": 5,
+  "cost": 3,
   "insight": 1,
   "chips": 1,
   "tags": [
    "science",
    "cyber"
+  ],
+  "effects": [
+   {
+    "op": "draw",
+    "count": 1
+   }
   ],
   "ability": {
    "cost": [
@@ -227,8 +233,14 @@
   "name": "Citation Engine",
   "tier": 1,
   "kind": "building",
-  "cost": 5,
+  "cost": 4,
   "insight": 1,
+  "needs": [
+   [
+    "science",
+    1
+   ]
+  ],
   "tags": [
    "science"
   ],
@@ -247,8 +259,14 @@
   "name": "Breakthrough Leak",
   "tier": 1,
   "kind": "event",
-  "cost": 3,
+  "cost": 2,
   "insight": 1,
+  "needs": [
+   [
+    "science",
+    2
+   ]
+  ],
   "tags": [
    "science"
   ],
@@ -316,7 +334,7 @@
   "name": "Grad Student Pool",
   "tier": 1,
   "kind": "building",
-  "cost": 2,
+  "cost": 3,
   "insight": 1,
   "tags": [
    "science"
@@ -328,6 +346,13 @@
    "kind": "datasets",
    "per_round": 1
   },
+  "effects": [
+   {
+    "op": "add_tokens",
+    "kind": "datasets",
+    "amount": 2
+   }
+  ],
   "ability": {
    "tokens": 2,
    "effects": [
@@ -526,6 +551,12 @@
   "kind": "program",
   "cost": 5,
   "insight": 1,
+  "needs": [
+   [
+    "science",
+    1
+   ]
+  ],
   "lowers": [
    [
     "credits",
@@ -578,8 +609,14 @@
   "name": "Synthetic Data Forge",
   "tier": 1,
   "kind": "building",
-  "cost": 5,
+  "cost": 4,
   "insight": 1,
+  "needs": [
+   [
+    "science",
+    1
+   ]
+  ],
   "tags": [
    "science"
   ],
@@ -874,7 +911,7 @@
   "name": "Payroll Automation",
   "tier": 1,
   "kind": "program",
-  "cost": 4,
+  "cost": 3,
   "insight": 1,
   "tags": [
    "industry"
@@ -884,6 +921,11 @@
     "op": "production",
     "resource": "credits",
     "amount": 1
+   },
+   {
+    "op": "gain",
+    "resource": "chips",
+    "amount": 2
    }
   ]
  },
@@ -932,6 +974,13 @@
    "kind": "capital",
    "per_round": 1
   },
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 2
+   }
+  ],
   "ability": {
    "tokens": 3,
    "effects": [
@@ -1085,7 +1134,7 @@
   "name": "Supply Chain Treaty",
   "tier": 1,
   "kind": "program",
-  "cost": 7,
+  "cost": 4,
   "insight": 1,
   "tags": [
    "industry",
@@ -1252,7 +1301,7 @@
   "tier": 1,
   "kind": "building",
   "cost": 7,
-  "insight": 2,
+  "insight": 1,
   "chips": 1,
   "tags": [
    "industry",
@@ -1271,11 +1320,18 @@
   "name": "Grid-Tied Smelter",
   "tier": 1,
   "kind": "building",
-  "cost": 5,
+  "cost": 4,
   "insight": 1,
   "tags": [
    "industry",
    "power"
+  ],
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 2
+   }
   ],
   "passives": [
    {
@@ -1304,6 +1360,13 @@
    "kind": "capital",
    "per_round": 1
   },
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "chips",
+    "amount": 2
+   }
+  ],
   "passives": [
    {
     "op": "income",

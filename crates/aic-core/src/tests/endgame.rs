@@ -3,7 +3,7 @@
 
 use super::alignment::give;
 use super::*;
-use crate::modules::common::{ambassador, presence, NODE};
+use crate::modules::common::{ambassador, presence, MARKER, NODE};
 use crate::modules::{adversary, board};
 
 /// The baseline playing only the action phase, after setup.
@@ -166,19 +166,6 @@ fn the_hold_is_never_below_its_minimum() {
 }
 
 #[test]
-fn a_city_that_corrupts_destroys_presence_on_it_to_the_destroyed_pile() {
-    let (rules, mut g) = lab_with(&[], &["board.presence_returns=1"]);
-    let h = rules.map.numbered(0, piece(0).cities[0]);
-    let far = rules.map.numbered(1, piece(1).cities[0]);
-    put(&mut g, h, &presence(0), 1);
-    put(&mut g, far, &presence(0), 1);
-    g.vars.insert(STAGE.into(), 2);
-    with_cx(&rules, |cx| adversary::corrupt_city(&mut g, cx, h));
-    assert_eq!(g.tokens(h, &presence(0)), 0);
-    assert_eq!(g.resource(0, Resource::PresenceReserve), 1);
-}
-
-#[test]
 fn stage_one_never_takes_a_last_presence() {
     let (rules, mut g) = lab_with(&[], &["board.last_safe_stage=2"]);
     let h = rules.map.numbered(0, piece(0).cities[0]);
@@ -241,37 +228,6 @@ fn presence_on_track(g: &mut GameState, s: usize, hexes: &[usize]) {
 }
 
 #[test]
-fn a_destroyed_presence_covers_its_track_space_again() {
-    use crate::modules::ai;
-    let (rules, mut g) = lab_with(&[], &["board.presence_returns=2"]);
-    let (a, b) = (rules.map.numbered(0, piece(0).presence), rules.map.numbered(0, piece(0).cities[0]));
-    let c = rules.map.hexes[a].neighbours[0];
-    presence_on_track(&mut g, 0, &[a, b, c]);
-    let w = rules.world();
-    let income = ai::track_income(&w, &g, 0);
-    let credits = |inc: &[(Resource, i64)]| inc.iter().filter(|(r, _)| *r == Resource::Credits).map(|(_, n)| n).sum::<i64>();
-    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, c, 0, "test"));
-    assert_eq!(board::track_taken(&g, 0), 2);
-    assert_eq!(g.resource(0, Resource::PresenceReserve), 0);
-    assert!(credits(&ai::track_income(&w, &g, 0)) < credits(&income), "the space's income is gone");
-    // The first space never covers: its token starts on the board.
-    g.vars.insert(board::track_key(0).into(), 1);
-    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, b, 0, "test"));
-    assert_eq!(board::track_taken(&g, 0), 1);
-}
-
-#[test]
-fn a_returned_presence_comes_off_the_second_track_when_it_is_further_along() {
-    let (rules, mut g) = lab_with(&[], &["board.presence_returns=2"]);
-    let a = rules.map.numbered(0, piece(0).presence);
-    put(&mut g, a, presence(0), 1);
-    g.vars.insert(board::track_key(0).into(), 1);
-    g.vars.insert(board::track2_key(0).into(), 1);
-    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, a, 0, "test"));
-    assert_eq!((board::track_taken(&g, 0), board::track2_taken(&g, 0)), (1, 0));
-}
-
-#[test]
 fn each_player_destroys_a_presence_of_their_choice_but_not_a_stage_one_last() {
     use crate::modules::common::hex_name;
     let (rules, mut g) = lab_with(&[], &["board.last_safe_stage=2"]);
@@ -328,4 +284,183 @@ fn a_lost_last_presence_comes_before_a_unity_tip_in_the_same_check() {
     give(&rules, &mut g);
     let o = g.outcome.as_ref().expect("a loss");
     assert_eq!((o.won, o.reason.as_str()), (false, "presence"));
+}
+
+// ---------- 034: presence leaves the game, the marker, the rich action ----------
+
+#[test]
+fn a_city_that_corrupts_destroys_presence_on_it_and_leaves_no_marker() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let h = rules.map.numbered(0, piece(0).cities[0]);
+    let far = rules.map.numbered(1, piece(1).cities[0]);
+    put(&mut g, h, &presence(0), 1);
+    put(&mut g, far, &presence(0), 1);
+    g.vars.insert(STAGE.into(), 2);
+    with_cx(&rules, |cx| adversary::corrupt_city(&mut g, cx, h));
+    assert_eq!((g.tokens(h, &presence(0)), g.tokens(h, MARKER)), (0, 0), "it has corruption already");
+}
+
+#[test]
+fn corruption_reach_takes_presence_around_the_city() {
+    let (rules, mut g) = lab_with(&[], &["board.corruption_reach=1"]);
+    let h = rules.map.numbered(0, piece(0).cities[0]);
+    let n = rules.map.hexes[h].neighbours[0];
+    let far = rules.map.numbered(1, piece(1).cities[0]);
+    put(&mut g, n, &presence(0), 1);
+    put(&mut g, far, &presence(0), 1);
+    g.vars.insert(STAGE.into(), 2);
+    with_cx(&rules, |cx| adversary::corrupt_city(&mut g, cx, h));
+    assert_eq!((g.tokens(n, &presence(0)), g.tokens(n, MARKER)), (0, 1));
+}
+
+#[test]
+fn a_lost_presence_leaves_the_game_and_its_income_stays() {
+    use crate::modules::ai;
+    let (rules, mut g) = lab_with(&[], &[]);
+    let (a, b) = (rules.map.numbered(0, piece(0).presence), rules.map.numbered(0, piece(0).cities[0]));
+    let c = rules.map.hexes[a].neighbours[0];
+    presence_on_track(&mut g, 0, &[a, b, c]);
+    let w = rules.world();
+    let income = ai::track_income(&w, &g, 0);
+    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, c, 0, "test"));
+    assert_eq!(board::track_taken(&g, 0), 3, "it does not go back on the track");
+    assert_eq!(ai::track_income(&w, &g, 0), income);
+    assert_eq!(g.tokens(c, MARKER), 1);
+}
+
+#[test]
+fn a_marker_adds_nothing_where_there_is_corruption_and_blocks_the_hex() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let a = rules.map.numbered(0, piece(0).presence);
+    let n = rules.map.hexes[a].neighbours[0];
+    put(&mut g, a, presence(0), 1);
+    put(&mut g, n, presence(1), 1);
+    put(&mut g, n, NODE, 1);
+    g.vars.insert(STAGE.into(), 2);
+    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, n, 1, "test"));
+    assert_eq!(g.tokens(n, MARKER), 0, "a node is corruption");
+    put(&mut g, n, MARKER, 1);
+    let w = rules.world();
+    assert!(!board::presence_hexes(&w, &g, 0).contains(&n));
+    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, a, 0, "test"));
+    assert_eq!(g.tokens(a, MARKER), 1);
+}
+
+#[test]
+fn a_marker_counts_toward_corrupting_a_city() {
+    let (rules, mut g) = lab_with(&["adversary.corrupt"], &["adversary.corrupt_at=2"]);
+    let h = rules.map.numbered(0, piece(0).cities[1]);
+    put(&mut g, h, MARKER, 1);
+    put(&mut g, h, ADV_AMBASSADOR, 1);
+    run(&rules, &mut g);
+    assert_eq!(g.tokens(h, ADV_CUBE), 1);
+    assert_eq!(g.tokens(h, MARKER), 0, "the city's corruption replaces it");
+}
+
+#[test]
+fn the_rich_action_opens_at_stage_two_and_rises_with_each_use() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let a = rules.map.numbered(0, piece(0).presence);
+    put(&mut g, a, presence(0), 1);
+    g.vars.insert(board::track_key(0).into(), 1);
+    set_res(&mut g, 0, Resource::Credits, 40);
+    g.vars.insert(STAGE.into(), 1);
+    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "presence_buy"), None).is_err(), "stage I");
+    g.vars.insert(STAGE.into(), 2);
+    let base = w.int("board.presence_credits");
+    let rise = w.int("board.presence_rise");
+    rules.apply_mut(&mut g, &std_act(0, "presence_buy"), None).unwrap();
+    answer_all(&rules, &mut g);
+    assert_eq!(g.resource(0, Resource::Credits), 40 - base);
+    rules.apply_mut(&mut g, &std_act(0, "presence_buy"), None).unwrap();
+    answer_all(&rules, &mut g);
+    assert_eq!(g.resource(0, Resource::Credits), 40 - base - (base + rise));
+}
+
+#[test]
+fn a_track_s_last_steps_cost_more_and_cards_skip_the_extra() {
+    use crate::modules::ai;
+    let (rules, mut g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let b = ai::board(&w, 0);
+    let a = rules.map.numbered(0, piece(0).presence);
+    put(&mut g, a, presence(0), 1);
+    // Both tracks down to their last steps.
+    g.vars.insert(board::track_key(0).into(), b.presence.len() as i64 - 1);
+    g.vars.insert(board::track2_key(0).into(), b.presence2.len() as i64 - 1);
+    let extra = b.presence.last().unwrap().extra.min(b.presence2.last().unwrap().extra);
+    assert!(extra > 0);
+    set_res(&mut g, 0, Resource::Energy, extra);
+    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "presence"), None).is_err(), "base + extra");
+    set_res(&mut g, 0, Resource::Energy, extra + w.int("board.presence_energy"));
+    rules.apply_mut(&mut g, &std_act(0, "presence"), None).unwrap();
+    answer_all(&rules, &mut g);
+    assert_eq!(g.resource(0, Resource::Energy), 0);
+}
+
+/// 034's d4 fix: every printed step of the Discord deck acts before it ends,
+/// at each difficulty, with the deck's tips counted as the game counts them.
+#[test]
+fn every_discord_step_is_reached_at_every_difficulty() {
+    for d in 0..=4 {
+        let arg = format!("adversary.difficulty={d}");
+        let (rules, g) = lab_with(&[], &[&arg]);
+        let w = rules.world();
+        let start = g.var("alignment.discord_tips").max(0);
+        let cards = w.content.alignment.iter().filter(|c| c.side == crate::content::Side::Discord).count() as i64;
+        let cut = if d >= 4 { w.int("adversary.discord_removed") } else { 0 };
+        let last = start + cards - cut - 1;
+        for c in w.content.alignment.iter().filter(|c| c.side == crate::content::Side::Discord) {
+            for st in &c.steps {
+                assert!(st.at <= last, "{} step at {} never acts at d{d} (last tip {last})", c.id, st.at);
+            }
+        }
+    }
+}
+
+#[test]
+fn the_round_cap_is_the_deck_and_higher_difficulty_shortens_it() {
+    let cap = |d: i64| {
+        let arg = format!("adversary.difficulty={d}");
+        let (_, g) = lab_with(&[], &[&arg]);
+        g.pile("adversary.deck").len() + g.pile("adversary.next").len()
+    };
+    assert_eq!((cap(0), cap(1), cap(2), cap(4)), (11, 11, 10, 10));
+}
+
+#[test]
+fn hold_base_is_the_same_at_every_difficulty() {
+    for d in 0..=4 {
+        let arg = format!("adversary.difficulty={d}");
+        let rules = Rules::new(&baseline_with(&[&arg])).unwrap();
+        assert_eq!(rules.world().int("board.hold_base"), 3);
+    }
+}
+
+#[test]
+fn science_tags_discount_insight_to_a_floor_of_one() {
+    use crate::modules::cards;
+    let (rules, mut g) = lab_with(&[], &["cards.science_every=2"]);
+    let w = rules.world();
+    let two = w.content.cards.iter().find(|c| c.insight == 2).unwrap();
+    let one = w.content.cards.iter().find(|c| c.insight == 1).unwrap();
+    assert_eq!(cards::play_insight(&w, &g, 0, two), 2);
+    let science: Vec<_> = w.content.cards.iter().filter(|c| c.tags.iter().filter(|t| **t == crate::content::Tag::Science).count() == 1 && c.tier == 1).take(4).map(|c| crate::key::Key::new(&c.id)).collect();
+    g.piles.insert(cards::played(0).into(), std::sync::Arc::new(science));
+    assert_eq!(cards::play_insight(&w, &g, 0, two), 1, "4 tags: 2 off, stopped at the floor");
+    assert_eq!(cards::play_insight(&w, &g, 0, one), 1, "1 stays 1");
+}
+
+#[test]
+fn industry_tags_discount_buildings_to_a_floor_of_one() {
+    use crate::modules::cards;
+    let (rules, mut g) = lab_with(&[], &["cards.industry_every=2"]);
+    let w = rules.world();
+    let d = w.content.cards.iter().find(|c| c.is_building() && c.cost >= 3 && c.tier == 1).unwrap();
+    let before = cards::play_cost(&w, &g, 1, d);
+    let industry: Vec<_> = w.content.cards.iter().filter(|c| c.tags.iter().filter(|t| **t == crate::content::Tag::Industry).count() == 1 && c.tier == 1 && !c.is_building()).take(2).map(|c| crate::key::Key::new(&c.id)).collect();
+    g.piles.insert(cards::played(1).into(), std::sync::Arc::new(industry));
+    assert_eq!(cards::play_cost(&w, &g, 1, d), before - 1);
+    assert_eq!(cards::discounted_cost(&w, d, 99), 1, "the floor");
 }

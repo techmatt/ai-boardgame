@@ -6,7 +6,7 @@ One row per harm, one column per kind of source. A number is how many printed ca
 
 | Harm | tier-1 threats | tier-2 threats | Discord cards | adversary twists | adversary projects | arrivals | build and spread | corruption | war | march |
 |---|---|---|---|---|---|---|---|---|---|---|
-| presence destroyed | 1 | 3 | 5 |  | 1 |  |  | yes | yes |  |
+| presence destroyed | 4 | 7 | 6 | 5 | 1 |  |  | yes | yes |  |
 | credits or income lost | 1 |  | 1 |  | 1 |  |  |  |  |  |
 | cards discarded | 2 | 2 |  |  |  |  |  |  |  |  |
 | insight lost | 1 |  |  |  |  |  | yes |  |  |  |
@@ -21,7 +21,7 @@ One row per harm, one column per kind of source. A number is how many printed ca
 | Unity pulled back | 1 |  | 1 |  |  |  |  |  |  |  |
 | actions or claims blocked | 1 |  |  |  |  |  | yes |  |  |  |
 
-**Checks** (`aic-sim docs --check`, and a fast test): every harm in at least 2 kinds of source; each threat tier at least 5 kinds of harm; no kind of source more than about half of the printed presence destruction. Measured shares are in the 028 screen.
+**Checks** (`aic-sim docs --check`, and a fast test): every harm in at least 2 kinds of source; each threat tier at least 5 kinds of harm; no kind of source more than about half of the printed presence destruction. Measured shares are in the 034 screen (`experiments/results/screen-034-clocks/clocks.md`).
 
 ## The board's rules
 
@@ -34,7 +34,7 @@ One row per harm, one column per kind of source. A number is how many printed ca
 - **build and spread, actions or claims blocked:** a node blocks site claims next to it.
 - **build and spread, insight lost:** an ambassador on a lone presence drains insight.
 - **build and spread, ambassadors lost:** a build or spread cancels a player ambassador there.
-- **corruption, presence destroyed:** presence on a city that corrupts is destroyed.
+- **corruption, presence destroyed:** presence on or next to a city that corrupts is destroyed.
 - **corruption, ambassadors lost:** player ambassadors on it are lost.
 - **corruption, production blacked out:** its energy goes to the adversary.
 - **corruption, Discord sway:** its energy sways Discord each round.

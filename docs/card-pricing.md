@@ -5,6 +5,65 @@ generated from `content/cards.json`. The screen that checked these prices, and t
 patches it led to, are in
 [experiments/results/screen-023-cards/cards.md](../experiments/results/screen-023-cards/cards.md).
 
+## 034's changes (r19)
+
+Ignoring Science or Industry cost a planning agent nothing: Industry paid over rounds and
+the wins come in rounds 6-8, so its payback had no time to land. As in Terraforming Mars,
+the two tags now pay in the deciding rounds: Science through cheap cards and tag
+requirements, Industry through money up front plus income. Where this list disagrees with
+the sections below, this list wins. These prices are candidates, screened in
+[034's gate](../experiments/results/screen-034-clocks/clocks.md): ignoring Industry now costs 12
+points at c2 (level at c3), and ignoring Science is still ahead (-16 / -9). 034 also moved the
+ceilings in *The credit budget*: 4 credits for 1 energy, and a token by credits is the rich action,
+6 and rising, from stage II.
+
+**The sum.** Value = immediate gain + income × rounds left. Aim: payback in 3-4 rounds
+when played in rounds 2-3. Payback here is (credits + play insight − immediate gain) ÷
+value a round, with 1 insight = 4 credits, 1 chip = 1.5, 1 Capital or Dataset about 1, a
+drawn tier-1 card = 1 insight. The keep (1 insight) comes on top for every card, so it
+is left out: it adds about 4 ÷ value a round.
+
+**Industry: immediate chips or credits plus income.**
+
+| card | was | now | payback |
+|---|---|---|---|
+| Payroll Automation | 4 cr, +1 income | 3 cr, +1 income, 2 chips | (3 + 4 − 3) ÷ 1 = 4 (was 8) |
+| Robotic Foundry | 7 cr, 1 chip, insight 2 | 7 cr, 1 chip, insight 1 | 12.5 ÷ 3 = 4.2 (was 5.5), under 4 once the building discount applies |
+| Grid-Tied Smelter | 5 cr | 4 cr, gain 2 credits | 6 ÷ 2 Power tags = 3 (was 4.5); 6 on its own tag alone |
+| Bonded Warehouse | 5 cr | 5 cr, gain 2 chips | 6 ÷ about 2 = 3-4 |
+| Expansion Fund | 3 cr | 3 cr, gain 2 credits | 5 up front; the factory still comes 3 rounds later |
+| Supply Chain Treaty | 7 cr | 4 cr | 4 for the table (it gives 3 away; the move is worth about 1) |
+
+Four of the six are buildings at 3-7 credits, which is where the core's separate Industry
+discount on buildings (every N Industry tags, floor 1) pays; it is not priced in here.
+Bridge Loan, Lights-Out Assembly and Retained Earnings
+already paid fast and are unchanged; so is tier 2, which already repays in 3-4 rounds
+(Full Automation Mandate 3.2, Arcology Foundry 3.6).
+
+**Science: cheap cards with a small gain now, and requirements that unlock the strong
+ones.** A tag in play comes cheaply from the 0-insight programs (Literature Crawler,
+Benchmark Suite, Cryo-Compute Burn, Field Sensor Grid). Events don't leave a tag.
+
+| card | was | now | why |
+|---|---|---|---|
+| Grad Student Pool | 2 cr | 3 cr, starts with 2 Datasets | a draw at once, then one every 2 rounds; (3 + 4 − 4) ÷ 2 = 1.5 |
+| Simulation Cluster | 5 cr, 1 chip | 3 cr, 1 chip, draw 1 | 3 credits a draw stays; (3 + 1.5 + 4 − 4) ÷ 1 = 4.5 (was 10.5) |
+| Citation Engine | 5 cr | 4 cr, needs 1 Science | pays 2 from its first round: 8 ÷ 2 = 4 |
+| Synthetic Data Forge | 5 cr | 4 cr, needs 1 Science | 1 insight a round for 8 credits: 2 rounds plus the 2 to fill it |
+| Endowed Research Chair | 5 cr | same, needs 1 Science | already the strongest tier-1 Science income, so it takes the gate rather than a price cut |
+| Breakthrough Leak | 3 cr | 2 cr, needs 2 Science | draw 3 is the tag's payoff for committing |
+
+Only these 4 of the 18 tier-1 Science cards carry a requirement, at most 2 tags, so a seat
+without Science loses those cards and nothing else: no tag becomes mandatory. The core's separate Science discount on insight costs (tier-2 keeps and card
+plays, floor 1) is not priced in.
+
+**The economy.** The twelve changes add about 31 credit-equivalents if one game played them
+all (Industry 19, Science 12), against about 800 over a game (3 seats × 8 rounds × about
+12 credits and 5-6 insight). That is under 4% and only a rough sum, before the core's two
+discounts and any compounding, so the 10% ceiling needs a measured check. Chip Spot Market
+pays 2 credits a chip, so Payroll's and the Warehouse's 2 chips are worth up to 4 credits
+to a seat holding it, as Bulk Silicon Procurement's already were.
+
 ## 024's changes
 
 - **Freeing is no longer a card's effect.** A corrupted city frees when one player holds

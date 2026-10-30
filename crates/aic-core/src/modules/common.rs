@@ -28,6 +28,8 @@ pub const UNIT: &str = "unit";
 pub const HARDEN: &str = "harden";
 /// An adversary node: persistent, makes adversary compute, blocks claims next to it.
 pub const NODE: &str = "node";
+/// A corruption marker (034): what a destroyed presence leaves on its hex.
+pub const MARKER: &str = "corruption";
 
 /// Seat keys are tables, not `format!`: the search asks for them on every hex
 /// of every position it scores (028: a tenth of the engine's time). A game has
@@ -113,6 +115,15 @@ pub fn has_adversary(g: &GameState, h: usize) -> bool {
 }
 
 /// Whether hex `h` holds, or is adjacent to a hex holding, something `pred` accepts.
+/// Hex `h`, and with `range` 1 its neighbours.
+pub fn within(w: &World, h: usize, range: i64) -> Vec<usize> {
+    let mut hexes = vec![h];
+    if range > 0 {
+        hexes.extend(w.map.hexes[h].neighbours.iter().copied());
+    }
+    hexes
+}
+
 pub fn next_to(w: &World, h: usize, pred: impl Fn(usize) -> bool) -> bool {
     pred(h) || w.map.hexes[h].neighbours.iter().any(|&n| pred(n))
 }

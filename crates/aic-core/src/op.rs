@@ -531,13 +531,13 @@ impl Op {
         use Slot::*;
         match self {
             Op::Sway { .. } => &[Player, Threat, Team, Twist],
+            Op::EachDestroyPresence { .. } => &[Threat, Team, Twist],
             Op::Gain { .. } | Op::CounterThreat => &[Player, Team],
             Op::Troops { .. }
             | Op::FlipStation { .. }
             | Op::CorruptCity
             | Op::PlayersLose { .. }
             | Op::DestroyPresence
-            | Op::EachDestroyPresence { .. }
             | Op::PullUnity { .. }
             | Op::LoseInsight { .. }
             | Op::AdversaryBuild => &[Threat, Team],

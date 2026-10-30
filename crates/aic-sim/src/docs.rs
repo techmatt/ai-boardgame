@@ -71,7 +71,7 @@ pub const RULE_HARMS: [(&str, &str, &str); 16] = [
     ("build and spread", "actions or claims blocked", "a node blocks site claims next to it"),
     ("build and spread", "insight lost", "an ambassador on a lone presence drains insight"),
     ("build and spread", "ambassadors lost", "a build or spread cancels a player ambassador there"),
-    ("corruption", "presence destroyed", "presence on a city that corrupts is destroyed"),
+    ("corruption", "presence destroyed", "presence on or next to a city that corrupts is destroyed"),
     ("corruption", "ambassadors lost", "player ambassadors on it are lost"),
     ("corruption", "production blacked out", "its energy goes to the adversary"),
     ("corruption", "Discord sway", "its energy sways Discord each round"),
@@ -223,7 +223,7 @@ fn harms_md() -> String {
          `board.ambassador_discord` are 0, so neither war nor an ambassador on a clean city sways).\n\n{}\n\
          **Checks** (`aic-sim docs --check`, and a fast test): every harm in at least 2 kinds of \
          source; each threat tier at least 5 kinds of harm; no kind of source more than about half \
-         of the printed presence destruction. Measured shares are in the 028 screen.\n\n\
+         of the printed presence destruction. Measured shares are in the 034 screen (`experiments/results/screen-034-clocks/clocks.md`).\n\n\
          ## The board's rules\n\n{notes}",
         table(&head, rows)
     )

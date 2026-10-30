@@ -1,0 +1,31 @@
+{
+  "name": "screen-034-keep",
+  "note": "034: the shared keep plan at r18 before rules changes: which setting closes tier-2-rush's lead, and whether samples=2 holds. d2, both sizes, 32 seeds (--quick --games 32).",
+  "configs": [
+    "out/base-r18.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    2
+  ],
+  "agents": [
+    "engine",
+    "engine:tier2_rush=1",
+    "engine:plan_rounds=4,plan_reserve=0",
+    "engine:plan_rounds=4,plan_reserve=1",
+    "engine:plan_rounds=4,plan_reserve=0,tier2_rush=1"
+  ],
+  "games": 32,
+  "records": 0
+}

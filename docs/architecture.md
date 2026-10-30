@@ -326,7 +326,7 @@ Content is data in `content/`, composed from code primitives:
 - **Adversary projects** (`projects.json`, 017): `stage` (1 cheap, 2 big), `cost` per
   player, `ongoing`, `text` and `effects` (ops, as on Alignment cards).
 - **AI boards** (`ais.json`): credit production, resource `discounts`, innate
-  passives, the presence track (`presence`: what each space uncovers, `keep2` the tier-2
+  passives, the presence track (`presence`: what each space uncovers, `extra` its added energy, `keep2` the tier-2
   keep upgrade) and flat `income`, growth options (lists of ops), unique cards, a
   `start` building and `powers` (021: `{name, text, tags, cost, effects}`; `tags` may
   name `any`). Slots are a config list, `ai.slots`.
@@ -467,7 +467,7 @@ In the baseline:
   on its track, and ambassadors on the board; it publishes every standard action with
   its cost (`View.standard`, read by the viewer's labels) and each adversary troop's
   next target and how many marches away (`View.arrows`, 019, drawn as arrows); bookkeeping
-  `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`, `board.track2.*`.
+  `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`, `board.track2.*`, `board.rich.*`.
 - `economy` adds each seat's income per resource and the next round's bonus insight
   (bookkeeping `economy.bonus_insight`, shown as its own global while >0;
   `economy.production.*`, one-time permanent gains, counted in the income;

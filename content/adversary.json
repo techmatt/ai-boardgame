@@ -115,7 +115,7 @@
   "id": "adv_s2_border_war",
   "name": "Border War",
   "stage": 2,
-  "text": "Arrivals: military bases. This round is a war round. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "text": "Arrivals: military bases. This round is a war round. Escalation: each military base gains an adversary ambassador when this round builds; each player destroys a presence of theirs.",
   "twists": [
    {
     "op": "arrivals",
@@ -123,6 +123,10 @@
    },
    {
     "op": "war"
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ],
   "escalation": true
@@ -148,7 +152,7 @@
   "id": "adv_s3_total_mobilisation",
   "name": "Total Mobilisation",
   "stage": 3,
-  "text": "Arrivals: industrial zones. Each corrupted city builds 1 more, and factories next to clean cities build 1 too; sway 2 toward Discord.",
+  "text": "Arrivals: industrial zones. Each corrupted city builds 1 more, and factories next to clean cities build 1 too; sway 1 toward Discord; each player destroys a presence of theirs.",
   "twists": [
    {
     "op": "arrivals",
@@ -165,7 +169,11 @@
    {
     "op": "sway",
     "side": "discord",
-    "amount": 2
+    "amount": 1
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -173,7 +181,7 @@
   "id": "adv_s3_blitzkrieg",
   "name": "Blitzkrieg",
   "stage": 3,
-  "text": "Arrivals: military bases. This round is a war round, and spread reaches 1 hex further; sway 2 toward Discord.",
+  "text": "Arrivals: military bases. This round is a war round, and spread reaches 1 hex further; sway 1 toward Discord; each player destroys a presence of theirs.",
   "twists": [
    {
     "op": "arrivals",
@@ -189,7 +197,11 @@
    {
     "op": "sway",
     "side": "discord",
-    "amount": 2
+    "amount": 1
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -197,7 +209,7 @@
   "id": "adv_s3_occupation",
   "name": "Occupation",
   "stage": 3,
-  "text": "Arrivals: research stations. Clean cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1; sway 2 toward Discord.",
+  "text": "Arrivals: research stations. Clean cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1; sway 1 toward Discord; each player destroys a presence of theirs.",
   "twists": [
    {
     "op": "arrivals",
@@ -214,7 +226,11 @@
    {
     "op": "sway",
     "side": "discord",
-    "amount": 2
+    "amount": 1
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  },
@@ -222,7 +238,7 @@
   "id": "adv_s3_iron_doctrine",
   "name": "Iron Doctrine",
   "stage": 3,
-  "text": "Arrivals: coastal cities. This round is a war round; sway 2 toward Discord.",
+  "text": "Arrivals: coastal cities. This round is a war round; sway 1 toward Discord; each player destroys a presence of theirs.",
   "twists": [
    {
     "op": "arrivals",
@@ -234,7 +250,11 @@
    {
     "op": "sway",
     "side": "discord",
-    "amount": 2
+    "amount": 1
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  }

@@ -7,6 +7,32 @@ What each rules revision changed, what it replaced and whether it is **locked** 
 record, moved out of it in 025 otherwise as written, so a row quoting a number or a card
 is as of its revision. Add a table here with every rules change.
 
+**Revision 19 (034): three distinct loss pressures, Spirit Island presence, earlier Science and Industry.**
+(The review called this r18; 033 took that number.)
+
+| What | Was | Now | Status |
+|---|---|---|---|
+| End conditions | | five: purge, the last Unity card; the Discord deck, presence, a round cap | **locked** (Matt, 2026-10-30) |
+| The three loss clocks | | distinct pressures; which ends a game varies | **locked** (Matt, 2026-10-30) |
+| Round cap | the adversary deck, 11 rounds | still the deck, `stage_cards` 4, 5, 2: 11 rounds, 10 from difficulty 2 (the review's 12 and 11 ended no game: 0 of 69 d2 losses) | cap **locked**; the number a candidate |
+| Destroyed presence | back on its track, re-covering the space | leaves the game; its income stays | **locked** (Matt, 2026-10-30) |
+| Corruption marker | none | a lost presence marks its hex unless the hex has corruption; a marked hex takes no presence, counts 1 toward corrupting a city; Remove takes one | the marker a candidate; what it does a **Default** (the review named only its caps) |
+| Presence count | 6 + 3 tokens | 8 + 6, last steps cost a printed extra (cards and growth skip it, and place 70% of tokens) | candidate |
+| The rich action | a 3-credit project from round 1 | `presence_buy`: from stage II, 6 credits, + 3 for each earlier use a round, + the extra at `energy_credits` | candidate |
+| `energy_credits` | 3 | 4: at 3, the project laundered credits into a 1-energy token | candidate |
+| Discord presence hits | each player 2 at 4+, 7 at 5+ | 1 at 3+, 2 at 4+, 2 at 5+ (the review's 3 at 5+ left too few other sources) | candidate |
+| More presence destruction | | seven more threats, Manhunt and Siege 2, stage-III cards and Border War, `corruption_reach` 1 (war: `war_reach` 0) | candidate |
+| Stage-III Discord sway | 2 | 1, so more games reach the cap | candidate |
+| `alignment.free_city` | 4 | 5: c3 won 28%, its wins late | candidate |
+| Difficulty 4 | removed card, a step never reached | the removed card counts as a tip made: all steps reached | fix |
+| `hold_base` | | the same at every difficulty | **locked** (Matt, 2026-10-30) |
+| Science | | `science_every` 2: 1 insight off tier-2 keeps and plays per 2 tags, floor 1; cheaper cards with immediate gains; `needs` on strong ones | candidate |
+| Industry | | `industry_every` 2: 1 credit off buildings per 2 tags, floor 1 (the floor now holds for every building discount); immediate gains | candidate |
+
+Agents, no rules change: keep plan `plan_rounds` 4, `plan_reserve` 0; presence danger from 4
+tokens down. `engine:samples=2` tried and dropped. Screen:
+`experiments/results/screen-034-clocks/clocks.md`.
+
 **Revision 18 (033): ongoing abilities only on buildings, card text from ops.**
 
 | What | Was | Now | Status |

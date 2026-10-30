@@ -35,7 +35,9 @@
         "troop_spent": 1,
         "troop_steps": 2,
         "troop_presence": 4,
-        "presence_returns": 2,
+        "presence_marker": 1,
+        "corruption_reach": 1,
+        "war_reach": 0,
         "presence_energy": 1,
         "build_energy": 2,
         "station_chips": 2,
@@ -51,9 +53,11 @@
         ],
         "city_energy_credits": 2,
         "harden_energy": 1,
-        "presence_credits": 3,
+        "presence_credits": 6,
+        "presence_rise": 3,
+        "presence_stage": 2,
         "harden_credits": 3,
-        "energy_credits": 3,
+        "energy_credits": 4,
         "drain_credits": 5,
         "drain_amount": 3
       }
@@ -65,8 +69,8 @@
         "difficulty": 0,
         "stage_cards": [
           4,
-          4,
-          3
+          5,
+          2
         ],
         "supply_per_country": 24,
         "city_build": 1,
@@ -108,7 +112,7 @@
         "discord_tip_per_player": 2,
         "momentum_every": 0,
         "troop": 1,
-        "free_city": 4,
+        "free_city": 5,
         "node": 2,
         "threat_discord": 1,
         "adversary_discord": 0,
@@ -161,7 +165,10 @@
         "keep_tier1": 1,
         "keep_tier2": 3,
         "keep_tier2_upgraded": 2,
-        "insight_credits": 5
+        "insight_credits": 5,
+        "science_every": 2,
+        "industry_every": 2,
+        "discount_floor": 1
       },
       "cards": [
         "telemetry_archive",

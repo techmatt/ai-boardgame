@@ -29,6 +29,9 @@ const DRAFT_PARAMS: &[ParamSpec] = &[
     ParamSpec::int("keep_tier2", 0, 10, "insight to keep a drafted tier-2 card"),
     ParamSpec::int("keep_tier2_upgraded", 0, 10, "insight to keep a tier-2 card once the AI board's keep upgrade is uncovered"),
     ParamSpec::int("insight_credits", 1, 20, "credits for 1 insight, usable only for keep costs"),
+    ParamSpec::int("science_every", 0, 10, "1 insight off tier-2 keeps and card plays per this many Science tags (0: off)"),
+    ParamSpec::int("industry_every", 0, 10, "1 credit off buildings per this many Industry tags (0: off)"),
+    ParamSpec::int("discount_floor", 0, 5, "tag and building discounts stop at this cost; a cost printed under it stays"),
 ];
 
 pub static DEF: ModuleDef = ModuleDef {
@@ -162,8 +165,8 @@ pub fn keep_need(w: &World, g: &GameState, seat: usize, tier: u8, kept: i64) -> 
         return (0, w.int("cards.opening_keep_credits"));
     }
     let need = match tier {
-        2 if ai::keep2(w, g, seat) => w.int("cards.keep_tier2_upgraded"),
-        2 => w.int("cards.keep_tier2"),
+        2 if ai::keep2(w, g, seat) => science_off(w, g, seat, w.int("cards.keep_tier2_upgraded")),
+        2 => science_off(w, g, seat, w.int("cards.keep_tier2")),
         _ => w.int("cards.keep_tier1"),
     };
     (need, 0)
@@ -178,10 +181,35 @@ pub fn list_cost(w: &World, id: &str) -> i64 {
     def(w, id).cost
 }
 
-/// A card's costs beyond credits, in the order its text prints them.
-fn extra_costs(d: &CardDef) -> [(Resource, i64); 4] {
+/// One off per `every` tags of `tag` on seat `s`'s cards (0: off).
+fn per_tags(w: &World, g: &GameState, seat: usize, tag: Tag, every: &str) -> i64 {
+    if w.variant("cards") != Some("draft") {
+        return 0;
+    }
+    match w.int(every) {
+        0 => 0,
+        n => tags(w, g, seat, tag) / n,
+    }
+}
+
+/// An insight cost `need` after seat `s`'s Science tags (034): never below
+/// `cards.discount_floor`, and a cost under the floor stays as printed.
+fn science_off(w: &World, g: &GameState, seat: usize, need: i64) -> i64 {
+    match per_tags(w, g, seat, Tag::Science, "cards.science_every") {
+        0 => need,
+        off => (need - off).max(need.min(w.int("cards.discount_floor"))),
+    }
+}
+
+/// The insight seat `s` pays to play `d`.
+pub fn play_insight(w: &World, g: &GameState, seat: usize, d: &CardDef) -> i64 {
+    science_off(w, g, seat, d.insight)
+}
+
+/// A card's costs beyond credits, for seat `s`, in the order its text prints them.
+fn extra_costs(w: &World, g: &GameState, seat: usize, d: &CardDef) -> [(Resource, i64); 4] {
     [
-        (Resource::Insight, d.insight),
+        (Resource::Insight, play_insight(w, g, seat, d)),
         (Resource::Energy, d.energy),
         (Resource::Chips, d.chips),
         (Resource::Antimatter, d.antimatter),
@@ -394,7 +422,7 @@ fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static s
     if g.resource(seat, Resource::Credits)
         + discount_room(w, g, seat, d).map_or(0, |(_, rate, k)| rate * k)
         < play_cost(w, g, seat, d)
-        || extra_costs(d).iter().any(|&(r, n)| g.resource(seat, r) < n)
+        || extra_costs(w, g, seat, d).iter().any(|&(r, n)| g.resource(seat, r) < n)
         || !lowers_ok(w, g, seat, d)
     {
         return Some("unaffordable");
@@ -446,7 +474,7 @@ pub fn discount_room_at(
             DiscountOn::Building => d.is_building(),
             DiscountOn::Tag(t) => d.tags.contains(&t),
         };
-        let reserved = extra_costs(d)
+        let reserved = extra_costs(w, g, seat, d)
             .iter()
             .find(|&&(r, _)| r == x.resource)
             .map_or(0, |&(_, n)| n);
@@ -464,11 +492,11 @@ pub fn play_cost(w: &World, g: &GameState, seat: usize, d: &CardDef) -> i64 {
     if !d.is_building() {
         return d.cost;
     }
-    discounted_cost(d, building_discount(w, g, seat))
+    discounted_cost(w, d, building_discount(w, g, seat))
 }
 
-/// The credits seat `s`'s buildings cost less now (its passives and a
-/// one-off discount): what [`play_cost`] takes off a building.
+/// The credits seat `s`'s buildings cost less now (its passives, a one-off
+/// discount and its Industry tags, 034): what [`play_cost`] takes off a building.
 pub fn building_discount(w: &World, g: &GameState, seat: usize) -> i64 {
     passives(w, g, seat)
         .iter()
@@ -478,13 +506,15 @@ pub fn building_discount(w: &World, g: &GameState, seat: usize) -> i64 {
         })
         .sum::<i64>()
         + g.var(&next_discount(seat))
+        + per_tags(w, g, seat, Tag::Industry, "cards.industry_every")
 }
 
 /// [`play_cost`] with the seat's [`building_discount`] already known (a
 /// caller pricing a whole hand works it out once).
-pub fn discounted_cost(d: &CardDef, discount: i64) -> i64 {
+pub fn discounted_cost(w: &World, d: &CardDef, discount: i64) -> i64 {
     if d.is_building() {
-        (d.cost - discount).max(0)
+        let floor = if w.variant("cards") == Some("draft") { w.int("cards.discount_floor") } else { 0 };
+        (d.cost - discount).max(d.cost.min(floor))
     } else {
         d.cost
     }
@@ -746,13 +776,13 @@ impl Cards {
             }
         }
         cx.add_resource(g, seat, Resource::Credits, -credits);
-        let [insight, energy, chips, antimatter] = extra_costs(d);
+        let [insight, energy, chips, antimatter] = extra_costs(&w, g, seat, d);
         for (r, n) in [antimatter, energy, chips, insight] {
             cx.add_resource(g, seat, r, -n);
         }
-        if d.insight > 0 {
-            cx.tally(g, "cards.insight_played", d.insight);
-            cx.per_round(g, "cards.insight_played", d.insight);
+        if insight.1 > 0 {
+            cx.tally(g, "cards.insight_played", insight.1);
+            cx.per_round(g, "cards.insight_played", insight.1);
         }
         for (r, n) in &d.lowers {
             cx.add_key(g, economy::production_key(seat, *r).into(), -n);
@@ -1087,7 +1117,7 @@ impl Module for Cards {
             if !d.tags.is_empty() {
                 bits.push(d.tags.iter().map(|t| t.name()).collect::<Vec<_>>().join("/"));
             }
-            for (r, n) in extra_costs(d) {
+            for (r, n) in extra_costs(&w, g, s, d) {
                 if n > 0 {
                     bits.push(format!("+{}", r.amount(n)));
                 }

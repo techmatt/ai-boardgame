@@ -124,8 +124,8 @@ macro_rules! with_policy_params {
         &[
             $($own,)*
             ("plan_keep", 1.0, "keep by a sketch of the next rounds (0: the heuristic keeps)"),
-            ("plan_rounds", 3.0, "rounds the keep plan sketches, this one included"),
-            ("plan_reserve", 2.0, "insight the keep plan holds back in each later round for that round's keeps"),
+            ("plan_rounds", 4.0, "rounds the keep plan sketches, this one included"),
+            ("plan_reserve", 0.0, "insight the keep plan holds back in each later round for that round's keeps"),
             ("plan_hand", 0.0, "keep nothing while the hand holds this many cards (0: off)"),
             ("plan_t2", 1.0, "share of a tier-2 card's value the keep plan counts"),
             ("plan_credit", 3.0, "what a credit paid for a keep costs the keep plan"),
@@ -145,6 +145,8 @@ macro_rules! with_policy_params {
             ("turtle", 0.0, "exploit check (027): no presence beyond setup; only remove, ambassador and hardening actions"),
             ("free_only", 0.0, "exploit check (027): only Diplomacy cards and the ambassador, move and remove actions"),
             ("unity_farm", 0.0, "exploit check (028): before anything else, buy ambassadors and land them on bases and factories"),
+            ("rich_spend", 0.0, "exploit check (034): every spare credit on the rich action"),
+            ("science_rush", 0.0, "exploit check (034): draft, keep and play Science first, for its discounts"),
         ]
     };
 }
@@ -412,6 +414,8 @@ impl AgentSpec {
             turtle: on("turtle"),
             free_only: on("free_only"),
             unity_farm: on("unity_farm"),
+            rich_spend: on("rich_spend"),
+            science_rush: on("science_rush"),
             plan_keep: on("plan_keep"),
             plan_rounds: num("plan_rounds") as usize,
             plan_reserve: num("plan_reserve") as i64,

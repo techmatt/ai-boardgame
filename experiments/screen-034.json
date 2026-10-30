@@ -1,0 +1,27 @@
+{
+  "name": "screen-034",
+  "note": "034 screen (r19): planner and engine, d2, 2 and 3 countries, 32 seeds (--games 32). Summary: python scripts/cards/screen_034.py DIR.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    2
+  ],
+  "agents": [
+    "planner"
+  ],
+  "games": 32,
+  "records": 0
+}

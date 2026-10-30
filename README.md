@@ -56,7 +56,7 @@ Current:
 - `wasm-smoke.mjs`: plays one game through the wasm package in Node. `wasm-parity.mjs`
   (020): replays aic-sim records of every variant in wasm.
 - `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline.
-- `cards/cards_doc.py`: regenerates `docs/cards.md`. `cards/screen_028.py`: the r17
+- `cards/cards_doc.py`: regenerates `docs/cards.md`. `cards/screen_034.py`: the r19 screen summary (failure mix, tokens left, harm shares) and gate. `cards/screen_028.py`: the r17
   screen summary and gate, each check against its own agent; `cards/screen_027.py`: the r16 ones; `cards/screen_024.py`: the r15 ones; `screen_023.py` and `screen_022.py` still read r15.
 - `board/screen_summary.py` (014), `alignment/screen_summary.py` (013): screen summaries
   whose counters still exist.
@@ -498,10 +498,12 @@ standard actions and how games ended; then adversary ambassadors on the board by
 and standard actions by kind. Committed with the report and records in
 `experiments/results/screen-014-board/` (`board.md`).
 
-**Rollout screen and gate (028, r17)**: `experiments/screen-028.json` (engine and planner, d2,
-`c2`, `c3`) and `experiments/screen-028-dominance.json` (027's checks and `unity_farm`, under
-both agents), with `--quick --games 32`, then `python scripts/cards/screen_028.py DIR` and
-`--gate DIR`. `experiments/screen-028-draft.json` is the drafting sanity check. Results and
+**Clocks screen and gate (034, r19)**: `experiments/screen-034.json` (planner, d2, `c2`, `c3`) and
+`experiments/screen-034-dominance.json` (028's checks, `rich_spend` and `science_rush`, under the
+planner), with `--quick --games 32`, then `python scripts/cards/screen_034.py DIR` and `--gate DIR`.
+`--quick` drops an agent with `samples` above 1: leave it off for those. A run needs its own binary
+and config copied aside (`out/`) if you rebuild while it runs. Results and timings:
+`experiments/results/screen-034-clocks/clocks.md`. At r19 the gate took 45 min for 1,024 planner games on a shared 12-thread machine. The 028 specs are in `experiments/archive/`. `experiments/screen-028-draft.json` is the drafting sanity check. Results and
 timings: `experiments/results/screen-028-rollout/rollout.md`.
 
 **Endgame screen and gate (027, r16)**: `experiments/archive/screen-027-cards.json` and
@@ -518,7 +520,7 @@ out/screen-024-dominance --before DIR` (DIR: the same cards screen on the r14 bi
 Agent changes in 024: the keep plan (`agents/policy.rs`) charges credits paid for keeps
 (`plan_credit` 3; the opening's 5-credit keeps took all 20 starting credits: this one
 change took the engine at c2 d2 from 37% to 81%), skips cards it can't play now (a built-over
-building with nothing to go over, a card with no target) and holds back `plan_reserve` (2)
+building with nothing to go over, a card with no target) and holds back `plan_reserve` (0; 034: was 2, with `plan_rounds` 4, was 3, which fixed the under-keeping)
 insight in later rounds; `plan_hand` and `plan_t2` exist for probes and are off. In
 `agents/eval.rs`: `w.project` 30 (projects can corrupt cities now), credits beyond
 `w.credit_cap` (12) a seat are worth `w.credit_idle` (0.15), `w.guard` for an adversary
