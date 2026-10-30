@@ -18,6 +18,7 @@
 
 use serde::Serialize;
 
+use crate::content::Content;
 use crate::hex::Hex;
 use crate::state::{GameState, Outcome};
 
@@ -438,7 +439,7 @@ fn upsert(values: &mut Vec<Value>, v: Value) {
 
 /// The parts of the view the engine fills in for every config.
 pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
-    let content = crate::content();
+    let content = rules.world().content;
     let engine = |key: String, label: &str, value: i64, doc: &str| Value {
         key,
         label: label.to_string(),
@@ -466,7 +467,6 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             tokens: h
                 .tokens
                 .iter()
-                .filter(|(_, &n)| n != 0)
                 .map(|(k, &n)| Token {
                     kind: k.clone(),
                     count: n,
@@ -495,11 +495,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             }
             CountryView {
                 index: c as u8,
-                name: content
-                    .map
-                    .countries
-                    .get(c)
-                    .map_or_else(|| format!("C{c}"), |p| p.name.clone()),
+                name: content.map.countries[c].name.clone(),
                 seat: c as u8,
                 colour: geo.colour.clone(),
                 hexes: geo.hexes.clone(),
@@ -529,7 +525,14 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             values: seat
                 .resources
                 .iter()
-                .map(|(k, &n)| engine(format!("resource.{k}"), &k.replace('_', " "), n, "on this seat's board"))
+                .map(|(k, &n)| {
+                    engine(
+                        format!("resource.{k}"),
+                        &k.name().replace('_', " "),
+                        n,
+                        "on this seat's board",
+                    )
+                })
                 .collect(),
             cards: Vec::new(),
             board: None,
@@ -580,8 +583,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
 
 /// After the modules: exhausted cards that no module's card group shows go
 /// into a generic group, so nothing in the state goes unshown.
-pub(crate) fn finish(view: &mut View, g: &GameState) {
-    let content = crate::content();
+pub(crate) fn finish(view: &mut View, g: &GameState, content: &Content) {
     for (s, seat) in g.seats.iter().enumerate() {
         let sv = &mut view.seats[s];
         let shown = |id: &str| {

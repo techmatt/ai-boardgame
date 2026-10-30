@@ -8,14 +8,14 @@ import {
   type Action, type CardView, type GameEvent, type View,
 } from './engine';
 import {
-  actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, kindName, placeNames, setCountryNames, strong, tokenColour, tokenName,
+  actionLabel, choiceKey, contentIds, escapeHtml, eventText, hexKey, hexesIn, isHex, kindName, strong, tokenColour, tokenName,
   type LabelContext,
 } from './format';
 import {
   boardDetails, countriesHtml, countryName, legendHtml, pilesHtml, pipelineHtml, seatCardsHtml, seatValuesHtml,
   statusHtml, trackStepDetails, varsHtml,
 } from './panels';
-import { Timeline, parseSeed, randomSeed, readRecord } from './session';
+import { Timeline, parseSeed, randomSeed, readRecord, storageGet, storageSet } from './session';
 import './style.css';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -148,7 +148,6 @@ function render() {
   const f = tl.frame;
   shown = engineView(f.snap);
   legal = legalActions(f.snap);
-  setCountryNames(shown.countries.map((c) => c.name));
   if (armed && !legal.some((a) => a.seat === armed!.seat && choiceKey(a) === armed!.key)) armed = null;
   // An open choice answered by picking a hex arms that pick at once.
   if (!armed && shown.choice) {
@@ -205,13 +204,7 @@ function renderPrompt(targets: number) {
   if (v.choice) {
     ui.prompt.className = 'choice';
     const how = targets ? `click one of the ${targets} highlighted hexes` : `answer in ${seatName(v.choice.seat)}'s panel`;
-    ui.prompt.innerHTML = `<b>${seatName(v.choice.seat)} decides:</b> ${escapeHtml(placeNames(v.choice.prompt.replace(/^Seat \d+:\s*/, '')))} <span class="how">— ${how}</span>`;
-    return;
-  }
-  if (armed) {
-    ui.prompt.className = 'choice';
-    const a = legal.find((x) => x.seat === armed!.seat && choiceKey(x) === armed!.key)!;
-    ui.prompt.innerHTML = `<b>${seatName(armed.seat)}:</b> pick a highlighted hex for ${escapeHtml(actionLabel(a, false, false, labels()))} <span class="how">(Esc cancels)</span>`;
+    ui.prompt.innerHTML = `<b>${seatName(v.choice.seat)} decides:</b> ${escapeHtml(contentIds(v.choice.prompt.replace(/^Seat \d+:\s*/, '')))} <span class="how">— ${how}</span>`;
     return;
   }
   const acting = [...new Set(legal.map((a) => a.seat))];
@@ -260,7 +253,7 @@ function renderSeats() {
       ${ai?.innate ? `<div class="innate" title="${escapeHtml(ai.text ?? '')}"><b>${escapeHtml(ai.innate.name)}:</b> ${escapeHtml(ai.innate.text ?? '')}</div>` : ''}
       ${seatValuesHtml(v, seat.index)}
       ${seatCardsHtml(v, seat.index)}`;
-    if (mine.length) box.append(actionButtons(seat.index, mine));
+    if (mine.length) box.append(actionButtons(mine));
     ui.seats.append(box);
   }
   const passers = (v.phase?.waiting ?? []).filter((s) => legal.some((a) => a.seat === s && a.type === 'pass'));
@@ -274,8 +267,11 @@ function renderSeats() {
   }
 }
 
-/** One button per choice; a choice whose actions differ only by target hex arms a hex pick. */
-function actionButtons(seat: number, mine: Action[]): HTMLElement {
+/**
+ * One button per choice. Only `choose` actions have a target hex, and `render` arms
+ * such a choice at once: it shows as a count here and is answered on the board.
+ */
+function actionButtons(mine: Action[]): HTMLElement {
   const row = document.createElement('div');
   row.className = 'actions';
   const groups = new Map<string, Action[]>();
@@ -285,21 +281,14 @@ function actionButtons(seat: number, mine: Action[]): HTMLElement {
     groups.set(k, [...(groups.get(k) ?? []), a]);
   }
   const cx = labels();
-  for (const [key, acts] of groups) {
+  for (const acts of groups.values()) {
     if (acts.every((a) => isHex(a.target))) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = acts[0].type === 'choose'
-        ? `pick a hex ▸ (${acts.length})`
-        : `${actionLabel(acts[0], false, false, cx)} ▸ hex (${acts.length})`;
-      b.className = armed?.seat === seat && armed.key === key ? 'armed' : '';
-      b.dataset.hexes = acts.map((a) => hexKey(a.target!)).join(' ');
-      b.dataset.action = JSON.stringify(acts[0]);
-      b.onclick = () => {
-        armed = armed?.seat === seat && armed.key === key ? null : { seat, key };
-        render();
-      };
-      row.append(b);
+      const count = document.createElement('span');
+      count.className = 'hex-pick';
+      count.textContent = `pick a hex ▸ (${acts.length})`;
+      count.dataset.hexes = acts.map((a) => hexKey(a.target!)).join(' ');
+      count.dataset.action = JSON.stringify(acts[0]);
+      row.append(count);
       // Two answers on one hex (a sacrifice: the ambassador or the presence there) can't
       // both be a click on it: each gets its own button (020: only the first was reachable).
       const perHex = new Map<string, Action[]>();
@@ -477,7 +466,7 @@ function details(t: HTMLElement | SVGElement): string | null {
     const toks = h.tokens.map((x) => `<span class="dot" style="background:${dot(x.kind)}"></span>${escapeHtml(tokenName(x.kind))} × ${x.count}`).join('<br>') || 'no tokens';
     const here = legal.filter((a) => isHex(a.target) && hexKey(a.target) === d.hex).map((a) => escapeHtml(actionLabel(a, true, true, labels())));
     const facing = h.facing !== undefined ? ` · <b>front</b> facing ${escapeHtml(countryName(shown, h.facing))}` : '';
-    const arrows = (shown.arrows ?? []).filter((a) => a.from === h.index || a.to === h.index).map((a) => escapeHtml(placeNames(a.doc)));
+    const arrows = (shown.arrows ?? []).filter((a) => a.from === h.index || a.to === h.index).map((a) => escapeHtml(contentIds(a.doc)));
     return `<b>${escapeHtml(countryName(shown, h.country))} #${h.number}</b> · ${escapeHtml(kindName(h.kind))}${facing}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${arrows.length ? `<hr>${arrows.join('<br>')}` : ''}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
   }
   if (d.pile) {
@@ -642,7 +631,7 @@ function jumpRound(dir: -1 | 1) {
 
 /** Autoplay speed (022, D4): 1x is 4 steps a second; 16x moves 4 steps a tick. */
 const SPEED_KEY = 'aic.speed';
-let speed = Number(localStorage.getItem(SPEED_KEY)) || 1;
+let speed = Number(storageGet(SPEED_KEY)) || 1;
 if (![1, 4, 16].includes(speed)) speed = 1;
 ui.speed.value = String(speed);
 
@@ -660,7 +649,7 @@ function startAutoplay() {
 
 ui.speed.onchange = () => {
   speed = Number(ui.speed.value) || 1;
-  localStorage.setItem(SPEED_KEY, String(speed));
+  storageSet(SPEED_KEY, String(speed));
   if (autoplay !== null) {
     stopAutoplay();
     startAutoplay();
@@ -697,10 +686,6 @@ document.addEventListener('keydown', (e) => {
     PageUp: () => jumpRound(-1),
     PageDown: () => jumpRound(1),
     ' ': () => ui.play.click(),
-    Escape: () => {
-      armed = null;
-      render();
-    },
     r: () => $('random-action').click(),
   };
   if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {

@@ -161,7 +161,7 @@ pub fn plays(g: &GameResult) -> [u32; 3] {
             continue;
         }
         out[0] += n.played;
-        if let Some(d) = content.cards.iter().find(|d| d.id == *id) {
+        if let Some(d) = content.card_index(id).map(|i| &content.cards[i]) {
             if d.is_building() {
                 out[1] += n.played;
             }
@@ -284,22 +284,33 @@ fn find_cell(cells: &[Cell], config: &str, variant: &str, d: i64, agent: &str) -
     })
 }
 
-/// The top agent: highest win rate at the highest difficulty on the base
-/// variant (mean over configs), ties to the later agent in the list.
-pub(super) fn top_agent(cells: &[Cell], sums: &[CellSummary]) -> Option<(String, i64)> {
+/// Each agent's measured strength: its win rate at the highest difficulty
+/// on the base variant (the first; mean over configs). An agent with no
+/// game there yet (a partial report) is left out, not scored 0.
+fn strength(cells: &[Cell], sums: &[CellSummary]) -> Vec<(String, f64)> {
+    let hi = cells.iter().map(|c| c.difficulty).max();
+    let base = cells.first().map(|c| &c.variant);
+    agent_order(cells)
+        .iter()
+        .filter_map(|a| {
+            let l = a.label();
+            let p = mean(
+                sums.iter()
+                    .filter(|s| Some(s.difficulty) == hi && s.agent == l)
+                    .filter(|s| Some(&s.variant) == base && s.games > 0)
+                    .map(|s| s.win_rate),
+            )?;
+            Some((l, p))
+        })
+        .collect()
+}
+
+/// The top agent: the highest [`strength`], ties to the later agent in the
+/// list.
+pub fn top_agent(cells: &[Cell], sums: &[CellSummary]) -> Option<(String, i64)> {
     let hi = cells.iter().map(|c| c.difficulty).max()?;
-    // On the base variant (the first), as the strategy-health line reads it.
-    let base = &cells.first()?.variant;
     let mut best: Option<(String, f64)> = None;
-    for a in agent_order(cells) {
-        let l = a.label();
-        let Some(p) = mean(
-            sums.iter()
-                .filter(|s| s.difficulty == hi && s.agent == l && s.variant == *base && s.games > 0)
-                .map(|s| s.win_rate),
-        ) else {
-            continue;
-        };
+    for (l, p) in strength(cells, sums) {
         match &best {
             Some((_, b)) if p < *b => {}
             _ => best = Some((l, p)),
@@ -308,31 +319,12 @@ pub(super) fn top_agent(cells: &[Cell], sums: &[CellSummary]) -> Option<(String,
     best.map(|(l, _)| (l, hi))
 }
 
-/// Each agent's rank by measured strength, 0 = weakest: its win rate at
-/// the highest difficulty on the base variant (mean over configs), as
-/// [`top_agent`] reads it. Equal win rates share a rank, so the top rank
-/// holds the top agent (and any agent tied with it), and a "weakest"
-/// agent exists only when some agent measured below the rest.
-pub(super) fn measured_rank(cells: &[Cell], games: &[GameResult]) -> BTreeMap<String, usize> {
-    let hi = cells.iter().map(|c| c.difficulty).max().unwrap_or(0);
-    let base = cells.first().map(|c| c.variant.clone()).unwrap_or_default();
-    let score: Vec<(String, f64)> = agent_order(cells)
-        .iter()
-        .map(|a| {
-            let l = a.label();
-            let mut by_config: BTreeMap<&str, (u64, u64)> = BTreeMap::new();
-            for g in games {
-                let c = &cells[g.cell];
-                if c.difficulty == hi && c.variant == base && c.agent.label() == l {
-                    let e = by_config.entry(c.config_path.as_str()).or_default();
-                    e.0 += g.won as u64;
-                    e.1 += 1;
-                }
-            }
-            let rates = by_config.values().map(|&(w, n)| w as f64 / n as f64);
-            (l, mean(rates).unwrap_or(0.0))
-        })
-        .collect();
+/// Each agent's rank by [`strength`], 0 = weakest. Equal win rates share a
+/// rank, so the top rank holds the top agent (and any agent tied with it),
+/// and a "weakest" agent exists only when some agent measured below the
+/// rest.
+pub(super) fn measured_rank(cells: &[Cell], sums: &[CellSummary]) -> BTreeMap<String, usize> {
+    let score = strength(cells, sums);
     let mut levels: Vec<f64> = score.iter().map(|s| s.1).collect();
     levels.sort_by(f64::total_cmp);
     levels.dedup();
@@ -547,6 +539,8 @@ pub fn summarize(cells: &[Cell], games: &[GameResult]) -> Vec<CellSummary> {
             let sigs: Vec<&str> = gs.iter().map(|g| g.build.as_str()).collect();
             let win_sigs: Vec<&str> = won.iter().map(|g| g.build.as_str()).collect();
             let ms: f64 = gs.iter().map(|g| g.ms).sum();
+            let played: Vec<[u32; 3]> = gs.iter().map(|g| plays(g)).collect();
+            let per_game = |k: usize| played.iter().map(|p| p[k] as f64).sum::<f64>() / n;
             CellSummary {
                 cell: ci,
                 config: c.config_path.clone(),
@@ -614,16 +608,19 @@ pub fn summarize(cells: &[Cell], games: &[GameResult]) -> Vec<CellSummary> {
                 distinct_builds_wins: win_sigs.iter().collect::<BTreeSet<_>>().len(),
                 build_distance: jaccard_mean(&sigs).unwrap_or(0.0),
                 build_distance_wins: jaccard_mean(&win_sigs),
-                cards_played_per_game: gs.iter().map(|g| plays(g)[0] as f64).sum::<f64>() / n,
-                buildings_played_per_game: gs.iter().map(|g| plays(g)[1] as f64).sum::<f64>() / n,
-                tier2_played_per_game: gs.iter().map(|g| plays(g)[2] as f64).sum::<f64>() / n,
+                cards_played_per_game: per_game(0),
+                buildings_played_per_game: per_game(1),
+                tier2_played_per_game: per_game(2),
                 buildings_standing_per_game: gs
                     .iter()
                     .map(|g| standing(&g.build) as f64)
                     .sum::<f64>()
                     / n,
                 wins_2plus_buildings_played: mean(
-                    won.iter().map(|g| (plays(g)[1] >= 2) as u8 as f64),
+                    gs.iter()
+                        .zip(&played)
+                        .filter(|(g, _)| g.won)
+                        .map(|(_, p)| (p[1] >= 2) as u8 as f64),
                 ),
                 wins_2plus_buildings_standing: mean(
                     won.iter().map(|g| (standing(&g.build) >= 2) as u8 as f64),

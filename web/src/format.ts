@@ -40,14 +40,14 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
     case 'choose': {
       const t = withTarget && isHex(a.target) ? ` @${hexKey(a.target)}` : '';
       // An option that is a content id (one word ids too: `sweep`) shows its name.
-      return `${placeNames(contentName(String(a.option ?? 'choose')))}${t}`;
+      return `${contentIds(contentName(String(a.option ?? 'choose')))}${t}`;
     }
     case 'tier':
       return `draft from tier ${a.tier}`;
     case 'draft':
       return `draft ${card}`;
     case 'keep':
-      return `keep ${card}${cost(cardCost(cx.view, a.seat, 'cards.drafted', a.card ?? ''), 'credits')}`;
+      return `keep ${card}`;
     case 'growth': {
       const g = cx.config && aiBoard(cx.config, a.seat)?.growth[Number(a.option)];
       return `growth: ${g ? g.name : `option ${a.option}`}`;
@@ -92,7 +92,7 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
 }
 
 /**
- * "seat 1: play Fab Line". The seat is left out with `withSeat` false, and the
+ * "seat 1: play Turnkey Factory". The seat is left out with `withSeat` false, and the
  * target with `withTarget` false (a choice's label, before its hex is picked).
  * Unknown action types are labelled from their fields.
  */
@@ -112,7 +112,7 @@ let contentNames: Map<string, string> | null = null;
 /**
  * A content id's printed name (a card, threat, adversary card, project or Alignment
  * card), or the id. Choice options and prompts name cards by id (020: buttons read
- * `overclock_rig`).
+ * the raw id).
  */
 export function contentName(id: string): string {
   if (!contentNames) {
@@ -134,31 +134,14 @@ export function contentName(id: string): string {
  * Content ids written into engine text (`snake_case` only, so plain words stay), but
  * not inside a dotted key (`adversary.project.node_swarm` stays as the state has it).
  */
-const contentIds = (text: string) => text.replace(/(?<![\w.])[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b(?!\.)/g, (m) => contentName(m));
-
-/** The shown game's country names, for `placeNames` (set on every render). */
-let countryNames: string[] = [];
-export function setCountryNames(names: string[]) {
-  countryNames = names;
-}
-
-/**
- * The engine names a hex "C1 #5" (country index 1, printed number 5) in prompts,
- * options and notes; the board labels countries by name, so show "Northern Union #5".
- */
-export function placeNames(text: string): string {
-  return contentIds(text)
-    // "country 1" (Protector's harden growth, Civil Defense, threat notes) by name too.
-    .replace(/\bcountry (\d+)\b/g, (m, c: string) => countryNames[Number(c)] ?? m)
-    .replace(/\bC(\d+) #(\d+)/g, (m, c: string, n: string) => (countryNames[Number(c)] ? `${countryNames[Number(c)]} #${n}` : m));
-}
+export const contentIds = (text: string) => text.replace(/(?<![\w.])[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b(?!\.)/g, (m) => contentName(m));
 
 /** A one-line event: its type, then its fields. */
 export function eventText(e: GameEvent): string {
   const rest = Object.entries(e)
     .filter(([k]) => k !== 'type')
     .map(([k, v]) => `${k} ${field(k, v)}`);
-  return placeNames([words(e.type), ...rest].join(' · '));
+  return contentIds([words(e.type), ...rest].join(' · '));
 }
 
 /** Hexes an action or event mentions (any `[q, r]` field). */
@@ -209,7 +192,7 @@ export function strong(hex: string): string {
 export const ADVERSARY_COLOUR = '#5b1a8c';
 
 // Token colours: chosen colours for the kinds the board draws, every other kind
-// hashed to a hue. Seat-owned kinds (`cube:<seat>`, `dc:<seat>`, `ambassador:<seat>`) are
+// hashed to a hue. Seat-owned kinds (`cube:<seat>`, `presence:<seat>`, `ambassador:<seat>`) are
 // drawn in the seat's colour on the board; this is their fallback.
 const KNOWN: Record<string, string> = {
   'cube:adversary': ADVERSARY_COLOUR,

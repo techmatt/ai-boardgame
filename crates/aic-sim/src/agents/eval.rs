@@ -24,13 +24,15 @@
 
 use std::collections::BTreeMap;
 
-use aic_core::content::{Passive, Side, Twist, ANTIMATTER, CREDITS, ENERGY, INSIGHT, RESOURCES};
+use aic_core::content::{Op, Resource, Side, RESOURCES};
 use aic_core::modules::common::{
-    self, ADV_AMBASSADOR, ADV_CUBE, AMBASSADORS, FACTORY, HARDEN, STATION, TROOP,
+    self, ADV_AMBASSADOR, ADV_CUBE, FACTORY, HARDEN, STATION, TROOP,
 };
 use aic_core::modules::{adversary, ai, alignment, board, cards, economy, plan, threats};
 use aic_core::{GameState, Rules};
 use serde::{Deserialize, Serialize};
+
+use super::{credit_equivalent, INSIGHT_COST};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Weights {
@@ -107,18 +109,14 @@ pub struct Weights {
     pub freeing: f64,
     /// Each adversary ambassador next to a corrupted city (024: it blocks
     /// the freeing), on top of `adv_ambassador`.
-    #[serde(default)]
     pub guard: f64,
     /// Each point of per-round income (AI tracks).
     pub income: f64,
     pub credits: f64,
     /// 024: credits a seat holds beyond `credit_cap` are worth `credit_idle`
     /// each: a stockpile buys nothing this round, so spending wins.
-    #[serde(default)]
     pub credit_cap: f64,
-    #[serde(default)]
     pub credit_idle: f64,
-    pub compute: f64,
     /// A program in a seat's play area (021: its tags pay AI-board powers).
     pub program: f64,
     /// A token on one of a seat's cards (021).
@@ -130,8 +128,8 @@ pub struct Weights {
     pub energy: f64,
     pub antimatter: f64,
     pub insight: f64,
-    /// A card in hand: `hand + hand_cost * cost`, cost in credits (antimatter
-    /// counts 3, insight 2).
+    /// A card in hand: `hand + hand_cost * cost`, cost in credits (see
+    /// [`credit_equivalent`]).
     pub hand: f64,
     pub hand_cost: f64,
     /// A drafted card not yet kept, as a share of its hand value.
@@ -140,7 +138,6 @@ pub struct Weights {
     /// keep price (insight, at `INSIGHT_COST` credits) times this; so the
     /// tier pick is a choice (before 023 a tier pick scored nothing, and
     /// tier 2 was drafted only once the tier-1 deck ran dry).
-    #[serde(default)]
     pub packet_keep: f64,
     /// A building in play: `built + built_cost * cost`.
     pub built: f64,
@@ -153,8 +150,7 @@ pub struct Weights {
     pub horizon: f64,
     /// Horizon mode: Sway toward Unity the team is assumed to gain per round
     /// before it has a record of its own (round 1), for the win estimate.
-    /// Was `opp_rate` (still accepted).
-    #[serde(alias = "opp_rate")]
+    /// Was `opp_rate` (still accepted, see [`RENAMED`]).
     pub unity_rate_start: f64,
     /// Horizon mode: rounds a win needs after the Unity target is reached.
     pub win_lag: f64,
@@ -168,12 +164,9 @@ pub struct Weights {
     /// Horizon mode: resources keep their full value only while at least
     /// this many rounds are left, then fall toward 0 (nothing left to buy).
     pub spend_horizon: f64,
-    /// Horizon mode: a tier-2 card in hand before tier 2 is unlocked counts
-    /// this share of its value.
-    pub locked: f64,
-    /// Horizon mode: board production (energy of aligned cities, compute of
-    /// presence not diverted) counts this share of income over the
-    /// rounds left, on top of the flat piece weights.
+    /// Horizon mode: board production (energy of aligned cities not
+    /// diverted) counts this share of income over the rounds left, on top
+    /// of the flat piece weights.
     pub production: f64,
     /// Horizon mode, when above 0: cards in hand wait their turn for
     /// insight (each needs the insight of the cards before it too).
@@ -186,11 +179,6 @@ pub struct Weights {
 
 /// Weights renamed since experiments named them: (former name, name).
 const RENAMED: [(&str, &str); 1] = [("opp_rate", "unity_rate_start")];
-
-/// A card's cost in credits: each antimatter counts this many credits...
-const ANTIMATTER_COST: i64 = 3;
-/// ...and each insight this many.
-const INSIGHT_COST: i64 = 2;
 
 /// A drafted card's keep price in credits (its tier's insight at
 /// `INSIGHT_COST`), for valuing the draft packet (023).
@@ -251,7 +239,6 @@ impl Default for Weights {
             credits: 0.6,
             credit_cap: 12.0,
             credit_idle: 0.15,
-            compute: 0.8,
             program: 1.0,
             token: 0.5,
             hand_cap: 0.0,
@@ -271,7 +258,6 @@ impl Default for Weights {
             risk: 0.1,
             ability: 0.5,
             spend_horizon: 2.0,
-            locked: 0.5,
             // Horizon mode only; the engine turns it on (see `engine`).
             production: 0.0,
             // 008: on, it cut the engine to 4% wins at d4 (96 games): spending
@@ -356,14 +342,7 @@ impl Eval {
             .content
             .cards
             .iter()
-            .map(|c| {
-                // 022: insight to play as printed; energy and hardware at about
-                // a credit each; lowered income at 3 a point.
-                let cost = c.cost + ANTIMATTER_COST * c.antimatter + c.energy + c.hardware
-                    + INSIGHT_COST * c.insight
-                    + 3 * c.lowers.iter().map(|(_, n)| n).sum::<i64>();
-                (c.id.clone(), cost.max(0) as f64)
-            })
+            .map(|c| (c.id.clone(), credit_equivalent(c, c.cost).max(0) as f64))
             .collect();
         let seats = rules.config.countries as usize;
         let outright = world.int("alignment.unity_win");
@@ -393,7 +372,7 @@ impl Eval {
     }
 
     /// Adversary cards still to come: the face-up one and the deck.
-    fn cards_left(g: &GameState) -> usize {
+    pub(crate) fn cards_left(g: &GameState) -> usize {
         g.pile(adversary::DECK).len() + g.pile(adversary::NEXT).len()
     }
 
@@ -431,7 +410,7 @@ impl Eval {
                     .twists
                     .iter()
                     .filter_map(|t| match t {
-                        Twist::CorruptSooner { amount } => Some(*amount),
+                        Op::CorruptSooner { amount } => Some(*amount),
                         _ => None,
                     })
                     .sum()
@@ -542,8 +521,8 @@ impl Eval {
             v += w.project_cube * (mine as f64 - 0.5 * theirs as f64);
         }
         for s in 0..self.seats {
-            v += w.ambassador * g.resource(s, AMBASSADORS) as f64;
-            v += w.hardware * g.resource(s, common::HARDWARE) as f64;
+            v += w.ambassador * g.resource(s, Resource::Ambassadors) as f64;
+            v += w.hardware * g.resource(s, Resource::Hardware) as f64;
         }
         // The win bar: what still stands between the team and a clear board.
         let level = alignment::bar_level(&world, g);
@@ -689,15 +668,15 @@ impl Eval {
         let w = &self.w;
         let world = rules.world();
         for s in 0..self.seats {
-            let res = |k: &str| g.resource(s, k) as f64;
-            *v += self.credit_value(res("credits"))
-                + w.energy * res("energy")
-                + w.antimatter * res("antimatter")
-                + w.insight * res("insight");
+            let res = |k: Resource| g.resource(s, k) as f64;
+            *v += self.credit_value(res(Resource::Credits))
+                + w.energy * res(Resource::Energy)
+                + w.antimatter * res(Resource::Antimatter)
+                + w.insight * res(Resource::Insight);
             for (r, n) in ai::track_income(&world, g, s) {
-                let unit = match r.as_str() {
-                    "antimatter" => ANTIMATTER_INCOME_UNIT,
-                    "insight" => INSIGHT_INCOME_UNIT,
+                let unit = match r {
+                    Resource::Antimatter => ANTIMATTER_INCOME_UNIT,
+                    Resource::Insight => INSIGHT_INCOME_UNIT,
                     _ => 1.0,
                 };
                 *v += w.income * unit * n as f64;
@@ -746,19 +725,18 @@ impl Eval {
         }
     }
 
-    /// What the board makes each seat a round if production came now, in
-    /// `RESOURCES` order: the energy of its aligned cities and the compute
-    /// of its presence, less what adversary ambassadors there divert.
-    fn board_production(&self, rules: &Rules, g: &GameState) -> Vec<[i64; RESOURCES.len()]> {
+    /// What the board makes each seat a round if production came now: the
+    /// energy of its aligned cities, less what adversary ambassadors divert.
+    fn board_production(&self, rules: &Rules, g: &GameState) -> Vec<i64> {
         let world = rules.world();
-        let mut out = vec![[0i64; RESOURCES.len()]; self.seats];
+        let mut out = vec![0; self.seats];
         for h in 0..g.hexes.len() {
             if g.tokens(h, ADV_AMBASSADOR) > 0 || g.tokens(h, ADV_CUBE) > 0 {
                 continue;
             }
             if common::is_city(&world, h) {
                 if let Some(s) = common::cube_owner(g, h).filter(|&s| s < self.seats) {
-                    out[s][ENERGY] += self.city_energy + self.aligned_bonus;
+                    out[s] += self.city_energy + self.aligned_bonus;
                 }
             }
         }
@@ -781,7 +759,7 @@ impl Eval {
         let prod = if w.production != 0.0 {
             self.board_production(rules, g)
         } else {
-            vec![[0; RESOURCES.len()]; self.seats]
+            vec![0; self.seats]
         };
         // Resources fade once fewer than `spend_horizon` rounds are left.
         let fade = if w.spend_horizon > 0.0 {
@@ -793,13 +771,13 @@ impl Eval {
         let unit = [w.credits, w.credits, w.energy, w.antimatter, w.insight];
         let mut v = 0.0;
         for s in 0..self.seats {
-            let res = |k: &str| g.resource(s, k);
+            let res = |k: Resource| g.resource(s, k);
             // Insight is reset each round, so what is held now only counts this round.
             for (i, r) in RESOURCES.iter().enumerate() {
-                if *r == "credits" {
-                    v += fade * self.credit_value(res(r) as f64);
-                } else if *r != "hardware" {
-                    v += fade * unit[i] * res(r) as f64;
+                if *r == Resource::Credits {
+                    v += fade * self.credit_value(res(*r) as f64);
+                } else if *r != Resource::Hardware {
+                    v += fade * unit[i] * res(*r) as f64;
                 }
             }
             self.in_play_value(rules, g, s, &mut v);
@@ -809,25 +787,21 @@ impl Eval {
             let mut income = economy::income(&world, g, s);
             for id in g.pile(&cards::built(s)) {
                 for (r, n) in &cards::def(&world, id).upkeep {
-                    if let Some(i) = RESOURCES.iter().position(|x| x == r) {
-                        income[i] -= n;
-                    }
+                    income.add(*r, -n);
                 }
             }
-            for (i, n) in income.iter().enumerate() {
-                v += w.horizon * left * unit[i] * *n as f64;
+            for (i, (_, n)) in income.iter().enumerate() {
+                v += w.horizon * left * unit[i] * n as f64;
             }
-            for (i, n) in prod[s].iter().enumerate() {
-                v += w.horizon * w.production * left * unit[i] * *n as f64;
-            }
+            v += w.horizon * w.production * left * w.energy * prod[s] as f64;
             for id in g.pile(&cards::built(s)) {
                 let d = cards::def(&world, id);
                 let pays = d.passives.iter().any(|p| {
                     matches!(
                         p,
-                        Passive::Income { .. }
-                            | Passive::IncomePerTag { .. }
-                            | Passive::IncomeIfTags { .. }
+                        Op::Income { .. }
+                            | Op::IncomePerTag { .. }
+                            | Op::IncomeIfTags { .. }
                     )
                 });
                 v += w.built + w.built_cost * self.cost(id);
@@ -847,7 +821,7 @@ impl Eval {
             // for it before the game ends, from what the seat has and earns.
             // Insight is spent one card at a time: each card waits for the
             // insight the cards before it in hand take.
-            let earn_credits = income[CREDITS];
+            let earn_credits = income[Resource::Credits];
             let mut insight_queue = 0i64;
             // The same for every building in hand: worked out once.
             let discount = cards::building_discount(&world, g, s);
@@ -865,18 +839,18 @@ impl Eval {
                 for (have, need, earn) in [
                     // The AI's discount: energy or compute spent as credits.
                     (
-                        res("credits")
+                        res(Resource::Credits)
                             + cards::discount_room(&world, g, s, d)
                                 .map_or(0, |(_, rate, k)| rate * k),
-                        cards::discounted_cost(&world, d, discount),
+                        cards::discounted_cost(d, discount),
                         earn_credits,
                     ),
                     (
-                        res("antimatter"),
+                        res(Resource::Antimatter),
                         d.antimatter,
-                        income[ANTIMATTER],
+                        income[Resource::Antimatter],
                     ),
-                    (res("insight"), insight_need, income[INSIGHT]),
+                    (res(Resource::Insight), insight_need, income[Resource::Insight]),
                 ] {
                     let short = need - have;
                     if short > 0 {
@@ -914,11 +888,5 @@ mod tests {
         assert_eq!(w.unity_rate_start, 1.5);
         assert!(w.set("unity_rate_start", 0.5));
         assert_eq!(w.unity_rate_start, 0.5);
-        let mut v = serde_json::to_value(Weights::default()).unwrap();
-        let m = v.as_object_mut().unwrap();
-        m.remove("unity_rate_start");
-        m.insert("opp_rate".into(), serde_json::json!(3.0));
-        let w: Weights = serde_json::from_value(v).unwrap();
-        assert_eq!(w.unity_rate_start, 3.0);
     }
 }

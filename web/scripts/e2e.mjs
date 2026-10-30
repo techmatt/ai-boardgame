@@ -6,14 +6,13 @@
 //   AIC_SHOTS   a folder to also save the mid-game and end-of-game screenshots in
 //               (viewer-mid.png, viewer-end.png)
 // Plays a game to the end through the UI, checks undo, the record dialog, the saved
-// session, hover details and the no-scroll layout at 1366x768 and 2560x1440, then loads
-// the record (if given) and steps through it. Screenshots go to web/e2e-out/.
+// session, hover details and the no-scroll layout at 1366x768, 1920x1080 and 2560x1440,
+// then loads the record (if given) and steps through it. Screenshots go to web/e2e-out/.
 
-import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { openPage, sleep } from './cdp.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const url = process.env.AIC_URL ?? 'http://localhost:5173/';
@@ -21,103 +20,33 @@ const recordPath = process.argv[2];
 const out = join(web, 'e2e-out');
 mkdirSync(out, { recursive: true });
 
-const candidates = [
-  process.env.AIC_BROWSER,
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  '/usr/bin/google-chrome',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-].filter(Boolean);
-const exe = candidates.find((p) => existsSync(p));
-if (!exe) throw new Error('no browser found; set AIC_BROWSER');
-
-const profile = mkdtempSync(join(tmpdir(), 'aic-e2e-'));
-const browser = spawn(exe, [
-  '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
-  '--no-first-run', '--no-default-browser-check', '--window-size=1366,768', 'about:blank',
-], { stdio: 'ignore' });
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const page = await openPage();
+const { send, js, until, size, consoleErrors } = page;
 let failures = 0;
 const check = (ok, what) => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`);
   if (!ok) failures++;
 };
 
-async function devtoolsPort() {
-  const file = join(profile, 'DevToolsActivePort');
-  for (let i = 0; i < 100; i++) {
-    if (existsSync(file)) {
-      const port = readFileSync(file, 'utf8').split('\n')[0].trim();
-      if (port) return port;
-    }
-    await sleep(100);
-  }
-  throw new Error('browser did not open a DevTools port');
-}
-
-const port = await devtoolsPort();
-const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-const ws = new WebSocket(pages.find((p) => p.type === 'page').webSocketDebuggerUrl);
-await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
-let nextId = 1;
-const waiting = new Map();
-const consoleErrors = [];
-ws.onmessage = (m) => {
-  const msg = JSON.parse(m.data);
-  if (msg.id && waiting.has(msg.id)) {
-    waiting.get(msg.id)(msg);
-    waiting.delete(msg.id);
-  } else if (msg.method === 'Runtime.exceptionThrown') {
-    consoleErrors.push(msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text);
-  } else if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
-    consoleErrors.push(msg.params.args.map((a) => a.value ?? a.description).join(' '));
-  }
-};
-const send = (method, params = {}) => new Promise((r, j) => {
-  const id = nextId++;
-  waiting.set(id, (msg) => (msg.error ? j(new Error(`${method}: ${msg.error.message}`)) : r(msg.result)));
-  ws.send(JSON.stringify({ id, method, params }));
-});
-/** Evaluates `expr` (an expression, awaited) in the page and returns its JSON value. */
-async function js(expr) {
-  const r = await send('Runtime.evaluate', { expression: `(async () => (${expr}))()`, awaitPromise: true, returnByValue: true });
-  if (r.exceptionDetails) throw new Error(`${expr.slice(0, 80)}: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
-  return r.result.value;
-}
-async function until(expr, what, ms = 10000) {
-  for (let t = 0; t < ms; t += 100) {
-    if (await js(expr).catch(() => false)) return true;
-    await sleep(100);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
 /** Reloads the page and waits for the new document's viewer (not the old one's) and `expr`. */
 async function reload(expr, what) {
   await js('(window.__aicOld = true)');
   await send('Page.reload');
   await until(`!window.__aicOld && window.aic && window.aic.view && (${expr})`, what, 30000);
 }
-async function size(w, h) {
-  await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
-  await sleep(150);
-}
 /** Saves a screenshot to web/e2e-out/, and under `copy` in AIC_SHOTS too if that is set. */
 async function shot(name, copy) {
-  const r = await send('Page.captureScreenshot', { format: 'png' });
-  writeFileSync(join(out, `${name}.png`), Buffer.from(r.data, 'base64'));
+  const png = await page.shot();
+  writeFileSync(join(out, `${name}.png`), png);
   if (copy && process.env.AIC_SHOTS) {
     mkdirSync(process.env.AIC_SHOTS, { recursive: true });
-    writeFileSync(join(process.env.AIC_SHOTS, `${copy}.png`), Buffer.from(r.data, 'base64'));
+    writeFileSync(join(process.env.AIC_SHOTS, `${copy}.png`), png);
   }
 }
 const noScroll = () => js(`document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth
   && document.body.scrollHeight <= innerHeight && document.body.scrollWidth <= innerWidth`);
 
 try {
-  await send('Page.enable');
-  await send('Runtime.enable');
   await size(1366, 768);
   await send('Page.navigate', { url });
   await until('window.aic && window.aic.view', 'the viewer to start', 30000);
@@ -143,7 +72,7 @@ try {
   check(board.kinds === 4 && board.fills === board.kinds, `hexes filled by kind (${board.fills} fills for ${board.kinds} kinds: city, base, open, ocean)`);
   check(board.bases > 0 && board.pennants === board.bases, `${board.pennants} military bases marked with the country they face`);
   check(board.fronts > 0 && board.links === board.fronts && board.edges > 0, `${board.links} fronts linked base to base, ${board.edges} front edges`);
-  // Tokens: one glyph per stack, owner cubes and data centres in their owner's colour.
+  // Tokens: one glyph per stack, owner cubes and presence in their owner's colour.
   const toks = await js(`(() => {
     const v = window.aic.view;
     const stacks = v.hexes.reduce((n, h) => n + h.tokens.length, 0);
@@ -405,18 +334,7 @@ try {
   console.error(e);
   failures++;
 } finally {
-  // Close the browser over the protocol and wait for it, then delete its profile (020:
-  // killing only the parent left the profile held, so every run leaked it in %TEMP%).
-  const exited = new Promise((r) => (browser.exitCode !== null ? r() : browser.once('exit', r)));
-  await Promise.race([send('Browser.close').catch(() => {}), sleep(2000)]);
-  ws.close();
-  await Promise.race([exited, sleep(5000)]);
-  if (browser.exitCode === null) browser.kill();
-  try {
-    rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
-  } catch (e) {
-    console.warn(`could not delete the browser profile ${profile}: ${e.message}`);
-  }
+  await page.close();
 }
 console.log(failures ? `e2e FAILED (${failures})` : 'e2e ok');
 process.exit(failures ? 1 : 0);

@@ -16,13 +16,13 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| die(&format!("{path}: {e}")));
     let mut spec: experiment::Spec =
         serde_json::from_str(&text).unwrap_or_else(|e| die(&format!("{path}: {e}")));
-    if o.games_given {
+    if o.given.contains("--games") {
         spec.games = o.games;
     }
-    if o.seed_given {
+    if o.given.contains("--seed") {
         spec.first_seed = o.seed;
     }
-    if o.max_actions_given {
+    if o.given.contains("--max-actions") {
         spec.max_actions = o.max_actions;
     }
     if let Some(n) = o.winprob {
@@ -45,7 +45,7 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
         .unwrap_or_else(|| format!("out/experiments/{}", file_stem(&spec.name)));
     let dir = dir.trim_end_matches(['/', '\\']).to_string();
     std::fs::create_dir_all(&dir).unwrap_or_else(|e| die(&format!("--out {dir}: {e}")));
-    let total = cells.len() * spec.games as usize;
+    let total = spec.total_games(&cells);
     // Every finished game goes to games.jsonl at once (a header line, then
     // one game per line), so a stopped or killed run keeps what it played;
     // --resume reads it back and plays only the rest.
@@ -176,7 +176,7 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
 /// later, when the rules settle), at most 16 seeds per cell unless --games
 /// says otherwise, and no probes unless --winprob or --closeness asks.
 fn quick(spec: &mut experiment::Spec, o: &Options) {
-    if !o.games_given {
+    if !o.given.contains("--games") {
         spec.games = spec.games.min(QUICK_GAMES);
     }
     if o.winprob.is_none() {
@@ -215,7 +215,6 @@ fn open_stream(
     cells: &[experiment::Cell],
     prior: &[experiment::GameResult],
 ) -> std::io::BufWriter<std::fs::File> {
-    use std::io::Write;
     let fail = |e: std::io::Error| -> ! {
         eprintln!("cannot write {path}: {e}");
         exit(2)
@@ -238,9 +237,7 @@ fn open_stream(
         .append(true)
         .open(path)
         .unwrap_or_else(|e| fail(e));
-    let mut w = std::io::BufWriter::new(f);
-    w.flush().unwrap_or_else(|e| fail(e));
-    w
+    std::io::BufWriter::new(f)
 }
 
 /// Writes the cycle report of `games` (sorted) into `dir`: report.md,
@@ -262,7 +259,9 @@ fn write_reports(
     let sums = report::summarize(cells, games);
     let groups = report::groups(cells, &sums, games);
     let cards = report::card_table(cells, games);
-    let records = report::save_records(dir, spec, cells, games)
+    let h2h = report::head_to_head(cells, games);
+    let variants = report::variant_diffs(spec, cells, games);
+    let records = report::save_records(dir, spec, cells, games, &sums)
         .map_err(|e| format!("cannot write records: {e}"))?;
     let run = report::Run {
         spec,
@@ -271,6 +270,9 @@ fn write_reports(
         sums: &sums,
         groups: &groups,
         cards: &cards,
+        head_to_head: &h2h,
+        variant_diffs: &variants,
+        top_agent: report::top_agent(cells, &sums),
         records: &records,
         wall_s,
         threads,

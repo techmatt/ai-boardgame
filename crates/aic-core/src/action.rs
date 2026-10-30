@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::hex::Hex;
+use crate::vocab::Resource;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -37,7 +38,7 @@ pub enum Action {
     Pay {
         seat: u8,
         threat: String,
-        resource: String,
+        resource: Resource,
         amount: i64,
     },
     /// Take back everything you put on a threat's counter in a resource
@@ -45,7 +46,7 @@ pub enum Action {
     Withdraw {
         seat: u8,
         threat: String,
-        resource: String,
+        resource: Resource,
     },
     /// Give 1 insight to another seat (module `economy`).
     Give { seat: u8, to: u8 },

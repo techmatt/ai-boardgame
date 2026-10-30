@@ -1,16 +1,6 @@
 use super::*;
-use crate::modules::common::NODE;
+use crate::modules::common::{presence, NODE};
 use crate::modules::{adversary, alignment};
-
-/// Stacks the Unity deck: `card` is drawn next, whatever the tier.
-fn next_unity(g: &mut GameState, card: &str) {
-    for tier in [1, 2] {
-        g.piles.insert(
-            format!("alignment.deck.unity.{tier}"),
-            vec![card.to_string()],
-        );
-    }
-}
 
 /// The baseline playing only the action phase, after setup (no build yet).
 fn action_only(sets: &[&str]) -> (Rules, GameState) {
@@ -24,7 +14,7 @@ fn action_only(sets: &[&str]) -> (Rules, GameState) {
 
 /// Gives 1 insight from seat 0 to seat 1: an action, so the end checks run.
 pub(super) fn give(rules: &Rules, g: &mut GameState) {
-    set_res(g, 0, "insight", 1);
+    set_res(g, 0, Resource::Insight, 1);
     act(rules, g, Action::Give { seat: 0, to: 1 });
 }
 
@@ -52,9 +42,8 @@ fn a_full_unity_bucket_tips_a_card_and_lowers_the_bar() {
     g.vars.insert(STAGE.into(), 1);
     g.vars.insert("alignment.unity_tips".into(), 1);
     let undecided = g.var("alignment.undecided");
-    g.vars.insert("alignment.undecided".into(), undecided - 4);
-    g.vars.insert("alignment.unity".into(), 4);
-    next_unity(&mut g, "civil_defense");
+    fill_bucket(&rules, &mut g, Side::Unity);
+    next_alignment_card(&mut g, Side::Unity, "civil_defense");
     give(&rules, &mut g);
     // The tip: each country removes an ambassador.
     assert_eq!(total(&g, ADV_AMBASSADOR), 2);
@@ -78,10 +67,10 @@ fn bar_levels_follow_the_unity_tips() {
         g.vars.insert("alignment.unity_tips".into(), tips);
         assert_eq!(alignment::bar_level(&w, &g), level, "{tips} tips");
     }
-    assert!(adversary::win_text(&w, 0).contains("node, adversary troop or adversary ambassador"));
-    assert!(adversary::win_text(&w, 1).contains("ambassadors no longer count"));
-    assert!(adversary::win_text(&w, 2).contains("no corrupted city or node"));
-    assert!(adversary::win_text(&w, 3).contains("nodes no longer count"));
+    assert!(adversary::win_text(0).contains("node, adversary troop or adversary ambassador"));
+    assert!(adversary::win_text(1).contains("ambassadors no longer count"));
+    assert!(adversary::win_text(2).contains("no corrupted city or node"));
+    assert!(adversary::win_text(3).contains("nodes no longer count"));
 }
 
 #[test]
@@ -141,10 +130,8 @@ fn eight_unity_tips_win_outright() {
     let (rules, mut g) = action_only(&[]);
     // Corrupted cities stay: only the outright win can end it.
     g.vars.insert("alignment.unity_tips".into(), 7);
-    let undecided = g.var("alignment.undecided");
-    g.vars.insert("alignment.undecided".into(), undecided - 4);
-    g.vars.insert("alignment.unity".into(), 4);
-    next_unity(&mut g, "grassroots_funding");
+    fill_bucket(&rules, &mut g, Side::Unity);
+    next_alignment_card(&mut g, Side::Unity, "grassroots_funding");
     give(&rules, &mut g);
     let o = g.outcome.as_ref().expect("a win");
     assert_eq!((o.won, o.reason.as_str()), (true, "unity"));
@@ -164,11 +151,11 @@ fn the_antimatter_action_and_the_empty_undecided() {
         g.vars.insert("alignment.undecided".into(), 0);
         g.vars.insert("alignment.unity".into(), 2);
         g.vars.insert("alignment.discord".into(), 0);
-        let am = g.resource(0, "antimatter");
+        let am = g.resource(0, Resource::Antimatter);
         let a = Action::Antimatter { seat: 0 };
         assert!(rules.legal_actions(&g).contains(&a));
         rules.apply_mut(&mut g, &a, None).unwrap();
-        assert_eq!(g.resource(0, "antimatter"), am + 1);
+        assert_eq!(g.resource(0, Resource::Antimatter), am + 1);
         let moved = i64::from(from_unity);
         assert_eq!(
             (g.var("alignment.unity"), g.var("alignment.discord")),
@@ -196,12 +183,9 @@ fn the_antimatter_action_and_the_empty_undecided() {
 fn discord_tips_do_not_escalate_and_momentum_shrinks_buckets() {
     let (rules, mut g) = action_only(&[]);
     g.vars.insert("alignment.discord_tips".into(), 1);
-    let undecided = g.var("alignment.undecided");
-    g.vars.insert("alignment.undecided".into(), undecided - 4);
-    g.vars.insert("alignment.discord".into(), 4);
+    fill_bucket(&rules, &mut g, Side::Discord);
     give(&rules, &mut g);
     assert_eq!(g.var("alignment.discord_tips"), 2);
-    assert_eq!(g.var("adversary.escalation"), 0);
     let w = rules.world();
     assert!(!adversary::level(&w, 1));
     assert_eq!(g.pile("alignment.resolved.discord").len(), 1);
@@ -213,7 +197,6 @@ fn discord_tips_do_not_escalate_and_momentum_shrinks_buckets() {
         .unwrap();
     assert_eq!(d.value, 0);
 
-    use crate::content::Side;
     let rules = Rules::new(&baseline_with(&["alignment.momentum_every=2"])).unwrap();
     let w = rules.world();
     let mut g = rules.new_game(4);
@@ -222,4 +205,102 @@ fn discord_tips_do_not_escalate_and_momentum_shrinks_buckets() {
         assert_eq!(alignment::capacity(&w, &g, Side::Unity), cap, "{tips} tips");
         assert_eq!(alignment::capacity(&w, &g, Side::Discord), 4);
     }
+}
+
+#[test]
+fn a_discord_tip_no_longer_moves_troops() {
+    // 019: the march replaced 017's Discord-tip advance.
+    let (rules, mut g) = lab(&[]);
+    let m = &rules.map;
+    let p = m.numbered(0, piece(0).presence);
+    let t = (0..m.hexes.len())
+        .find(|&h| m.distance(p, h) == 3 && kind(m, h) != content::HexKind::Ocean)
+        .unwrap();
+    put(&mut g, p, &presence(0), 1);
+    put(&mut g, t, TROOP, 1);
+    next_alignment_card(&mut g, Side::Discord, "propaganda");
+    fill_bucket(&rules, &mut g, Side::Discord);
+    give(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(g.var("alignment.discord_tips"), 1);
+    assert_eq!((g.tokens(t, TROOP), g.tokens(p, &presence(0))), (1, 1));
+}
+
+#[test]
+fn discord_cards_step_up_with_the_discord_tip_count() {
+    for (tips, each) in [(0, 1), (2, 2), (5, 3)] {
+        let (rules, mut g) = lab(&[]);
+        g.vars.insert("alignment.discord_tips".into(), tips);
+        next_alignment_card(&mut g, Side::Discord, "blight");
+        fill_bucket(&rules, &mut g, Side::Discord);
+        give(&rules, &mut g);
+        answer_all(&rules, &mut g);
+        assert_eq!(total(&g, ADV_AMBASSADOR), 2 * each, "{tips} tips");
+    }
+}
+
+#[test]
+fn alignment_cards_are_one_shot() {
+    assert!(crate::content()
+        .alignment
+        .iter()
+        .all(|c| !c.effects.is_empty()));
+    // The ongoing field is gone from the format: content with it is rejected.
+    let bad = r#"[{"id":"x","name":"X","side":"unity","tier":1,"ongoing":true,"text":"","effects":[{"op":"build"}]}]"#;
+    assert!(serde_json::from_str::<Vec<content::AlignmentCard>>(bad).is_err());
+}
+
+#[test]
+fn freeing_a_city_and_removing_a_node_sway_unity() {
+    let (rules, mut g) = lab(&[]);
+    let m = &rules.map;
+    let city = m.numbered(0, piece(0).cities[0]);
+    put(&mut g, city, ADV_CUBE, 1);
+    put(&mut g, city, &presence(0), 1);
+    set_res(&mut g, 0, Resource::Ambassadors, 1);
+    set_res(&mut g, 0, Resource::Energy, 10);
+    rules.apply_mut(&mut g, &std_act(0, "move"), None).unwrap();
+    answer_hex(&rules, &mut g, city);
+    answer_all(&rules, &mut g);
+    assert_eq!(g.tokens(city, ADV_CUBE), 0);
+    assert_eq!(g.var("alignment.unity"), 4);
+    // No standard action removes a node (019); the Decommission Unity card does.
+    put(&mut g, city, NODE, 1);
+    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "node"), None).is_err());
+    with_cx(&rules, |cx| {
+        crate::modules::effects::run(
+            &mut g,
+            cx,
+            &[content::Op::RemoveNodes { count: 1 }],
+            &mut crate::modules::effects::Ctx::team(),
+        )
+    })
+    .unwrap();
+    assert_eq!(g.tokens(city, NODE), 0);
+    // Freeing a city sways 4 (024; 023: 5), removing a node 2 (the bucket tips
+    // only once an action or phase finishes, so it holds both here).
+    assert_eq!(g.var("alignment.unity"), 6);
+}
+
+#[test]
+fn the_purge_counts_only_from_its_round() {
+    assert_eq!(Rules::new(&baseline()).unwrap().world().int("alignment.purge_round"), 6);
+    let mut c = lab_config(&[ACTIONS]);
+    c.apply_override("alignment.purge_round=6").unwrap();
+    let rules = Rules::new(&c).unwrap();
+    let mut g = rules.new_game(1);
+    for h in 0..g.hexes.len() {
+        put(&mut g, h, ADV_CUBE, 0);
+        put(&mut g, h, NODE, 0);
+        put(&mut g, h, ADV_AMBASSADOR, 0);
+    }
+    g.vars.insert("alignment.unity_tips".into(), 2);
+    set_res(&mut g, 0, Resource::Credits, 10);
+    g.round = 5;
+    let mut k = g.clone();
+    rules.apply_mut(&mut k, &std_act(0, "energy"), None).unwrap();
+    assert!(k.outcome.is_none());
+    g.round = 6;
+    rules.apply_mut(&mut g, &std_act(0, "energy"), None).unwrap();
+    assert!(g.outcome.as_ref().is_some_and(|o| o.won && o.reason == "purge"));
 }

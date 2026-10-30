@@ -96,35 +96,20 @@ fn the_view_shows_the_board_the_fronts_the_projects_and_the_next_card() {
         assert_eq!(value("board.presence_track").value, 5);
         assert_eq!(
             value("resource.ambassadors").value,
-            g.resource(s.index as usize, AMBASSADORS)
+            g.resource(s.index as usize, Resource::Ambassadors)
         );
     }
 }
 
 #[test]
 fn the_view_follows_every_variant_and_keeps_bookkeeping_out_of_globals() {
-    // Per-seat, per-country and per-card `vars`: never game-wide globals.
-    const BOOKKEEPING: &[&str] = &[
-        "board.track.",
+    // Flags shown elsewhere: game-wide keys, but still never globals.
+    const FLAGS: &[&str] = &[
         "adversary.peek",
         "adversary.starved",
+        "adversary.first_project",
         "adversary.first_corruption",
-        "adversary.removed_troop.",
-        "alignment.used.",
-        "board.blackout.",
-        "board.sabotage.",
-        "board.shelter.",
-        "board.project.",
-        "board.project_done.",
-        "cards.tier.",
-        "cards.picked.",
-        "cards.next_discount.",
-        "cards.civic_used.",
-        "cards.unpowered.",
-        "cards.kept_round.",
         "economy.bonus_insight",
-        "threats.paid.",
-        "threats.jam.",
     ];
     let names: Vec<&str> = crate::content()
         .map
@@ -174,15 +159,11 @@ fn the_view_follows_every_variant_and_keeps_bookkeeping_out_of_globals() {
             };
             assert_eq!(threats_shown, threats::active(&g).len());
             for x in &v.globals {
-                let claimed = BOOKKEEPING.iter().any(|p| {
-                    if p.ends_with('.') {
-                        x.key.starts_with(p)
-                    } else {
-                        x.key == *p
-                    }
-                });
+                // Per-seat, per-country and per-card `vars` carry a third
+                // key segment: `module.name` is the shape of a game-wide one.
+                let game_wide = x.key.matches('.').count() == 1 && !FLAGS.contains(&x.key.as_str());
                 assert!(
-                    !claimed || x.source != "engine",
+                    game_wide || x.source != "engine",
                     "bookkeeping {} in globals",
                     x.key
                 );

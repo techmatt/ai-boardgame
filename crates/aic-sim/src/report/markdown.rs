@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 use aic_core::content_hash;
 
 use super::findings::findings;
-use super::stats::{agent_order, head_to_head, time_split, variant_diffs, CellSummary};
+use super::stats::{agent_order, time_split, CellSummary};
 use super::{Run, SavedRecord};
 
 /// `+4.2 ±3.1` (percentage points).
@@ -102,13 +102,6 @@ pub fn markdown(run: &Run) -> String {
     let _ = writeln!(w, "- Variants: {}", vs.join("; "));
     let ds: Vec<String> = spec.difficulties.iter().map(|d| d.to_string()).collect();
     let _ = writeln!(w, "- Difficulties: {}", ds.join(", "));
-    let agents: Vec<String> = run
-        .cells
-        .iter()
-        .map(|c| c.agent.label())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
     let _ = writeln!(w, "- Agents (weakest first): {}", spec.agents.join(", "));
     let _ = writeln!(
         w,
@@ -150,7 +143,6 @@ pub fn markdown(run: &Run) -> String {
             format!("**{bad} game(s) failed to replay**")
         }
     );
-    let _ = agents;
 
     // Findings first: what a reader needs before the tables.
     let _ = writeln!(w, "## Findings\n");
@@ -219,13 +211,13 @@ pub fn markdown(run: &Run) -> String {
             String::new()
         }
     };
-    let h2h = head_to_head(run.cells, run.games);
+    let h2h = run.head_to_head;
     if let Some(first) = h2h.first() {
         let _ = writeln!(w, "## Head to head against greedy\n");
         let _ = writeln!(w, "Each agent and `{}` play the same seeds in every cell. Won by both / only the agent / only greedy / neither. Difference: the agent's win rate minus greedy's, ± the standard error of the per-seed difference; p: exact two-sided sign test on the seeds only one of them won. Beats greedy: ahead with p < 0.05.\n", first.greedy);
         let _ = writeln!(w, "| cell | games | agent win % | greedy win % | both / only agent / only greedy / neither | difference (pts) | p | verdict |");
         let _ = writeln!(w, "|---|---|---|---|---|---|---|---|");
-        for h in &h2h {
+        for h in h2h {
             let p = &h.paired;
             let _ = writeln!(
                 w,
@@ -248,7 +240,7 @@ pub fn markdown(run: &Run) -> String {
         }
         let _ = writeln!(w);
     }
-    let vds = variant_diffs(spec, run.cells, run.games);
+    let vds = run.variant_diffs;
     if let Some(first) = vds.first() {
         let _ = writeln!(w, "## Variants against the base\n");
         let _ = writeln!(w, "The first variant, `{}`, is the base. Both play the same seeds, so the difference (variant minus base, percentage points) carries the standard error of the per-seed difference; p: exact two-sided sign test on the seeds only one of them won.\n", first.base);
@@ -257,7 +249,7 @@ pub fn markdown(run: &Run) -> String {
             "| variant | difficulty | agent | win % base → variant | difference (pts) | p | rounds base → variant |"
         );
         let _ = writeln!(w, "|---|---|---|---|---|---|---|");
-        for v in &vds {
+        for v in vds {
             let p = &v.paired;
             let _ = writeln!(
                 w,

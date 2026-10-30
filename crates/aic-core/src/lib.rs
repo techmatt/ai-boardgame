@@ -25,11 +25,13 @@ pub mod hex;
 pub mod map;
 pub mod module;
 pub mod modules;
+pub mod op;
 pub mod record;
 pub mod rng;
 pub mod rules;
 pub mod state;
 pub mod view;
+pub mod vocab;
 
 pub use action::Action;
 pub use config::{Config, ModuleConfig, ParamValue};

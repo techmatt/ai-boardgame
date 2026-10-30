@@ -2,11 +2,13 @@
 //! would do on the current table, without doing it. Not a module: no
 //! phases, no state. Everything here reads public information only.
 //!
-//! The adversary's build step is the one forecast so far (015's deferred
-//! call 9: the agents' heuristic used to copy it). It mirrors
-//! `adversary::build_all`, and a core test keeps the two in step.
+//! The adversary's build step lives here (015's deferred call 9: the agents'
+//! heuristic used to copy it): `adversary::build_all` places what
+//! [`build_plan`] says, and the build's escalation what [`escalation_hexes`]
+//! says, so the forecast in [`next_build`] can't drift from the rule. The
+//! troops' forecast is `board::troop_plan`.
 
-use crate::content::Twist;
+use crate::content::Op;
 use crate::module::World;
 use crate::state::GameState;
 
@@ -23,24 +25,24 @@ use super::common::{clean_city, corrupted, is_base, is_city, scope_hexes, FACTOR
 pub fn build_plan(
     w: &World,
     g: &GameState,
-    twists: &[&Twist],
+    twists: &[&Op],
     scope: Option<usize>,
 ) -> Vec<(usize, i64)> {
-    let sum = |f: fn(&Twist) -> Option<i64>| -> i64 { twists.iter().filter_map(|t| f(t)).sum() };
+    let sum = |f: fn(&Op) -> Option<i64>| -> i64 { twists.iter().filter_map(|t| f(t)).sum() };
     let mut city = w.int("adversary.city_build");
     if adversary::level(w, 3) {
         city += w.int("adversary.build_bonus");
     }
     city += sum(|t| match t {
-        Twist::CityBuild { amount } => Some(*amount),
+        Op::CityBuild { amount } => Some(*amount),
         _ => None,
     });
     let clean = sum(|t| match t {
-        Twist::CleanFactories { amount } => Some(*amount),
+        Op::CleanFactories { amount } => Some(*amount),
         _ => None,
     });
     let stations = sum(|t| match t {
-        Twist::Stations { amount } => Some(*amount),
+        Op::StationBuild { amount } => Some(*amount),
         _ => None,
     });
     let factory = w.int("adversary.factory_build");
@@ -70,31 +72,36 @@ pub fn build_plan(
     plan
 }
 
+/// What an escalating card places in its build: `(hex, ambassadors)` for
+/// every military base, in hex order (none at `escalation_ambassadors` 0).
+pub fn escalation_hexes(w: &World, g: &GameState) -> Vec<(usize, i64)> {
+    let n = w.int("adversary.escalation_ambassadors");
+    if n <= 0 {
+        return Vec::new();
+    }
+    (0..g.hexes.len())
+        .filter(|&h| is_base(w, h))
+        .map(|h| (h, n))
+        .collect()
+}
+
 /// The next round's build, read off the face-up adversary card (public):
-/// [`build_plan`] with that card's twists, plus its escalation
-/// (`escalation_ambassadors` on every military base) when it carries one.
-/// Empty when no card is face up (the deck has run out). Read on the table
-/// as it stands now, so anything that changes before the adversary phase
-/// (a corruption, escalation from Discord) is not foreseen.
+/// [`build_plan`] with that card's twists, plus its escalation when it
+/// carries one. Empty when no card is face up (the deck has run out). Read
+/// on the table as it stands now, so anything that changes before the
+/// adversary phase (a corruption) is not foreseen, and nor are ongoing
+/// projects, which can place ambassadors during the build itself.
 pub fn next_build(w: &World, g: &GameState) -> Vec<(usize, i64)> {
-    let Some(card) = g
-        .pile(adversary::NEXT)
-        .first()
-        .and_then(|id| w.content.adversary_index(id))
-        .map(|i| &w.content.adversary[i])
-    else {
+    let Some(card) = g.pile(adversary::NEXT).first().map(|id| adversary::card(w, id)) else {
         return Vec::new();
     };
-    let twists: Vec<&Twist> = card.twists.iter().collect();
+    let twists: Vec<&Op> = card.twists.iter().collect();
     let mut plan = build_plan(w, g, &twists, None);
     if card.escalation {
-        let n = w.int("adversary.escalation_ambassadors");
-        if n > 0 {
-            for h in (0..g.hexes.len()).filter(|&h| is_base(w, h)) {
-                match plan.binary_search_by_key(&h, |&(x, _)| x) {
-                    Ok(i) => plan[i].1 += n,
-                    Err(i) => plan.insert(i, (h, n)),
-                }
+        for (h, n) in escalation_hexes(w, g) {
+            match plan.binary_search_by_key(&h, |&(x, _)| x) {
+                Ok(i) => plan[i].1 += n,
+                Err(i) => plan.insert(i, (h, n)),
             }
         }
     }

@@ -25,7 +25,7 @@
   "text": "Spread reaches 1 hex further.",
   "twists": [
    {
-    "op": "reach",
+    "op": "spread_reach",
     "amount": 1
    }
   ]
@@ -37,7 +37,8 @@
   "text": "Sway 1 toward Discord.",
   "twists": [
    {
-    "op": "discord",
+    "op": "sway",
+    "side": "discord",
     "amount": 1
    }
   ]
@@ -62,7 +63,7 @@
   "text": "Each corrupted research station builds 1. Escalation: each military base gains an adversary ambassador when this round builds.",
   "twists": [
    {
-    "op": "stations",
+    "op": "station_build",
     "amount": 1
    }
   ],
@@ -132,7 +133,7 @@
     "op": "war"
    },
    {
-    "op": "reach",
+    "op": "spread_reach",
     "amount": 1
    }
   ]
@@ -148,7 +149,7 @@
     "amount": 1
    },
    {
-    "op": "stations",
+    "op": "station_build",
     "amount": 1
    }
   ]
@@ -163,7 +164,8 @@
     "op": "war"
    },
    {
-    "op": "discord",
+    "op": "sway",
+    "side": "discord",
     "amount": 2
    }
   ]

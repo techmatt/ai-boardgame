@@ -1,10 +1,10 @@
 //! Economy: insight each round, income in upkeep (AI credit production,
 //! AI tracks, buildings, Unity cards), building upkeep, and giving insight
-//! to another player. What the board produces (energy, compute,
-//! megaproject cubes) is the board's production phase.
+//! to another player. What the board produces (energy, hardware, megaproject
+//! cubes) is the board's production phase.
 
 use crate::action::Action;
-use crate::content::{Passive, ANTIMATTER, CREDITS, ENERGY, HARDWARE, INSIGHT, RESOURCES};
+use crate::content::{Op, PerResource, Resource, RoundFlag, RESOURCES};
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -12,7 +12,7 @@ use crate::state::GameState;
 use crate::view::ViewOut;
 
 use super::common::has_presence_in;
-use super::{ai, alignment, cards};
+use super::{ai, alignment, board, cards};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "economy",
@@ -43,12 +43,13 @@ pub static DEF: ModuleDef = ModuleDef {
     }],
 };
 
-/// Insight every player gains next round (Global Mandate).
+/// Insight every player gains next round (Predictive Modelling, Open-Weights
+/// Release).
 pub const BONUS_INSIGHT: &str = "economy.bonus_insight";
 
 /// Seat `s`'s printed production of `resource` raised by one-time permanent
 /// gains (021).
-pub fn production_key(seat: usize, resource: &str) -> String {
+pub fn production_key(seat: usize, resource: Resource) -> String {
     format!("economy.production.{seat}.{resource}")
 }
 
@@ -73,56 +74,52 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     }))
 }
 
-/// What the next upkeep pays seat `s`: its `income`, less the compute of a
+/// What the next upkeep pays seat `s`: its `income`, with no energy for a
 /// seat with presence in a country sabotaged then. Once this round's upkeep
 /// has run, a flag counts only if it outlasts this round's cleanup (2+).
-pub fn upkeep_income(w: &World, g: &GameState, seat: usize) -> [i64; RESOURCES.len()] {
+pub fn upkeep_income(w: &World, g: &GameState, seat: usize) -> PerResource {
     let mut inc = income(w, g, seat);
     let upkeep_done = g
         .config
         .round
         .iter()
-        .position(|p| p == "economy.upkeep")
+        .position(|p| p.split('+').any(|q| q == "economy.upkeep"))
         .is_some_and(|i| g.phase > i);
     let at = if upkeep_done { 2 } else { 1 };
     if (0..w.map.countries.len()).any(|c| {
-        g.var(&format!("board.sabotage.{c}")) >= at && has_presence_in(w, g, seat, c)
+        board::flag_level(g, RoundFlag::Sabotage, c) >= at && has_presence_in(w, g, seat, c)
     }) {
-        inc[ENERGY] = 0;
+        inc[Resource::Energy] = 0;
     }
     inc
 }
 
 /// Seat `s`'s income per resource from its AI board, tracks, buildings and
-/// Unity cards (not the board's production), in `RESOURCES` order.
-pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; RESOURCES.len()] {
-    let mut out = [0i64; RESOURCES.len()];
-    let mut add = |r: &str, n: i64| {
-        if let Some(i) = RESOURCES.iter().position(|x| *x == r) {
-            out[i] += n;
-        }
-    };
-    add("credits", ai::board(w, seat).credits);
+/// Unity cards (not the board's production).
+pub fn income(w: &World, g: &GameState, seat: usize) -> PerResource {
+    let mut out = PerResource::default();
+    let mut add = |r: Resource, n: i64| out.add(r, n);
+    add(Resource::Credits, ai::board(w, seat).credits);
     for (r, n) in ai::track_income(w, g, seat) {
-        add(&r, n);
+        add(r, n);
     }
     for p in cards::passives(w, g, seat) {
         match p {
-            Passive::Income { resource, amount } => add(resource, *amount),
-            Passive::IncomePerTag {
+            Op::Income { resource, amount } => add(*resource, *amount),
+            Op::IncomePerTag {
                 resource,
                 tag,
                 per,
                 max,
-            } => add(resource, (cards::tags(w, g, seat, tag) / per).min(*max)),
-            Passive::IncomeIfTags {
+            } => add(*resource, (cards::tags(w, g, seat, *tag) / per).min(*max)),
+            Op::IncomeIfTags {
                 resource,
                 tag,
                 count,
                 amount,
             } => {
-                if cards::tags(w, g, seat, tag) >= *count {
-                    add(resource, *amount)
+                if cards::tags(w, g, seat, *tag) >= *count {
+                    add(*resource, *amount)
                 }
             }
             _ => {}
@@ -131,9 +128,18 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> [i64; RESOURCES.len()] {
     for r in RESOURCES {
         add(r, g.var(&production_key(seat, r)));
     }
-    add("credits", alignment::income_bonus(g));
-    add("insight", alignment::insight_bonus(g));
+    add(Resource::Credits, alignment::income_bonus(g));
+    add(Resource::Insight, alignment::insight_bonus(g));
     out
+}
+
+impl Economy {
+    /// Whether seat `s` can give insight now. `give_insight` 0 switches giving
+    /// off (rules.md §9; 020: it was still offered and cost the giver an
+    /// insight for nothing).
+    fn can_give(&self, g: &GameState, seat: usize) -> bool {
+        g.resource(seat, Resource::Insight) >= 1 && self.give_insight > 0
+    }
 }
 
 impl Module for Economy {
@@ -142,10 +148,10 @@ impl Module for Economy {
         let bonus = g.var(BONUS_INSIGHT);
         for s in 0..g.seats.len() {
             // Unspent insight is lost.
-            let have = g.resource(s, "insight");
+            let have = g.resource(s, Resource::Insight);
             let debt = g.var(&insight_debt(s));
-            let n = (income(&w, g, s)[INSIGHT] + bonus - debt).max(0);
-            cx.add_resource(g, s, "insight", n - have);
+            let n = (income(&w, g, s)[Resource::Insight] + bonus - debt).max(0);
+            cx.add_resource(g, s, Resource::Insight, n - have);
             if debt > 0 {
                 cx.set_key(g, insight_debt(s), 0);
             }
@@ -153,10 +159,8 @@ impl Module for Economy {
         cx.set_key(g, BONUS_INSIGHT.into(), 0);
     }
 
-    fn legal(&self, _phase: usize, g: &GameState, w: &World, seat: u8, out: &mut Vec<Action>) {
-        // `give_insight` 0 switches giving off (rules.md §9; 020: it was still offered
-        // and cost the giver an insight for nothing).
-        if g.resource(seat as usize, "insight") < 1 || w.int("economy.give_insight") <= 0 {
+    fn legal(&self, _phase: usize, g: &GameState, _w: &World, seat: u8, out: &mut Vec<Action>) {
+        if !self.can_give(g, seat as usize) {
             return;
         }
         for to in 0..g.seats.len() as u8 {
@@ -176,14 +180,14 @@ impl Module for Economy {
             return Err(Halt::Illegal("not a give".into()));
         };
         let (s, t) = (seat as usize, to as usize);
-        if s == t || t >= g.seats.len() || g.resource(s, "insight") < 1 || w.int("economy.give_insight") <= 0 {
+        if s == t || t >= g.seats.len() || !self.can_give(g, s) {
             return Err("can't give insight there".into());
         }
-        cx.add_resource(g, s, "insight", -1);
-        cx.add_resource(g, t, "insight", self.give_insight);
+        cx.add_resource(g, s, Resource::Insight, -1);
+        cx.add_resource(g, t, Resource::Insight, self.give_insight);
         for p in cards::passives(&w, g, s) {
-            if let Passive::GiveBonus { resource, amount } = p {
-                cx.add_resource(g, t, resource, *amount);
+            if let Op::GiveBonus { resource, amount } = p {
+                cx.add_resource(g, t, *resource, *amount);
             }
         }
         cx.count(g, "insight_given", 1);
@@ -194,16 +198,16 @@ impl Module for Economy {
         let w = cx.world;
         for s in 0..g.seats.len() {
             // What the action phase left unspent (021 screen): insight expires.
-            let (cr, ins) = (g.resource(s, "credits"), g.resource(s, "insight"));
+            let (cr, ins) = (g.resource(s, Resource::Credits), g.resource(s, Resource::Insight));
             cx.per_round(g, "economy.credits_unspent", cr);
             cx.per_round(g, "economy.insight_unspent", ins);
             let inc = upkeep_income(&w, g, s);
-            for (i, r) in RESOURCES.iter().enumerate() {
-                if *r != "insight" {
-                    cx.add_resource(g, s, r, inc[i]);
+            for (r, n) in inc.iter() {
+                if r != Resource::Insight {
+                    cx.add_resource(g, s, r, n);
                 }
             }
-            cx.count(g, "credits_income", inc[CREDITS]);
+            cx.count(g, "credits_income", inc[Resource::Credits]);
             cards::upkeep(g, cx, s);
         }
         Ok(())
@@ -212,37 +216,48 @@ impl Module for Economy {
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
         for s in 0..g.seats.len() {
             // What upkeep will pay, Sabotage included (020: the view showed the
-            // compute a sabotaged seat would not get).
+            // energy a sabotaged seat would not get).
             let inc = upkeep_income(w, g, s);
             let parts = [
                 (
                     "credits",
-                    inc[CREDITS],
+                    inc[Resource::Credits],
                     "credits in upkeep: credit production, tracks, buildings",
                 ),
                 (
                     "hardware",
-                    inc[HARDWARE],
+                    inc[Resource::Hardware],
                     "hardware in upkeep: Industry cards (player-owned factories make it in production)",
                 ),
                 (
                     "energy",
-                    inc[ENERGY],
+                    inc[Resource::Energy],
                     "energy in upkeep: the AI board, buildings (cities make energy in production)",
                 ),
                 (
                     "antimatter",
-                    inc[ANTIMATTER],
+                    inc[Resource::Antimatter],
                     "antimatter in upkeep: buildings",
                 ),
                 (
                     "insight",
-                    inc[INSIGHT],
+                    inc[Resource::Insight],
                     "insight at the start of each round (unspent insight is lost)",
                 ),
             ];
             for (r, n, doc) in parts {
                 out.seat(s, &format!("income.{r}"), &format!("+{r}"), n, None, doc);
+            }
+            let debt = g.var(&insight_debt(s));
+            if debt > 0 {
+                out.seat(
+                    s,
+                    "insight_debt",
+                    "insight lost next round",
+                    debt,
+                    None,
+                    "adversary ambassadors on your presence: this much less insight next round",
+                );
             }
         }
         out.bookkeeping(&[BONUS_INSIGHT, "economy.production.", "economy.insight_debt."]);

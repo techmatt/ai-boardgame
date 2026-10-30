@@ -14,6 +14,7 @@ use crate::content::Content;
 use crate::event::Event;
 use crate::map::Map;
 use crate::rng::Stream;
+use crate::vocab::Resource;
 use crate::state::{Ask, GameState, Opt, Outcome, Pick};
 use crate::view::ViewOut;
 
@@ -35,8 +36,7 @@ pub struct VariantDef {
     pub phases: &'static [PhaseSpec],
     /// RNG purposes this variant draws from. Each gets its own stream.
     pub rng: &'static [&'static str],
-    /// Whether the variant plays content cards (config `cards`). Card
-    /// parameter references become required parameters of this module.
+    /// Whether the variant plays content cards (config `cards`).
     pub uses_cards: bool,
     pub build: fn(&Build) -> Result<Box<dyn Module>, String>,
 }
@@ -139,7 +139,9 @@ impl PhaseKind {
 /// Why resolution stopped early.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Halt {
-    /// The action is not legal. The engine restores the state from before it.
+    /// The action is not legal. Before any choice is answered, the engine
+    /// restores the state from before it; after one, it panics
+    /// ([`Module::act`]).
     Illegal(String),
     /// A choice is needed ([`Cx::choose`] recorded the question).
     Ask,
@@ -193,7 +195,9 @@ pub trait Module: Send + Sync + Debug {
         false
     }
     /// Validate and apply a non-pass action this module owns. On
-    /// `Halt::Illegal` the engine restores the state from before it.
+    /// `Halt::Illegal` the engine restores the state from before it, but only
+    /// if no choice has been answered: after the first answer it is a bug
+    /// and panics, so do every legality check before the first `choose`.
     fn act(&self, _phase: usize, _g: &mut GameState, _cx: &mut Cx, action: &Action) -> Res {
         Err(Halt::Illegal(format!(
             "this phase takes no action like {action:?}"
@@ -235,7 +239,7 @@ impl World<'_> {
     pub fn int(&self, key: &str) -> i64 {
         match self.params.get(key) {
             Some(ParamValue::Int(v)) => *v,
-            Some(ParamValue::List(v)) => v[0],
+            Some(ParamValue::List(_)) => panic!("parameter {key} is not an int"),
             None => panic!("parameter {key} is not configured"),
         }
     }
@@ -243,7 +247,7 @@ impl World<'_> {
     pub fn list(&self, key: &str) -> &[i64] {
         match self.params.get(key) {
             Some(ParamValue::List(v)) => v,
-            Some(ParamValue::Int(v)) => std::slice::from_ref(v),
+            Some(ParamValue::Int(_)) => panic!("parameter {key} is not a list"),
             None => panic!("parameter {key} is not configured"),
         }
     }
@@ -275,8 +279,8 @@ impl Choices {
 }
 
 /// What a module gets while it resolves: the world, its own id (for
-/// namespacing counters and vars), its RNG purposes, the event log and the
-/// choices of the current resolution.
+/// [`Cx::count`] and the RNG panic message), its RNG purposes, the event log
+/// and the choices of the current resolution.
 pub struct Cx<'a> {
     pub world: World<'a>,
     pub module: &'static str,
@@ -364,16 +368,16 @@ impl<'a> Cx<'a> {
         next - cur
     }
 
-    pub fn add_resource(&mut self, g: &mut GameState, seat: usize, name: &str, delta: i64) {
+    pub fn add_resource(&mut self, g: &mut GameState, seat: usize, r: Resource, delta: i64) {
         if delta == 0 {
             return;
         }
-        let v = g.seats[seat].resources.entry(name.to_string()).or_insert(0);
+        let v = g.seats[seat].resources.entry(r).or_insert(0);
         *v += delta;
         let total = *v;
         self.emit(|| Event::ResourceChanged {
             seat: seat as u8,
-            resource: name.to_string(),
+            resource: r,
             delta,
             total,
         });
@@ -413,16 +417,6 @@ impl<'a> Cx<'a> {
     /// Sets a counter by its full key to `n` (a level; the last one set stays).
     pub fn level(&mut self, g: &mut GameState, key: &str, n: i64) {
         g.stats.counters.insert(key.to_string(), n);
-    }
-
-    /// This module's track `"<module>.<name>"`.
-    pub fn var(&self, g: &GameState, name: &str) -> i64 {
-        g.var(&format!("{}.{name}", self.module))
-    }
-
-    pub fn set_var(&mut self, g: &mut GameState, name: &str, v: i64) {
-        let key = format!("{}.{name}", self.module);
-        self.set_key(g, key, v);
     }
 
     /// Sets any module's track by its full key (shared rules code acting
@@ -589,7 +583,10 @@ impl Build<'_> {
     pub fn list(&self, name: &str) -> Result<Vec<i64>, String> {
         match self.params.get(name) {
             Some(ParamValue::List(v)) => Ok(v.clone()),
-            Some(ParamValue::Int(v)) => Ok(vec![*v]),
+            Some(ParamValue::Int(_)) => Err(format!(
+                "{}.{name}: expected a list, got an integer",
+                self.module
+            )),
             None => Err(format!("{}.{name}: missing", self.module)),
         }
     }

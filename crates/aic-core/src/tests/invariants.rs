@@ -62,7 +62,7 @@ fn broken(rules: &Rules, g: &GameState) -> Vec<String> {
         }
         let track = ai::board(&w, s).presence.len() + ai::board(&w, s).presence2.len();
         let taken = board::track_taken(g, s) + board::track2_taken(g, s);
-        let placed = total(g, &presence(s)) + g.resource(s, crate::modules::common::RESERVE);
+        let placed = total(g, &presence(s)) + g.resource(s, Resource::PresenceReserve);
         if taken > track {
             out.push(format!("seat {s}: {taken} presence taken off a track of {track}"));
         }
@@ -164,7 +164,7 @@ fn invariants_hold_in_random_games() {
 }
 
 #[test]
-#[ignore = "slow lane: more seeds of the invariant check, every variant"]
+#[ignore = "slow lane: the invariant check in every variant, one seed each"]
 fn invariants_hold_in_random_games_every_variant() {
     // One seed a variant (~14 s): the slow lane's slowest aic-core test.
     check_games(&variant_matrix(), 2..3);

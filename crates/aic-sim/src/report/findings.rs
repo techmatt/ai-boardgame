@@ -4,9 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use super::markdown::{p_value, pct, pts};
-use super::stats::{
-    agent_order, head_to_head, mean, top_agent, variant_diffs, CellSummary, HeadToHead, VariantDiff,
-};
+use super::stats::{agent_order, mean, CellSummary, HeadToHead, VariantDiff};
 use super::Run;
 use crate::experiment::CardCounts;
 
@@ -22,7 +20,7 @@ pub(super) fn findings(run: &Run) -> Vec<String> {
     // "The strongest agent" below: the top agent by win rate (the ladder's
     // top tier is not always the strongest: 008's engine sits above greedy
     // and two agents share its tier), else the top tier.
-    let top_label = top_agent(run.cells, sums).map(|(l, _)| l);
+    let top_label = run.top_agent.clone().map(|(l, _)| l);
     let strongest = |s: &CellSummary| match &top_label {
         Some(l) => s.agent == *l,
         None => s.tier == top_tier,
@@ -289,8 +287,8 @@ fn comparison_findings(run: &Run) -> Vec<String> {
         }
     }
     // Head to head: the top agent against greedy at the top difficulty.
-    let h2h = head_to_head(run.cells, run.games);
-    if let (Some((top, hi)), Some(first)) = (top_agent(run.cells, sums), h2h.first()) {
+    let h2h = run.head_to_head;
+    if let (Some((top, hi)), Some(first)) = (run.top_agent.clone(), h2h.first()) {
         let gl = &first.greedy;
         let line = |h: &HeadToHead| {
             let p = &h.paired;
@@ -349,9 +347,9 @@ fn comparison_findings(run: &Run) -> Vec<String> {
         }
     }
     // Variants: each against the base for the top agent at each difficulty.
-    let vds = variant_diffs(run.spec, run.cells, run.games);
+    let vds = run.variant_diffs;
     if !vds.is_empty() {
-        let who = top_agent(run.cells, sums).map(|(a, _)| a);
+        let who = run.top_agent.clone().map(|(a, _)| a);
         for c in &run.spec.configs {
             for &d in &run.spec.difficulties {
                 let Some(a) = &who else { continue };

@@ -27,20 +27,29 @@ The standing contract for every executor working in this repo.
   way of doing one is a variant.
 - Any change to how games play out: bump `RULES_REVISION` and update the golden
   fingerprint (`crates/aic-core/src/tests/mod.rs` and `scripts/wasm-smoke.mjs`).
-- Every rules change updates [docs/rules.md](docs/rules.md) in the same commit.
+- Every rules change updates [docs/rules.md](docs/rules.md) and adds its row to
+  [docs/rules-history.md](docs/rules-history.md) in the same commit. Run `aic-sim docs`
+  after changing content or tunables: rules.md's tables, docs/ops.md are generated, and a
+  fast-lane test fails if they are stale. One home per rule: a rule's number lives in a
+  config or in content, its effect in one `Op` arm or the rule that reads it.
+- What content does is one schema, `Op` (`crates/aic-core/src/op.rs`); resources, tags
+  and token types are enums (`vocab.rs`). Docs: *The op schema* in docs/architecture.md.
 
 ## Working rules
 
 - **Commit to the branch you are on.** Leave nothing uncommitted.
 - **Tests come in two lanes.** `cargo test --workspace` is the fast lane (~4 s once
   built): run it after every change. `cargo test-all` is the full run, the `#[ignore]`d
-  slow lane included (~1.7 min built, ~3 min after an edit, measured at r13 in 022): run it before every commit. A test slower than about a second goes
+  slow lane included (~3.4 min at r15): run it before every commit. A test slower than about a second goes
   in the slow lane, with a cheaper fast-lane twin where one makes sense. Details in
   the README's *Build and test*.
 - **Times are local, 12-hour clock** (2:45pm), in reports, docs and progress lines.
 - **Background any step that takes more than ~30 seconds** (builds, tests, servers),
   and wait on the real process — the `cargo`/`node`/test binary — never on a
   launcher wrapper that returns before the work is done.
+- **One cargo at a time in a target dir.** Concurrent builds corrupt incremental objects
+  here (LNK2019 on anon symbols); `cargo clean -p aic-core -p aic-sim -p aic-wasm` clears
+  it. Parallel helpers need their own `CARGO_TARGET_DIR`.
 - **LF line endings.** `.gitattributes` sets `* text=auto eol=lf`; don't override it.
 - **Operational facts go into `README.md`**: how to build, run and test, measured run
   times, ports, gotchas. Never leave one only in a report.

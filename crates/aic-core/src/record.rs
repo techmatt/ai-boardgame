@@ -99,7 +99,10 @@ impl SavedGame {
             } else if let Some(s) = o.get("seed").filter(|s| s.is_number()) {
                 // 020: a negative, fractional or too-large number said "expected a
                 // string", naming no field.
-                return Err(format!("bad record: seed {s} is not a whole number from 0 to {}", u64::MAX));
+                return Err(format!(
+                    "bad record: seed {s} is not a whole number from 0 to {}",
+                    u64::MAX
+                ));
             }
         }
         serde_json::from_value(rest).map_err(|e| format!("bad record: {e}"))
@@ -113,6 +116,12 @@ impl SavedGame {
         // Field order, not the map's alphabetical order.
         for k in HEAD {
             if let Some(v) = obj.get(*k) {
+                out.push_str(&format!("  {}: {},\n", json(k), v));
+            }
+        }
+        // A field `HEAD` doesn't list yet must not vanish from saved files.
+        for (k, v) in obj {
+            if k != "actions" && !HEAD.contains(&k.as_str()) {
                 out.push_str(&format!("  {}: {},\n", json(k), v));
             }
         }
@@ -130,9 +139,10 @@ impl SavedGame {
     }
 
     /// Replays the record and checks it against what was saved. Returns the
-    /// final state and a list of warnings (a different engine, content or
-    /// rules revision; a final state that differs from the saved one). An
-    /// invalid config or a rejected action is an error.
+    /// final state and a list of warnings (a different rules revision,
+    /// content hash, config hash or final fingerprint; a different engine
+    /// version alone is not one). An invalid config or a rejected action is
+    /// an error.
     pub fn replay(&self) -> Result<(GameState, Vec<String>), String> {
         let rules = Rules::new(&self.config)?;
         let g = crate::replay(&rules, self.seed, &self.actions)?;

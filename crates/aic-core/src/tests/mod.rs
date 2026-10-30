@@ -3,27 +3,34 @@ use std::collections::BTreeSet;
 use rand::{RngCore, SeedableRng};
 
 use super::*;
+use crate::content::{Resource, Side, TokenKind};
 use crate::content::HexKind;
 use crate::modules::adversary::{CURRENT, DECK, NEXT, STAGE, SUPPLY};
 use crate::modules::common::{
-    ambassador, cube, presence, presence_of, ADV_AMBASSADOR, ADV_CUBE, AMBASSADORS, FACTORY,
+    ambassador, cube, presence, presence_of, ADV_AMBASSADOR, ADV_CUBE, FACTORY,
     HARDEN, STATION, TROOP, UNIT,
 };
 
 mod adversary;
 mod alignment;
-mod board;
+mod ambassadors;
 mod cards;
 mod config;
 mod determinism;
+mod factories;
 mod freeing;
 mod invariants;
 mod map;
+mod march;
+mod ops;
 mod plan;
+mod production;
 mod projects;
 mod setup;
+mod standard_actions;
 mod threats;
 mod view;
+mod war;
 
 const BASELINE: &str = include_str!("../../../../configs/baseline.json");
 const SHARED_ROW: &str = include_str!("../../../../configs/shared_row.json");
@@ -111,8 +118,8 @@ fn total(g: &GameState, kind: &str) -> i64 {
     (0..g.hexes.len()).map(|h| g.tokens(h, kind)).sum()
 }
 
-fn set_res(g: &mut GameState, seat: usize, r: &str, n: i64) {
-    g.seats[seat].resources.insert(r.to_string(), n);
+fn set_res(g: &mut GameState, seat: usize, r: Resource, n: i64) {
+    g.seats[seat].resources.insert(r, n);
 }
 
 fn hexes_where(m: &Map, f: impl Fn(usize) -> bool) -> Vec<usize> {
@@ -134,6 +141,28 @@ fn corrupt_cities_except(m: &Map, g: &mut GameState, keep: &[usize]) {
             put(g, h, ADV_CUBE, 1);
         }
     }
+}
+
+/// A city with at least three open neighbours that touch no other city.
+fn city_with_lonely_neighbours(m: &Map) -> (usize, Vec<usize>) {
+    for c in cities(m) {
+        let lonely: Vec<usize> = m.hexes[c]
+            .neighbours
+            .iter()
+            .copied()
+            .filter(|&n| kind(m, n) == HexKind::Open)
+            .filter(|&n| {
+                m.hexes[n]
+                    .neighbours
+                    .iter()
+                    .all(|&x| x == c || kind(m, x) != HexKind::City)
+            })
+            .collect();
+        if lonely.len() >= 3 {
+            return (c, lonely);
+        }
+    }
+    panic!("no city with three lonely neighbours");
 }
 
 fn piece(c: usize) -> &'static content::CountryPiece {
@@ -197,9 +226,45 @@ fn std_act(seat: u8, act: &str) -> Action {
     }
 }
 
+/// Every seat passes, then whatever that asks takes first options.
+fn pass_round(rules: &Rules, g: &mut GameState) {
+    for s in 0..2 {
+        rules.apply_mut(g, &Action::Pass { seat: s }, None).unwrap();
+    }
+    answer_all(rules, g);
+}
+
+/// Stacks `side`'s Alignment deck: `card` is drawn next, whatever the tier.
+fn next_alignment_card(g: &mut GameState, side: Side, card: &str) {
+    for tier in [1, 2] {
+        g.piles.insert(
+            format!("alignment.deck.{}.{tier}", side.name()),
+            vec![card.to_string()],
+        );
+    }
+}
+
+/// Fills `side`'s bucket from the Undecided so the next action tips it.
+fn fill_bucket(rules: &Rules, g: &mut GameState, side: Side) {
+    let cap = crate::modules::alignment::capacity(&rules.world(), g, side);
+    g.vars.insert(format!("alignment.{}", side.name()), cap);
+    let u = g.var("alignment.undecided");
+    g.vars
+        .insert("alignment.undecided".into(), (u - cap).max(0));
+}
+
 /// A Cx for calling module functions directly on a crafted state.
 fn with_cx<T>(rules: &Rules, f: impl FnOnce(&mut module::Cx) -> T) -> T {
-    let mut choices = module::Choices::new(Vec::new());
+    with_cx_picks(rules, Vec::new(), f)
+}
+
+/// `with_cx` with the choices already answered by `picks`.
+fn with_cx_picks<T>(
+    rules: &Rules,
+    picks: Vec<crate::state::Pick>,
+    f: impl FnOnce(&mut module::Cx) -> T,
+) -> T {
+    let mut choices = module::Choices::new(picks);
     let mut cx = module::Cx {
         world: rules.world(),
         module: "test",
@@ -210,13 +275,19 @@ fn with_cx<T>(rules: &Rules, f: impl FnOnce(&mut module::Cx) -> T) -> T {
     f(&mut cx)
 }
 
-/// Plays first legal actions until `phase` is the current decision.
+/// Passes (else plays the first legal action) until `phase` is the current
+/// decision: first-action play could pay and withdraw a threat counter forever.
 fn advance_to(rules: &Rules, g: &mut GameState, phase: &str) {
     for _ in 0..10_000 {
         if g.pending.is_none() && rules.phase(g).is_some_and(|p| p.name == phase) {
             return;
         }
-        let a = rules.legal_actions(g)[0].clone();
+        let legal = rules.legal_actions(g);
+        let a = legal
+            .iter()
+            .find(|a| matches!(a, Action::Pass { .. }))
+            .unwrap_or(&legal[0])
+            .clone();
         rules.apply_mut(g, &a, None).unwrap();
     }
     panic!("never reached {phase}");

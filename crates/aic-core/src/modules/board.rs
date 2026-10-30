@@ -2,12 +2,12 @@
 //! ocean, industrial zones; military bases on the fronts), player presence
 //! (owned here; AI boards read the track through `track_taken`), the setup,
 //! the production/war clock, production (factories grow from cities and
-//! make troops and hardware, front battles on war steps, adversary troops,
-//! cities, stations, megaprojects), player ambassadors and site claims, the
-//! standard actions and the round-end cleanup.
+//! make corp units and hardware, front battles on war steps, adversary
+//! troops, cities, stations, megaprojects), player ambassadors and site
+//! claims, the standard actions and the round-end cleanup.
 
 use crate::action::Action;
-use crate::content::{Passive, RoundFlag, Side};
+use crate::content::{Op, RoundFlag, Side};
 use crate::module::{
     scheduled, Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -28,19 +28,19 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("start_corrupted", 0, 3, "cities per country that start corrupted"),
             ParamSpec::int("start_ambassadors", 0, 10, "player ambassadors each player starts with"),
             ParamSpec::int("unit_cap", 0, 20, "corp units a base holds at most"),
-            ParamSpec::int("factory_units", 0, 5, "troops each factory makes on a production step at each of its corp's bases"),
+            ParamSpec::int("factory_units", 0, 5, "corp units each factory makes on a production step at each of its corp's bases"),
             ParamSpec::list("clock", 0, 3, "the printed round track, per round: 1 production, 2 war, 3 both (the last entry repeats)"),
             ParamSpec::list("corp_energy", 0, 10, "energy cubes each city of country i makes a round (a megacorp parameter; the list repeats)"),
             ParamSpec::int("city_energy_credits", 0, 20, "credits for a neutral city's energy cube, bought by a player with presence next to it"),
             ParamSpec::int("aligned_bonus", 0, 10, "extra energy an aligned city gives its owner"),
             ParamSpec::int("station_cubes", 0, 5, "megaproject cubes a research station makes a round"),
             ParamSpec::int("project_credits", 0, 50, "credits each player cube pays when a megaproject completes"),
-            ParamSpec::int("project_discord_per", 0, 10, "adversary cubes per Discord when a megaproject completes"),
+            ParamSpec::int("project_discord_per", 1, 10,"adversary cubes per Discord when a megaproject completes"),
             ParamSpec::int("divert_discord", 0, 5, "Discord per unit of energy or compute diverted to the adversary"),
             ParamSpec::int("base_discord", 0, 10, "Discord an adversary ambassador on a producing base sways"),
             ParamSpec::int("base_unity", 0, 10, "Unity a player ambassador on a producing base sways"),
             ParamSpec::int("factory_unity", 0, 10, "Unity a player ambassador on a producing factory sways"),
-            ParamSpec::int("free_city_at", 0, 10, "one player's ambassadors on a corrupted city that free it, with no adversary ambassador on or next to it"),
+            ParamSpec::int("free_city_at", 1, 10,"one player's ambassadors on a corrupted city that free it, with no adversary ambassador on or next to it"),
             ParamSpec::int("destruction_discord", 0, 5, "Discord each building destroyed in war sways"),
             ParamSpec::int("troop_spent", 0, 1, "1: an adversary troop that strikes a target is used up"),
             ParamSpec::int("troop_steps", 0, 5, "steps each adversary troop takes in the march: destroy a target on or next to it, else move 1 hex toward the nearest"),
@@ -63,11 +63,11 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("drain_amount", 1, 20, "standard project: compute drained"),
         ],
         phases: &[
-            PhaseSpec::decision("act", "standard actions and projects: presence, station, remove, move, align, harden, hardware, sell, buy energy, drain"),
-            PhaseSpec::auto("bases", "on a production step: bases and factories make troops and hardware, cities grow factories"),
-            PhaseSpec::auto("war", "on a war step, the troops on either side of each front fight"),
+            PhaseSpec::decision("act", "standard actions and projects: presence, station, remove, move, ambassador, align, harden, hardware, sell, buy energy, drain"),
+            PhaseSpec::auto("bases", "on a production step: bases and factories make corp units and hardware, cities grow factories"),
+            PhaseSpec::auto("war", "on a war step, the corp units on either side of each front fight"),
             PhaseSpec::auto("march", "each adversary troop takes its steps: destroy a target next to it, else move toward the nearest"),
-            PhaseSpec::auto("produce", "cities and research stations produce; ambassadors divert them and leak presence compute"),
+            PhaseSpec::auto("produce", "cities and research stations produce; ambassadors divert them, and one on a lone presence drains its owner's insight into adversary compute"),
             PhaseSpec::auto("cleanup", "remove the round's country flags"),
         ],
         rng: &[],
@@ -85,9 +85,14 @@ pub fn flag(f: RoundFlag, country: usize) -> String {
     format!("board.{}.{country}", f.name())
 }
 
+/// A country flag's count: above 0 while it is up.
+pub fn flag_level(g: &GameState, f: RoundFlag, country: usize) -> i64 {
+    g.var(&flag(f, country))
+}
+
 /// Whether a country flag is up, by its name (`"blackout"`, ...).
-pub fn flagged(g: &GameState, name: &str, country: usize) -> bool {
-    g.var(&format!("board.{name}.{country}")) > 0
+pub fn flagged(g: &GameState, f: RoundFlag, country: usize) -> bool {
+    g.var(&flag(f, country)) > 0
 }
 
 /// Shelters country `c`'s buildings for the rest of the round.
@@ -108,22 +113,64 @@ pub fn project_done(c: usize) -> String {
     format!("board.project_done.{c}")
 }
 
-/// The standard actions, by name.
-pub const STANDARD: [&str; 12] = [
-    "presence",
-    "station",
-    "remove",
-    "move",
-    "ambassador",
-    "align",
-    "harden",
-    "hardware",
+/// A standard action. `Action::Standard` carries its [`name`](Self::name).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StandardAction {
+    Presence,
+    Station,
+    Remove,
+    Move,
+    Ambassador,
+    Align,
+    Harden,
+    Hardware,
     // 024: the credit sinks, Terraforming Mars' standard projects.
-    "presence_buy",
-    "harden_buy",
-    "energy",
-    "drain",
+    PresenceBuy,
+    HardenBuy,
+    Energy,
+    Drain,
+}
+
+/// The standard actions, in the order they are offered and published.
+pub const STANDARD: [StandardAction; 12] = [
+    StandardAction::Presence,
+    StandardAction::Station,
+    StandardAction::Remove,
+    StandardAction::Move,
+    StandardAction::Ambassador,
+    StandardAction::Align,
+    StandardAction::Harden,
+    StandardAction::Hardware,
+    StandardAction::PresenceBuy,
+    StandardAction::HardenBuy,
+    StandardAction::Energy,
+    StandardAction::Drain,
 ];
+
+impl StandardAction {
+    /// The action's name: `Action::Standard.act`, and its tally `board.std.<name>`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            StandardAction::Presence => "presence",
+            StandardAction::Station => "station",
+            StandardAction::Remove => "remove",
+            StandardAction::Move => "move",
+            StandardAction::Ambassador => "ambassador",
+            StandardAction::Align => "align",
+            StandardAction::Harden => "harden",
+            StandardAction::Hardware => "hardware",
+            StandardAction::PresenceBuy => "presence_buy",
+            StandardAction::HardenBuy => "harden_buy",
+            StandardAction::Energy => "energy",
+            StandardAction::Drain => "drain",
+        }
+    }
+
+    /// The action called `name`, if there is one.
+    pub fn parse(name: &str) -> Option<StandardAction> {
+        STANDARD.into_iter().find(|a| a.name() == name)
+    }
+}
 
 /// The clock's step for round `round`: 1 production, 2 war, 3 both.
 pub fn clock_step(w: &World, round: u32) -> i64 {
@@ -193,7 +240,7 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
         return Ok(false);
     }
     let hexes = presence_hexes(&w, g, seat);
-    let reserve = g.resource(seat, RESERVE) > 0;
+    let reserve = g.resource(seat, Resource::PresenceReserve) > 0;
     // 021: with two tracks the player chooses which one's next token to take.
     let b = ai::board(&w, seat);
     let (t1, t2) = (track_taken(g, seat), track2_taken(g, seat));
@@ -231,7 +278,7 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
         return Ok(false);
     };
     if reserve {
-        cx.add_resource(g, seat, RESERVE, -1);
+        cx.add_resource(g, seat, Resource::PresenceReserve, -1);
         cx.tally(g, "board.presence_from_reserve", 1);
     } else if second {
         cx.add_key(g, track2_key(seat), 1);
@@ -246,8 +293,7 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> 
 /// Whether seat `s` can claim the site on hex `h` (align a city, take a
 /// station or factory): its presence is on or next to `h`, and no node is.
 pub fn can_claim(w: &World, g: &GameState, seat: usize, h: usize) -> bool {
-    let k = presence(seat);
-    next_to(w, h, |x| g.tokens(x, &k) > 0) && !next_to(w, h, |x| g.tokens(x, NODE) > 0)
+    in_reach(w, g, seat, h) && !next_to(w, h, |x| g.tokens(x, NODE) > 0)
 }
 
 #[derive(Debug)]
@@ -258,71 +304,71 @@ fn build(_b: &Build) -> Result<Box<dyn Module>, String> {
 }
 
 /// A standard action's cost: (energy, credits, hardware).
-pub fn std_cost(w: &World, act: &str) -> (i64, i64, i64) {
+pub fn std_cost(w: &World, act: StandardAction) -> (i64, i64, i64) {
     let i = |k: &str| w.int(&format!("board.{k}"));
     match act {
-        "presence" => (i("presence_energy"), 0, 0),
-        "station" => (i("build_energy"), 0, i("station_hardware")),
-        "remove" => (i("remove_energy"), 0, 0),
-        "move" => (i("move_energy"), 0, 0),
-        "ambassador" => (0, i("ambassador_credits"), 0),
-        "align" => (i("align_energy"), 0, 0),
-        "hardware" => (0, 0, 1),
-        "presence_buy" => (0, i("presence_credits"), 0),
-        "harden_buy" => (0, i("harden_credits"), 0),
-        "energy" => (0, i("energy_credits"), 0),
-        "drain" => (0, i("drain_credits"), 0),
-        _ => (i("harden_energy"), 0, 0),
+        StandardAction::Presence => (i("presence_energy"), 0, 0),
+        StandardAction::Station => (i("build_energy"), 0, i("station_hardware")),
+        StandardAction::Remove => (i("remove_energy"), 0, 0),
+        StandardAction::Move => (i("move_energy"), 0, 0),
+        StandardAction::Ambassador => (0, i("ambassador_credits"), 0),
+        StandardAction::Align => (i("align_energy"), 0, 0),
+        StandardAction::Harden => (i("harden_energy"), 0, 0),
+        StandardAction::Hardware => (0, 0, 1),
+        StandardAction::PresenceBuy => (0, i("presence_credits"), 0),
+        StandardAction::HardenBuy => (0, i("harden_credits"), 0),
+        StandardAction::Energy => (0, i("energy_credits"), 0),
+        StandardAction::Drain => (0, i("drain_credits"), 0),
     }
 }
 
 /// What a standard action does, for the view.
-pub fn std_text(act: &str) -> &'static str {
+pub fn std_text(act: StandardAction) -> &'static str {
     match act {
-        "presence" => "place a presence next to yours (uncovers your track's next space)",
-        "station" => "build a research station in reach (yours)",
-        "remove" => "remove an adversary ambassador in reach",
-        "move" => "move a player ambassador onto a piece in reach",
-        "ambassador" => "gain a player ambassador",
-        "align" => "align a clean city you can claim (1 ambassador)",
-        "hardware" => "sell 1 hardware for credits",
-        "presence_buy" => "standard project: place a presence next to yours",
-        "harden_buy" => "standard project: harden a building in reach",
-        "energy" => "standard project: gain 1 energy",
-        "drain" => "standard project: remove compute from an adversary project",
-        _ => "harden a building in reach (Harden passive)",
+        StandardAction::Presence => "place a presence next to yours (uncovers your track's next space)",
+        StandardAction::Station => "build a research station in reach (yours)",
+        StandardAction::Remove => "remove an adversary ambassador in reach",
+        StandardAction::Move => "move a player ambassador onto a piece in reach",
+        StandardAction::Ambassador => "gain a player ambassador",
+        StandardAction::Align => "align a clean city you can claim (1 ambassador)",
+        StandardAction::Harden => "harden a building in reach (Harden passive)",
+        StandardAction::Hardware => "sell 1 hardware for credits",
+        StandardAction::PresenceBuy => "standard project: place a presence next to yours",
+        StandardAction::HardenBuy => "standard project: harden a building in reach",
+        StandardAction::Energy => "standard project: gain 1 energy",
+        StandardAction::Drain => "standard project: remove compute from an adversary project",
     }
 }
 
 fn can_afford(g: &GameState, seat: usize, (e, cr, hw): (i64, i64, i64)) -> bool {
-    g.resource(seat, "energy") >= e
-        && g.resource(seat, "credits") >= cr
-        && g.resource(seat, HARDWARE) >= hw
+    g.resource(seat, Resource::Energy) >= e
+        && g.resource(seat, Resource::Credits) >= cr
+        && g.resource(seat, Resource::Hardware) >= hw
 }
 
 /// The hexes a standard action of `seat` may target (empty: not offered).
-fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
+fn std_targets(w: &World, g: &GameState, seat: usize, act: StandardAction) -> Vec<usize> {
     let reach = |h: usize| in_reach(w, g, seat, h);
     let all = 0..g.hexes.len();
     match act {
-        "presence" | "presence_buy" => {
+        StandardAction::Presence | StandardAction::PresenceBuy => {
             if ai::can_place(w, g, seat) {
                 presence_hexes(w, g, seat)
             } else {
                 Vec::new()
             }
         }
-        "station" => all
+        StandardAction::Station => all
             .filter(|&h| buildable(w, g, h) && !w.map.hexes[h].industrial && reach(h))
             .collect(),
-        "remove" => all
+        StandardAction::Remove => all
             .filter(|&h| reach(h) && g.tokens(h, ADV_AMBASSADOR) > 0)
             .collect(),
         // Onto a piece in reach, from the supply or another hex: never onto the
         // hex the seat's only ambassador already holds (020: that charged the
         // energy and moved nothing).
-        "move" => {
-            let supply = g.resource(seat, AMBASSADORS) > 0;
+        StandardAction::Move => {
+            let supply = g.resource(seat, Resource::Ambassadors) > 0;
             let on_board = ambassadors_on_board(g, seat);
             all.filter(|&h| {
                 (supply || on_board > g.tokens(h, &ambassador(seat)))
@@ -331,32 +377,102 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
             })
             .collect()
         }
-        "align" => {
-            if g.resource(seat, AMBASSADORS) > 0 {
-                all.filter(|&h| reach(h) && clean_city(w, g, h) && can_claim(w, g, seat, h))
+        StandardAction::Align => {
+            if g.resource(seat, Resource::Ambassadors) > 0 {
+                all.filter(|&h| clean_city(w, g, h) && can_claim(w, g, seat, h))
                     .collect()
             } else {
                 Vec::new()
             }
         }
-        "harden" => {
-            if cards::has_passive(w, g, seat, |p| matches!(p, Passive::HardenAction)) {
+        StandardAction::Harden => {
+            if cards::has_passive(w, g, seat, |p| matches!(p, Op::HardenAction)) {
                 all.filter(|&h| reach(h) && hardenable(g, h)).collect()
             } else {
                 Vec::new()
             }
         }
-        "harden_buy" => all.filter(|&h| reach(h) && hardenable(g, h)).collect(),
-        "drain" => {
+        StandardAction::HardenBuy => all.filter(|&h| reach(h) && hardenable(g, h)).collect(),
+        StandardAction::Drain => {
             if adversary::projects(g).iter().any(|p| g.var(&adversary::project_key(p)) > 0) {
                 vec![usize::MAX]
             } else {
                 Vec::new()
             }
         }
-        // Gaining an ambassador or hardware needs no target.
-        _ => vec![usize::MAX],
+        // Gaining an ambassador, credits or energy needs no target.
+        StandardAction::Ambassador | StandardAction::Hardware | StandardAction::Energy => {
+            vec![usize::MAX]
+        }
     }
+}
+
+/// A standard action's effect, paid for and tallied; `targets` are its
+/// [`std_targets`].
+fn std_resolve(
+    g: &mut GameState,
+    cx: &mut Cx,
+    s: usize,
+    act: StandardAction,
+    targets: &[usize],
+) -> Res {
+    let w = cx.world;
+    let on_hex = |cx: &mut Cx| -> Res<Option<usize>> {
+        let opts = targets.iter().map(|&h| hex_opt(&w, h)).collect();
+        let prompt = format!("Seat {s}: {} on which hex?", act.name());
+        Ok(cx.choose(s, &prompt, opts)?.map(|i| targets[i]))
+    };
+    match act {
+        StandardAction::Ambassador => cx.add_resource(g, s, Resource::Ambassadors, 1),
+        StandardAction::Hardware => {
+            cx.add_resource(g, s, Resource::Credits, w.int("board.hardware_credits"));
+            cx.tally(g, "board.hardware_sold", 1);
+        }
+        StandardAction::Presence | StandardAction::PresenceBuy => {
+            place_presence(g, cx, s)?;
+        }
+        StandardAction::Energy => cx.add_resource(g, s, Resource::Energy, 1),
+        StandardAction::Drain => {
+            let ids: Vec<String> = adversary::projects(g)
+                .into_iter()
+                .filter(|p| g.var(&adversary::project_key(p)) > 0)
+                .collect();
+            let opts = ids.iter().map(|p| opt(p.clone())).collect();
+            let prompt = format!("Seat {s}: remove compute from which adversary project?");
+            if let Some(i) = cx.choose(s, &prompt, opts)? {
+                adversary::drain_project(g, cx, &ids[i], w.int("board.drain_amount"));
+            }
+        }
+        StandardAction::Station => {
+            if let Some(h) = on_hex(cx)? {
+                cx.add_tokens(g, h, STATION, 1);
+                cx.add_tokens(g, h, &cube(s), 1);
+            }
+        }
+        StandardAction::Remove => {
+            if let Some(h) = on_hex(cx)? {
+                adversary::remove_piece(g, cx, Some(s), h, ADV_AMBASSADOR);
+            }
+        }
+        StandardAction::Move => {
+            if let Some(h) = on_hex(cx)? {
+                move_ambassador(g, cx, s, h)?;
+            }
+        }
+        StandardAction::Align => {
+            if let Some(h) = on_hex(cx)? {
+                cx.add_resource(g, s, Resource::Ambassadors, -1);
+                cx.add_tokens(g, h, &cube(s), 1);
+                cx.tally(g, "board.cities_aligned", 1);
+            }
+        }
+        StandardAction::Harden | StandardAction::HardenBuy => {
+            if let Some(h) = on_hex(cx)? {
+                cx.add_tokens(g, h, HARDEN, 1);
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn ambassadors_on_board(g: &GameState, seat: usize) -> i64 {
@@ -375,8 +491,7 @@ pub fn place_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
         cx.tally(g, "board.cancelled", 1);
         return;
     }
-    let site = g.tokens(h, STATION) > 0 || g.tokens(h, FACTORY) > 0;
-    if site && !corrupted(g, h) && cube_owner(g, h).is_none() && can_claim(&w, g, seat, h) {
+    if has_building(g, h) && !corrupted(g, h) && cube_owner(g, h).is_none() && can_claim(&w, g, seat, h) {
         cx.add_tokens(g, h, &cube(seat), 1);
         let what = if g.tokens(h, STATION) > 0 {
             "station"
@@ -405,11 +520,7 @@ pub fn place_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
 
 /// Whether an adversary ambassador stands on hex `h` or an adjacent hex.
 pub fn guarded(w: &World, g: &GameState, h: usize) -> bool {
-    g.tokens(h, ADV_AMBASSADOR) > 0
-        || w.map.hexes[h]
-            .neighbours
-            .iter()
-            .any(|&n| g.tokens(n, ADV_AMBASSADOR) > 0)
+    next_to(w, h, |x| g.tokens(x, ADV_AMBASSADOR) > 0)
 }
 
 /// 024: a corrupted city frees the moment one player holds `free_city_at`
@@ -417,7 +528,7 @@ pub fn guarded(w: &World, g: &GameState, h: usize) -> bool {
 /// ambassadors are used up. Checked after every action and automatic phase.
 fn free_cities(g: &mut GameState, cx: &mut Cx) {
     let w = cx.world;
-    let need = w.int("board.free_city_at").max(1);
+    let need = w.int("board.free_city_at");
     for h in 0..g.hexes.len() {
         if !is_city(&w, h) || !corrupted(g, h) {
             continue;
@@ -445,7 +556,7 @@ pub fn move_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, to: usize) -
         .filter(|&h| h != to && g.tokens(h, &k) > 0)
         .collect();
     let mut opts = Vec::new();
-    if g.resource(seat, AMBASSADORS) > 0 {
+    if g.resource(seat, Resource::Ambassadors) > 0 {
         opts.push(opt("from your supply"));
     }
     let off = opts.len();
@@ -458,7 +569,7 @@ pub fn move_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, to: usize) -
         return Ok(());
     };
     if i < off {
-        cx.add_resource(g, seat, AMBASSADORS, -1);
+        cx.add_resource(g, seat, Resource::Ambassadors, -1);
     } else {
         cx.add_tokens(g, from[i - off], &k, -1);
     }
@@ -467,9 +578,9 @@ pub fn move_ambassador(g: &mut GameState, cx: &mut Cx, seat: usize, to: usize) -
 }
 
 /// A building of `kind` on hex `h` would be destroyed. A Shelter Order in
-/// its country, a corp troop at a base next to it (adversary strikes only,
-/// `by_troop`), a hardening token, a player ambassador on the hex, or a
-/// Civic Shelter absorbs it (in that order); otherwise it goes, and a war
+/// its country, a corp unit at a base next to it (adversary strikes only,
+/// `by_troop`), a hardening token, a player ambassador on the hex, or an
+/// Aegis Dome Array absorbs it (in that order); otherwise it goes, and a war
 /// destruction (not `by_troop`) sways toward Discord. Returns whether it was
 /// destroyed.
 pub fn destroy_building(
@@ -481,7 +592,7 @@ pub fn destroy_building(
 ) -> bool {
     let w = cx.world;
     let c = w.map.hexes[h].country as usize;
-    if flagged(g, RoundFlag::Shelter.name(), c) {
+    if flag_level(g, RoundFlag::Shelter, c) > 0 {
         return false;
     }
     if by_troop {
@@ -510,7 +621,7 @@ pub fn destroy_building(
     cx.add_tokens(g, h, kind, -1);
     if w.int("board.presence_returns") > 0 {
         if let Some(s) = (0..g.seats.len()).find(|&s| kind == presence(s)) {
-            cx.add_resource(g, s, RESERVE, 1);
+            cx.add_resource(g, s, Resource::PresenceReserve, 1);
         }
     }
     if kind == STATION || kind == FACTORY {
@@ -531,13 +642,14 @@ pub fn destroy_building(
     true
 }
 
-/// Uses a Civic Shelter for a building destruction in `country`, if one applies.
+/// Uses a seat's `CivicShelter` passive (Aegis Dome Array) for a building
+/// destruction in `country`, if one applies.
 fn civic_shelter(g: &mut GameState, cx: &mut Cx, country: usize) -> bool {
     let w = cx.world;
     for s in 0..g.seats.len() {
         if g.var(&cards::civic_used(s)) == 0
             && has_presence_in(&w, g, s, country)
-            && cards::has_passive(&w, g, s, |p| matches!(p, Passive::CivicShelter))
+            && cards::has_passive(&w, g, s, |p| matches!(p, Op::CivicShelter))
         {
             cx.set_key(g, cards::civic_used(s), 1);
             return true;
@@ -566,7 +678,7 @@ fn add_unit(g: &mut GameState, cx: &mut Cx, base: usize) {
 }
 
 /// Production step 1, on a production step of the clock: bases, then
-/// factories, make their corp's troops (a factory 1 at each of its corp's
+/// factories, make their corp's units (a factory 1 at each of its corp's
 /// bases); an ambassador on the piece diverts it and is removed; an
 /// adversary-owned factory makes an adversary troop. Player-owned factories
 /// make hardware. Then the cities grow factories.
@@ -598,7 +710,7 @@ fn produce_units(g: &mut GameState, cx: &mut Cx) -> Res {
             continue;
         }
         if let Some(s) = cube_owner(g, h) {
-            cx.add_resource(g, s, HARDWARE, hw);
+            cx.add_resource(g, s, Resource::Hardware, hw);
             cx.tally(g, "board.hardware_made", hw);
         }
         if per == 0 {
@@ -639,13 +751,6 @@ fn produce_units(g: &mut GameState, cx: &mut Cx) -> Res {
         }
     }
     grow_factories(g, cx)
-}
-
-/// Free industrial zones: printed zones holding no building.
-pub fn free_zones(w: &World, g: &GameState) -> Vec<usize> {
-    (0..g.hexes.len())
-        .filter(|&h| w.map.hexes[h].industrial && !has_building(g, h))
-        .collect()
 }
 
 /// Each city builds one factory: a corrupted city at a free zone in its
@@ -997,9 +1102,10 @@ pub fn troop_plan(w: &World, g: &GameState, h: usize) -> Option<(usize, i64)> {
     Some((target, (moves + 1 + steps - 1) / steps))
 }
 
-/// Production step 3: cities make energy, stations megaproject cubes, data
-/// centres compute; an adversary ambassador on the piece diverts its output
-/// and is removed. Diverted energy and compute sway toward Discord.
+/// Production step 3: cities make energy, stations megaproject cubes; an
+/// adversary ambassador on the piece diverts its output and is removed, and
+/// diverted energy sways toward Discord. Then an adversary ambassador on a
+/// lone presence drains 1 of its owner's next insight into adversary compute.
 fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
     let w = cx.world;
     let divert = w.int("board.divert_discord");
@@ -1013,7 +1119,7 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             let l = w.list("board.corp_energy");
             l[c % l.len()]
         };
-        if flagged(g, RoundFlag::Blackout.name(), c) {
+        if flag_level(g, RoundFlag::Blackout, c) > 0 {
             continue;
         }
         if corrupted(g, h) {
@@ -1025,17 +1131,12 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             cx.tally(g, "board.energy_diverted", energy);
         } else if let Some(s) = cube_owner(g, h) {
             // An aligned city's cube goes free to the player who aligned it.
-            cx.add_resource(g, s, "energy", energy + w.int("board.aligned_bonus"));
+            cx.add_resource(g, s, Resource::Energy, energy + w.int("board.aligned_bonus"));
         } else {
             // A neutral city's cube: a player with presence next to it may buy
             // it (players choose who), otherwise it is lost (021).
             let buyers: Vec<usize> = (0..g.seats.len())
-                .filter(|&s| {
-                    g.resource(s, "credits") >= price
-                        && std::iter::once(h)
-                            .chain(w.map.hexes[h].neighbours.iter().copied())
-                            .any(|x| g.tokens(x, &presence(s)) > 0)
-                })
+                .filter(|&s| g.resource(s, Resource::Credits) >= price && in_reach(&w, g, s, h))
                 .collect();
             if buyers.is_empty() {
                 continue;
@@ -1048,8 +1149,8 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             );
             if let Some(i) = cx.choose(0, &prompt, opts)? {
                 if let Some(&s) = buyers.get(i) {
-                    cx.add_resource(g, s, "credits", -price);
-                    cx.add_resource(g, s, "energy", energy);
+                    cx.add_resource(g, s, Resource::Credits, -price);
+                    cx.add_resource(g, s, Resource::Energy, energy);
                     cx.tally(g, "board.city_energy_bought", energy);
                 }
             }
@@ -1076,7 +1177,7 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
         if g.var(&project_done(c)) > 0 {
             if let Some(s) = to {
                 for (r, n) in &w.content.map.countries[c].project.benefit {
-                    cx.add_resource(g, s, r, *n);
+                    cx.add_resource(g, s, *r, *n);
                 }
             }
             continue;
@@ -1125,10 +1226,10 @@ fn complete_project(g: &mut GameState, cx: &mut Cx, c: usize) {
         return;
     }
     for (s, &n) in mine.iter().enumerate() {
-        cx.add_resource(g, s, "credits", n * w.int("board.project_credits"));
+        cx.add_resource(g, s, Resource::Credits, n * w.int("board.project_credits"));
         cx.set_key(g, project_key(c, Some(s)), 0);
     }
-    let per = w.int("board.project_discord_per").max(1);
+    let per = w.int("board.project_discord_per");
     alignment::sway(g, cx, Side::Discord, adv / per);
     cx.set_key(g, project_key(c, None), 0);
     cx.set_key(g, project_done(c), 1);
@@ -1162,7 +1263,7 @@ impl Module for Board {
             let n = w.content.map.countries[c].presence;
             cx.add_tokens(g, w.map.numbered(c, n), &presence(s), 1);
             cx.set_key(g, track_key(s), 1);
-            cx.add_resource(g, s, AMBASSADORS, w.int("board.start_ambassadors"));
+            cx.add_resource(g, s, Resource::Ambassadors, w.int("board.start_ambassadors"));
         }
     }
 
@@ -1172,13 +1273,10 @@ impl Module for Board {
             if !can_afford(g, s, std_cost(w, act)) {
                 continue;
             }
-            if act == "align" && g.resource(s, AMBASSADORS) < 1 {
-                continue;
-            }
             if !std_targets(w, g, s, act).is_empty() {
                 out.push(Action::Standard {
                     seat,
-                    act: act.to_string(),
+                    act: act.name().to_string(),
                 });
             }
         }
@@ -1204,82 +1302,28 @@ impl Module for Board {
                     return Err(Halt::Illegal("not in your hand".into()));
                 }
                 cards::discard(g, cx, card, &hand);
-                cx.add_resource(g, s, "credits", w.int("board.sell_credits"));
+                cx.add_resource(g, s, Resource::Credits, w.int("board.sell_credits"));
                 cx.tally(g, "board.std.sell", 1);
                 Ok(())
             }
             Action::Standard { seat, act } => {
                 let s = *seat as usize;
-                let act = act.as_str();
-                if !STANDARD.contains(&act) {
+                let Some(act) = StandardAction::parse(act) else {
                     return Err(Halt::Illegal("no such standard action".into()));
-                }
+                };
                 let cost = std_cost(&w, act);
                 let targets = std_targets(&w, g, s, act);
                 if !can_afford(g, s, cost) || targets.is_empty() {
                     return Err("can't take that standard action now".into());
                 }
                 let (e, cr, hw) = cost;
-                cx.add_resource(g, s, "energy", -e);
-                cx.add_resource(g, s, "credits", -cr);
-                cx.add_resource(g, s, HARDWARE, -hw);
+                cx.add_resource(g, s, Resource::Energy, -e);
+                cx.add_resource(g, s, Resource::Credits, -cr);
+                cx.add_resource(g, s, Resource::Hardware, -hw);
                 cx.tally(g, "board.hardware_spent", hw);
-                cx.tally(g, &format!("board.std.{act}"), 1);
+                cx.tally(g, &format!("board.std.{}", act.name()), 1);
                 cx.tally(g, "board.std_actions", 1);
-                if act == "ambassador" {
-                    cx.add_resource(g, s, AMBASSADORS, 1);
-                    return Ok(());
-                }
-                if act == "hardware" {
-                    cx.add_resource(g, s, "credits", w.int("board.hardware_credits"));
-                    cx.tally(g, "board.hardware_sold", 1);
-                    return Ok(());
-                }
-                if act == "presence" || act == "presence_buy" {
-                    place_presence(g, cx, s)?;
-                    return Ok(());
-                }
-                if act == "energy" {
-                    cx.add_resource(g, s, "energy", 1);
-                    return Ok(());
-                }
-                if act == "drain" {
-                    let ids: Vec<String> = adversary::projects(g)
-                        .into_iter()
-                        .filter(|p| g.var(&adversary::project_key(p)) > 0)
-                        .collect();
-                    let opts = ids.iter().map(|p| opt(p.clone())).collect();
-                    let prompt = format!("Seat {s}: remove compute from which adversary project?");
-                    if let Some(i) = cx.choose(s, &prompt, opts)? {
-                        adversary::drain_project(g, cx, &ids[i], w.int("board.drain_amount"));
-                    }
-                    return Ok(());
-                }
-                let opts = targets.iter().map(|&h| hex_opt(&w, h)).collect();
-                let prompt = format!("Seat {s}: {act} on which hex?");
-                let Some(i) = cx.choose(s, &prompt, opts)? else {
-                    return Ok(());
-                };
-                let h = targets[i];
-                match act {
-                    "station" => {
-                        cx.add_tokens(g, h, STATION, 1);
-                        cx.add_tokens(g, h, &cube(s), 1);
-                    }
-                    "remove" => {
-                        adversary::remove_piece(g, cx, Some(s), h, ADV_AMBASSADOR);
-                    }
-                    "move" => move_ambassador(g, cx, s, h)?,
-                    "align" => {
-                        cx.add_resource(g, s, AMBASSADORS, -1);
-                        cx.add_tokens(g, h, &cube(s), 1);
-                        cx.tally(g, "board.cities_aligned", 1);
-                    }
-                    _ => {
-                        cx.add_tokens(g, h, HARDEN, 1);
-                    }
-                }
-                Ok(())
+                std_resolve(g, cx, s, act, &targets)
             }
             _ => Err(Halt::Illegal("not a standard action".into())),
         }
@@ -1312,7 +1356,7 @@ impl Module for Board {
                 // Rounds that end with only nodes between the players and the
                 // purge (019: nodes are hard to remove).
                 let level = alignment::bar_level(&w, g);
-                let nodes: i64 = (0..g.hexes.len()).map(|h| g.tokens(h, NODE)).sum();
+                let nodes = adversary::node_count(g, None);
                 cx.peak(g, "adversary.nodes_peak", nodes);
                 if level < 3 && nodes > 0 && adversary::purge_count(&w, g, level) == nodes {
                     cx.tally(g, "alignment.purge_blocked_by_nodes", 1);
@@ -1345,11 +1389,11 @@ impl Module for Board {
             .map(|f| format!("board.{}.", f.name()))
             .collect();
         let mut keys: Vec<&str> = flags.iter().map(String::as_str).collect();
-        keys.extend(["board.project.", "board.project_done.", "board.track."]);
+        keys.extend(["board.project.", "board.project_done.", "board.track.", "board.track2."]);
         out.bookkeeping(&keys);
         for c in 0..w.map.countries.len() {
             for f in FLAGS {
-                if flagged(g, f.name(), c) {
+                if flag_level(g, f, c) > 0 {
                     out.country(c, f.name(), f.name(), 1, None, flag_doc(f));
                 }
             }
@@ -1479,7 +1523,7 @@ impl Module for Board {
                     cost.join(" + ")
                 }
             );
-            out.standard(act, e, cr, hw, &doc);
+            out.standard(act.name(), e, cr, hw, &doc);
         }
         for s in 0..g.seats.len() {
             out.seat(
@@ -1498,17 +1542,15 @@ impl Module for Board {
                 None,
                 "your presence: you act within 1 of it, and claim sites on or next to it",
             );
-            let left = ai::board(w, s)
-                .presence
-                .len()
-                .saturating_sub(track_taken(g, s));
+            let b = ai::board(w, s);
+            let left = b.presence.len().saturating_sub(track_taken(g, s));
             out.seat(
                 s,
                 "presence_track",
-                "presence left on the track",
+                "presence left on track 1",
                 left as i64,
                 None,
-                "presence tokens still on your AI board's track",
+                "presence tokens still on your AI board's first track (the second shows on the board; your reserve is separate)",
             );
         }
     }

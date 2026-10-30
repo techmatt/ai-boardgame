@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use crate::action::Action;
-use crate::content::{CardDef, Passive, ANY_TAG, RESOURCES};
+use crate::content::{CardDef, DiscountOn, Op, Tag, TagOrAny, TokenKind};
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -129,7 +129,7 @@ pub fn next_discount(seat: usize) -> String {
     format!("cards.next_discount.{seat}")
 }
 
-/// Set once seat `s`'s Civic Shelter has saved a building this round (module `board`).
+/// Set once seat `s`'s Aegis Dome Array has saved a building this round (module `board`).
 pub fn civic_used(seat: usize) -> String {
     format!("cards.civic_used.{seat}")
 }
@@ -139,8 +139,33 @@ fn unpowered(seat: usize, card: &str) -> String {
 }
 
 /// Drafted cards `seat` has kept this round.
-fn kept_key(seat: usize) -> String {
+pub fn kept_key(seat: usize) -> String {
     format!("cards.kept_round.{seat}")
+}
+
+/// The rule for keeping one more card of `tier` when `seat` has already kept
+/// `kept` this round, before any conversion: (insight needed, credits). The
+/// opening (round 1): free for the first `opening_free`, then credits. Later
+/// rounds: insight by tier. Paying a shortfall of insight in credits is the
+/// caller's: it depends on the insight the seat has left at that point.
+///
+/// Variant `off` has no draft and no keep parameters: keeping is free there.
+pub fn keep_need(w: &World, g: &GameState, seat: usize, tier: u8, kept: i64) -> (i64, i64) {
+    if w.variant("cards") == Some("off") {
+        return (0, 0);
+    }
+    if g.round <= 1 {
+        if kept < w.int("cards.opening_free") {
+            return (0, 0);
+        }
+        return (0, w.int("cards.opening_keep_credits"));
+    }
+    let need = match tier {
+        2 if ai::keep2(w, g, seat) => w.int("cards.keep_tier2_upgraded"),
+        2 => w.int("cards.keep_tier2"),
+        _ => w.int("cards.keep_tier1"),
+    };
+    (need, 0)
 }
 
 pub fn def<'w>(w: &World<'w>, id: &str) -> &'w CardDef {
@@ -150,6 +175,16 @@ pub fn def<'w>(w: &World<'w>, id: &str) -> &'w CardDef {
 /// A card's printed credit cost.
 pub fn list_cost(w: &World, id: &str) -> i64 {
     def(w, id).cost
+}
+
+/// A card's costs beyond credits, in the order its text prints them.
+fn extra_costs(d: &CardDef) -> [(Resource, i64); 4] {
+    [
+        (Resource::Insight, d.insight),
+        (Resource::Energy, d.energy),
+        (Resource::Hardware, d.hardware),
+        (Resource::Antimatter, d.antimatter),
+    ]
 }
 
 /// Discards `card` from pile `from`: to its tier's discard pile, or back to
@@ -166,8 +201,8 @@ pub fn discard(g: &mut GameState, cx: &mut Cx, card: &str, from: &str) {
 
 /// Standing effects that apply to seat `s`: its AI's innate rule and its
 /// powered active buildings.
-pub fn passives<'w>(w: &World<'w>, g: &GameState, seat: usize) -> Vec<&'w Passive> {
-    let mut out: Vec<&'w Passive> = ai::board(w, seat).innate.passives.iter().collect();
+pub fn passives<'w>(w: &World<'w>, g: &GameState, seat: usize) -> Vec<&'w Op> {
+    let mut out: Vec<&'w Op> = ai::board(w, seat).innate.passives.iter().collect();
     for id in g.pile(&built(seat)) {
         if g.var(&unpowered(seat, id)) == 0 {
             out.extend(def(w, id).passives.iter());
@@ -176,7 +211,7 @@ pub fn passives<'w>(w: &World<'w>, g: &GameState, seat: usize) -> Vec<&'w Passiv
     out
 }
 
-pub fn has_passive(w: &World, g: &GameState, seat: usize, f: impl Fn(&Passive) -> bool) -> bool {
+pub fn has_passive(w: &World, g: &GameState, seat: usize, f: impl Fn(&Op) -> bool) -> bool {
     passives(w, g, seat).into_iter().any(f)
 }
 
@@ -193,16 +228,16 @@ pub fn in_play(g: &GameState, seat: usize) -> Vec<String> {
 }
 
 /// Seat `s`'s tags of one kind, over every card it has in play (021).
-pub fn tags(w: &World, g: &GameState, seat: usize, tag: &str) -> i64 {
+pub fn tags(w: &World, g: &GameState, seat: usize, tag: Tag) -> i64 {
     in_play(g, seat)
         .iter()
-        .map(|id| def(w, id).tags.iter().filter(|t| *t == tag).count() as i64)
+        .map(|id| def(w, id).tags.iter().filter(|t| **t == tag).count() as i64)
         .sum()
 }
 
 /// Cards seat `s` has in play holding tokens of `kind` (active buildings
 /// and programs), in that order.
-pub fn token_cards(w: &World, g: &GameState, seat: usize, kind: Option<&str>) -> Vec<String> {
+pub fn token_cards(w: &World, g: &GameState, seat: usize, kind: Option<TokenKind>) -> Vec<String> {
     g.pile(&built(seat))
         .iter()
         .chain(g.pile(&played(seat)).iter())
@@ -243,25 +278,25 @@ pub fn upkeep(g: &mut GameState, cx: &mut Cx, seat: usize) {
         if d.upkeep.is_empty() {
             continue;
         }
-        let ok = d.upkeep.iter().all(|(r, n)| g.resource(seat, r) >= *n);
+        let ok = d.upkeep.iter().all(|(r, n)| g.resource(seat, *r) >= *n);
         if ok {
             for (r, n) in &d.upkeep {
-                cx.add_resource(g, seat, r, -n);
+                cx.add_resource(g, seat, *r, -n);
             }
         }
         cx.set_key(g, unpowered(seat, &id), (!ok) as i64);
     }
     for p in passives(&w, g, seat) {
-        if let Passive::ConvertUpkeep {
+        if let Op::ConvertUpkeep {
             from,
             amount,
             to,
             gain,
         } = p
         {
-            if g.resource(seat, from) >= *amount {
-                cx.add_resource(g, seat, from, -amount);
-                cx.add_resource(g, seat, to, *gain);
+            if g.resource(seat, *from) >= *amount {
+                cx.add_resource(g, seat, *from, -amount);
+                cx.add_resource(g, seat, *to, *gain);
             }
         }
     }
@@ -278,7 +313,7 @@ pub fn capacity(w: &World, g: &GameState, seat: usize) -> i64 {
     let extra: i64 = passives(w, g, seat)
         .iter()
         .map(|p| match p {
-            Passive::Slots { amount } => *amount,
+            Op::Slots { amount } => *amount,
             _ => 0,
         })
         .sum();
@@ -311,9 +346,6 @@ fn stack_targets(w: &World, g: &GameState, seat: usize, d: &CardDef) -> Vec<Stri
 struct Cards {
     deal: i64,
     opening_deal: i64,
-    opening_free: i64,
-    opening_keep_credits: i64,
-    keep: [i64; 3],
     insight_credits: i64,
     /// Selected cards (content indices).
     cards: Vec<usize>,
@@ -325,13 +357,6 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Cards {
         deal: b.int("deal")?,
         opening_deal: b.int("opening_deal")?,
-        opening_free: b.int("opening_free")?,
-        opening_keep_credits: b.int("opening_keep_credits")?,
-        keep: [
-            b.int("keep_tier1")?,
-            b.int("keep_tier2")?,
-            b.int("keep_tier2_upgraded")?,
-        ],
         insight_credits: b.int("insight_credits")?,
         cards: b.cards.clone(),
         off: false,
@@ -342,9 +367,6 @@ fn build_off(b: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Cards {
         deal: 0,
         opening_deal: 0,
-        opening_free: 0,
-        opening_keep_credits: 0,
-        keep: [0; 3],
         insight_credits: 1,
         cards: b.cards.clone(),
         off: true,
@@ -352,41 +374,28 @@ fn build_off(b: &Build) -> Result<Box<dyn Module>, String> {
 }
 
 impl Cards {
-    /// What keeping `card` costs `seat` now: (insight, credits). The
-    /// opening (round 1): free for the first `opening_free`, then credits.
-    /// Later rounds: insight by tier, any shortfall at `insight_credits`
-    /// credits an insight (that conversion is only for keeps).
+    /// What keeping `card` costs `seat` now: (insight, credits). [`keep_need`],
+    /// with any shortfall of insight at `insight_credits` credits an insight
+    /// (that conversion is only for keeps).
     fn keep_price(&self, w: &World, g: &GameState, seat: usize, card: &str) -> (i64, i64) {
-        if g.round <= 1 {
-            if g.var(&kept_key(seat)) < self.opening_free {
-                return (0, 0);
-            }
-            return (0, self.opening_keep_credits);
-        }
-        let need = match def(w, card).tier {
-            2 if ai::keep2(w, g, seat) => self.keep[2],
-            2 => self.keep[1],
-            _ => self.keep[0],
-        };
-        let have = g.resource(seat, "insight").max(0);
+        let kept = g.var(&kept_key(seat));
+        let (need, credits) = keep_need(w, g, seat, def(w, card).tier, kept);
+        let have = g.resource(seat, Resource::Insight).max(0);
         let ins = need.min(have);
-        (ins, (need - ins) * self.insight_credits)
+        (ins, credits + (need - ins) * self.insight_credits)
     }
 }
 
 /// Why a card can't be played now, or `None` if it can.
 fn blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'static str> {
     let d = def(w, id);
-    if d.needs.iter().any(|(t, n)| tags(w, g, seat, t) < *n) {
+    if d.needs.iter().any(|(t, n)| tags(w, g, seat, *t) < *n) {
         return Some("needs tags");
     }
-    if g.resource(seat, "credits")
+    if g.resource(seat, Resource::Credits)
         + discount_room(w, g, seat, d).map_or(0, |(_, rate, k)| rate * k)
         < play_cost(w, g, seat, d)
-        || g.resource(seat, "antimatter") < d.antimatter
-        || g.resource(seat, "energy") < d.energy
-        || g.resource(seat, HARDWARE) < d.hardware
-        || g.resource(seat, "insight") < d.insight
+        || extra_costs(d).iter().any(|&(r, n)| g.resource(seat, r) < n)
         || !lowers_ok(w, g, seat, d)
     {
         return Some("unaffordable");
@@ -407,42 +416,36 @@ pub fn lowers_ok(w: &World, g: &GameState, seat: usize, d: &CardDef) -> bool {
         return true;
     }
     let income = economy::income(w, g, seat);
-    d.lowers.iter().all(|(r, n)| {
-        RESOURCES
-            .iter()
-            .position(|x| x == r)
-            .is_some_and(|i| income[i] >= *n)
-    })
+    d.lowers
+        .iter()
+        .all(|(r, n)| income[*r] >= *n)
 }
 
 /// The AI's resource discount on card `d` for seat `s`: (resource, credits
 /// per unit, most units worth spending), if the AI has one that applies and
 /// the seat holds some of it (beyond what the card itself needs).
-pub fn discount_room<'w>(
-    w: &World<'w>,
+pub fn discount_room(
+    w: &World,
     g: &GameState,
     seat: usize,
     d: &CardDef,
-) -> Option<(&'w str, i64, i64)> {
+) -> Option<(Resource, i64, i64)> {
     let cost = play_cost(w, g, seat, d);
     ai::board(w, seat).discounts.iter().find_map(|x| {
-        let applies = if x.tag == "building" {
-            d.is_building()
-        } else {
-            d.tags.contains(&x.tag)
+        let applies = match x.tag {
+            DiscountOn::Building => d.is_building(),
+            DiscountOn::Tag(t) => d.tags.contains(&t),
         };
-        let reserved = match x.resource.as_str() {
-            "energy" => d.energy,
-            "antimatter" => d.antimatter,
-            "hardware" => d.hardware,
-            _ => 0,
-        };
-        let have = g.resource(seat, &x.resource) - reserved;
+        let reserved = extra_costs(d)
+            .iter()
+            .find(|&&(r, _)| r == x.resource)
+            .map_or(0, |&(_, n)| n);
+        let have = g.resource(seat, x.resource) - reserved;
         if !applies || have <= 0 || x.rate <= 0 || cost <= 0 {
             return None;
         }
         let most = ((cost + x.rate - 1) / x.rate).min(have);
-        Some((x.resource.as_str(), x.rate, most))
+        Some((x.resource, x.rate, most))
     })
 }
 
@@ -451,7 +454,7 @@ pub fn play_cost(w: &World, g: &GameState, seat: usize, d: &CardDef) -> i64 {
     if !d.is_building() {
         return d.cost;
     }
-    discounted_cost(w, d, building_discount(w, g, seat))
+    discounted_cost(d, building_discount(w, g, seat))
 }
 
 /// The credits seat `s`'s buildings cost less now (its passives and a
@@ -460,7 +463,7 @@ pub fn building_discount(w: &World, g: &GameState, seat: usize) -> i64 {
     passives(w, g, seat)
         .iter()
         .map(|p| match p {
-            Passive::BuildingDiscount { amount } => *amount,
+            Op::BuildingDiscount { amount } => *amount,
             _ => 0,
         })
         .sum::<i64>()
@@ -469,7 +472,7 @@ pub fn building_discount(w: &World, g: &GameState, seat: usize) -> i64 {
 
 /// [`play_cost`] with the seat's [`building_discount`] already known (a
 /// caller pricing a whole hand works it out once).
-pub fn discounted_cost(_w: &World, d: &CardDef, discount: i64) -> i64 {
+pub fn discounted_cost(d: &CardDef, discount: i64) -> i64 {
     if d.is_building() {
         (d.cost - discount).max(0)
     } else {
@@ -487,14 +490,7 @@ fn ability_blocked(w: &World, g: &GameState, seat: usize, id: &str) -> Option<&'
     if g.var(&unpowered(seat, id)) > 0 {
         return Some("unpowered");
     }
-    let unaffordable = ab.cost.iter().any(|(r, n)| {
-        if r == "tokens" {
-            g.var(&tokens_key(seat, id)) < *n
-        } else {
-            g.resource(seat, r) < *n
-        }
-    });
-    if unaffordable {
+    if g.var(&tokens_key(seat, id)) < ab.tokens || ab.cost.iter().any(|(r, n)| g.resource(seat, *r) < *n) {
         return Some("unaffordable");
     }
     if !effects::feasible(w, g, seat, &ab.effects) {
@@ -513,7 +509,7 @@ pub struct Source {
     pub label: String,
     /// The pile the cards leave, and the cards (a stack: all of it).
     pub cards: Vec<(String, String)>,
-    pub tags: Vec<String>,
+    pub tags: Vec<Tag>,
 }
 
 /// What seat `s` could sacrifice now, in a fixed order: programs, stacks,
@@ -536,7 +532,7 @@ pub fn sources(w: &World, g: &GameState, seat: usize) -> Vec<Source> {
         cards.push((built(seat), top.clone()));
         let tags = cards
             .iter()
-            .flat_map(|(_, c)| def(w, c).tags.iter().cloned())
+            .flat_map(|(_, c)| def(w, c).tags.iter().copied())
             .collect();
         out.push(Source {
             label: format!("stack {top}"),
@@ -544,20 +540,20 @@ pub fn sources(w: &World, g: &GameState, seat: usize) -> Vec<Source> {
             tags,
         });
     }
-    let from_hand: Vec<&str> = passives(w, g, seat)
+    let from_hand: Vec<TagOrAny> = passives(w, g, seat)
         .into_iter()
         .filter_map(|p| match p {
-            Passive::TagsFromHand { tag } => Some(tag.as_str()),
+            Op::TagsFromHand { tag } => Some(*tag),
             _ => None,
         })
         .collect();
     if !from_hand.is_empty() {
         for id in g.pile(&hand(seat)) {
-            let tags: Vec<String> = def(w, id)
+            let tags: Vec<Tag> = def(w, id)
                 .tags
                 .iter()
-                .filter(|t| from_hand.iter().any(|x| *x == ANY_TAG || x == t))
-                .cloned()
+                .copied()
+                .filter(|&t| from_hand.iter().any(|x| x.accepts(t)))
                 .collect();
             if !tags.is_empty() {
                 out.push(Source {
@@ -574,21 +570,20 @@ pub fn sources(w: &World, g: &GameState, seat: usize) -> Vec<Source> {
 /// A power's tag cost still unpaid: specific tags, and `any`.
 #[derive(Debug, Clone)]
 pub struct TagNeed {
-    pub specific: BTreeMap<String, i64>,
+    pub specific: BTreeMap<Tag, i64>,
     pub any: i64,
 }
 
 impl TagNeed {
-    pub fn new(cost: &[(String, i64)]) -> TagNeed {
+    pub fn new(cost: &[(TagOrAny, i64)]) -> TagNeed {
         let mut need = TagNeed {
             specific: BTreeMap::new(),
             any: 0,
         };
         for (t, n) in cost {
-            if t == ANY_TAG {
-                need.any += n;
-            } else {
-                *need.specific.entry(t.clone()).or_default() += n;
+            match t {
+                TagOrAny::Any => need.any += n,
+                TagOrAny::Is(t) => *need.specific.entry(*t).or_default() += n,
             }
         }
         need
@@ -599,13 +594,13 @@ impl TagNeed {
     }
 
     /// Whether `tags` would pay any of what is still needed.
-    pub fn helps(&self, tags: &[String]) -> bool {
+    pub fn helps(&self, tags: &[Tag]) -> bool {
         tags.iter()
             .any(|t| self.any > 0 || self.specific.get(t).is_some_and(|&n| n > 0))
     }
 
     /// Pays with `tags`: each tag fills its own requirement first, then `any`.
-    pub fn pay(&mut self, tags: &[String]) {
+    pub fn pay(&mut self, tags: &[Tag]) {
         for t in tags {
             match self.specific.get_mut(t) {
                 Some(n) if *n > 0 => *n -= 1,
@@ -630,9 +625,8 @@ impl TagNeed {
 }
 
 /// Seat `s` pays a power's tag cost by sacrificing sources one at a time
-/// (its choice among those that still help), until it is paid. Returns the
-/// tags given up.
-pub fn sacrifice_for(g: &mut GameState, cx: &mut Cx, seat: usize, cost: &[(String, i64)]) -> Res<i64> {
+/// (its choice among those that still help), until it is paid.
+pub fn sacrifice_for(g: &mut GameState, cx: &mut Cx, seat: usize, cost: &[(TagOrAny, i64)]) -> Res {
     let w = cx.world;
     let mut need = TagNeed::new(cost);
     let mut given = 0;
@@ -666,17 +660,16 @@ pub fn sacrifice_for(g: &mut GameState, cx: &mut Cx, seat: usize, cost: &[(Strin
     }
     cx.tally(g, "ai.tags_sacrificed", given);
     cx.per_round(g, "ai.tags_sacrificed", given);
-    Ok(given)
+    Ok(())
 }
 
 /// Seat `s` draws up to `n` tier-1 cards into its hand, no keep paid (023's
 /// `draw`); the deck reshuffles its discards when it runs out.
 pub fn draw(g: &mut GameState, cx: &mut Cx, seat: usize, n: i64) -> Res {
     for _ in 0..n.max(0) {
-        let Some(id) = top_of(g, cx, 1) else {
+        if !deal_top(g, cx, 1, &hand(seat))? {
             break;
-        };
-        cx.move_card(g, &id, &deck(1), &hand(seat), false)?;
+        }
         cx.tally(g, "cards.drawn", 1);
     }
     Ok(())
@@ -697,20 +690,25 @@ fn top_of(g: &mut GameState, cx: &mut Cx, tier: u8) -> Option<String> {
     g.pile(&deck(tier)).first().cloned()
 }
 
+/// Moves the top card of a tier's deck (see [`top_of`]) to pile `to`; false
+/// with no card to move.
+fn deal_top(g: &mut GameState, cx: &mut Cx, tier: u8, to: &str) -> Res<bool> {
+    let Some(id) = top_of(g, cx, tier) else {
+        return Ok(false);
+    };
+    cx.move_card(g, &id, &deck(tier), to, false)?;
+    Ok(true)
+}
+
+fn all_picked(g: &GameState) -> bool {
+    (0..g.seats.len()).all(|s| g.var(&picked_key(s)) > 0 || g.pile(&packet(s)).is_empty())
+}
+
+fn tier_open(g: &GameState, tier: u8) -> bool {
+    !(g.pile(&deck(tier)).is_empty() && g.pile(&discard_pile(tier)).is_empty())
+}
+
 impl Cards {
-    /// The top card of a tier's deck, reshuffling its discards if it is empty.
-    fn top(&self, g: &mut GameState, cx: &mut Cx, tier: u8) -> Option<String> {
-        top_of(g, cx, tier)
-    }
-
-    fn all_picked(&self, g: &GameState) -> bool {
-        (0..g.seats.len()).all(|s| g.var(&picked_key(s)) > 0 || g.pile(&packet(s)).is_empty())
-    }
-
-    fn tier_open(&self, g: &GameState, tier: u8) -> bool {
-        !(g.pile(&deck(tier)).is_empty() && g.pile(&discard_pile(tier)).is_empty())
-    }
-
     fn play(&self, g: &mut GameState, cx: &mut Cx, seat: usize, id: &str) -> Res {
         let w = cx.world;
         if !g.pile(&hand(seat)).iter().any(|c| c == id) {
@@ -723,7 +721,7 @@ impl Cards {
         let mut credits = play_cost(&w, g, seat, d);
         if let Some((resource, rate, most)) = discount_room(&w, g, seat, d) {
             // Spend the AI's resource for credits: at least enough to afford it.
-            let short = (credits - g.resource(seat, "credits")).max(0);
+            let short = (credits - g.resource(seat, Resource::Credits)).max(0);
             let least = (short + rate - 1) / rate;
             let opts = (least..=most)
                 .map(|k| opt(format!("spend {k} {resource}")))
@@ -737,17 +735,17 @@ impl Cards {
                 cx.tally(g, "cards.discount_used", k);
             }
         }
-        cx.add_resource(g, seat, "credits", -credits);
-        cx.add_resource(g, seat, "antimatter", -d.antimatter);
-        cx.add_resource(g, seat, "energy", -d.energy);
-        cx.add_resource(g, seat, HARDWARE, -d.hardware);
+        cx.add_resource(g, seat, Resource::Credits, -credits);
+        let [insight, energy, hardware, antimatter] = extra_costs(d);
+        for (r, n) in [antimatter, energy, hardware, insight] {
+            cx.add_resource(g, seat, r, -n);
+        }
         if d.insight > 0 {
-            cx.add_resource(g, seat, "insight", -d.insight);
             cx.tally(g, "cards.insight_played", d.insight);
             cx.per_round(g, "cards.insight_played", d.insight);
         }
         for (r, n) in &d.lowers {
-            cx.add_key(g, economy::production_key(seat, r), -n);
+            cx.add_key(g, economy::production_key(seat, *r), -n);
         }
         if d.hardware > 0 {
             cx.tally(g, "board.hardware_spent", d.hardware);
@@ -791,7 +789,7 @@ impl Cards {
         } else {
             cx.move_card(g, id, &hand(seat), &played(seat), false)?;
         }
-        effects::run(g, cx, seat, &d.effects, &mut effects::Ctx::default())
+        effects::run(g, cx, &d.effects, &mut effects::Ctx::seat(seat))
     }
 }
 
@@ -849,7 +847,7 @@ impl Module for Cards {
             0 => {
                 // The opening has no draft (round 1 deals the opening hand).
                 // With both decks and discards empty there is nothing to deal.
-                let dry = !self.tier_open(g, 1) && !self.tier_open(g, 2);
+                let dry = !tier_open(g, 1) && !tier_open(g, 2);
                 for s in 0..g.seats.len() {
                     if self.off || g.round <= 1 || self.deal <= 0 || dry {
                         g.seats[s].passed = true;
@@ -874,7 +872,7 @@ impl Module for Cards {
                 for s in 0..g.seats.len() {
                     let hand_n = g.pile(&hand(s)).len() as i64;
                     cx.per_round(g, "cards.hand_size", hand_n);
-                    let ins = g.resource(s, "insight");
+                    let ins = g.resource(s, Resource::Insight);
                     cx.per_round(g, "cards.insight_after_keep", ins);
                     for id in g.pile(&drafted(s)).to_vec() {
                         discard(g, cx, &id, &drafted(s));
@@ -892,10 +890,9 @@ impl Module for Cards {
         }
         for s in 0..g.seats.len() {
             for _ in 0..self.opening_deal {
-                let Some(id) = self.top(g, cx, 1) else {
+                if !deal_top(g, cx, 1, &drafted(s))? {
                     break;
-                };
-                cx.move_card(g, &id, &deck(1), &drafted(s), false)?;
+                }
             }
         }
         Ok(())
@@ -906,7 +903,7 @@ impl Module for Cards {
         match phase {
             0 => {
                 for tier in [1u8, 2] {
-                    if self.tier_open(g, tier) {
+                    if tier_open(g, tier) {
                         out.push(Action::Tier { seat, tier });
                     }
                 }
@@ -925,7 +922,7 @@ impl Module for Cards {
                 let free = alignment::free_purchases(g) > 0;
                 for id in g.pile(&drafted(s)) {
                     let (_, cr) = self.keep_price(w, g, s, id);
-                    if free || g.resource(s, "credits") >= cr {
+                    if free || g.resource(s, Resource::Credits) >= cr {
                         out.push(Action::Keep {
                             seat,
                             card: id.clone(),
@@ -975,17 +972,18 @@ impl Module for Cards {
         match a {
             Action::Tier { tier, .. } => {
                 // Card by card: the chosen tier's top card joins the hand.
-                if !(1..=2).contains(tier) || !self.tier_open(g, *tier) {
+                if !(1..=2).contains(tier) || !tier_open(g, *tier) {
                     return Err("no such tier to draft from".into());
                 }
-                let id = self.top(g, cx, *tier).ok_or("no card to deal")?;
-                cx.move_card(g, &id, &deck(*tier), &packet(s), false)?;
+                if !deal_top(g, cx, *tier, &packet(s))? {
+                    return Err("no card to deal".into());
+                }
                 cx.tally(g, &format!("cards.dealt_tier{tier}"), 1);
                 let full = g.pile(&packet(s)).len() as i64 >= self.deal;
                 if full {
                     g.seats[s].passed = true;
                 }
-                if !(self.tier_open(g, 1) || self.tier_open(g, 2)) {
+                if !(tier_open(g, 1) || tier_open(g, 2)) {
                     // The decks ran dry: every seat's hand is what it has.
                     for seat in g.seats.iter_mut() {
                         seat.passed = true;
@@ -998,7 +996,7 @@ impl Module for Cards {
                 }
                 cx.move_card(g, card, &packet(s), &drafted(s), false)?;
                 cx.set_key(g, picked_key(s), 1);
-                if self.all_picked(g) {
+                if all_picked(g) {
                     let n = g.seats.len();
                     let packets: Vec<Vec<String>> =
                         (0..n).map(|p| g.pile(&packet(p)).to_vec()).collect();
@@ -1024,11 +1022,11 @@ impl Module for Cards {
                 // A Unity card's free purchase first, then the price.
                 let (ins, cr) = self.keep_price(&w, g, s, card);
                 if (ins > 0 || cr > 0) && !alignment::take_free_purchase(g, cx) {
-                    if g.resource(s, "credits") < cr {
+                    if g.resource(s, Resource::Credits) < cr {
                         return Err("can't afford to keep it".into());
                     }
-                    cx.add_resource(g, s, "insight", -ins);
-                    cx.add_resource(g, s, "credits", -cr);
+                    cx.add_resource(g, s, Resource::Insight, -ins);
+                    cx.add_resource(g, s, Resource::Credits, -cr);
                     if ins > 0 {
                         cx.tally(g, "cards.insight_kept", ins);
                         cx.per_round(g, "cards.insight_kept", ins);
@@ -1055,15 +1053,12 @@ impl Module for Cards {
                 }
                 let ab = def(&w, card).ability.as_ref().ok_or("no ability")?;
                 for (r, n) in &ab.cost {
-                    if r == "tokens" {
-                        add_tokens(g, cx, s, card, -n);
-                    } else {
-                        cx.add_resource(g, s, r, -n);
-                    }
+                    cx.add_resource(g, s, *r, -n);
                 }
+                add_tokens(g, cx, s, card, -ab.tokens);
                 cx.exhaust(g, s, card);
                 cx.count(g, &format!("used.{card}"), 1);
-                effects::run(g, cx, s, &ab.effects, &mut effects::Ctx::default())?;
+                effects::run(g, cx, &ab.effects, &mut effects::Ctx::seat(s))?;
             }
             _ => return Err(Halt::Illegal(format!("not a card action: {a:?}"))),
         }
@@ -1080,9 +1075,9 @@ impl Module for Cards {
                 bits.push("unique".into());
             }
             if !d.tags.is_empty() {
-                bits.push(d.tags.join("/"));
+                bits.push(d.tags.iter().map(|t| t.name()).collect::<Vec<_>>().join("/"));
             }
-            for (n, r) in [(d.insight, "insight"), (d.energy, "energy"), (d.hardware, "hardware"), (d.antimatter, "antimatter")] {
+            for (r, n) in extra_costs(d) {
                 if n > 0 {
                     bits.push(format!("+{n} {r}"));
                 }
@@ -1225,10 +1220,10 @@ impl Module for Cards {
                 out.seat(
                     s,
                     "civic_used",
-                    "civic shelter used",
+                    "Aegis Dome Array used",
                     1,
                     None,
-                    "your Civic Shelter has saved a building this round",
+                    "your Aegis Dome Array has saved a building this round",
                 );
             }
         }

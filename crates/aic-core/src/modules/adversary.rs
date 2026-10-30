@@ -4,14 +4,14 @@
 //! adversary ambassadors and troops, which cards, threats and Alignment use,
 //! and the board conditions for winning and losing.
 
-use crate::content::{AdversaryCard, Passive, ProjectCard, Twist};
+use crate::content::{AdversaryCard, Op, ProjectCard};
 use crate::module::{Build, Cx, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World};
 use crate::rng::shuffle;
 use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{alignment, cards};
+use super::{alignment, cards, effects};
 
 const PARAMS: &[ParamSpec] = &[
     ParamSpec::int("difficulty", 0, 4, "difficulty level 0-4 (each level includes the ones below)"),
@@ -89,12 +89,12 @@ const FIRST_PROJECT: &str = "adversary.first_project";
 /// The round of the first corruption after setup (sim observation).
 const FIRST_CORRUPTION: &str = "adversary.first_corruption";
 
-/// Seat `s` removed an adversary troop this round (card conditions).
 /// Set on a node's hex by a hack (021): it makes no compute in the next build.
 pub fn cut_key(h: usize) -> String {
     format!("adversary.cut.{h}")
 }
 
+/// Seat `s` removed an adversary troop this round (card conditions).
 pub fn removed_troop(seat: usize) -> String {
     format!("adversary.removed_troop.{seat}")
 }
@@ -123,7 +123,7 @@ pub fn project_cost(w: &World, g: &GameState, id: &str) -> i64 {
     project(w, id).cost * g.seats.len().max(1) as i64
 }
 
-/// The ambassador supply at the start, for this many countries.
+/// The ambassador supply at the start, for the map's countries.
 pub fn start_supply(w: &World) -> i64 {
     let mut per = w.int("adversary.supply_per_country");
     if level(w, 4) {
@@ -153,7 +153,7 @@ pub fn threat_tier(w: &World, g: &GameState) -> u8 {
     1
 }
 
-fn card<'w>(w: &World<'w>, id: &str) -> &'w AdversaryCard {
+pub(super) fn card<'w>(w: &World<'w>, id: &str) -> &'w AdversaryCard {
     &w.content.adversary[w
         .content
         .adversary_index(id)
@@ -175,7 +175,7 @@ pub fn card_text(c: &AdversaryCard) -> String {
 /// This round's twists. Before this round's build step (a Discord tip in
 /// the Sway phase) this round's card is still the face-up one: read it (022:
 /// that read last round's card, and none in round 1).
-pub fn twists<'w>(w: &World<'w>, g: &GameState) -> Vec<&'w Twist> {
+pub fn twists<'w>(w: &World<'w>, g: &GameState) -> Vec<&'w Op> {
     let before_build = g
         .config
         .round
@@ -188,13 +188,13 @@ pub fn twists<'w>(w: &World<'w>, g: &GameState) -> Vec<&'w Twist> {
         .collect()
 }
 
-fn twist_sum(w: &World, g: &GameState, f: impl Fn(&Twist) -> Option<i64>) -> i64 {
+fn twist_sum(w: &World, g: &GameState, f: impl Fn(&Op) -> Option<i64>) -> i64 {
     twists(w, g).into_iter().filter_map(f).sum()
 }
 
 /// Whether this round's card makes it a war round.
 pub fn war_twist(w: &World, g: &GameState) -> bool {
-    twists(w, g).iter().any(|t| matches!(t, Twist::War))
+    twists(w, g).iter().any(|t| matches!(t, Op::War))
 }
 
 #[derive(Debug)]
@@ -325,24 +325,19 @@ impl Module for Adversary {
                     format!("Adversary card: {} ({})", c.name, card_text(c))
                 });
                 for t in &c.twists {
-                    if let Twist::Discord { amount } = t {
-                        alignment::sway(g, cx, crate::content::Side::Discord, *amount);
+                    if let Op::Sway { side, amount } = t {
+                        alignment::sway(g, cx, *side, *amount);
                     }
                 }
                 build_all(g, cx, None)?;
                 if c.escalation {
-                    let n = w.int("adversary.escalation_ambassadors");
-                    let bases: Vec<usize> =
-                        (0..g.hexes.len()).filter(|&h| is_base(&w, h)).collect();
-                    for h in bases {
+                    for (h, n) in super::plan::escalation_hexes(&w, g) {
                         place(g, cx, h, n);
                     }
                 }
                 // Ongoing projects act, in the order they came into play.
                 for id in g.pile(PROJECTS_ONGOING).to_vec() {
-                    for op in &project(&w, &id).effects {
-                        alignment::resolve(g, cx, op)?;
-                    }
+                    effects::run(g, cx, &project(&w, &id).effects, &mut effects::Ctx::team())?;
                     if g.is_over() {
                         return Ok(());
                     }
@@ -376,7 +371,7 @@ impl Module for Adversary {
             2 => {
                 let at = (w.int("adversary.corrupt_at")
                     - twist_sum(&w, g, |t| match t {
-                        Twist::CorruptSooner { amount } => Some(*amount),
+                        Op::CorruptSooner { amount } => Some(*amount),
                         _ => None,
                     }))
                 .max(1);
@@ -466,7 +461,10 @@ impl Module for Adversary {
             "adv. compute made",
             g.var(COMPUTE),
             None,
-            "adversary compute made so far: each node makes 1 a round (none under a player ambassador); it fills the cheapest visible project",
+            &format!(
+                "adversary compute made so far: each node makes {} a round (none under a player ambassador, or in the build after a hack cuts it); it fills the cheapest visible project",
+                w.int("adversary.node_compute")
+            ),
         );
         out.global(
             "difficulty",
@@ -476,20 +474,19 @@ impl Module for Adversary {
             "difficulty level",
         );
         // A visible project's status is its fill, "n/cost compute".
-        let pshow = |id: &str, status: &str, have: Option<i64>| {
+        let pshow = |id: &str, status: &str| {
             let p = project(w, id);
-            let cost = project_cost(w, g, id);
             let kind = if p.stage == 1 { "cheap" } else { "big" };
             CardView {
                 id: id.to_string(),
                 name: p.name.clone(),
                 text: format!("{kind}: {}", p.text),
-                status: match have {
-                    Some(n) => format!("{n}/{cost} compute"),
-                    None => status.to_string(),
-                },
-                cost: Some(cost),
+                status: status.to_string(),
+                cost: Some(project_cost(w, g, id)),
             }
+        };
+        let fill = |id: &str| {
+            format!("{}/{} compute", g.var(&project_key(id)), project_cost(w, g, id))
         };
         let row = g.pile(PROJECTS);
         out.pile(
@@ -497,9 +494,7 @@ impl Module for Adversary {
             "Adversary projects (compute fills the cheapest)",
             None,
             row.len(),
-            row.iter()
-                .map(|id| pshow(id, "filling", Some(g.var(&project_key(id)))))
-                .collect(),
+            row.iter().map(|id| pshow(id, &fill(id))).collect(),
         );
         let on = g.pile(PROJECTS_ONGOING);
         out.pile(
@@ -507,7 +502,7 @@ impl Module for Adversary {
             "Ongoing adversary projects",
             None,
             on.len(),
-            on.iter().map(|id| pshow(id, "ongoing", None)).collect(),
+            on.iter().map(|id| pshow(id, "ongoing")).collect(),
         );
         let done = g.pile(PROJECTS_DONE);
         out.pile(
@@ -516,7 +511,7 @@ impl Module for Adversary {
             "Adversary projects resolved or discarded",
             None,
             done.len(),
-            done.iter().map(|id| pshow(id, "done", None)).collect(),
+            done.iter().map(|id| pshow(id, "done")).collect(),
         );
         out.pile(
             "project_deck",
@@ -629,9 +624,7 @@ fn resolve_project(g: &mut GameState, cx: &mut Cx, id: &str) -> Res {
         deal_projects(g, cx);
     }
     if !p.ongoing {
-        for op in &p.effects {
-            alignment::resolve(g, cx, op)?;
-        }
+        effects::run(g, cx, &p.effects, &mut effects::Ctx::team())?;
     }
     Ok(())
 }
@@ -722,15 +715,14 @@ fn arrive(g: &mut GameState, cx: &mut Cx, h: usize, spreading: bool) {
         cx.add_key(g, SUPPLY.into(), 1);
         cx.add_tokens(g, h, NODE, 1);
         cx.tally(g, "adversary.nodes_made", 1);
-        let nodes: i64 = (0..g.hexes.len()).map(|x| g.tokens(x, NODE)).sum();
-        cx.peak(g, "adversary.nodes_peak", nodes);
+        cx.peak(g, "adversary.nodes_peak", node_count(g, None));
         cx.note(Some(h), || format!("A node forms at {}", hex_name(&w, h)));
         return;
     }
     cx.add_tokens(g, h, ADV_AMBASSADOR, 1);
 }
 
-/// Removes the node on hex `h` (the standard action).
+/// Removes the node on hex `h` (a card's effect; no standard action does, 019).
 pub fn remove_node(g: &mut GameState, cx: &mut Cx, h: usize) {
     if g.tokens(h, NODE) > 0 {
         cx.add_tokens(g, h, NODE, -1);
@@ -739,6 +731,7 @@ pub fn remove_node(g: &mut GameState, cx: &mut Cx, h: usize) {
     }
 }
 
+/// Nodes on `hexes`, or on the whole board for `None`.
 pub fn node_count(g: &GameState, c: Option<&[usize]>) -> i64 {
     match c {
         Some(hexes) => hexes.iter().map(|&h| g.tokens(h, NODE)).sum(),
@@ -799,6 +792,37 @@ pub fn corrupt_city(g: &mut GameState, cx: &mut Cx, h: usize) {
     cx.note(Some(h), || format!("{} is corrupted", hex_name(&w, h)));
 }
 
+/// `count` adversary troops, each onto a factory among `hexes` (players
+/// choose), or with no factory onto a city.
+pub fn land_troops(
+    g: &mut GameState,
+    cx: &mut Cx,
+    hexes: &[usize],
+    count: i64,
+    prompt: &str,
+    tally: &str,
+) -> Res {
+    let w = cx.world;
+    for _ in 0..count {
+        let mut spots: Vec<usize> = hexes
+            .iter()
+            .copied()
+            .filter(|&h| g.tokens(h, FACTORY) > 0)
+            .collect();
+        if spots.is_empty() {
+            spots = hexes.iter().copied().filter(|&h| is_city(&w, h)).collect();
+        }
+        let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
+        let Some(i) = cx.choose(0, prompt, opts)? else {
+            break;
+        };
+        place_troop(g, cx, spots[i]);
+        cx.per_round(g, OPS, 1);
+        cx.tally(g, tally, 1);
+    }
+    Ok(())
+}
+
 /// Research station `h` flips to the adversary.
 pub fn corrupt_station(g: &mut GameState, cx: &mut Cx, h: usize) {
     let w = cx.world;
@@ -815,7 +839,7 @@ pub fn corrupt_station(g: &mut GameState, cx: &mut Cx, h: usize) {
 }
 
 /// Where an ambassador spreading from `from` may go: hexes within `range`
-/// holding a piece or player-owned (never an empty hex), not shielded, and
+/// holding a piece (never an empty hex), not shielded, and
 /// without an adversary ambassador unless a clean city (cities collect
 /// them) or a piece with no node (a second ambassador makes a node).
 /// Returns the best by priority (player owned, then clean cities, then the
@@ -825,7 +849,7 @@ fn destinations(w: &World, g: &GameState, from: usize, range: i32) -> Vec<usize>
         .filter(|&s| {
             cards::passives(w, g, s)
                 .iter()
-                .any(|p| matches!(p, Passive::SpreadShield))
+                .any(|p| matches!(p, Op::SpreadShield))
         })
         .collect();
     let mut best: Option<(u8, i32)> = None;
@@ -835,7 +859,7 @@ fn destinations(w: &World, g: &GameState, from: usize, range: i32) -> Vec<usize>
         if h == from || d > range || is_ocean(w, h) {
             continue;
         }
-        if !(has_piece(w, g, h) || player_owned(g, h)) {
+        if !has_piece(w, g, h) {
             continue;
         }
         if shields.iter().any(|&s| g.tokens(h, &presence(s)) > 0) {
@@ -873,7 +897,7 @@ pub fn spread(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> Res {
     let w = cx.world;
     let range = w.int("adversary.spread_range")
         + twist_sum(&w, g, |t| match t {
-            Twist::Reach { amount } => Some(*amount),
+            Op::SpreadReach { amount } => Some(*amount),
             _ => None,
         });
     let sources: Vec<usize> = scope_hexes(&w, scope)
@@ -907,7 +931,7 @@ pub fn spread(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> Res {
     Ok(())
 }
 
-/// Removal cost of an adversary piece: an ambassador 1, a troop `board.troop_health`.
+/// Removal cost of an adversary piece: an ambassador 1, a troop `adversary.troop_health`.
 fn cost(w: &World, kind: &str) -> i64 {
     if kind == TROOP {
         w.int("adversary.troop_health")
@@ -1051,7 +1075,7 @@ pub fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
     purge_count(w, g, level) == 0
 }
 
-pub fn win_text(_w: &World, level: i64) -> String {
+pub fn win_text(level: i64) -> String {
     match level {
         0 => "purge: no corrupted city, node, adversary troop or adversary ambassador on the board"
             .into(),

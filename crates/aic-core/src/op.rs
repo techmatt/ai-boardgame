@@ -1,0 +1,566 @@
+//! The one effect schema (015's call 2, done in 025): everything content
+//! does is an [`Op`], whichever card, threat or board prints it.
+//!
+//! An op means the same wherever it is printed; what differs is the context
+//! it resolves in (`effects::Ctx`):
+//!
+//! - **who chooses**: the acting seat on a player's card; seat 0 for the team
+//!   on threats, Alignment cards and projects;
+//! - **who it hits**: the acting seat; the seats in a threat's scope; every seat;
+//! - **where**: a threat's scope (its country, or the whole board on the
+//!   shared row); the whole board otherwise.
+//!
+//! Not every op makes sense everywhere, and the compiler no longer says so:
+//! [`Op::slots`] does, and `Content::check` enforces it when content loads.
+//! Instant ops resolve in `modules/effects.rs`, the one place an op's meaning
+//! is dispatched. Standing and twist ops never resolve: they are read by the
+//! rule they change, while their card is in force.
+
+use serde::{Deserialize, Serialize};
+
+use crate::vocab::{Resource, Side, Tag, TagOrAny, TokenKind};
+
+/// The kinds of content list an op can sit in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Slot {
+    /// A player's effects: card, ability, growth option, AI-board power.
+    Player,
+    /// A threat's effects, in the threat's scope.
+    Threat,
+    /// A Unity or Discord card or an adversary project: the whole team.
+    Team,
+    /// A building's standing effects or an AI's innate rule, read while in force.
+    Standing,
+    /// What an adversary card changes about its round, read while it is current.
+    Twist,
+}
+
+/// Where a removal effect may land, always within your reach (016).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DamageAt {
+    /// A hex within your reach (1 of one of your presence).
+    Reach,
+    /// A hex in a country where you have a presence.
+    PresenceCountry,
+}
+
+/// Which country a placement may go to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CountryRule {
+    Any,
+    PresenceCountry,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Cond {
+    /// You removed an adversary troop this round.
+    RemovedTroop,
+    /// Some clean city holds adversary ambassadors.
+    CityWithAmbassador,
+}
+
+/// Pieces a threat places adversary ambassadors on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Spot {
+    /// Player-owned pieces: presence, aligned cities, owned stations and factories.
+    PlayerBuildings,
+    CleanCities,
+    Factories,
+    Bases,
+}
+
+/// A country marker that lasts until the end of the round (module `board`):
+/// set by threats and cards, cleared in the board's cleanup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoundFlag {
+    /// Cities in the country make no energy.
+    Blackout,
+    /// Players with presence in the country make no energy in upkeep (021: was compute).
+    Sabotage,
+    /// Buildings in the country can't be destroyed.
+    Shelter,
+}
+
+impl RoundFlag {
+    pub fn name(self) -> &'static str {
+        match self {
+            RoundFlag::Blackout => "blackout",
+            RoundFlag::Sabotage => "sabotage",
+            RoundFlag::Shelter => "shelter",
+        }
+    }
+}
+
+/// One thing content does. See the module docs for how context shapes it;
+/// [`Op::slots`] says which lists may print it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Op {
+    // ---------- instant: player effects ----------
+    /// You gain `amount` of `resource`; on a team card, every player does.
+    Gain {
+        resource: Resource,
+        amount: i64,
+    },
+    /// 1 of `resource` per presence you have on the board, up to `max`.
+    GainPerPresence {
+        resource: Resource,
+        max: i64,
+    },
+    /// Choose another player for the `other_gain` / `transfer` that follow.
+    ChoosePlayer,
+    /// The chosen player gains `amount` of `resource`.
+    OtherGain {
+        resource: Resource,
+        amount: i64,
+    },
+    /// Give up to `max` of `resource` to the chosen player; they gain
+    /// `bonus` more if you gave any.
+    Transfer {
+        resource: Resource,
+        max: i64,
+        bonus: i64,
+    },
+    /// Convert up to `max` of `from` into `rate` of `to` each.
+    Convert {
+        from: Resource,
+        to: Resource,
+        max: i64,
+        rate: i64,
+    },
+    /// Place `count` presence off your AI board's tracks.
+    PlacePresence {
+        count: i64,
+    },
+    /// Remove adversary pieces in one hex, `amount` worth: an ambassador
+    /// costs 1, a troop `adversary.troop_health`.
+    Damage {
+        amount: i64,
+        at: DamageAt,
+    },
+    /// `amount` worth of removal in each hex of one country holding adversary pieces.
+    DamageCountry {
+        amount: i64,
+    },
+    /// Remove every adversary ambassador and troop in one hex.
+    DestroyAll,
+    /// Remove one node within your reach (019: the tier-2 way to remove a node).
+    RemoveNode,
+    /// Remove every adversary ambassador in one country; sway 1 toward Unity per `unity_per` removed.
+    RemoveAmbassadorsCountry {
+        unity_per: i64,
+    },
+    /// Build a factory on a free industrial zone in your reach.
+    BuildFactory,
+    /// Take the adversary cube off up to `amount` corrupted stations or
+    /// factories, one at a time (`one_country`: all in the first one's
+    /// country). `cities` (024): corrupted cities too, outright; only a tier-2
+    /// ultimate prints it.
+    Cleanse {
+        amount: i64,
+        one_country: bool,
+        #[serde(default)]
+        cities: bool,
+    },
+    /// Remove up to `max` adversary ambassadors (0: all) on or next to one
+    /// corrupted city in your reach, the ones next to it first (024).
+    ClearCity {
+        max: i64,
+    },
+    /// Put `count` hardening tokens on buildings in one country.
+    Harden {
+        count: i64,
+        #[serde(rename = "where")]
+        in_country: CountryRule,
+    },
+    /// Move up to `max` of your ambassadors (from your supply or the board)
+    /// onto pieces within your reach, one at a time.
+    MoveAmbassadors {
+        max: i64,
+    },
+    /// Gain `count` player ambassadors into your supply.
+    GainAmbassadors {
+        count: i64,
+    },
+    /// In one country, buildings can't be destroyed this round.
+    Shelter,
+    /// The next `count` adversary cards are shown.
+    Peek {
+        count: i64,
+    },
+    /// One threat needs `amount` less of each resource.
+    Jam {
+        amount: i64,
+    },
+    /// Counter one active threat (the chooser picks).
+    CounterThreat,
+    /// Remove up to `amount` compute from one visible adversary project
+    /// (017; the Security cards' primitive).
+    DrainProject {
+        amount: i64,
+    },
+    /// Discard one visible adversary project, with its compute (017).
+    DiscardProject,
+    /// Every player gains `amount` insight next round.
+    NextRoundInsight {
+        amount: i64,
+    },
+    /// Your next building this round costs `amount` less.
+    NextBuildingDiscount {
+        amount: i64,
+    },
+    /// A one-time permanent gain (021): your printed production of
+    /// `resource` rises by `amount` for the rest of the game.
+    Production {
+        resource: Resource,
+        amount: i64,
+    },
+    /// Add `amount` tokens to one of your cards in play holding `kind` (021).
+    AddTokens {
+        kind: TokenKind,
+        amount: i64,
+    },
+    /// A hack (021): a node within your reach makes no compute in the next build.
+    CutNode,
+    /// Movement add-on (021): move one of your ambassadors on the board up to
+    /// `range` hexes onto a piece (or not at all).
+    MoveOne {
+        range: i64,
+    },
+    /// Spread (021, rare): each of your ambassadors on the board may move 1
+    /// hex onto an adjacent piece.
+    SpreadAmbassadors,
+    /// Consolidate (021): move up to `max` of your ambassadors within your
+    /// reach onto one piece in your reach.
+    Consolidate {
+        max: i64,
+    },
+    /// Draw `count` tier-1 cards into your hand, no keep paid (023: Science's
+    /// card draw).
+    Draw {
+        count: i64,
+    },
+    /// Remove up to `amount` compute from every visible adversary project (023).
+    DrainAll {
+        amount: i64,
+    },
+    /// "Count as power" (023): 1 of `resource` per `per` tokens of `kind` on
+    /// your cards in play (the tokens stay), up to `max`.
+    GainPerTokens {
+        resource: Resource,
+        kind: TokenKind,
+        per: i64,
+        max: i64,
+    },
+    /// Cash out (023): remove all your `kind` tokens; gain 1 + 2 + ... + n of
+    /// `resource` for the n removed (a growing rate); with `max` > 0, at most
+    /// `max` tokens, taken card by card.
+    CashOut {
+        kind: TokenKind,
+        resource: Resource,
+        #[serde(default)]
+        max: i64,
+    },
+    /// The ops of `then` if `cond` holds, else those of `else`.
+    If {
+        cond: Cond,
+        then: Vec<Op>,
+        #[serde(rename = "else")]
+        otherwise: Vec<Op>,
+    },
+
+    // ---------- instant: any list ----------
+    /// Sway `amount` toward `side` (module `alignment`).
+    Sway {
+        side: Side,
+        amount: i64,
+    },
+
+    // ---------- instant: threats and the team ----------
+    /// `count` adversary ambassadors from the supply, each onto a piece of
+    /// kind `at` in scope (players choose each).
+    Ambassadors {
+        at: Spot,
+        count: i64,
+    },
+    /// `count` adversary troops, each onto a factory in scope (players
+    /// choose), or with no factory onto a city. With `each_country` (team
+    /// cards), `count` in each country instead of `count` in all.
+    Troops {
+        count: i64,
+        #[serde(default)]
+        each_country: bool,
+    },
+    /// One research station in scope that is not corrupted becomes corrupted
+    /// (players choose). With `each_country` (team cards), one per country.
+    FlipStation {
+        #[serde(default)]
+        each_country: bool,
+    },
+    /// In each country in scope, the city not corrupted with the most
+    /// adversary ambassadors (ties: lower hex number) becomes corrupted.
+    CorruptCity,
+    /// Each player in scope loses `amount` of `resource` (as much as they have).
+    PlayersLose {
+        resource: Resource,
+        amount: i64,
+    },
+    /// The adversary builds now, in scope.
+    AdversaryBuild,
+
+    // ---------- instant: threats ----------
+    /// A round marker on each country in scope, read by production.
+    Flag {
+        name: RoundFlag,
+    },
+    /// Each player in scope discards `cards` cards or pays `amount`
+    /// `resource` (their choice).
+    Requisition {
+        resource: Resource,
+        amount: i64,
+        #[serde(default = "one")]
+        cards: i64,
+    },
+    /// Each player in scope loses a player ambassador (from their supply,
+    /// else one of theirs on the board).
+    LoseAmbassador,
+    /// Each player in scope discards their dearest card in hand (their
+    /// choice on a tie).
+    DiscardMostExpensive,
+    /// The adversary gains `amount` compute (onto its projects, 017).
+    Compute {
+        amount: i64,
+    },
+    /// Each player in scope loses `amount` tokens from their cards (021;
+    /// their choice of card).
+    LoseTokens {
+        amount: i64,
+    },
+
+    // ---------- instant: the team (Alignment cards, projects) ----------
+    /// Every player's `resource` income (credits or insight) rises by
+    /// `amount` for the rest of the game.
+    TeamIncome {
+        resource: Resource,
+        amount: i64,
+    },
+    /// The next `count` card purchases (keeping a drafted card) are free.
+    FreePurchases {
+        count: i64,
+    },
+    /// Counter every active threat.
+    CounterAll,
+    /// In each country, remove `ambassadors` adversary ambassadors (players choose).
+    Pushback {
+        ambassadors: i64,
+    },
+    /// Deal `count` extra threats now, one per country in turn.
+    DealThreats {
+        count: i64,
+    },
+    /// In each country, the clean city with the most adversary ambassadors
+    /// (ties: lower hex number) gains `amount` more.
+    Infiltrate {
+        amount: i64,
+    },
+    /// The adversary spreads now.
+    AdversarySpread,
+    /// Every player sacrifices one of their ambassadors (supply or board)
+    /// or one of their presence tokens (their choice).
+    Sacrifice,
+    /// Every node makes `amount` adversary ambassadors on its hex.
+    NodeAmbassadors {
+        amount: i64,
+    },
+    /// Every clean city gains `amount` adversary ambassadors.
+    CleanCityAmbassadors {
+        amount: i64,
+    },
+    /// Remove `count` nodes anywhere on the board, one at a time (players choose).
+    RemoveNodes {
+        count: i64,
+    },
+
+    // ---------- standing: read while in force ----------
+    /// `amount` of `resource` a round.
+    Income {
+        resource: Resource,
+        amount: i64,
+    },
+    /// `1` per `per` of your `tag` tags, up to `max`.
+    IncomePerTag {
+        resource: Resource,
+        tag: Tag,
+        per: i64,
+        max: i64,
+    },
+    /// `amount` if you have at least `count` `tag` tags.
+    IncomeIfTags {
+        resource: Resource,
+        tag: Tag,
+        count: i64,
+        amount: i64,
+    },
+    /// Your buildings cost `amount` credits less.
+    BuildingDiscount {
+        amount: i64,
+    },
+    /// You may use the Harden standard action.
+    HardenAction,
+    /// `amount` more building slots.
+    Slots {
+        amount: i64,
+    },
+    /// Gain this when a threat you paid toward is countered.
+    Logistics {
+        resource: Resource,
+        amount: i64,
+    },
+    /// Extra Sway toward Unity when you remove an adversary troop.
+    UnityBonus {
+        amount: i64,
+    },
+    /// When you give insight, the receiver also gains this.
+    GiveBonus {
+        resource: Resource,
+        amount: i64,
+    },
+    /// The adversary's spread places no ambassador on hexes holding your presence.
+    SpreadShield,
+    /// Once a round, prevent the first building destruction in a country
+    /// where you have a presence.
+    CivicShelter,
+    /// While you have this building, cards discarded from hand that carry
+    /// `tag` (or any tag, `"any"`) count as those tags for AI-board powers (021).
+    TagsFromHand {
+        tag: TagOrAny,
+    },
+    /// In upkeep, convert `amount` `from` into `gain` `to` (if you have it).
+    ConvertUpkeep {
+        from: Resource,
+        amount: i64,
+        to: Resource,
+        gain: i64,
+    },
+
+    // ---------- twists: read while the adversary card is current ----------
+    /// Each corrupted city builds `amount` more.
+    CityBuild {
+        amount: i64,
+    },
+    /// Factories next to clean cities build `amount` too.
+    CleanFactories {
+        amount: i64,
+    },
+    /// Each corrupted research station builds `amount`.
+    StationBuild {
+        amount: i64,
+    },
+    /// Spread reaches `amount` hexes further.
+    SpreadReach {
+        amount: i64,
+    },
+    /// Clean cities corrupt at `amount` fewer ambassadors.
+    CorruptSooner {
+        amount: i64,
+    },
+    /// This round is a war round.
+    War,
+}
+
+fn one() -> i64 {
+    1
+}
+
+impl Op {
+    /// The lists that may print this op: the home of "what can go where".
+    pub fn slots(&self) -> &'static [Slot] {
+        use Slot::*;
+        match self {
+            Op::Sway { .. } => &[Player, Threat, Team, Twist],
+            Op::Gain { .. } | Op::CounterThreat => &[Player, Team],
+            Op::Troops { .. }
+            | Op::FlipStation { .. }
+            | Op::CorruptCity
+            | Op::PlayersLose { .. }
+            | Op::AdversaryBuild => &[Threat, Team],
+            Op::Ambassadors { .. }
+            | Op::Flag { .. }
+            | Op::Requisition { .. }
+            | Op::LoseAmbassador
+            | Op::DiscardMostExpensive
+            | Op::Compute { .. }
+            | Op::LoseTokens { .. } => &[Threat],
+            Op::TeamIncome { .. }
+            | Op::FreePurchases { .. }
+            | Op::CounterAll
+            | Op::Pushback { .. }
+            | Op::DealThreats { .. }
+            | Op::Infiltrate { .. }
+            | Op::AdversarySpread
+            | Op::Sacrifice
+            | Op::NodeAmbassadors { .. }
+            | Op::CleanCityAmbassadors { .. }
+            | Op::RemoveNodes { .. } => &[Team],
+            Op::Income { .. }
+            | Op::IncomePerTag { .. }
+            | Op::IncomeIfTags { .. }
+            | Op::BuildingDiscount { .. }
+            | Op::HardenAction
+            | Op::Slots { .. }
+            | Op::Logistics { .. }
+            | Op::UnityBonus { .. }
+            | Op::GiveBonus { .. }
+            | Op::SpreadShield
+            | Op::CivicShelter
+            | Op::TagsFromHand { .. }
+            | Op::ConvertUpkeep { .. } => &[Standing],
+            Op::CityBuild { .. }
+            | Op::CleanFactories { .. }
+            | Op::StationBuild { .. }
+            | Op::SpreadReach { .. }
+            | Op::CorruptSooner { .. }
+            | Op::War => &[Twist],
+            Op::GainPerPresence { .. }
+            | Op::ChoosePlayer
+            | Op::OtherGain { .. }
+            | Op::Transfer { .. }
+            | Op::Convert { .. }
+            | Op::PlacePresence { .. }
+            | Op::Damage { .. }
+            | Op::DamageCountry { .. }
+            | Op::DestroyAll
+            | Op::RemoveNode
+            | Op::RemoveAmbassadorsCountry { .. }
+            | Op::BuildFactory
+            | Op::Cleanse { .. }
+            | Op::ClearCity { .. }
+            | Op::Harden { .. }
+            | Op::MoveAmbassadors { .. }
+            | Op::GainAmbassadors { .. }
+            | Op::Shelter
+            | Op::Peek { .. }
+            | Op::Jam { .. }
+            | Op::DrainProject { .. }
+            | Op::DiscardProject
+            | Op::NextRoundInsight { .. }
+            | Op::NextBuildingDiscount { .. }
+            | Op::Production { .. }
+            | Op::AddTokens { .. }
+            | Op::CutNode
+            | Op::MoveOne { .. }
+            | Op::SpreadAmbassadors
+            | Op::Consolidate { .. }
+            | Op::Draw { .. }
+            | Op::DrainAll { .. }
+            | Op::GainPerTokens { .. }
+            | Op::CashOut { .. }
+            | Op::If { .. } => &[Player],
+        }
+    }
+}

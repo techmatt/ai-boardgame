@@ -28,8 +28,7 @@ rules themselves are in [rules.md](rules.md).
     same one.
   - A stream is keyed by the game seed and a hash of the purpose name, so adding,
     removing or reordering modules never shifts another module's numbers.
-- **Fixed-width draws**: `Stream` exposes only `below(n)` and `next_u32()`, written
-  out on `u32`. rand samples `usize` from a `u64` on 64-bit targets and from a `u32` on
+- **Fixed-width draws**: `Stream` exposes only `below(n)`, written out on `u32`. rand samples `usize` from a `u64` on 64-bit targets and from a `u32` on
   wasm32, which made native and browser games differ. Never draw a `usize` through
   rand.
 - **No hash-order leaks**: every map is a `BTreeMap`, and iteration follows seat, piece
@@ -78,7 +77,7 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
 ## Config
 
 A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the baseline
-game (r12 since 021), rules revision 11 (2 countries, difficulty 0);
+game (2 countries, difficulty 0);
 [`configs/shared_row.json`](../configs/shared_row.json) differs only in the threat
 variant. Abridged:
 
@@ -92,13 +91,13 @@ variant. Abridged:
     { "module": "threats", "variant": "countries", "params": { "per_country": 1 } },
     { "module": "alignment", "variant": "tug", "params": { "undecided_per_player": 3, "tip_per_player": 2, ... } },
     { "module": "economy", "variant": "standard", "params": { ... } },
-    { "module": "ai", "variant": "boards", "params": { "boards": [0, 1], "start_credits": 25 } },
+    { "module": "ai", "variant": "boards", "params": { "boards": [0, 1], "start_credits": 20 } },
     { "module": "cards", "variant": "draft", "params": { "deal": 4, ... }, "cards": ["fab_line", ...] }
   ],
   "round": ["alignment.sway", "adversary.build", "adversary.spread", "adversary.corrupt",
             "board.march", "threats.deal", "adversary.reveal", "cards.tier", "cards.deal",
             "cards.draft", "cards.keep", "ai.growth",
-            "cards.play+threats.counter+economy.give+alignment.act+board.act",
+            "cards.play+threats.counter+economy.give+alignment.act+board.act+ai.power",
             "board.bases", "board.war", "board.produce", "economy.upkeep",
             "threats.execute", "board.cleanup"]
 }
@@ -119,8 +118,9 @@ variant. Abridged:
   - a phase may appear more than once, or not at all;
   - `"a.play+b.build"` combines several modules' **decision** phases into one
     simultaneous phase (the baseline's action phase is
-    `cards.play+threats.counter+economy.give+alignment.act+board.act`: cards, threat
-    counters, giving, the antimatter action and the board's standard actions);
+    `cards.play+threats.counter+economy.give+alignment.act+board.act+ai.power`: cards,
+    threat counters, giving, the antimatter action, the board's standard actions and
+    AI-board powers);
   - if `round` is empty, it defaults to every module's phases in module order.
 - **Config hash**: `Rules::config_hash` is a 64-bit FNV-1a hash of the *resolved*
   config's JSON (round filled in, lists normalized, `name` excluded). Every
@@ -132,9 +132,8 @@ variant. Abridged:
   - `countries=4`;
   - `adversary.stage_cards=3,4,3` (`3` or `1,2,3`);
   - `adversary.difficulty=` unsets a parameter;
-  - `cards.variant=free_keep` switches variant and drops the parameters the new
-    variant doesn't take, so only its new ones need setting
-    (`--set cards.free_keeps=1`);
+  - `alignment.variant=still` switches variant and drops the parameters the new
+    variant doesn't take, so only its new ones need setting;
   - `<module>=off` removes a module and its phases. `threats`, `cards` and `economy`
     can go; `board`, `adversary`, `alignment` and `ai` are needed by another
     (`ModuleDef::requires`, see [Modules](#modules)), so that is rejected with the
@@ -156,13 +155,13 @@ way of doing it. The difference matters for tuning:
 | Another way of doing the mechanic | **variant**: code, selected by config |
 | A new mechanic | **module**: code, added to the config |
 | A card, threat, adversary card, AI board or country piece made of existing primitives | **content**: data only (`content/`) |
-| A new effect primitive or selector | code (`content.rs`, plus the module that runs it) |
+| A new effect primitive or selector | code: an [`Op`] variant in `op.rs` with its `slots`, and its arm in `modules/effects.rs` (a standing or twist op: the rule that reads it) |
 | A new kind of player action | code (`Action`); a structural change |
 
 The modules are `board` (014: pieces, production, war, ambassadors, standard actions),
 `adversary` (014: deck, build, spread, corrupt), `threats`, `alignment` (013), `economy`,
 `ai` and `cards` (`crates/aic-core/src/modules/`); `common.rs` (board queries, token
-names, reach) and `effects.rs` (the player effect primitives) are shared code;
+names, reach) and `effects.rs` (what every instant [`Op`] does) are shared code;
 `plan.rs` holds read-only forecasts of rules steps for agents and clients
 (`plan::next_build`, the adversary's next build off the face-up card). Rules
 areas lean on each other, so modules call each other's public functions (a card's
@@ -181,10 +180,11 @@ in `ModuleDef::requires`; a config missing one is rejected. Today:
 | `ai` | `board` |
 | `cards` | `ai`, `adversary`, `alignment`, `board` |
 
-(020: the table had gone stale; this is `ModuleDef::requires` today.) No module
-requires `threats`, `cards` or `economy`, so `<module>=off` is rejected only
-for `board`, `adversary`, `alignment` and `ai` (the config tests assert it for `alignment=off` and `board=off`); since 016 `requires` lists only the modules whose parameters a module reads, so `threats=off`, `cards=off` and `economy=off` are accepted and play (also tested); a module's effect
-is measured with its `off` variant instead (`threats`, `alignment` and `cards` have one).
+`requires` lists only the modules whose parameters a module reads. No module requires
+`threats`, `cards` or `economy`, so `<module>=off` is rejected only for `board`,
+`adversary`, `alignment` and `ai`; `threats=off`, `cards=off` and `economy=off` are
+accepted and play (the config tests assert both). A module's effect is measured with its
+`off` variant instead (`threats`, `alignment` and `cards` have one).
 
 A rule that depends on another module's *variant* reads `World::variant("<module>")`
 (none do today: 016 removed the `overflow` variant). Everything that
@@ -219,7 +219,7 @@ A `Module` implements whichever of these hooks it needs:
 | `legal(phase, seat)` | A `Decision` phase: append the seat's non-pass actions. |
 | `can_pass(phase, seat)` | Whether the engine offers `Pass` (default yes; draft picks and growth say no, and the module passes the seat itself). |
 | `owns(phase, action)` | Whether a non-pass action is this module's (routing in combined phases). |
-| `act(phase, action)` | Validate and apply an owned action. May ask choices. On `Halt::Illegal` the engine restores the state. |
+| `act(phase, action)` | Validate and apply an owned action. May ask choices. On `Halt::Illegal` the engine restores the state; after the first answered choice, `Illegal` is a bug and panics. |
 | `after` | When an action or automatic phase finishes resolving (after the answer that completes it): standing checks (Alignment tips, win and loss). May ask choices. |
 
 Modules change the state through `Cx`, which keeps the event log and counters
@@ -228,7 +228,7 @@ consistent:
 - `add_tokens`, `add_resource`;
 - `move_card` (between piles, or to and from the box), `set_pile` (a shuffle);
 - `exhaust`, `refresh` (cards; the owning module refreshes its own cards);
-- `set_var` (this module's track), `set_key` / `add_key` (any track by full key);
+- `set_key` / `add_key` (any track by full key);
 - `choose` (players choose, below), `note` (a log line);
 - `per_round` (a per-round counter by full key; `adversary.ops` is one), `count`
   (this module's counter), `tally` (any counter by full key);
@@ -307,39 +307,65 @@ Content is data in `content/`, composed from code primitives:
   starting building), a `kind` (`building`, `program`: stays in the play area, or
   `event`: discarded), a credit `cost` and optional `insight` (022: to play, shared
   with keeps), `energy`, `hardware` and `antimatter` costs and `lowers` (022: incomes
-  the play lowers for good, `[["credits", 1]]`), 1-3 `tags` (`content::TAGS`), `needs` (tags in play), `effects`
-  ([`Effect`]: on play, or when built), `passives` ([`Passive`]: a building's standing
-  effects), an `ability` (once a round; buildings and programs; its cost may name
-  `"tokens"`, spent from the card), `upkeep`, `replaces` (a tag: built over one of your
+  the play lowers for good, `[["credits", 1]]`), 1-3 `tags` (`vocab::Tag`), `needs` (tags in play), `effects`
+  (ops: on play, or when built), `passives` (ops: a building's standing effects), an
+  `ability` (once a round; buildings and programs; `cost` from the seat, `tokens` from the
+  card), `upkeep`, `replaces` (a tag: built over one of your
   buildings whose top card carries it), `tokens` (`{kind, per_round}`, a type from
-  `content::TOKEN_KINDS`), `keywords` (printed words, read by nothing yet; `help` marks
+  `vocab::TokenKind`), `keywords` (printed words, read by nothing yet; `help` marks
   a help card), `slotless` and `unique`. List the id in the `cards` module's config
   `cards`, then run `python scripts/cards/cards_doc.py` to regenerate `docs/cards.md`
-  (023). Effects added in 023: `draw`, `drain_all`, `gain_per_tokens` (a card's
-  strength counting its tokens) and `cash_out` (tokens out at 1 + 2 + ... + n, `max`
-  optional).
-- **Threats** (`threats.json`): `counter` costs and `effects` ([`ThreatOp`], with
-  `Spot`s naming the pieces they hit).
-- **Adversary cards** (`adversary.json`): stage, text, `twists` ([`Twist`]), escalation.
+  (023). Every op, with where it is printed, is listed in [ops.md](ops.md).
+- **Threats** (`threats.json`): `counter` costs and `effects` (ops, with `Spot`s naming
+  the pieces they hit).
+- **Adversary cards** (`adversary.json`): stage, text, `twists` (ops), escalation.
 - **Adversary projects** (`projects.json`, 017): `stage` (1 cheap, 2 big), `cost` per
-  player, `ongoing`, `text` and `effects` ([`AlignOp`], the same primitives as the
-  Alignment cards).
+  player, `ongoing`, `text` and `effects` (ops, as on Alignment cards).
 - **AI boards** (`ais.json`): credit production, resource `discounts`, innate
   passives, the presence track (`presence`: what each space uncovers, `keep2` the tier-2
-  keep upgrade) and flat `income`, growth options (lists of `Effect`), unique cards, a
+  keep upgrade) and flat `income`, growth options (lists of ops), unique cards, a
   `start` building and `powers` (021: `{name, text, tags, cost, effects}`; `tags` may
   name `any`). Slots are a config list, `ai.slots`.
 - **Alignment cards** (`alignment.json`, the Unity and Discord decks): `side` (`unity`
-  or `discord`), `tier` (1 or 2), `text`, `effects` ([`AlignOp`]: resolved when its
-  side's bucket tips) and `steps` (017: from `at` tips of its side, other `effects`).
+  or `discord`), `tier` (1 or 2), `text`, `effects` (ops: resolved when its side's
+  bucket tips) and `steps` (017: from `at` tips of its side, other `effects`).
   Cards are one-shot; there is no `ongoing` field.
 - **Country pieces** (`map.json`, `countries`): cities, the order cities start
   corrupted in (`corrupted`), ocean, setup buildings (research stations, factories),
   the starting presence spot (`presence`), and the corp's megaproject card.
 
 Ids are unique across all content, and actions refer to content by id, so reordering a
-file does not break action logs. `Content::check` validates references, and every tag
-and resource name, when the content loads.
+file does not break action logs. Tags, resources and token types are Rust enums
+(`vocab.rs`), so a misspelt one fails to load. `Content::check` validates the rest when
+content loads: references, and that every op sits in a list its [`Op::slots`] allows.
+
+### The op schema
+
+Everything content does is one enum, [`Op`] (`op.rs`), read from JSON as
+`{"op": "<snake_case>", ...}`. An op means one thing wherever it is printed; a context
+(`effects::Ctx`) supplies what differs: who chooses (`Source`), who is hit and where
+(`scope`, a threat's country or the whole board). So `sway` is `sway`, whether a card, a
+threat or a Discord card prints it. Three kinds:
+
+- **Instant** ops resolve in `effects::run`, the one dispatch; an arm calls the owning
+  module for a long rule. `effects::feasible` says whether a player's card has a target.
+- **Standing** ops (a building's `passives`, an AI's `innate`) are read by the rule they
+  change, through `cards::passives`, while the card is in force.
+- **Twists** (an adversary card's `twists`) are read through `adversary::twists` while the
+  card is current; a `sway` there resolves at the reveal.
+
+`Op::slots` says which lists may print an op, and `Content::check` enforces it, because
+one enum can't. An op shared by threats and team cards takes its wording and tally from
+the context; `each_country` is the one printed difference (a project hits every country,
+a shared-row threat one place on the whole board).
+
+### Generated docs
+
+`aic-sim docs` rewrites the blocks between `<!-- generated: NAME -->` markers in
+[rules.md](rules.md) (threats, adversary deck, Alignment cards, projects, tunables) and
+all of [ops.md](ops.md); `python scripts/cards/cards_doc.py` writes [cards.md](cards.md).
+A fast-lane test fails if any is stale, or if rules.md names a `module.param` that doesn't
+exist. Change the source, not the table.
 
 ## Map
 
@@ -430,14 +456,14 @@ In the baseline:
 - `ai` adds each seat's board (`ai.board`: name, text, innate rule, the presence track
   with every step, keep-upgrade (`tier2` key) and resource marks, slots, the AI's unique
   cards and where they are, and its powers with their cost and status, `ready` or why
-  not), and credit production. Bookkeeping: `ai.track.*`, `ai.power_used.*`.
+  not), and credit production. Bookkeeping: `ai.power_used.*`.
 - `board` shows its per-country flags (blackout, sabotage, shelter) and each country's
   megaproject (cubes by owner, against its size) as country values, the war round and
   fronts and the clock's step as globals, each seat's presence on the board and left
   on its track, and ambassadors on the board; it publishes every standard action with
   its cost (`View.standard`, read by the viewer's labels) and each adversary troop's
   next target and how many marches away (`View.arrows`, 019, drawn as arrows); bookkeeping
-  `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`.
+  `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`, `board.track2.*`.
 - `economy` adds each seat's income per resource and the next round's bonus insight
   (bookkeeping `economy.bonus_insight`, shown as its own global while >0;
   `economy.production.*`, one-time permanent gains, counted in the income;
@@ -465,7 +491,8 @@ Tests in `crates/aic-core/src/tests/view.rs` check it.
 country colour, and draws token kinds it knows with their own glyph and any other kind
 as a counter. It offers actions as `legal_actions` lists them, grouped per seat:
 
-- Actions that differ only in a `target` hex become one button that arms a hex pick.
+- An open choice with hex targets (`Action::Choose`) arms a hex pick. Only `Choose` has a
+  target today; a new action with one would need the viewer taught to pick it.
 - Every other action is its own button, labelled from its fields.
 
 A new `Action` variant with new fields therefore shows up as a button with no client

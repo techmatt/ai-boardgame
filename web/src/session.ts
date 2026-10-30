@@ -9,6 +9,23 @@ import { apply, parseRecord, rulesRevision, start, type Action, type GameEvent, 
 const SAVE_KEY = 'aic.session';
 const U64_MAX = 0xffff_ffff_ffff_ffffn;
 
+/** localStorage may throw (blocked, sandboxed, full): saving is a convenience only. */
+export function storageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function storageSet(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // See above.
+  }
+}
+
 /** Frame 0 is the start of the game (setup); frame i > 0 follows action i - 1. */
 export interface Frame {
   action: Action | null;
@@ -124,22 +141,15 @@ export class Timeline {
     const src = this.source.kind === 'record'
       ? { kind: 'record', file: this.source.file, note: this.source.note }
       : this.source;
-    try {
-      localStorage.setItem(
-        SAVE_KEY,
-        JSON.stringify({ config: this.configJson, seed: this.seed, actions: this.actions, cursor: this.cursor, source: src }),
-      );
-    } catch {
-      // Storage unavailable or full: saving is a convenience only.
-    }
+    storageSet(SAVE_KEY, JSON.stringify({ config: this.configJson, seed: this.seed, actions: this.actions, cursor: this.cursor, source: src }));
   }
 
   /** The saved session, replayed; null if there is none. Throws if its config no longer loads. */
   static restore(): Timeline | null {
     let saved: { config: string; seed: string; actions: Action[]; cursor: number; source: Source & { note?: string } };
+    const raw = storageGet(SAVE_KEY);
+    if (!raw) return null;
     try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return null;
       saved = JSON.parse(raw);
     } catch {
       return null;

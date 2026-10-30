@@ -13,8 +13,8 @@ use crate::event::Event;
 use crate::hash::fnv1a64;
 use crate::map::Map;
 use crate::module::{
-    end_game, Build, Choices, Cx, Halt, Module, ModuleDef, ParamKind, PhaseKind, Res, VariantDef,
-    World,
+    end_game, Build, Choices, Cx, Halt, Module, ModuleDef, ParamKind, ParamSpec, PhaseKind, Res,
+    VariantDef, World,
 };
 use crate::modules;
 use crate::rng::Stream;
@@ -23,7 +23,6 @@ use crate::view::{self, View, ViewOut};
 
 /// Hard stop for configs whose round never ends the game.
 pub const MAX_ROUNDS: u32 = 1000;
-
 
 pub struct Rules {
     /// The resolved config: validated, lists normalized, `round` filled in.
@@ -74,15 +73,11 @@ struct Instance {
     id: &'static str,
     variant: &'static VariantDef,
     module: Box<dyn Module>,
-    specs: Vec<Spec>,
 }
 
 impl Rules {
     pub fn new(config: &Config) -> Result<Rules, String> {
         let content = content();
-        if !(1..=5).contains(&config.countries) {
-            return Err(format!("countries must be 1-5, got {}", config.countries));
-        }
         let map = Map::build(content, config.countries)?;
 
         let mut resolved = config.clone();
@@ -101,7 +96,7 @@ impl Rules {
             })?;
             if to_build
                 .iter()
-                .any(|(d, ..): &(&ModuleDef, _, _, _)| d.id == def.id)
+                .any(|(d, ..): &(&ModuleDef, _, _)| d.id == def.id)
             {
                 return Err(format!("module {:?} appears twice", def.id));
             }
@@ -134,9 +129,8 @@ impl Rules {
                     ));
                 }
             }
-            let specs = param_specs(variant);
-            resolve_params(def.id, &specs, mc)?;
-            to_build.push((def, variant, cards, specs));
+            resolve_params(def.id, variant.params, mc)?;
+            to_build.push((def, variant, cards));
         }
         let mut params = BTreeMap::new();
         for mc in &resolved.modules {
@@ -166,7 +160,7 @@ impl Rules {
             params: &params,
             variants: &variants,
         };
-        for ((def, variant, cards, specs), mc) in to_build.into_iter().zip(&resolved.modules) {
+        for ((def, variant, cards), mc) in to_build.into_iter().zip(&resolved.modules) {
             let b = Build {
                 module: def.id,
                 params: &mc.params,
@@ -178,7 +172,6 @@ impl Rules {
                 id: def.id,
                 variant,
                 module,
-                specs,
             });
         }
 
@@ -266,19 +259,19 @@ impl Rules {
         }
     }
 
-    /// Every tunable of this config, card-derived ones included, in module
-    /// then declaration order. What a sweep can vary with `--set`.
+    /// Every tunable of this config, in module then declaration order.
+    /// What a sweep can vary with `--set`.
     pub fn tunables(&self) -> Vec<Tunable> {
         let mut out = Vec::new();
         for (i, mc) in self.modules.iter().zip(&self.config.modules) {
-            for s in &i.specs {
+            for s in i.variant.params {
                 out.push(Tunable {
                     key: format!("{}.{}", i.id, s.name),
                     kind: s.kind.name(),
                     min: s.min,
                     max: s.max,
                     doc: s.doc,
-                    value: mc.params[&s.name].clone(),
+                    value: mc.params[s.name].clone(),
                 });
             }
         }
@@ -352,8 +345,8 @@ impl Rules {
             let snap = &p.snapshot;
             let kind = self.round.get(g.phase).map(|r| r.kind);
             let trigger_fits = match p.trigger {
-                crate::state::Trigger::Phase => kind == Some(PhaseKind::Auto),
-                crate::state::Trigger::Action { .. } => kind == Some(PhaseKind::Decision),
+                Trigger::Phase => kind == Some(PhaseKind::Auto),
+                Trigger::Action { .. } => kind == Some(PhaseKind::Decision),
             };
             if snap.pending.is_some()
                 || snap.config != self.config
@@ -403,7 +396,7 @@ impl Rules {
                 },
             );
         }
-        view::finish(&mut v, g);
+        view::finish(&mut v, g, self.content);
         v
     }
 
@@ -454,8 +447,10 @@ impl Rules {
         })
     }
 
-    /// Applies an action in place. On error the state is unchanged. Pass
-    /// `None` for `events` in hot loops to skip building the event log.
+    /// Applies an action in place. An action refused before any choice was
+    /// answered is an error and leaves the state unchanged; `Halt::Illegal`
+    /// after one is a bug and panics (see [`Module::act`]). Pass `None` for
+    /// `events` in hot loops to skip building the event log.
     pub fn apply_mut(
         &self,
         g: &mut GameState,
@@ -609,12 +604,7 @@ impl Rules {
             }
             Err(Halt::Ask) => {
                 g.stats.actions += answered + is_action as u32;
-                g.pending = Some(Box::new(Pending {
-                    trigger,
-                    made: ch.made,
-                    ask: ch.asked.expect("a halted choice records its question"),
-                    snapshot: snapshot.share(),
-                }));
+                park(g, trigger, ch, snapshot.share());
                 Ok(())
             }
             Err(Halt::Illegal(e)) => {
@@ -715,12 +705,7 @@ impl Rules {
                     match self.run_trigger(g, &Trigger::Phase, &mut ch, events.as_deref_mut()) {
                         Ok(()) => g.phase += 1,
                         Err(Halt::Ask) => {
-                            g.pending = Some(Box::new(Pending {
-                                trigger: Trigger::Phase,
-                                made: Vec::new(),
-                                ask: ch.asked.expect("a halted choice records its question"),
-                                snapshot: Arc::new(snapshot),
-                            }));
+                            park(g, Trigger::Phase, ch, Arc::new(snapshot));
                             return;
                         }
                         Err(Halt::Illegal(e)) => panic!("phase {} failed: {e}", p.name),
@@ -751,6 +736,17 @@ impl Rules {
             }
         }
     }
+}
+
+/// Stops a resolution at the question it asked, to go on from `snapshot`
+/// once it is answered.
+fn park(g: &mut GameState, trigger: Trigger, ch: Choices, snapshot: Arc<GameState>) {
+    g.pending = Some(Box::new(Pending {
+        trigger,
+        made: ch.made,
+        ask: ch.asked.expect("a halted choice records its question"),
+        snapshot,
+    }));
 }
 
 /// What a checked action does.
@@ -803,38 +799,12 @@ fn resolve_cards(
     Ok(out)
 }
 
-/// A parameter a module instance requires: a variant's declared spec, or
-/// one synthesized for a parameter that a selected card refers to.
-struct Spec {
-    name: String,
-    kind: ParamKind,
-    min: i64,
-    max: i64,
-    doc: &'static str,
-}
-
-/// The variant's parameters (021: cards no longer name parameters).
-fn param_specs(variant: &VariantDef) -> Vec<Spec> {
-    let specs: Vec<Spec> = variant
-        .params
-        .iter()
-        .map(|p| Spec {
-            name: p.name.to_string(),
-            kind: p.kind,
-            min: p.min,
-            max: p.max,
-            doc: p.doc,
-        })
-        .collect();
-    specs
-}
-
 /// Checks the config's parameters against `specs` and normalizes them
 /// (a single integer for a list parameter becomes a one-item list).
-fn resolve_params(module: &str, specs: &[Spec], mc: &mut ModuleConfig) -> Result<(), String> {
+fn resolve_params(module: &str, specs: &[ParamSpec], mc: &mut ModuleConfig) -> Result<(), String> {
     for name in mc.params.keys() {
         if name == "variant" || !specs.iter().any(|s| s.name == *name) {
-            let known: Vec<&str> = specs.iter().map(|s| s.name.as_str()).collect();
+            let known: Vec<&str> = specs.iter().map(|s| s.name).collect();
             return Err(format!(
                 "{module}.{name}: not a parameter of variant {} (parameters: {})",
                 mc.variant,
@@ -847,7 +817,7 @@ fn resolve_params(module: &str, specs: &[Spec], mc: &mut ModuleConfig) -> Result
         }
     }
     for s in specs {
-        let v = mc.params.get_mut(&s.name).ok_or_else(|| {
+        let v = mc.params.get_mut(s.name).ok_or_else(|| {
             format!(
                 "{module}.{}: missing (every parameter must be set in config: {})",
                 s.name, s.doc

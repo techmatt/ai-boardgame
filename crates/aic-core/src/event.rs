@@ -1,6 +1,7 @@
 //! Typed events emitted while applying actions: the event log, for UIs to
 //! animate and for traces.
 
+use crate::vocab::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::hex::Hex;
@@ -11,13 +12,14 @@ pub enum Event {
     RoundStarted {
         round: u32,
     },
-    /// `phase` is `"<module>.<phase>"`.
+    /// `phase` is the round entry: `"<module>.<phase>"`, or `"a.x+b.y"` for
+    /// a combined phase.
     PhaseStarted {
         phase: String,
     },
     ResourceChanged {
         seat: u8,
-        resource: String,
+        resource: Resource,
         delta: i64,
         total: i64,
     },

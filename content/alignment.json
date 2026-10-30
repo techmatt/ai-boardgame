@@ -5,7 +5,7 @@
   "side": "unity",
   "tier": 1,
   "text": "Every player gains 2 credit income for the rest of the game.",
-  "effects": [{"op": "income", "credits": 2}]
+  "effects": [{"op": "team_income", "resource": "credits", "amount": 2}]
  },
  {
   "id": "open_market",
@@ -21,7 +21,7 @@
   "side": "unity",
   "tier": 1,
   "text": "Every player gains 1 insight each round for the rest of the game.",
-  "effects": [{"op": "insight_income", "insight": 1}]
+  "effects": [{"op": "team_income", "resource": "insight", "amount": 1}]
  },
  {
   "id": "ceasefire",
@@ -61,7 +61,7 @@
   "side": "unity",
   "tier": 2,
   "text": "Every player gains 2 credit income for the rest of the game and 4 credits now.",
-  "effects": [{"op": "income", "credits": 2}, {"op": "credits", "credits": 4}]
+  "effects": [{"op": "team_income", "resource": "credits", "amount": 2}, {"op": "gain", "resource": "credits", "amount": 4}]
  },
  {
   "id": "decommission",
@@ -77,8 +77,8 @@
   "side": "discord",
   "tier": 1,
   "text": "Deal one extra threat (2+ Discord tips: two; 5+: three).",
-  "effects": [{"op": "threats", "count": 1}],
-  "steps": [{"at": 2, "effects": [{"op": "threats", "count": 2}]}, {"at": 5, "effects": [{"op": "threats", "count": 3}]}]
+  "effects": [{"op": "deal_threats", "count": 1}],
+  "steps": [{"at": 2, "effects": [{"op": "deal_threats", "count": 2}]}, {"at": 5, "effects": [{"op": "deal_threats", "count": 3}]}]
  },
  {
   "id": "blight",
@@ -95,8 +95,8 @@
   "side": "discord",
   "tier": 1,
   "text": "The adversary builds now (5+ Discord tips: it builds, then spreads).",
-  "effects": [{"op": "build"}],
-  "steps": [{"at": 5, "effects": [{"op": "build"}, {"op": "spread"}]}]
+  "effects": [{"op": "adversary_build"}],
+  "steps": [{"at": 5, "effects": [{"op": "adversary_build"}, {"op": "adversary_spread"}]}]
  },
  {
   "id": "propaganda",
@@ -113,8 +113,8 @@
   "side": "discord",
   "tier": 2,
   "text": "The adversary spreads now (5+ Discord tips: it builds, then spreads).",
-  "effects": [{"op": "spread"}],
-  "steps": [{"at": 5, "effects": [{"op": "build"}, {"op": "spread"}]}]
+  "effects": [{"op": "adversary_spread"}],
+  "steps": [{"at": 5, "effects": [{"op": "adversary_build"}, {"op": "adversary_spread"}]}]
  },
  {
   "id": "two_fronts",
@@ -122,8 +122,8 @@
   "side": "discord",
   "tier": 2,
   "text": "Deal two extra threats (5+ Discord tips: three).",
-  "effects": [{"op": "threats", "count": 2}],
-  "steps": [{"at": 5, "effects": [{"op": "threats", "count": 3}]}]
+  "effects": [{"op": "deal_threats", "count": 2}],
+  "steps": [{"at": 5, "effects": [{"op": "deal_threats", "count": 3}]}]
  },
  {
   "id": "firestorm",

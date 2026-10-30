@@ -5,8 +5,10 @@
 //!
 //! The rules areas lean on each other (a card's damage destroys adversary
 //! pieces and sways toward Unity), so modules call each other's public
-//! functions and read each other's parameters; each declares the modules it
-//! needs in `ModuleDef::requires`. `common` and `effects` are shared code,
+//! functions and read each other's parameters. `ModuleDef::requires` lists
+//! only the modules whose parameters a module reads, so the optional ones can
+//! be switched off: an optional module's public functions must still work
+//! with that module absent. `common`, `effects` and `plan` are shared code,
 //! not modules.
 
 use crate::module::ModuleDef;

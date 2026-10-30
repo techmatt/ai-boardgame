@@ -1,6 +1,6 @@
 //! The experiment harness: configs × variants × difficulties × agents over a
 //! seed range, played on every core, with the measures of
-//! `docs/principles.md` gathered per game. `report.rs` aggregates and writes
+//! `docs/principles.md` gathered per game. `report/` aggregates and writes
 //! them out. See README.md ("Experiments") for the spec format.
 //!
 //! Everything a game measures is read from the public state or the actions
@@ -17,7 +17,7 @@ use std::time::Instant;
 
 use aic_core::content::Side;
 use aic_core::modules::{adversary, alignment, cards, common};
-use aic_core::{replay, Action, Config, GameState, Rules};
+use aic_core::{replay, Action, Config, GameState, Outcome, Rules, Stats};
 use serde::{Deserialize, Serialize};
 
 use crate::agents::determinize::determinize;
@@ -54,6 +54,13 @@ pub struct Spec {
     /// Records saved per category (close losses, lock-ins, surprises).
     #[serde(default = "default_records")]
     pub records: usize,
+}
+
+impl Spec {
+    /// Games the grid of `cells` has.
+    pub fn total_games(&self, cells: &[Cell]) -> usize {
+        cells.len() * self.games as usize
+    }
 }
 
 mod seed_string {
@@ -205,6 +212,15 @@ pub fn cells(spec: &Spec) -> Result<Vec<Cell>, String> {
         .iter()
         .map(|a| AgentSpec::parse(a))
         .collect::<Result<_, _>>()?;
+    // The report keys everything by agent label and variant name: a second
+    // cell of the same name would show the first one's numbers.
+    let labels: Vec<String> = agents.iter().map(AgentSpec::label).collect();
+    if let Some(l) = first_repeat(labels.iter().map(String::as_str)) {
+        return Err(format!("two agents play as {l:?}"));
+    }
+    if let Some(n) = first_repeat(spec.variants.iter().map(|v| v.name.as_str())) {
+        return Err(format!("two variants are named {n:?}"));
+    }
     if spec.winprob.games > 0 {
         AgentSpec::parse(&spec.winprob.agent).map_err(|e| format!("winprob.agent: {e}"))?;
         if spec.winprob.rollouts == 0 {
@@ -243,6 +259,11 @@ pub fn cells(spec: &Spec) -> Result<Vec<Cell>, String> {
         }
     }
     Ok(out)
+}
+
+fn first_repeat<'a>(names: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+    let mut seen = std::collections::BTreeSet::new();
+    names.into_iter().find(|n| !seen.insert(*n))
 }
 
 /// Everything measured in one game; one line of `games.jsonl`.
@@ -308,7 +329,7 @@ pub struct CardCounts {
     pub played: u32,
     /// The sum of its pick positions (1 = a seat's first pick of the round).
     pub pick_sum: u32,
-    /// Times drawn (paid compute for).
+    /// Times drawn into a hand by an effect.
     pub drawn: u32,
 }
 
@@ -344,9 +365,7 @@ pub struct Margin {
     /// Unity tips.
     pub unity_tips: i64,
     /// Nodes and adversary troops on the board at the end (018).
-    #[serde(default)]
     pub nodes_end: i64,
-    #[serde(default)]
     pub troops_end: i64,
 }
 
@@ -362,7 +381,7 @@ fn margin(rules: &Rules, g: &GameState) -> Margin {
         .filter(|&h| common::is_city(&w, h))
         .collect();
     Margin {
-        deck_left: (g.pile(adversary::DECK).len() + g.pile(adversary::NEXT).len()) as u32,
+        deck_left: Eval::cards_left(g) as u32,
         supply_left: g.var(adversary::SUPPLY),
         supply_start: adversary::start_supply(&w),
         cities_corrupted_end: cities.iter().filter(|&&h| common::corrupted(g, h)).count() as i64,
@@ -375,6 +394,20 @@ fn margin(rules: &Rules, g: &GameState) -> Margin {
         unity_tips: g.var(alignment::tips_key(Side::Unity)),
         nodes_end: (0..g.hexes.len()).map(|h| g.tokens(h, common::NODE)).sum(),
         troops_end: (0..g.hexes.len()).map(|h| g.tokens(h, common::TROOP)).sum(),
+    }
+}
+
+/// How a game ended: its reason, or `timeout` when the action cap hit first.
+pub fn end_reason(outcome: Option<&Outcome>) -> String {
+    outcome.map_or("timeout".into(), |o| o.reason.clone())
+}
+
+/// The generic per-round counter (017), split: adversary operations during
+/// setup (entry 0), and in each round since (entry r, round r).
+pub fn adversary_ops(stats: &Stats) -> (i64, &[i64]) {
+    match stats.per_round.get("adversary.ops").map(Vec::as_slice) {
+        Some([setup, rounds @ ..]) => (*setup, rounds),
+        _ => (0, &[]),
     }
 }
 
@@ -430,7 +463,7 @@ fn win_probability(
         }
         wins += s.outcome.as_ref().is_some_and(|o| o.won) as usize;
     }
-    wins as f64 / rollouts.max(1) as f64
+    wins as f64 / rollouts as f64
 }
 
 /// Plays one game of one cell and measures it.
@@ -501,7 +534,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
                     spec.max_actions,
                 );
                 r.winprob.push(p);
-                r.probe_ms += t.elapsed().as_secs_f64() * 1000.0;
+                r.probe_ms += ms_since(t);
             }
         }
         // Draft packets are dealt face down to each seat and passed: the
@@ -537,12 +570,12 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
                 r.probed += 1;
                 r.gap_sum += gap;
                 r.close += (gap < spec.closeness.gap) as u32;
-                r.probe_ms += t.elapsed().as_secs_f64() * 1000.0;
+                r.probe_ms += ms_since(t);
             }
         }
         let t = Instant::now();
         let i = agent.choose(rules, &g, &legal);
-        r.agent_ms += t.elapsed().as_secs_f64() * 1000.0;
+        r.agent_ms += ms_since(t);
         let t = Instant::now();
         let a = legal[i].clone();
         match &a {
@@ -560,18 +593,19 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
             Action::Withdraw { .. } => r.withdraws += 1,
             _ => {}
         }
-        // A draw's card is only known once drawn: whatever is new in the hand.
-        let hand_before = match &a {
-            Action::Tier { seat, .. } => {
-                Some((*seat, g.pile(&cards::hand(*seat as usize)).to_vec()))
-            }
-            _ => None,
-        };
+        // A draw's card is only known once drawn, and any effect of any step
+        // may draw, for any seat: whatever is new in a hand, bar a keep's card.
+        let mut hands: Vec<Vec<String>> = (0..g.seats.len())
+            .map(|s| g.pile(&cards::hand(s)).to_vec())
+            .collect();
+        if let Action::Keep { seat, card } = &a {
+            hands[*seat as usize].push(card.clone());
+        }
         rules
             .apply_mut(&mut g, &a, None)
             .expect("a legal action applies");
-        if let Some((seat, mut before)) = hand_before {
-            for c in g.pile(&cards::hand(seat as usize)) {
+        for (s, mut before) in hands.into_iter().enumerate() {
+            for c in g.pile(&cards::hand(s)) {
                 match before.iter().position(|b| b == c) {
                     Some(k) => {
                         before.swap_remove(k);
@@ -587,21 +621,13 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
     r.replay_ok = replay(rules, seed, &r.actions).is_ok_and(|h| h == g);
     r.replay_ms = ms_since(t);
     r.won = g.outcome.as_ref().is_some_and(|o| o.won);
-    r.reason = g
-        .outcome
-        .as_ref()
-        .map_or("timeout".into(), |o| o.reason.clone());
+    r.reason = end_reason(g.outcome.as_ref());
     r.rounds = g.round;
     r.margin = margin(rules, &g);
-    // The generic per-round counter (017): entry 0 is setup, entry r round r.
-    let ops = g
-        .stats
-        .per_round
-        .get("adversary.ops")
-        .map_or(&[][..], |v| v.as_slice());
-    r.setup_ops = ops.first().copied().unwrap_or(0) as u32;
-    r.adversary_ops = (1..=g.round as usize)
-        .map(|i| ops.get(i).copied().unwrap_or(0) as u32)
+    let (setup_ops, round_ops) = adversary_ops(&g.stats);
+    r.setup_ops = setup_ops as u32;
+    r.adversary_ops = (0..g.round as usize)
+        .map(|i| round_ops.get(i).copied().unwrap_or(0) as u32)
         .collect();
     r.counters = g.stats.counters.clone();
     // 021: the card and economy per-round counters, as `<key>.rNN` (summed
@@ -630,8 +656,8 @@ fn ms_since(t: Instant) -> f64 {
 /// `on_game` (with the games finished and the total) under the same lock,
 /// so a caller can stream games to disk and report from `results` while
 /// the run goes on. Work is handed out one game at a time (agents differ a
-/// hundredfold in cost), seed by seed across every cell, the most expensive
-/// agents first within a seed: a run stopped early has every cell's first
+/// hundredfold in cost), seed by seed across every cell, the highest ladder
+/// tier first within a seed: a run stopped early has every cell's first
 /// seeds, not some cells whole and others missing. Sort the results by cell
 /// then seed ([`sort`]) and nothing depends on the thread count or order.
 pub fn run(
@@ -647,7 +673,7 @@ pub fn run(
         .iter()
         .map(|r| (r.cell, r.seed))
         .collect();
-    let total = cells.len() * spec.games as usize;
+    let total = spec.total_games(cells);
     let mut jobs: Vec<(usize, u64)> = (0..spec.games)
         .flat_map(|k| (0..cells.len()).map(move |c| (c, spec.first_seed + k)))
         .filter(|j| !have.contains(j))

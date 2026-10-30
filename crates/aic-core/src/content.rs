@@ -3,10 +3,9 @@
 //! player cards, threats, the adversary deck, the AI boards and the
 //! Alignment decks.
 //!
-//! Effects are composed from code primitives ([`Effect`], [`Passive`],
-//! [`ThreatOp`], [`Twist`], [`AlignOp`]). A new primitive is a code change;
-//! a new card, threat, adversary card, AI board or Alignment card that only
-//! combines existing primitives is a data change.
+//! What content does is one schema, [`Op`] (`op.rs`). A new op is a code
+//! change; a new card, threat, adversary card, AI board or Alignment card
+//! that only combines existing ops is a data change.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
@@ -15,6 +14,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::hash::fnv1a64;
 use crate::hex::{Dir, Hex};
+pub use crate::op::{Cond, CountryRule, DamageAt, Op, RoundFlag, Slot, Spot};
+pub use crate::vocab::{
+    DiscountOn, PerResource, Resource, Side, Tag, TagOrAny, TokenKind, RESOURCES, TAGS,
+};
 
 const MAP_JSON: &str = include_str!("../../../content/map.json");
 const CARDS_JSON: &str = include_str!("../../../content/cards.json");
@@ -34,53 +37,6 @@ const FILES: [&str; 7] = [
     ALIGNMENT_JSON,
     PROJECTS_JSON,
 ];
-
-/// Player resources, in display order.
-/// (021: players have no compute; compute is the adversary's, `adversary.compute`.)
-pub const RESOURCES: [&str; 5] = ["credits", "hardware", "energy", "antimatter", "insight"];
-
-/// Positions in [`RESOURCES`], the order of income and production arrays.
-pub const CREDITS: usize = 0;
-pub const HARDWARE: usize = 1;
-pub const ENERGY: usize = 2;
-pub const ANTIMATTER: usize = 3;
-pub const INSIGHT: usize = 4;
-
-// The positions above name the right resources (checked at compile time).
-const _: () = {
-    assert!(str_eq(RESOURCES[CREDITS], "credits"));
-    assert!(str_eq(RESOURCES[HARDWARE], "hardware"));
-    assert!(str_eq(RESOURCES[ENERGY], "energy"));
-    assert!(str_eq(RESOURCES[ANTIMATTER], "antimatter"));
-    assert!(str_eq(RESOURCES[INSIGHT], "insight"));
-};
-
-/// String equality usable in a const context.
-const fn str_eq(a: &str, b: &str) -> bool {
-    let (a, b) = (a.as_bytes(), b.as_bytes());
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut i = 0;
-    while i < a.len() {
-        if a[i] != b[i] {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
-
-/// Card tags (021). A card carries 1-3.
-pub const TAGS: [&str; 6] = ["science", "industry", "cyber", "power", "diplomacy", "security"];
-
-/// Token types (021): tokens live only on cards that print their type.
-/// Datasets (Science), Followers (Diplomacy), Capital (Industry), Agents
-/// (Security); a Cyber type is still to come.
-pub const TOKEN_KINDS: [&str; 4] = ["datasets", "followers", "capital", "agents"];
-
-/// A power's tag cost that any tag pays.
-pub const ANY_TAG: &str = "any";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -230,10 +186,10 @@ pub enum CardKind {
 }
 
 /// A resource and an amount, written `["energy", 2]`.
-pub type Cost = (String, i64);
+pub type Cost = (Resource, i64);
 
 /// A tag and a count, written `["power", 2]`.
-pub type TagCount = (String, i64);
+pub type TagCount = (Tag, i64);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -263,14 +219,14 @@ pub struct CardDef {
     #[serde(default)]
     pub lowers: Vec<Cost>,
     #[serde(default)]
-    pub tags: Vec<String>,
+    pub tags: Vec<Tag>,
     /// Printed keywords, for reading the card (021): `hack`, `token`, ...
     #[serde(default)]
     pub keywords: Vec<String>,
     /// A building that must be built over one of yours whose top card
     /// carries this tag (021: tier-2 replacement).
     #[serde(default)]
-    pub replaces: Option<String>,
+    pub replaces: Option<Tag>,
     /// The token type this card holds, and how many it gains a round while
     /// in play (021: token engines).
     #[serde(default)]
@@ -282,10 +238,10 @@ pub struct CardDef {
     pub text: String,
     /// On play (a program), or when built (a building).
     #[serde(default)]
-    pub effects: Vec<Effect>,
+    pub effects: Vec<Op>,
     /// A building's standing effects.
     #[serde(default)]
-    pub passives: Vec<Passive>,
+    pub passives: Vec<Op>,
     /// A building's once-a-round ability.
     #[serde(default)]
     pub ability: Option<Ability>,
@@ -306,288 +262,21 @@ pub struct CardDef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TokenSpec {
-    pub kind: String,
+    pub kind: TokenKind,
     #[serde(default)]
     pub per_round: i64,
 }
 
-/// A once-a-round ability. `cost` may name `"tokens"`: spent from the card's
-/// own tokens (021: spend at a rate).
+/// A once-a-round ability: `cost` from the seat, `tokens` from the card's own
+/// tokens (021: spend at a rate).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ability {
+    #[serde(default)]
     pub cost: Vec<Cost>,
-    pub effects: Vec<Effect>,
-}
-
-/// Where a removal effect may land.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DamageAt {
-    /// Any hex holding adversary ambassadors or troops.
-    Any,
-    /// A hex within your reach (1 of one of your presence).
-    Reach,
-    /// A hex in a country where you have a presence.
-    PresenceCountry,
-}
-
-/// Which country a placement may go to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CountryRule {
-    Any,
-    PresenceCountry,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Cond {
-    /// You removed an adversary troop this round.
-    RemovedTroop,
-    /// Some clean city holds adversary ambassadors.
-    CityWithAmbassador,
-}
-
-/// Player effect primitives (cards, abilities, growth options), resolved in
-/// order for the acting player. Choices they need are asked as
-/// `Action::Choose`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Effect {
-    Gain {
-        resource: String,
-        amount: i64,
-    },
-    /// 1 of `resource` per presence you have on the board, up to `max`.
-    GainPerPresence {
-        resource: String,
-        max: i64,
-    },
-    /// Choose another player for the `other_gain` / `transfer` that follow.
-    ChoosePlayer,
-    OtherGain {
-        resource: String,
-        amount: i64,
-    },
-    /// Give up to `max` of `resource` to the chosen player; they gain
-    /// `bonus` more if you gave any.
-    Transfer {
-        resource: String,
-        max: i64,
-        bonus: i64,
-    },
-    /// Convert up to `max` of `from` into `rate` of `to` each.
-    Convert {
-        from: String,
-        to: String,
-        max: i64,
-        rate: i64,
-    },
-    PlacePresence {
-        count: i64,
-    },
-    /// Remove adversary pieces in one hex, `amount` worth: an ambassador
-    /// costs 1, a troop `board.troop_health`.
-    Damage {
-        amount: i64,
-        at: DamageAt,
-    },
-    /// `amount` worth of removal in each hex of one country holding adversary pieces.
-    DamageCountry {
-        amount: i64,
-    },
-    /// Remove every adversary ambassador and troop in one hex.
-    DestroyAll,
-    /// Remove one node within your reach (019: the tier-2 way to remove a node).
-    RemoveNode,
-    /// Remove every adversary ambassador in one country; sway 1 toward Unity per `unity_per` removed.
-    RemoveAmbassadorsCountry {
-        unity_per: i64,
-    },
-    /// Build a factory on an empty open hex touching a city.
-    BuildFactory,
-    /// Take the adversary cube off up to `amount` corrupted stations or
-    /// factories, one at a time (`one_country`: all in the first one's
-    /// country). `cities` (024): corrupted cities too, outright; only a tier-2
-    /// ultimate prints it.
-    Cleanse {
-        amount: i64,
-        one_country: bool,
-        #[serde(default)]
-        cities: bool,
-    },
-    /// Remove up to `max` adversary ambassadors (0: all) on or next to one
-    /// corrupted city in your reach, the ones next to it first (024).
-    ClearCity {
-        max: i64,
-    },
-    /// Put `count` hardening tokens on buildings in one country.
-    Harden {
-        count: i64,
-        #[serde(rename = "where")]
-        in_country: CountryRule,
-    },
-    /// Move up to `max` of your ambassadors (from your supply or the board)
-    /// onto pieces within your reach, one at a time.
-    MoveAmbassadors {
-        max: i64,
-    },
-    /// Gain `count` player ambassadors into your supply.
-    GainAmbassadors {
-        count: i64,
-    },
-    /// In one country, buildings can't be destroyed this round.
-    Shelter,
-    /// The next `count` adversary cards are shown.
-    Peek {
-        count: i64,
-    },
-    /// One threat needs `amount` less of each resource.
-    Jam {
-        amount: i64,
-    },
-    CounterThreat,
-    /// Remove up to `amount` compute from one visible adversary project
-    /// (017; the Security cards' primitive).
-    DrainProject {
-        amount: i64,
-    },
-    /// Discard one visible adversary project, with its compute (017).
-    DiscardProject,
-    /// Sway `amount` toward Unity (module `alignment`).
-    Unity {
-        amount: i64,
-    },
-    /// Every player gains `amount` insight next round.
-    NextRoundInsight {
-        amount: i64,
-    },
-    /// Your next building this round costs `amount` less.
-    NextBuildingDiscount {
-        amount: i64,
-    },
-    /// A one-time permanent gain (021): your printed production of
-    /// `resource` rises by `amount` for the rest of the game.
-    Production {
-        resource: String,
-        amount: i64,
-    },
-    /// Add `amount` tokens to one of your cards in play holding `kind` (021).
-    AddTokens {
-        kind: String,
-        amount: i64,
-    },
-    /// A hack (021): a node within your reach makes no compute in the next build.
-    CutNode,
-    /// Movement add-on (021): move one of your ambassadors on the board up to
-    /// `range` hexes onto a piece (or not at all).
-    MoveOne {
-        range: i64,
-    },
-    /// Spread (021, rare): each of your ambassadors on the board may move 1
-    /// hex onto an adjacent piece.
-    Spread,
-    /// Consolidate (021): move up to `max` of your ambassadors within your
-    /// reach onto one piece in your reach.
-    Consolidate {
-        max: i64,
-    },
-    /// Draw `count` tier-1 cards into your hand, no keep paid (023: Science's
-    /// card draw).
-    Draw {
-        count: i64,
-    },
-    /// Remove up to `amount` compute from every visible adversary project (023).
-    DrainAll {
-        amount: i64,
-    },
-    /// "Count as power" (023): 1 of `resource` per `per` tokens of `kind` on
-    /// your cards in play (the tokens stay), up to `max`.
-    GainPerTokens {
-        resource: String,
-        kind: String,
-        per: i64,
-        max: i64,
-    },
-    /// Cash out (023): remove all your `kind` tokens; gain 1 + 2 + ... + n of
-    /// `resource` for the n removed (a growing rate); with `max` > 0, at most
-    /// `max` tokens, taken card by card.
-    CashOut {
-        kind: String,
-        resource: String,
-        #[serde(default)]
-        max: i64,
-    },
-    If {
-        cond: Cond,
-        then: Vec<Effect>,
-        #[serde(rename = "else")]
-        otherwise: Vec<Effect>,
-    },
-}
-
-/// Standing effects of a building or an AI's innate rule.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Passive {
-    Income {
-        resource: String,
-        amount: i64,
-    },
-    /// `1` per `per` of your `tag` tags, up to `max`.
-    IncomePerTag {
-        resource: String,
-        tag: String,
-        per: i64,
-        max: i64,
-    },
-    /// `amount` if you have at least `count` `tag` tags.
-    IncomeIfTags {
-        resource: String,
-        tag: String,
-        count: i64,
-        amount: i64,
-    },
-    BuildingDiscount {
-        amount: i64,
-    },
-    /// You may use the Harden standard action.
-    HardenAction,
-    Slots {
-        amount: i64,
-    },
-    /// Gain this when a threat you paid toward is countered.
-    Logistics {
-        resource: String,
-        amount: i64,
-    },
-    /// Extra Sway toward Unity when you remove an adversary troop.
-    UnityBonus {
-        amount: i64,
-    },
-    /// When you give insight, the receiver also gains this.
-    GiveBonus {
-        resource: String,
-        amount: i64,
-    },
-    /// The adversary's spread places no ambassador on hexes holding your presence.
-    SpreadShield,
-    /// Once a round, prevent the first building destruction in a country
-    /// where you have a presence.
-    CivicShelter,
-    /// While you have this building, cards discarded from hand that carry
-    /// `tag` (or any tag, `"any"`) count as those tags for AI-board powers (021).
-    TagsFromHand {
-        tag: String,
-    },
-    /// In upkeep, convert `amount` `from` into `gain` `to` (if you have it).
-    ConvertUpkeep {
-        from: String,
-        amount: i64,
-        to: String,
-        gain: i64,
-    },
+    #[serde(default)]
+    pub tokens: i64,
+    pub effects: Vec<Op>,
 }
 
 // ---------- threats ----------
@@ -602,106 +291,7 @@ pub struct ThreatDef {
     pub text: String,
     /// What countering it costs, in order (difficulty 1 raises the first).
     pub counter: Vec<Cost>,
-    pub effects: Vec<ThreatOp>,
-}
-
-/// Pieces a threat places adversary ambassadors on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Spot {
-    /// Player-owned pieces: presence, aligned cities, owned stations and factories.
-    PlayerBuildings,
-    CleanCities,
-    Factories,
-    Bases,
-}
-
-/// Threat effect primitives. Each applies to the threat's scope: its
-/// country, or every country for a shared-row threat. Team choices are
-/// asked of seat 0.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ThreatOp {
-    /// `count` adversary ambassadors from the supply, each onto a piece of
-    /// kind `at` in scope (players choose each).
-    Ambassadors {
-        at: Spot,
-        count: i64,
-    },
-    /// `count` adversary troops, each onto a factory in scope (players
-    /// choose), or with no factory onto a city.
-    Troop {
-        count: i64,
-    },
-    /// One research station in scope that is not corrupted becomes
-    /// corrupted (players choose).
-    FlipStation,
-    /// The clean city in scope with the most adversary ambassadors (ties:
-    /// lower hex number) becomes corrupted.
-    CorruptCity,
-    /// Each player with a presence in scope loses `amount` of `resource`.
-    PlayersLose {
-        resource: String,
-        amount: i64,
-    },
-    /// A round marker on the country, read by production.
-    Flag {
-        name: RoundFlag,
-    },
-    /// Each player in scope discards `cards` cards or pays `amount`
-    /// `resource` (their choice).
-    Requisition {
-        resource: String,
-        amount: i64,
-        #[serde(default = "one")]
-        cards: i64,
-    },
-    /// Each player in scope loses a player ambassador (from their supply,
-    /// else one of theirs on the board).
-    LoseAmbassador,
-    /// Sway `amount` toward Discord.
-    Discord {
-        amount: i64,
-    },
-    /// The adversary builds now, in the threat's scope (its country, or everywhere on the shared row).
-    Build,
-    DiscardMostExpensive,
-    /// The adversary gains `amount` compute (onto its projects, 017).
-    Compute {
-        amount: i64,
-    },
-    /// Each player in scope loses `amount` tokens from their cards (021;
-    /// their choice of card).
-    LoseTokens {
-        amount: i64,
-    },
-}
-
-fn one() -> i64 {
-    1
-}
-
-/// A country marker that lasts until the end of the round (module `board`):
-/// set by threats and cards, cleared in the board's cleanup.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RoundFlag {
-    /// Cities in the country make no energy.
-    Blackout,
-    /// Players with presence in the country make no energy in upkeep (021: was compute).
-    Sabotage,
-    /// Buildings in the country can't be destroyed.
-    Shelter,
-}
-
-impl RoundFlag {
-    pub fn name(self) -> &'static str {
-        match self {
-            RoundFlag::Blackout => "blackout",
-            RoundFlag::Sabotage => "sabotage",
-            RoundFlag::Shelter => "shelter",
-        }
-    }
+    pub effects: Vec<Op>,
 }
 
 // ---------- adversary ----------
@@ -717,58 +307,14 @@ pub struct AdversaryCard {
     #[serde(default)]
     pub text: String,
     #[serde(default)]
-    pub twists: Vec<Twist>,
+    pub twists: Vec<Op>,
     /// The Militarist's escalation: each military base gains an adversary
     /// ambassador when this card's round builds.
     #[serde(default)]
     pub escalation: bool,
 }
 
-/// What an adversary card changes about its round.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Twist {
-    /// Each corrupted city builds `amount` more.
-    CityBuild { amount: i64 },
-    /// Factories next to clean cities build `amount` too.
-    CleanFactories { amount: i64 },
-    /// Each corrupted research station builds `amount`.
-    Stations { amount: i64 },
-    /// Spread reaches `amount` hexes further.
-    Reach { amount: i64 },
-    /// Clean cities corrupt at `amount` fewer ambassadors.
-    CorruptSooner { amount: i64 },
-    /// Sway `amount` toward Discord.
-    Discord { amount: i64 },
-    /// This round is a war round.
-    War,
-}
-
 // ---------- alignment ----------
-
-/// A side of the Alignment track: Unity (the good AIs) or Discord (the evil AI).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Side {
-    Unity,
-    Discord,
-}
-
-impl Side {
-    pub fn other(self) -> Side {
-        match self {
-            Side::Unity => Side::Discord,
-            Side::Discord => Side::Unity,
-        }
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Side::Unity => "unity",
-            Side::Discord => "discord",
-        }
-    }
-}
 
 /// A Unity or Discord card, resolved when its side's bucket tips.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -780,7 +326,7 @@ pub struct AlignmentCard {
     /// 1, or 2 for the stronger tier.
     pub tier: u8,
     pub text: String,
-    pub effects: Vec<AlignOp>,
+    pub effects: Vec<Op>,
     /// Printed strength steps (017): from `at` tips of the card's side
     /// (counted before this tip), `effects` replace the card's effects; the
     /// last step reached applies.
@@ -793,13 +339,13 @@ pub struct AlignmentCard {
 #[serde(deny_unknown_fields)]
 pub struct Step {
     pub at: i64,
-    pub effects: Vec<AlignOp>,
+    pub effects: Vec<Op>,
 }
 
 /// An adversary project (017): one shared deck, staged (stage 1 cheap,
 /// stage 2 big). Adversary compute fills the cheapest visible project; a
 /// full one resolves its effects once, or, `ongoing`, every round from then
-/// on. Effects are Alignment primitives; team choices are asked of seat 0.
+/// on. Team choices are asked of seat 0.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectCard {
@@ -811,58 +357,7 @@ pub struct ProjectCard {
     #[serde(default)]
     pub ongoing: bool,
     pub text: String,
-    pub effects: Vec<AlignOp>,
-}
-
-/// What an Alignment card does. Team choices are asked of seat 0.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-pub enum AlignOp {
-    /// Every player gains `credits` credit income for the rest of the game.
-    Income { credits: i64 },
-    /// Every player gains `insight` insight each round for the rest of the game.
-    InsightIncome { insight: i64 },
-    /// Every player gains `credits` credits now.
-    Credits { credits: i64 },
-    /// The next `count` card purchases (keeping a drafted card) are free.
-    FreePurchases { count: i64 },
-    /// Counter one active threat (players choose).
-    CounterThreat,
-    /// Counter every active threat.
-    CounterAll,
-    /// In each country, remove `ambassadors` adversary ambassadors (players choose).
-    Pushback { ambassadors: i64 },
-    /// Sway `amount` toward `side`.
-    Sway { side: Side, amount: i64 },
-    /// Deal `count` extra threats now, one per country in turn.
-    Threats { count: i64 },
-    /// In each country, the clean city with the most adversary ambassadors
-    /// (ties: lower hex number) gains `amount` more.
-    Infiltrate { amount: i64 },
-    /// The adversary builds now.
-    Build,
-    /// The adversary spreads now.
-    Spread,
-    /// Every player sacrifices one of their ambassadors (supply or board)
-    /// or one of their presence tokens (their choice).
-    Sacrifice,
-    /// Every node makes `amount` adversary ambassadors on its hex.
-    NodeAmbassadors { amount: i64 },
-    /// Every clean city gains `amount` adversary ambassadors.
-    CleanCityAmbassadors { amount: i64 },
-    /// In each country, `count` adversary troops onto a factory (players
-    /// choose; with no factory, onto a city).
-    Troops { count: i64 },
-    /// In each country, one research station that is not corrupted becomes
-    /// corrupted (players choose).
-    FlipStations,
-    /// Every player loses `amount` of `resource` (as much as they have).
-    PlayersLose { resource: String, amount: i64 },
-    /// Remove `count` nodes anywhere on the board, one at a time (players choose).
-    RemoveNodes { count: i64 },
-    /// In each country, the city that is not corrupted with the most
-    /// adversary ambassadors (ties: lower hex number) becomes corrupted (024).
-    CorruptCities,
+    pub effects: Vec<Op>,
 }
 
 // ---------- AI boards ----------
@@ -909,8 +404,8 @@ pub struct AiBoard {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Discount {
-    pub resource: String,
-    pub tag: String,
+    pub resource: Resource,
+    pub tag: DiscountOn,
     pub rate: i64,
 }
 
@@ -920,7 +415,7 @@ pub struct Innate {
     pub name: String,
     #[serde(default)]
     pub text: String,
-    pub passives: Vec<Passive>,
+    pub passives: Vec<Op>,
 }
 
 /// A presence-track space: what placing its token uncovers.
@@ -945,17 +440,17 @@ pub struct Power {
     pub name: String,
     #[serde(default)]
     pub text: String,
-    pub tags: Vec<TagCount>,
+    pub tags: Vec<(TagOrAny, i64)>,
     #[serde(default)]
     pub cost: Vec<Cost>,
-    pub effects: Vec<Effect>,
+    pub effects: Vec<Op>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Growth {
     pub name: String,
-    pub effects: Vec<Effect>,
+    pub effects: Vec<Op>,
 }
 
 impl CardDef {
@@ -1014,27 +509,16 @@ impl Content {
         }
         for c in &self.cards {
             let what = format!("card {:?}", c.id);
-            for t in c.tags.iter().chain(c.needs.iter().map(|(t, _)| t)) {
-                tag(t, &what)?;
-            }
-            check_effects(&c.effects, &what)?;
-            check_passives(&c.passives, &what)?;
+            check_ops(&c.effects, Slot::Player, &what)?;
+            check_ops(&c.passives, Slot::Standing, &what)?;
             if let Some(a) = &c.ability {
-                check_effects(&a.effects, &what)?;
+                check_ops(&a.effects, Slot::Player, &what)?;
             }
             if c.tags.is_empty() || c.tags.len() > 3 {
                 return Err(format!("card {:?}: 1-3 tags", c.id));
             }
-            if let Some(t) = &c.replaces {
-                tag(t, &what)?;
-            }
-            if let Some(t) = &c.tokens {
-                if !TOKEN_KINDS.contains(&t.kind.as_str()) {
-                    return Err(format!("{what}: unknown token type {:?}", t.kind));
-                }
-                if c.is_event() {
-                    return Err(format!("{what}: an event can't hold tokens"));
-                }
+            if c.tokens.is_some() && c.is_event() {
+                return Err(format!("{what}: an event can't hold tokens"));
             }
             if !c.is_building()
                 && (!c.passives.is_empty() || !c.upkeep.is_empty() || c.slotless)
@@ -1059,13 +543,12 @@ impl Content {
             for (r, _) in c.upkeep.iter().chain(&c.lowers) {
                 resource(r, &what)?;
             }
-            for (r, _) in c.ability.iter().flat_map(|a| &a.cost) {
-                if r == "tokens" {
-                    if c.tokens.is_none() {
-                        return Err(format!("{what}: spends tokens but holds none"));
-                    }
-                } else {
+            if let Some(a) = &c.ability {
+                for (r, _) in &a.cost {
                     resource(r, &what)?;
+                }
+                if a.tokens != 0 && c.tokens.is_none() {
+                    return Err(format!("{what}: spends tokens but holds none"));
                 }
             }
         }
@@ -1077,18 +560,13 @@ impl Content {
             for (r, _) in &t.counter {
                 resource(r, &what)?;
             }
-            for op in &t.effects {
-                match op {
-                    ThreatOp::PlayersLose { resource: r, .. }
-                    | ThreatOp::Requisition { resource: r, .. } => resource(r, &what)?,
-                    _ => {}
-                }
-            }
+            check_ops(&t.effects, Slot::Threat, &what)?;
         }
         for a in &self.adversary {
             if !(1..=3).contains(&a.stage) {
                 return Err(format!("adversary card {:?}: stage 1-3", a.id));
             }
+            check_ops(&a.twists, Slot::Twist, &format!("adversary card {:?}", a.id))?;
         }
         for a in &self.alignment {
             if !(1..=2).contains(&a.tier) || a.effects.is_empty() {
@@ -1103,14 +581,10 @@ impl Content {
                     a.id
                 ));
             }
-            for op in a
-                .effects
-                .iter()
-                .chain(a.steps.iter().flat_map(|s| &s.effects))
-            {
-                if let AlignOp::PlayersLose { resource: r, .. } = op {
-                    resource(r, &format!("alignment card {:?}", a.id))?;
-                }
+            let what = format!("alignment card {:?}", a.id);
+            check_ops(&a.effects, Slot::Team, &what)?;
+            for st in &a.steps {
+                check_ops(&st.effects, Slot::Team, &what)?;
             }
         }
         for p in &self.projects {
@@ -1120,11 +594,7 @@ impl Content {
                     p.id
                 ));
             }
-            for op in &p.effects {
-                if let AlignOp::PlayersLose { resource: r, .. } = op {
-                    resource(r, &format!("project {:?}", p.id))?;
-                }
-            }
+            check_ops(&p.effects, Slot::Team, &format!("project {:?}", p.id))?;
         }
         for b in &self.ais {
             if b.presence.is_empty() {
@@ -1151,22 +621,16 @@ impl Content {
             }
             for d in &b.discounts {
                 resource(&d.resource, &what)?;
-                if d.tag != "building" {
-                    tag(&d.tag, &what)?;
-                }
             }
             for gr in &b.growth {
-                check_effects(&gr.effects, &what)?;
+                check_ops(&gr.effects, Slot::Player, &what)?;
             }
             for p in &b.powers {
-                check_effects(&p.effects, &what)?;
+                check_ops(&p.effects, Slot::Player, &what)?;
                 for (r, _) in &p.cost {
                     resource(r, &what)?;
                 }
-                for (t, n) in &p.tags {
-                    if t != ANY_TAG {
-                        tag(t, &what)?;
-                    }
+                for (_, n) in &p.tags {
                     if *n < 1 {
                         return Err(format!("{what}: power tag counts are 1 or more"));
                     }
@@ -1178,7 +642,7 @@ impl Content {
                     _ => return Err(format!("{what}: start building {id:?} is not a building")),
                 }
             }
-            check_passives(&b.innate.passives, &what)?;
+            check_ops(&b.innate.passives, Slot::Standing, &what)?;
         }
         let size = self.map.piece.size;
         let n = size as usize * size as usize;
@@ -1290,8 +754,9 @@ impl Content {
     }
 }
 
-fn resource(r: &str, what: &str) -> Result<(), String> {
-    if RESOURCES.contains(&r) {
+/// A cost or income must name a player resource.
+fn resource(r: &Resource, what: &str) -> Result<(), String> {
+    if r.is_player() {
         Ok(())
     } else {
         Err(format!("{what}: unknown resource {r:?}"))
@@ -1299,97 +764,59 @@ fn resource(r: &str, what: &str) -> Result<(), String> {
 }
 
 /// A resource an effect may give or move: a player resource, or the seat's
-/// ambassador supply (`modules::common::AMBASSADORS`), which effects reach
-/// through the same `add_resource`.
-fn seat_resource(r: &str, what: &str) -> Result<(), String> {
-    if r == "ambassadors" {
+/// ambassador supply, which effects reach through the same `add_resource`.
+fn seat_resource(r: &Resource, what: &str) -> Result<(), String> {
+    if *r == Resource::Ambassadors {
         Ok(())
     } else {
         resource(r, what)
     }
 }
 
-fn tag(t: &str, what: &str) -> Result<(), String> {
-    if TAGS.contains(&t) {
-        Ok(())
-    } else {
-        Err(format!("{what}: unknown tag {t:?}"))
-    }
-}
-
-/// Checks the resource names in `effects`, `if` branches included.
-fn check_effects(effects: &[Effect], what: &str) -> Result<(), String> {
-    for e in effects {
-        match e {
-            Effect::Gain { resource: r, .. }
-            | Effect::GainPerPresence { resource: r, .. }
-            | Effect::OtherGain { resource: r, .. }
-            | Effect::Transfer { resource: r, .. } => seat_resource(r, what)?,
-            Effect::Convert { from, to, .. } => {
-                resource(from, what)?;
-                resource(to, what)?;
-            }
-            Effect::Production { resource: r, .. } => resource(r, what)?,
-            Effect::AddTokens { kind, .. } => {
-                if !TOKEN_KINDS.contains(&kind.as_str()) {
-                    return Err(format!("{what}: unknown token type {kind:?}"));
-                }
-            }
-            Effect::GainPerTokens { resource: r, kind, per, .. } => {
+/// Checks every op of a content list: it may sit in `slot`, and the
+/// resources it names are ones it can use. `if` branches included.
+pub(crate) fn check_ops(ops: &[Op], slot: Slot, what: &str) -> Result<(), String> {
+    for op in ops {
+        if !op.slots().contains(&slot) {
+            return Err(format!("{what}: op {op:?} can't go in a {slot:?} list"));
+        }
+        match op {
+            Op::Gain { resource: r, .. }
+            | Op::GainPerPresence { resource: r, .. }
+            | Op::OtherGain { resource: r, .. }
+            | Op::Transfer { resource: r, .. }
+            | Op::CashOut { resource: r, .. } => seat_resource(r, what)?,
+            Op::GainPerTokens { resource: r, per, .. } => {
                 seat_resource(r, what)?;
-                if !TOKEN_KINDS.contains(&kind.as_str()) {
-                    return Err(format!("{what}: unknown token type {kind:?}"));
-                }
                 if *per < 1 {
                     return Err(format!("{what}: gain_per_tokens needs per >= 1"));
                 }
             }
-            Effect::CashOut { kind, resource: r, .. } => {
-                seat_resource(r, what)?;
-                if !TOKEN_KINDS.contains(&kind.as_str()) {
-                    return Err(format!("{what}: unknown token type {kind:?}"));
-                }
-            }
-            Effect::If {
-                then, otherwise, ..
-            } => {
-                check_effects(then, what)?;
-                check_effects(otherwise, what)?;
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-/// Checks the resource and tag names in `passives`.
-fn check_passives(passives: &[Passive], what: &str) -> Result<(), String> {
-    for p in passives {
-        match p {
-            Passive::Income { resource: r, .. }
-            | Passive::Logistics { resource: r, .. }
-            | Passive::GiveBonus { resource: r, .. } => resource(r, what)?,
-            Passive::IncomePerTag {
-                resource: r,
-                tag: t,
-                ..
-            }
-            | Passive::IncomeIfTags {
-                resource: r,
-                tag: t,
-                ..
-            } => {
-                resource(r, what)?;
-                tag(t, what)?;
-            }
-            Passive::ConvertUpkeep { from, to, .. } => {
+            Op::Convert { from, to, .. } | Op::ConvertUpkeep { from, to, .. } => {
                 resource(from, what)?;
                 resource(to, what)?;
             }
-            Passive::TagsFromHand { tag: t } => {
-                if t != ANY_TAG {
-                    tag(t, what)?;
+            Op::Production { resource: r, .. }
+            | Op::PlayersLose { resource: r, .. }
+            | Op::Requisition { resource: r, .. }
+            | Op::Income { resource: r, .. }
+            | Op::Logistics { resource: r, .. }
+            | Op::GiveBonus { resource: r, .. }
+            | Op::IncomePerTag { resource: r, .. }
+            | Op::IncomeIfTags { resource: r, .. } => resource(r, what)?,
+            Op::TeamIncome { resource: r, .. } => {
+                if !matches!(r, Resource::Credits | Resource::Insight) {
+                    return Err(format!("{what}: team_income is credits or insight"));
                 }
+            }
+            Op::Troops { each_country: true, .. } | Op::FlipStation { each_country: true }
+                if slot != Slot::Team =>
+            {
+                return Err(format!("{what}: each_country is for team cards"));
+            }
+            Op::If { then, otherwise, .. } => {
+                check_ops(then, slot, what)?;
+                check_ops(otherwise, slot, what)?;
             }
             _ => {}
         }

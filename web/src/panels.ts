@@ -41,7 +41,8 @@ export function cardChip(c: CardView, where: string, printed = false): string {
   const cost = c.cost !== undefined ? ` <small title="cost">${c.cost}</small>` : '';
   const status = c.status && !['in slot', 'draft', 'drafted', 'built', 'slotted', 'resolved', 'done', 'ongoing'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
   // 024: a card repeats its rules text under its name, as Terraforming Mars' do.
-  // The view's text starts with a bracketed cost line ("[3 credits, 1 insight] ..."), drawn on the chip.
+  // The view's text starts with a bracketed line ("[building, tier 1, industry, +1 insight]
+  // ..."): kind, tags and every cost but credits. Printed chips show the rules text only.
   const rules = (c.text ?? '').replace(/^\[[^\]]*\]\s*/, '');
   const text = printed && rules ? `<span class="ctext">${esc(rules)}</span>` : '';
   return `<span class="card${printed ? ' printed' : ''} ${esc(c.status.replace(/\s+/g, '-'))}" data-card="${esc(c.id)}" data-where="${where}">${esc(c.name)}${cost}${status}${text}</span>`;
@@ -304,7 +305,7 @@ export function legendHtml(): string {
 // ---------- seat panels ----------
 
 const SEAT_DRAWN = (k: string) =>
-  k.startsWith('resource.') || k.startsWith('economy.income.') || ['ai.tier2', 'cards.slots'].includes(k);
+  k.startsWith('resource.') || k.startsWith('economy.income.') || k === 'cards.slots';
 
 /** The seat's resources with income, its board's tracks, then other values. */
 export function seatValuesHtml(v: View, seatIndex: number): string {
@@ -329,8 +330,6 @@ export function seatValuesHtml(v: View, seatIndex: number): string {
   }).join('');
 
   const ai: string[] = [];
-  const t2 = findValue(s.values, 'ai.tier2');
-  if (t2) ai.push(`<span class="value t2 ${t2.value ? 'on' : 'off'}" data-value="ai.tier2" data-scope="${scope}">tier 2 ${t2.value ? 'unlocked' : 'locked'}</span>`);
   const slots = findValue(s.values, 'cards.slots');
   const built = s.cards.find((g) => g.key === 'cards.built');
   if (slots) {

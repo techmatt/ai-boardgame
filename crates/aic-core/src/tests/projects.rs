@@ -1,12 +1,12 @@
-//! 017: the adversary project deck, compute and its counterplay, the
-//! Discord card steps, the new Unity sources and (019) tier-2 node removal.
+//! 017: the adversary project deck, compute and its counterplay, and (019)
+//! tier-2 node removal.
 
-use super::alignment::give;
+use super::threats::{deal, threat_lab};
 use super::*;
 use crate::modules::adversary::{self, PROJECTS, PROJECTS_DONE, PROJECTS_ONGOING, PROJECT_DECK};
 use crate::modules::common::{presence, presence_of, NODE};
 
-fn row(g: &mut GameState, ids: &[&str]) {
+pub(super) fn row(g: &mut GameState, ids: &[&str]) {
     g.piles
         .insert(PROJECTS.into(), ids.iter().map(|s| s.to_string()).collect());
 }
@@ -70,10 +70,10 @@ fn a_new_row_is_dealt_when_all_three_have_resolved() {
         .map(String::from)
         .to_vec(),
     );
-    set_res(&mut g, 0, "credits", 10);
+    set_res(&mut g, 0, Resource::Credits, 10);
     with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, 11)).unwrap();
     // Market Crash (10) resolved: 8 credits each (as much as they have).
-    assert_eq!(g.resource(0, "credits"), 2);
+    assert_eq!(g.resource(0, Resource::Credits), 2);
     assert_eq!(
         g.pile(PROJECTS),
         ["station_coup", "recruitment_drive", "total_offensive"]
@@ -122,23 +122,28 @@ fn a_player_ambassador_on_a_node_stops_its_compute_and_stays() {
 }
 
 #[test]
-fn uncountered_threats_can_carry_compute() {
-    let (rules, mut g) = lab(&[]);
-    row(&mut g, &["false_flag"]);
+fn about_half_the_threats_carry_compute() {
     let t = crate::content()
         .threats
         .iter()
         .filter(|t| {
             t.effects
                 .iter()
-                .any(|e| matches!(e, crate::content::ThreatOp::Compute { .. }))
+                .any(|e| matches!(e, crate::content::Op::Compute { .. }))
         })
         .count();
-    // About half the threats carry compute.
     let n = crate::content().threats.len();
     assert!(t * 3 >= n && t * 3 <= 2 * n, "{t} of {n}");
-    with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, 2)).unwrap();
-    assert_eq!(g.var(&adversary::project_key("false_flag")), 2);
+}
+
+#[test]
+fn an_uncountered_threat_puts_its_compute_on_a_project() {
+    let (rules, mut g) = threat_lab();
+    row(&mut g, &["false_flag"]);
+    deal(&mut g, "blackout", 0);
+    pass_round(&rules, &mut g);
+    assert_eq!(g.stats.counters["threats.executed"], 1);
+    assert_eq!(g.var(&adversary::project_key("false_flag")), 3);
 }
 
 #[test]
@@ -150,9 +155,9 @@ fn security_cards_drain_or_discard_a_project() {
         "cards.hand.0".into(),
         vec!["flash_exploit".into(), "killswitch_directive".into()],
     );
-    set_res(&mut g, 0, "credits", 30);
-    set_res(&mut g, 0, "insight", 5);
-    set_res(&mut g, 0, "antimatter", 2);
+    set_res(&mut g, 0, Resource::Credits, 30);
+    set_res(&mut g, 0, Resource::Insight, 5);
+    set_res(&mut g, 0, Resource::Antimatter, 2);
     act(
         &rules,
         &mut g,
@@ -163,122 +168,17 @@ fn security_cards_drain_or_discard_a_project() {
     );
     // The only project holding compute: 6 - 5 (023: Flash Exploit; was Security Patch's 4).
     assert_eq!(g.var(&adversary::project_key("false_flag")), 1);
-    g.vars.insert("ai.tier2.0".into(), 1);
-    g.vars.insert(crate::modules::board::track_key(0), 3);
-    if rules.legal_actions(&g).contains(&Action::Play {
-        seat: 0,
-        card: "killswitch_directive".into(),
-    }) {
-        act(
-            &rules,
-            &mut g,
-            Action::Play {
-                seat: 0,
-                card: "killswitch_directive".into(),
-            },
-        );
-        assert_eq!(g.pile(PROJECTS).len(), 1);
-        assert_eq!(g.var(&adversary::project_key("false_flag")), 0);
-        assert_eq!(g.stats.counters["adversary.projects_discarded"], 1);
-    } else {
-        panic!("Zero-Day Wipe is not playable with tier 2 unlocked");
-    }
-}
-
-/// Stacks the Discord deck: `card` is drawn next, whatever the tier.
-fn next_discord(g: &mut GameState, card: &str) {
-    for tier in [1, 2] {
-        g.piles.insert(
-            format!("alignment.deck.discord.{tier}"),
-            vec![card.to_string()],
-        );
-    }
-}
-
-/// Fills the Discord bucket so the next action tips it.
-fn fill_discord(rules: &Rules, g: &mut GameState) {
-    let cap = crate::modules::alignment::capacity(&rules.world(), g, crate::content::Side::Discord);
-    g.vars.insert("alignment.discord".into(), cap);
-    let u = g.var("alignment.undecided");
-    g.vars
-        .insert("alignment.undecided".into(), (u - cap).max(0));
-}
-
-#[test]
-fn a_discord_tip_no_longer_moves_troops() {
-    // 019: the march replaced 017's Discord-tip advance.
-    let (rules, mut g) = lab(&[]);
-    let m = &rules.map;
-    let p = m.numbered(0, piece(0).presence);
-    let t = (0..m.hexes.len())
-        .find(|&h| m.distance(p, h) == 3 && kind(m, h) != content::HexKind::Ocean)
-        .unwrap();
-    put(&mut g, p, &presence(0), 1);
-    put(&mut g, t, TROOP, 1);
-    next_discord(&mut g, "propaganda");
-    fill_discord(&rules, &mut g);
-    give(&rules, &mut g);
-    answer_all(&rules, &mut g);
-    assert_eq!(g.var("alignment.discord_tips"), 1);
-    assert_eq!((g.tokens(t, TROOP), g.tokens(p, &presence(0))), (1, 1));
-    assert!(!g.stats.counters.contains_key("board.troop_moves"));
-    // No escalation any more.
-    assert_eq!(g.var("adversary.escalation"), 0);
-}
-
-#[test]
-fn discord_cards_step_up_with_the_discord_tip_count() {
-    for (tips, each) in [(0, 1), (2, 2), (5, 3)] {
-        let (rules, mut g) = lab(&[]);
-        g.vars.insert("alignment.discord_tips".into(), tips);
-        next_discord(&mut g, "blight");
-        fill_discord(&rules, &mut g);
-        give(&rules, &mut g);
-        answer_all(&rules, &mut g);
-        assert_eq!(total(&g, ADV_AMBASSADOR), 2 * each, "{tips} tips");
-    }
-}
-
-#[test]
-fn alignment_cards_are_one_shot() {
-    assert!(crate::content()
-        .alignment
-        .iter()
-        .all(|c| !c.effects.is_empty()));
-    // The ongoing field is gone from the format: content with it is rejected.
-    let bad = r#"[{"id":"x","name":"X","side":"unity","tier":1,"ongoing":true,"text":"","effects":[{"op":"build"}]}]"#;
-    assert!(serde_json::from_str::<Vec<content::AlignmentCard>>(bad).is_err());
-}
-
-#[test]
-fn freeing_a_city_and_removing_a_node_sway_unity() {
-    let (rules, mut g) = lab(&[]);
-    let m = &rules.map;
-    let city = m.numbered(0, piece(0).cities[0]);
-    put(&mut g, city, ADV_CUBE, 1);
-    put(&mut g, city, &presence(0), 1);
-    set_res(&mut g, 0, "ambassadors", 1);
-    set_res(&mut g, 0, "energy", 10);
-    rules.apply_mut(&mut g, &std_act(0, "move"), None).unwrap();
-    answer_hex(&rules, &mut g, city);
-    answer_all(&rules, &mut g);
-    assert_eq!(g.tokens(city, ADV_CUBE), 0);
-    assert_eq!(g.var("alignment.unity"), 4);
-    // No standard action removes a node (019); the Decommission Unity card does.
-    put(&mut g, city, NODE, 1);
-    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "node"), None).is_err());
-    with_cx(&rules, |cx| {
-        crate::modules::alignment::resolve(
-            &mut g,
-            cx,
-            &content::AlignOp::RemoveNodes { count: 1 },
-        )
-    })
-    .unwrap();
-    assert_eq!(g.tokens(city, NODE), 0);
-    // Freeing a city sways 4 (024; 023: 5), removing a node 2 (the bucket tips
-    // only once an action or phase finishes, so it holds both here).
-    assert_eq!(g.var("alignment.unity"), 6);
+    act(
+        &rules,
+        &mut g,
+        Action::Play {
+            seat: 0,
+            card: "killswitch_directive".into(),
+        },
+    );
+    assert_eq!(g.pile(PROJECTS).len(), 1);
+    assert_eq!(g.var(&adversary::project_key("false_flag")), 0);
+    assert_eq!(g.stats.counters["adversary.projects_discarded"], 1);
 }
 
 #[test]
@@ -292,11 +192,9 @@ fn node_takedown_removes_a_node_in_reach() {
     let near = m.hexes[p].neighbours[0];
     put(&mut g, far, NODE, 1);
     g.piles.insert("cards.hand.0".into(), vec!["node_severance".into()]);
-    set_res(&mut g, 0, "credits", 30);
-    set_res(&mut g, 0, "insight", 5);
-    set_res(&mut g, 0, "antimatter", 2);
-    g.vars.insert("ai.tier2.0".into(), 1);
-    g.vars.insert(crate::modules::board::track_key(0), 3);
+    set_res(&mut g, 0, Resource::Credits, 30);
+    set_res(&mut g, 0, Resource::Insight, 5);
+    set_res(&mut g, 0, Resource::Antimatter, 2);
     let play = Action::Play {
         seat: 0,
         card: "node_severance".into(),
@@ -318,7 +216,7 @@ fn purge_the_unaligned_sacrifices_a_presence_that_is_on_the_board() {
     let homes = [0, 1].map(|c| rules.map.numbered(c, piece(c).presence));
     for (s, &h) in homes.iter().enumerate() {
         put(&mut g, h, &presence(s), 1);
-        set_res(&mut g, s, AMBASSADORS, 0);
+        set_res(&mut g, s, Resource::Ambassadors, 0);
     }
     // One factory a country, so its troop asks nothing (024).
     for c in 0..2 {
@@ -332,94 +230,5 @@ fn purge_the_unaligned_sacrifices_a_presence_that_is_on_the_board() {
     assert_eq!(homes.map(|h| total(&g, &presence(0)) + total(&g, &presence(1)) + g.tokens(h, NODE)), [0, 0]);
     assert_eq!(g.stats.counters["alignment.sacrificed_presence"], 2);
     // It leaves the game: not to the reserve.
-    assert_eq!((g.resource(0, crate::modules::common::RESERVE), g.resource(1, crate::modules::common::RESERVE)), (0, 0));
-}
-
-#[test]
-fn a_player_ambassador_on_a_base_sways_unity_in_production() {
-    // Locked (013/016): a player ambassador on a producing base sways
-    // `base_unity` instead of a troop.
-    let (rules, mut g) = lab(&["board.bases"]);
-    let m = &rules.map;
-    let base = (0..m.hexes.len())
-        .find(|&h| kind(m, h) == content::HexKind::Base)
-        .unwrap();
-    put(&mut g, base, &ambassador(0), 1);
-    run(&rules, &mut g);
-    assert_eq!(g.var("alignment.unity"), 2);
-    assert_eq!(g.tokens(base, &ambassador(0)), 0);
-}
-
-/// 023's primitives: draw, drain every project, count tokens as power, cash
-/// tokens out at a growing rate (with a cap); and an `if` is only offered
-/// when the branch that would fire has a target.
-#[test]
-fn the_023_primitives_draw_drain_all_count_and_cash_out() {
-    use crate::content::{Cond, Effect};
-    use crate::modules::{cards, effects};
-    let (rules, mut g) = lab_actions();
-    let run = |g: &mut GameState, e: Effect| {
-        with_cx(&rules, |cx| effects::run(g, cx, 0, &[e], &mut effects::Ctx::default())).unwrap()
-    };
-    let hand = g.pile("cards.hand.0").len();
-    let deck = g.pile("cards.deck.1").len();
-    run(&mut g, Effect::Draw { count: 2 });
-    assert_eq!(g.pile("cards.hand.0").len(), hand + 2);
-    assert_eq!(g.pile("cards.deck.1").len(), deck - 2);
-
-    row(&mut g, &["false_flag", "disinformation"]);
-    g.vars.insert(adversary::project_key("false_flag"), 6);
-    g.vars.insert(adversary::project_key("disinformation"), 3);
-    run(&mut g, Effect::DrainAll { amount: 4 });
-    assert_eq!(g.var(&adversary::project_key("false_flag")), 2);
-    assert_eq!(g.var(&adversary::project_key("disinformation")), 0);
-
-    // Retained Earnings holds Capital.
-    g.piles.insert("cards.played.0".into(), vec!["retained_earnings".into()]);
-    g.vars.insert(cards::tokens_key(0, "retained_earnings"), 5);
-    let credits = g.resource(0, "credits");
-    run(
-        &mut g,
-        Effect::GainPerTokens {
-            resource: "credits".into(),
-            kind: "capital".into(),
-            per: 2,
-            max: 9,
-        },
-    );
-    assert_eq!(g.resource(0, "credits"), credits + 2, "5 Capital count as 2; they stay");
-    assert_eq!(g.var(&cards::tokens_key(0, "retained_earnings")), 5);
-    run(
-        &mut g,
-        Effect::CashOut {
-            kind: "capital".into(),
-            resource: "credits".into(),
-            max: 3,
-        },
-    );
-    assert_eq!(g.resource(0, "credits"), credits + 2 + 6, "3 cashed out: 1 + 2 + 3");
-    assert_eq!(g.var(&cards::tokens_key(0, "retained_earnings")), 2);
-    run(
-        &mut g,
-        Effect::CashOut {
-            kind: "capital".into(),
-            resource: "credits".into(),
-            max: 0,
-        },
-    );
-    assert_eq!(g.resource(0, "credits"), credits + 2 + 6 + 3);
-    assert_eq!(g.var(&cards::tokens_key(0, "retained_earnings")), 0);
-
-    // Both branches drain a project: with no compute left, nothing to target.
-    let w = rules.world();
-    let drain = vec![Effect::DrainProject { amount: 1 }];
-    let gate = [Effect::If {
-        cond: Cond::CityWithAmbassador,
-        then: drain.clone(),
-        otherwise: drain,
-    }];
-    g.vars.insert(adversary::project_key("false_flag"), 0);
-    assert!(!effects::feasible(&w, &g, 0, &gate));
-    g.vars.insert(adversary::project_key("false_flag"), 1);
-    assert!(effects::feasible(&w, &g, 0, &gate));
+    assert_eq!((g.resource(0, Resource::PresenceReserve), g.resource(1, Resource::PresenceReserve)), (0, 0));
 }

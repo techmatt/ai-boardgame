@@ -9,18 +9,15 @@ Reads DIR/games.jsonl and DIR/results.json (cell labels) as written by
 `aic-sim experiment`. Prints markdown.
 """
 import collections
-import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from screens import cnt, load  # noqa: E402
 
 
 def main(d):
-    cells = {c['cell']: c for c in json.load(open(f'{d}/results.json', encoding='utf-8'))['cells']}
-    games = collections.defaultdict(list)
-    with open(f'{d}/games.jsonl', encoding='utf-8') as f:
-        next(f)
-        for line in f:
-            g = json.loads(line)
-            games[g['cell']].append(g)
+    cells, games = load(d)
     print('| cell | variant | d | agent | games | win % | rounds | first new corruption (mean round; % of games) | cities corrupted at end | destroyed per war round | Unity tips | Discord tips | std actions/game | ends |')
     print('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     amb = {}
@@ -29,7 +26,6 @@ def main(d):
         gs = games[cell]
         c = cells[cell]
         n = len(gs)
-        cnt = lambda g, k: g['counters'].get(k, 0)
         won = sum(g['won'] for g in gs)
         rounds = sum(g['rounds'] for g in gs) / n
         firsts = [cnt(g, 'adversary.first_corruption_round') for g in gs if cnt(g, 'adversary.first_corruption_round') > 0]

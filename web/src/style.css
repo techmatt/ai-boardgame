@@ -140,7 +140,6 @@ code { font: 0.92em ui-monospace, Consolas, monospace; }
 .acards .adeck { color: var(--muted); white-space: nowrap; }
 .losses { display: inline-flex; align-items: center; gap: 0.3em; flex-wrap: wrap; }
 .losses .what { min-width: 0; font-weight: 600; color: var(--warn); }
-.losses .sep { width: 0.6em; }
 .tracks { display: inline-flex; align-items: center; gap: 0.3em; flex-wrap: wrap; margin-left: 0.6em; }
 .value.danger { border-color: var(--warn); background: #fde7e5; }
 .value.danger b { color: var(--warn); }
@@ -253,7 +252,6 @@ code { font: 0.92em ui-monospace, Consolas, monospace; }
 .res .label { color: var(--muted); }
 .res .inc { color: var(--good); font-size: 0.85em; margin-left: 0.25em; font-weight: 600; }
 .res.r-credits { border-color: #d4b24c; }
-.res.r-compute { border-color: #5c9be0; }
 .res.r-energy { border-color: #e68a2e; }
 .res.r-insight { border-color: #9c6ade; }
 .res.r-antimatter { border-color: #d63c8f; }
@@ -270,8 +268,6 @@ code { font: 0.92em ui-monospace, Consolas, monospace; }
 .step .m-tier2 { color: #fff; background: var(--good); }
 .step .m-antimatter { color: #fff; background: #d63c8f; }
 .step.covered .mark { opacity: 0.6; }
-.value.t2.on { border-color: var(--good); color: var(--good); font-weight: 600; }
-.value.t2.off { color: var(--muted); }
 .row { display: flex; flex-wrap: wrap; gap: 0.25em; align-items: center; margin-top: 0.3em; }
 .what { color: var(--muted); font-size: 0.9em; min-width: 5.5em; }
 .row.cards-packet, .row.cards-drafted { background: #eef4ff; border-radius: 3px; padding: 0.1em 0.2em; }
@@ -289,7 +285,7 @@ code { font: 0.92em ui-monospace, Consolas, monospace; }
 .card.unaffordable em, .card.no-target em { color: var(--warn); }
 .slot { color: #bbb; padding: 0 0.4em; }
 .actions { display: flex; flex-wrap: wrap; gap: 0.3em; margin-top: 0.4em; padding-top: 0.35em; border-top: 1px dashed var(--line); }
-.actions button.armed { background: var(--accent); color: #fff; }
+.actions .hex-pick { background: var(--accent); color: #fff; border-radius: 3px; padding: 0.1em 0.5em; }
 .actions button.pass { color: var(--muted); }
 .actions button.a-choose, .actions button.a-growth, .actions button.a-draft, .actions button.a-tier { border-color: #e0a100; background: #fff8e1; font-weight: 600; }
 .actions button.a-play, .actions button.a-keep, .actions button.a-use { border-color: #7fa7e0; background: #f1f6ff; }

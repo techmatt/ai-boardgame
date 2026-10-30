@@ -6,24 +6,16 @@ use std::collections::BTreeMap;
 use std::process::exit;
 use std::time::Instant;
 
-use aic_core::{
-    content_hash, play, replay, Action, Config, Event, GameRecord, Outcome, Rules, SavedGame,
-};
+use aic_core::{play, replay, Action, Config, Event, GameRecord, Outcome, Rules, SavedGame};
 use serde::Serialize;
 
 use crate::agents::AgentSpec;
-use crate::cli::{die, load, rules, Options};
+use crate::cli::{load, rules, Options};
+use crate::experiment::{adversary_ops, end_reason};
 use crate::report::file_stem;
 
 /// `aic-sim run` and `aic-sim compare`.
 pub fn run(o: &Options) {
-    let want = if o.command == "run" { 1 } else { 2 };
-    if o.paths.len() != want {
-        die(&format!("{} takes {want} config path(s)", o.command));
-    }
-    if o.command == "run" && !o.set_b.is_empty() {
-        die("--set-b needs compare");
-    }
     let mut sides = Vec::new();
     let mut records = Vec::new();
     for (i, path) in o.paths.iter().enumerate() {
@@ -34,7 +26,7 @@ pub fn run(o: &Options) {
         if o.trace {
             trace(&r, &o.agent, o.seed, o.max_actions, o.json);
         }
-        let label = if want == 1 {
+        let label = if o.command == "run" {
             "run".to_string()
         } else {
             ["A", "B"][i].to_string()
@@ -95,9 +87,6 @@ pub fn run(o: &Options) {
 
 /// `aic-sim replay`: checks each saved record.
 pub fn replay_all(o: &Options) {
-    if o.paths.is_empty() {
-        die("replay takes one or more game records");
-    }
     let bad = o.paths.iter().filter(|p| !replay_record(p)).count();
     if bad > 0 {
         eprintln!(
@@ -459,11 +448,7 @@ fn simulate(
     let mut setup_ops = 0u64;
     for g in &played {
         let rec = &g.record;
-        let reason = rec
-            .outcome
-            .as_ref()
-            .map_or("timeout".to_string(), |o| o.reason.clone());
-        *ended.entry(reason).or_insert(0) += 1;
+        *ended.entry(end_reason(rec.outcome.as_ref())).or_insert(0) += 1;
         *end_round.entry(rec.rounds).or_insert(0) += 1;
         rounds += rec.rounds as u64;
         rmin = rmin.min(rec.rounds);
@@ -472,12 +457,10 @@ fn simulate(
         options += rec.options_total;
         forced += rec.forced as u64;
         max_options = max_options.max(rec.max_options);
-        // `adversary.ops` per round: entry 0 is setup (017).
-        let per = rec.stats.per_round.get("adversary.ops");
-        let rounds_ops = per.map_or(&[][..], |v| v.get(1..).unwrap_or(&[]));
+        let (setup, rounds_ops) = adversary_ops(&rec.stats);
         ops += rounds_ops.iter().map(|&x| x as u64).sum::<u64>();
         ops_max = ops_max.max(rounds_ops.iter().copied().max().unwrap_or(0) as u32);
-        setup_ops += per.and_then(|v| v.first()).copied().unwrap_or(0) as u64;
+        setup_ops += setup as u64;
         for (k, v) in &rec.stats.counters {
             *counters.entry(k.clone()).or_insert(0.0) += *v as f64;
             *reached.entry(k.clone()).or_insert(0.0) += 1.0;
@@ -502,14 +485,13 @@ fn simulate(
             n
         };
     }
-    let first = played.first().map(|p| &p.record);
     let summary = Summary {
         label,
         path: path.to_string(),
         overrides: overrides.into_iter().cloned().collect(),
         name: r.config.name.clone(),
         config_hash: r.config_hash.clone(),
-        content_hash: first.map_or_else(content_hash, |f| f.content_hash.clone()),
+        content_hash: played[0].record.content_hash.clone(),
         engine_version: aic_core::VERSION.to_string(),
         config: (*r.config).clone(),
         games: played.len() as u64,
@@ -517,7 +499,7 @@ fn simulate(
         win_rate: p,
         win_rate_se: (p * (1.0 - p) / n).sqrt(),
         rounds_mean: rounds as f64 / n,
-        rounds_min: if played.is_empty() { 0 } else { rmin },
+        rounds_min: rmin,
         rounds_max: rmax,
         ended,
         end_round,

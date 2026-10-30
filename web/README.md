@@ -43,7 +43,7 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   one. When two answers name the same hex (a sacrifice: the ambassador or the presence
   there), each also gets its own button (clicking the hex takes the first). Any other answer
   is a button in that seat's panel. Prompts, options and the log name hexes by country
-  (`Northern Union #13`; older records say `C1 #13`, shown by name too) and cards by name. *Pass every seat* passes
+  (`Northern Union #13`) and cards by name. *Pass every seat* passes
   all the seats still to act. *Random action* (R) and *Random to end* are for quick
   debugging.
 - **Reading the board:** hexes are filled by what they are (`kind`: city grey, military

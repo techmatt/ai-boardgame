@@ -8,27 +8,23 @@
 //! one behaviour forced: they must lose to thoughtful play
 //! (`docs/principles.md`, *Dominance checks*).
 //!
-//! The plan is simple and deterministic, and uses full information (allowed
-//! for agents, principles.md *Information*): projected credit, insight,
+//! The plan is simple and deterministic, and reads only the public state
+//! and the seat's own hand: projected credit, insight,
 //! hardware and energy income; the cards it would play (hand plus the
 //! candidates) in value-per-cost order, filled into each round's budget.
 
-use aic_core::content::{CardDef, Effect, RESOURCES};
+use aic_core::content::{CardDef, Op, Resource, Tag};
 use aic_core::modules::{ai, cards, economy, effects};
 use aic_core::module::World;
 use aic_core::{Action, Agent, GameState, Rules};
 
+use super::credit_equivalent;
+
 /// A play's value falls by this share for each round it waits.
 const WAIT: f64 = 0.15;
 
-/// A card's credit-equivalent cost: each antimatter counts this many
-/// credits, each insight this many, each point of income lowered this many.
-const ANTIMATTER: i64 = 3;
-const INSIGHT: i64 = 2;
-const LOWERED: i64 = 3;
-
 /// The behaviour a dominance check forces (none for thoughtful play).
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Forced {
     /// Keep every drafted card it can afford.
     pub keep_all: bool,
@@ -46,9 +42,9 @@ pub struct Forced {
     /// that places one).
     pub no_presence: bool,
     /// Mono-tag (023): keep and play only cards carrying this tag.
-    pub only_tag: Option<String>,
+    pub only_tag: Option<Tag>,
     /// Ignore-X (023): never keep or play a card carrying this tag.
-    pub never_tag: Option<String>,
+    pub never_tag: Option<Tag>,
     /// Event-hoarder (023): keep and play only events.
     pub events_only: bool,
     /// Keep by plan (off: the wrapped agent's heuristic decides keeps).
@@ -73,13 +69,48 @@ pub struct Forced {
 }
 
 impl Forced {
+    /// Whether anything is forced: keeping by plan or a dominance check. The
+    /// plan's numbers do nothing on their own. Destructured whole so that a
+    /// new field has to be placed here.
+    pub fn is_active(&self) -> bool {
+        let Forced {
+            keep_all,
+            keep_k,
+            tier1_only,
+            tier2_rush,
+            no_powers,
+            no_counters,
+            no_presence,
+            only_tag,
+            never_tag,
+            events_only,
+            plan_keep,
+            plan_rounds: _,
+            plan_reserve: _,
+            plan_hand: _,
+            plan_t2: _,
+            plan_credit: _,
+        } = self;
+        *keep_all
+            || *keep_k > 0
+            || *tier1_only
+            || *tier2_rush
+            || *no_powers
+            || *no_counters
+            || *no_presence
+            || only_tag.is_some()
+            || never_tag.is_some()
+            || *events_only
+            || *plan_keep
+    }
+
     /// Whether the card restrictions (mono-tag, ignore-X, event-hoarder)
     /// let this seat keep or play `d`. AI-unique cards (tier 0) are exempt.
     pub fn allows(&self, d: &CardDef) -> bool {
         if d.tier == 0 {
             return true;
         }
-        let has = |t: &Option<String>| t.as_ref().is_some_and(|t| d.tags.contains(t));
+        let has = |t: &Option<Tag>| t.as_ref().is_some_and(|t| d.tags.contains(t));
         (self.only_tag.is_none() || has(&self.only_tag))
             && !has(&self.never_tag)
             && (!self.events_only || d.is_event())
@@ -134,7 +165,7 @@ impl Policy {
     }
 
     /// Whether `a` is an action the forced behaviour rules out.
-    fn ruled_out(&self, world: &World, g: &GameState, a: &Action) -> bool {
+    fn ruled_out(&self, world: &World, a: &Action) -> bool {
         let f = &self.forced;
         match a {
             Action::Tier { tier: 2, .. } => f.tier1_only,
@@ -153,16 +184,13 @@ impl Policy {
                         .get(*option as usize)
                         .is_some_and(|o| places_presence(&o.effects))
             }
-            _ => {
-                let _ = g;
-                false
-            }
+            _ => false,
         }
     }
 }
 
-fn places_presence(effects: &[Effect]) -> bool {
-    effects.iter().any(|e| matches!(e, Effect::PlacePresence { .. }))
+fn places_presence(effects: &[Op]) -> bool {
+    effects.iter().any(|e| matches!(e, Op::PlacePresence { .. }))
 }
 
 impl Agent for Policy {
@@ -199,7 +227,7 @@ impl Agent for Policy {
             }
         }
         let keep: Vec<usize> = (0..legal.len())
-            .filter(|&i| !self.ruled_out(&world, g, &legal[i]))
+            .filter(|&i| !self.ruled_out(&world, &legal[i]))
             .collect();
         if keep.is_empty() || keep.len() == legal.len() {
             return self.inner.choose(rules, g, legal);
@@ -212,37 +240,15 @@ impl Agent for Policy {
 /// A card's printed cost in credits (antimatter, insight, energy, hardware
 /// and lowered income at fixed rates): the plan's measure of what it does.
 pub fn list_cost(d: &CardDef) -> i64 {
-    d.cost
-        + ANTIMATTER * d.antimatter
-        + d.energy
-        + d.hardware
-        + INSIGHT * d.insight
-        + LOWERED * d.lowers.iter().map(|(_, n)| n).sum::<i64>()
-}
-
-/// The keep price of a tier for seat `s` in insight, after the round's
-/// opening rules: (insight, credits for an opening keep).
-fn keep_need(w: &World, g: &GameState, s: usize, tier: u8, kept: i64) -> (i64, i64) {
-    if g.round <= 1 {
-        if kept < w.int("cards.opening_free") {
-            return (0, 0);
-        }
-        return (0, w.int("cards.opening_keep_credits"));
-    }
-    let need = match tier {
-        2 if ai::keep2(w, g, s) => w.int("cards.keep_tier2_upgraded"),
-        2 => w.int("cards.keep_tier2"),
-        _ => w.int("cards.keep_tier1"),
-    };
-    (need, 0)
+    credit_equivalent(d, d.cost)
 }
 
 /// Whether seat `s` could pay to keep a card of `tier` now (insight, with
 /// any shortfall in credits).
 fn keep_affordable(w: &World, g: &GameState, s: usize, tier: u8) -> bool {
-    let (ins, cr) = keep_need(w, g, s, tier, 0);
-    let short = (ins - g.resource(s, "insight").max(0)).max(0);
-    g.resource(s, "credits") >= cr + short * w.int("cards.insight_credits")
+    let (ins, cr) = cards::keep_need(w, g, s, tier, 0);
+    let short = (ins - g.resource(s, Resource::Insight).max(0)).max(0);
+    g.resource(s, Resource::Credits) >= cr + short * w.int("cards.insight_credits")
 }
 
 /// One round's budget in the plan.
@@ -316,9 +322,7 @@ fn replaceable(w: &World, g: &GameState, s: usize, d: &CardDef) -> bool {
 
 /// What seat `s` pays to play `d`: credits after its building discount.
 fn spend(w: &World, g: &GameState, s: usize, d: &CardDef) -> i64 {
-    let credits = cards::play_cost(w, g, s, d);
-    credits + ANTIMATTER * d.antimatter + d.energy + d.hardware + INSIGHT * d.insight
-        + LOWERED * d.lowers.iter().map(|(_, n)| n).sum::<i64>()
+    credit_equivalent(d, cards::play_cost(w, g, s, d))
 }
 
 fn ratio(w: &World, g: &GameState, s: usize, id: &str) -> f64 {
@@ -336,22 +340,22 @@ fn plan(
     f: &Forced,
 ) -> Option<(f64, Vec<String>)> {
     let (rounds, reserve) = (f.plan_rounds, f.plan_reserve);
-    let res = |r: &str| g.resource(s, r).max(0);
+    let res = |r: Resource| g.resource(s, r).max(0);
     let income = economy::income(w, g, s);
-    let inc = |r: &str| RESOURCES.iter().position(|x| *x == r).map_or(0, |i| income[i]);
+    let inc = |r: Resource| income[r];
     let mut now = Budget {
-        credits: res("credits"),
-        insight: res("insight"),
-        hardware: res("hardware"),
-        energy: res("energy"),
-        antimatter: res("antimatter"),
+        credits: res(Resource::Credits),
+        insight: res(Resource::Insight),
+        hardware: res(Resource::Hardware),
+        energy: res(Resource::Energy),
+        antimatter: res(Resource::Antimatter),
     };
     // Pay the keeps: insight first, the shortfall in credits.
     let rate = w.int("cards.insight_credits");
-    let mut count = g.var(&format!("cards.kept_round.{s}"));
+    let mut count = g.var(&cards::kept_key(s));
     let mut paid = 0;
     for id in kept {
-        let (ins, cr) = keep_need(w, g, s, cards::def(w, id).tier, count);
+        let (ins, cr) = cards::keep_need(w, g, s, cards::def(w, id).tier, count);
         count += 1;
         let from_insight = ins.min(now.insight);
         now.insight -= from_insight;
@@ -375,11 +379,11 @@ fn plan(
         if round > 0 {
             // Credits, hardware, energy and antimatter carry over; insight resets.
             b = Budget {
-                credits: b.credits + inc("credits"),
-                insight: (inc("insight") - reserve).max(0),
-                hardware: b.hardware + inc("hardware"),
-                energy: b.energy + inc("energy"),
-                antimatter: b.antimatter + inc("antimatter"),
+                credits: b.credits + inc(Resource::Credits),
+                insight: (inc(Resource::Insight) - reserve).max(0),
+                hardware: b.hardware + inc(Resource::Hardware),
+                energy: b.energy + inc(Resource::Energy),
+                antimatter: b.antimatter + inc(Resource::Antimatter),
             };
         }
         for id in &pool {
@@ -396,7 +400,7 @@ fn plan(
                 && cards::lowers_ok(w, g, s, d)
                 && replaceable(w, g, s, d)
                 && (d.is_building() || effects::feasible(w, g, s, &d.effects))
-                && d.needs.iter().all(|(t, n)| cards::tags(w, g, s, t) >= *n);
+                && d.needs.iter().all(|(t, n)| cards::tags(w, g, s, *t) >= *n);
             if fits {
                 b.credits -= credits;
                 b.insight -= d.insight;

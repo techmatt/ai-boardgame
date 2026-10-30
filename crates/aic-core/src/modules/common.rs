@@ -12,6 +12,7 @@
 use crate::content::HexKind;
 use crate::module::World;
 use crate::state::{GameState, Opt};
+pub use crate::vocab::Resource;
 
 pub const FACTORY: &str = "factory";
 pub const STATION: &str = "station";
@@ -25,13 +26,6 @@ pub const TROOP: &str = "troop";
 pub const UNIT: &str = "unit";
 /// A hardening token: absorbs one destruction of a building on its hex.
 pub const HARDEN: &str = "harden";
-/// Seat resource: player ambassadors in the seat's supply.
-pub const AMBASSADORS: &str = "ambassadors";
-/// Seat resource: hardware, made by player-owned factories.
-pub const HARDWARE: &str = "hardware";
-/// Seat resource: destroyed presence back beside the seat's board, placed
-/// before the track's next token (018).
-pub const RESERVE: &str = "presence_reserve";
 /// An adversary node: persistent, makes adversary compute, blocks claims next to it.
 pub const NODE: &str = "node";
 
@@ -106,13 +100,9 @@ pub fn player_ambassador(g: &GameState, h: usize) -> Option<usize> {
     (0..g.seats.len()).find(|&s| g.tokens(h, &ambassador(s)) > 0)
 }
 
-pub fn adversary_count(g: &GameState, h: usize) -> i64 {
-    g.tokens(h, ADV_AMBASSADOR) + g.tokens(h, TROOP)
-}
-
 /// Adversary ambassadors or troops on the hex.
 pub fn has_adversary(g: &GameState, h: usize) -> bool {
-    adversary_count(g, h) > 0
+    g.tokens(h, ADV_AMBASSADOR) + g.tokens(h, TROOP) > 0
 }
 
 /// Whether hex `h` holds, or is adjacent to a hex holding, something `pred` accepts.
@@ -135,8 +125,9 @@ pub fn scope_countries(w: &World, scope: Option<usize>) -> Vec<usize> {
     }
 }
 
-/// Free industrial zones (no building): where a factory may be built.
-pub fn factory_hexes(w: &World, g: &GameState) -> Vec<usize> {
+/// Free industrial zones: printed zones holding no building, where a factory
+/// may be built.
+pub fn free_zones(w: &World, g: &GameState) -> Vec<usize> {
     (0..g.hexes.len())
         .filter(|&h| w.map.hexes[h].industrial && !has_building(g, h))
         .collect()

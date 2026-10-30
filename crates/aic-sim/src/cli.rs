@@ -1,6 +1,7 @@
 //! The command line: usage text, options and their checks, and loading a
 //! config with its overrides.
 
+use std::collections::BTreeSet;
 use std::process::exit;
 
 use aic_core::{Config, Rules};
@@ -13,6 +14,8 @@ usage: aic-sim run <config.json> [options]
        aic-sim show <config.json> [--set k=v]...     resolved config + hash
        aic-sim modules                               module registry as JSON
        aic-sim replay <record.json>...               check saved game records
+       aic-sim docs [--check]                        regenerate docs from content and
+                                                     configs (--check: exit 1 if stale)
 
 options:
   --games N         games per config (default 200)
@@ -43,11 +46,13 @@ replay:
                     saved; exit 1 if any record fails or has warnings
 
 experiment:
-  aic-sim experiment <spec.json> [--out DIR] [--games N] [--seed S] [--threads N]
+  aic-sim experiment <spec.json> [--out DIR] [--games N] [--seed S] [--max-actions N]
+                    [--threads N]
                     play the spec's grid (configs x variants x difficulties x agents
                     over a seed range) and write the cycle report into DIR (default
                     out/experiments/<name>): report.md, results.json, games.csv,
-                    cards.csv, records/. --games and --seed override the spec.
+                    cards.csv, records/. --games, --seed and --max-actions override
+                    the spec (whose action cap defaults to 5000).
   Expensive measures are opt-in (off unless the spec or these turn them on):
     --winprob N     win-probability playouts for the first N seeds of each cell
                     (about 5x an experiment's time at N = 10 of 200)
@@ -64,6 +69,51 @@ experiment:
     --resume        continue a stopped run of the same spec from DIR/games.jsonl:
                     play only the games it lacks, then report them all";
 
+const RUN_FLAGS: &[&str] = &[
+    "--games", "--seed", "--set", "--set-a", "--agent", "--max-actions", "--threads", "--json",
+    "--trace", "--save", "--save-when", "--save-seed", "--save-max",
+];
+const COMPARE_FLAGS: &[&str] = &[
+    "--games", "--seed", "--set", "--set-a", "--set-b", "--agent", "--max-actions", "--threads",
+    "--json", "--trace", "--save", "--save-when", "--save-seed", "--save-max",
+];
+
+/// One command: the paths it takes (fewest, most, and what to say when they
+/// don't fit) and the options it reads. A command refuses every other option
+/// rather than silently drop it (020: `show --set-a` printed the unmodified
+/// config; `replay --json` printed text).
+const COMMANDS: &[(&str, usize, usize, &str, &[&str])] = &[
+    ("run", 1, 1, "run takes 1 config path(s)", RUN_FLAGS),
+    ("compare", 2, 2, "compare takes 2 config path(s)", COMPARE_FLAGS),
+    ("show", 1, 1, "show takes one config", &["--set"]),
+    ("modules", 0, 0, "modules takes no paths", &[]),
+    ("replay", 1, usize::MAX, "replay takes one or more game records", &[]),
+    ("docs", 0, 0, "docs takes no paths", &["--check"]),
+    (
+        "experiment",
+        1,
+        1,
+        "experiment takes one spec file",
+        &[
+            "--games", "--seed", "--max-actions", "--threads", "--out", "--winprob", "--closeness",
+            "--variants", "--quick", "--resume", "--report-every",
+        ],
+    ),
+];
+
+/// What to do instead of a refused option, where there's something to say.
+fn hint(command: &str, flag: &str) -> &'static str {
+    match (command, flag) {
+        ("experiment", "--set" | "--set-a" | "--set-b") => " (use the spec's variants)",
+        ("experiment", "--agent") => " (use the spec's agents)",
+        ("experiment", "--json") => " (results.json is always written)",
+        ("experiment", "--save") => " (records are always saved)",
+        ("show", "--set-a" | "--set-b") | ("run", "--set-b") => " (one config: use --set)",
+        ("replay", "--set" | "--set-a" | "--set-b") => " (a record carries its own config)",
+        _ => "",
+    }
+}
+
 pub struct Options {
     pub command: String,
     pub paths: Vec<String>,
@@ -76,16 +126,17 @@ pub struct Options {
     pub threads: usize,
     pub json: bool,
     pub trace: bool,
+    pub check: bool,
     pub save: Option<String>,
     pub save_when: Vec<String>,
     pub save_seeds: Vec<u64>,
     pub save_max: usize,
     pub agent: AgentSpec,
-    /// `experiment`: output directory, and whether --games/--seed were given.
+    /// Every option given (`experiment`: --games, --seed and --max-actions
+    /// override the spec only if here).
+    pub given: BTreeSet<String>,
+    /// `experiment`: output directory.
     pub out: Option<String>,
-    pub games_given: bool,
-    pub seed_given: bool,
-    pub max_actions_given: bool,
     /// `experiment`: probe overrides and a variant filter (two-stage runs).
     pub winprob: Option<u64>,
     pub closeness: Option<usize>,
@@ -110,6 +161,9 @@ pub fn parse_args() -> Options {
         println!("{USAGE}");
         exit(0);
     }
+    let Some(&(_, fewest, most, paths_msg, flags)) = COMMANDS.iter().find(|c| c.0 == command) else {
+        die(&format!("unknown command {command:?}"))
+    };
     let mut o = Options {
         command,
         paths: Vec::new(),
@@ -122,15 +176,14 @@ pub fn parse_args() -> Options {
         threads: std::thread::available_parallelism().map_or(1, |n| n.get()),
         json: false,
         trace: false,
+        check: false,
         save: None,
         save_when: Vec::new(),
         save_seeds: Vec::new(),
         save_max: 20,
         agent: AgentSpec::parse("random").expect("random is an agent"),
+        given: BTreeSet::new(),
         out: None,
-        games_given: false,
-        seed_given: false,
-        max_actions_given: false,
         winprob: None,
         closeness: None,
         variants: None,
@@ -138,9 +191,10 @@ pub fn parse_args() -> Options {
         resume: false,
         report_every: 60,
     };
-    let mut save_max_given = false;
-    let mut report_every_given = false;
     while let Some(a) = args.next() {
+        if a.starts_with("--") {
+            o.given.insert(a.clone());
+        }
         let mut value = |name: &str| {
             args.next()
                 .unwrap_or_else(|| die(&format!("{name} needs a value")))
@@ -150,14 +204,8 @@ pub fn parse_args() -> Options {
                 .unwrap_or_else(|_| die(&format!("{name}: not a number: {v:?}")))
         }
         match a.as_str() {
-            "--games" => {
-                o.games = num("--games", value("--games"));
-                o.games_given = true;
-            }
-            "--seed" => {
-                o.seed = num("--seed", value("--seed"));
-                o.seed_given = true;
-            }
+            "--games" => o.games = num("--games", value("--games")),
+            "--seed" => o.seed = num("--seed", value("--seed")),
             "--out" => o.out = Some(value("--out")),
             "--winprob" => o.winprob = Some(num("--winprob", value("--winprob"))),
             "--closeness" => o.closeness = Some(num("--closeness", value("--closeness"))),
@@ -172,21 +220,16 @@ pub fn parse_args() -> Options {
             }
             "--quick" => o.quick = true,
             "--resume" => o.resume = true,
-            "--report-every" => {
-                o.report_every = num("--report-every", value("--report-every"));
-                report_every_given = true;
-            }
+            "--report-every" => o.report_every = num("--report-every", value("--report-every")),
             "--set" => o.set.push(value("--set")),
             "--set-a" => o.set_a.push(value("--set-a")),
             "--set-b" => o.set_b.push(value("--set-b")),
-            "--max-actions" => {
-                o.max_actions = num("--max-actions", value("--max-actions"));
-                o.max_actions_given = true;
-            }
+            "--max-actions" => o.max_actions = num("--max-actions", value("--max-actions")),
             "--agent" => o.agent = AgentSpec::parse(&value("--agent")).unwrap_or_else(|e| die(&e)),
             "--threads" => o.threads = num::<usize>("--threads", value("--threads")).max(1),
             "--json" => o.json = true,
             "--trace" => o.trace = true,
+            "--check" => o.check = true,
             "--save" => {
                 let d = value("--save");
                 if d.is_empty() {
@@ -202,10 +245,7 @@ pub fn parse_args() -> Options {
                 o.save_when.push(w)
             }
             "--save-seed" => o.save_seeds.push(num("--save-seed", value("--save-seed"))),
-            "--save-max" => {
-                o.save_max = num("--save-max", value("--save-max"));
-                save_max_given = true;
-            }
+            "--save-max" => o.save_max = num("--save-max", value("--save-max")),
             "-h" | "--help" => {
                 println!("{USAGE}");
                 exit(0)
@@ -214,62 +254,27 @@ pub fn parse_args() -> Options {
             _ => o.paths.push(a),
         }
     }
-    if o.command == "experiment" {
-        let ignored = [
-            (
-                !o.set.is_empty() || !o.set_a.is_empty() || !o.set_b.is_empty(),
-                "--set (use the spec's variants)",
-            ),
-            (
-                o.agent.kind != "random" || !o.agent.params.is_empty(),
-                "--agent (use the spec's agents)",
-            ),
-            (o.json, "--json (results.json is always written)"),
-            (o.trace, "--trace"),
-            (o.save.is_some(), "--save (records are always saved)"),
-        ];
-        for (given, what) in ignored {
-            if given {
-                die(&format!("experiment does not take {what}"));
-            }
-        }
-        if o.out
-            .as_deref()
-            .is_some_and(|d| d.trim_end_matches(['/', '\\']).is_empty())
-        {
-            die("--out needs a directory");
+    for flag in &o.given {
+        if !flags.contains(&flag.as_str()) {
+            die(&format!(
+                "{} does not take {flag}{}",
+                o.command,
+                hint(&o.command, flag)
+            ));
         }
     }
-    // Commands that would silently drop an option say so instead (020: `show --set-a`
-    // printed the unmodified config; `replay --json` printed text).
-    let refuse = |what: &str| die(&format!("{} does not take {what}", o.command));
-    if o.command == "show" && (!o.set_a.is_empty() || !o.set_b.is_empty()) {
-        refuse("--set-a / --set-b (one config: use --set)");
+    if o.paths.len() < fewest || o.paths.len() > most {
+        die(paths_msg);
     }
-    if (o.command == "replay" || o.command == "modules")
-        && (!o.set.is_empty() || !o.set_a.is_empty() || !o.set_b.is_empty())
+    if o.out
+        .as_deref()
+        .is_some_and(|d| d.trim_end_matches(['/', '\\']).is_empty())
     {
-        refuse("--set (a record carries its own config)");
+        die("--out needs a directory");
     }
-    if (o.command == "replay" || o.command == "modules") && o.json {
-        refuse("--json");
-    }
-    if (o.winprob.is_some() || o.closeness.is_some() || o.variants.is_some())
-        && o.command != "experiment"
-    {
-        die("--winprob, --closeness and --variants need experiment");
-    }
-    if o.out.is_some() && o.command != "experiment" {
-        die("--out needs experiment");
-    }
-    if (o.quick || o.resume || report_every_given) && o.command != "experiment" {
-        die("--quick, --resume and --report-every need experiment");
-    }
-    if o.save.is_none() && (!o.save_when.is_empty() || !o.save_seeds.is_empty() || save_max_given) {
+    let save_options = ["--save-when", "--save-seed", "--save-max"];
+    if o.save.is_none() && save_options.iter().any(|f| o.given.contains(*f)) {
         die("--save-when, --save-seed and --save-max need --save DIR");
-    }
-    if o.save.is_some() && o.command != "run" && o.command != "compare" {
-        die("--save needs run or compare");
     }
     if o.save.is_some() && o.save_when.is_empty() && o.save_seeds.is_empty() {
         o.save_when.push("loss".to_string());

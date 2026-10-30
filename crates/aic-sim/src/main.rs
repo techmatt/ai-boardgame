@@ -5,6 +5,7 @@
 
 mod agents;
 mod cli;
+mod docs;
 mod experiment;
 mod experiment_run;
 mod prof;
@@ -14,7 +15,7 @@ mod sweep;
 use std::process::exit;
 
 use aic_core::content_hash;
-use cli::{die, load, parse_args, rules, Options};
+use cli::{load, parse_args, rules, Options};
 
 /// The search clones game states by the hundred thousand, and the system
 /// allocator serializes them across workers: on 12 threads a state clone
@@ -30,23 +31,17 @@ fn main() {
             serde_json::to_string_pretty(&aic_core::describe_modules()).unwrap()
         ),
         "show" => show(&o),
+        "docs" => docs::run(&o),
         "run" | "compare" => sweep::run(&o),
         "replay" => sweep::replay_all(&o),
-        "experiment" => {
-            let [path] = o.paths.as_slice() else {
-                die("experiment takes one spec file")
-            };
-            exit(experiment_run::run_experiment(path, &o));
-        }
-        other => die(&format!("unknown command {other:?}")),
+        "experiment" => exit(experiment_run::run_experiment(&o.paths[0], &o)),
+        other => unreachable!("command {other} is checked in parse_args"),
     }
 }
 
 /// `aic-sim show`: the resolved config, its hashes and the tunables.
 fn show(o: &Options) {
-    let [path] = o.paths.as_slice() else {
-        die("show takes one config")
-    };
+    let path = &o.paths[0];
     let r = rules(path, &load(path, &o.set.iter().collect::<Vec<_>>()));
     println!(
         "config hash {}  content hash {}  rules revision {}",

@@ -37,7 +37,7 @@ fn the_shared_row_config_is_the_baseline_with_the_shared_row_threats() {
 #[test]
 fn bad_configs_are_rejected_with_a_reason() {
     let cases: &[(&str, &str)] = &[
-        ("countries=6", "countries must be 1-5"),
+        ("countries=6", "no map layout for 6 countries"),
         ("countries=5", "no map layout for 5 countries"),
         ("adversary.variant=nope", "unknown variant"),
         ("adversary.dificulty=3", "not a parameter"),
@@ -190,14 +190,14 @@ fn tunables_list_every_module_parameter() {
 #[test]
 fn off_switches_and_degenerate_values() {
     let (rules, mut g) = lab_actions();
-    set_res(&mut g, 0, "insight", 2);
+    set_res(&mut g, 0, Resource::Insight, 2);
     let gives = |r: &Rules, g: &GameState| r.legal_actions(g).iter().any(|a| matches!(a, Action::Give { .. }));
     assert!(gives(&rules, &g));
     let mut c = lab_config(&[ACTIONS]);
     c.apply_override("economy.give_insight=0").unwrap();
     let off = Rules::new(&c).unwrap();
     let mut g0 = off.new_game(1);
-    set_res(&mut g0, 0, "insight", 2);
+    set_res(&mut g0, 0, Resource::Insight, 2);
     assert!(!gives(&off, &g0));
     for bad in ["board.ambassador_credits=0", "board.harden_energy=0"] {
         let mut c = baseline();

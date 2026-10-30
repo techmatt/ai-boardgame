@@ -349,7 +349,7 @@ fn the_players_lose_when_the_supply_starves_or_every_city_is_corrupted() {
 /// card's, the one about to become this round's; after it, the current card's.
 #[test]
 fn twists_before_the_build_step_are_the_face_up_cards() {
-    use crate::content::Twist;
+    use crate::content::Op;
     let (rules, mut g) = lab(&["alignment.sway", "adversary.build"]);
     let w = rules.world();
     g.piles
@@ -359,7 +359,7 @@ fn twists_before_the_build_step_are_the_face_up_cards() {
     let reach = |g: &GameState| {
         adversary::twists(&w, g)
             .iter()
-            .any(|t| matches!(t, Twist::Reach { .. }))
+            .any(|t| matches!(t, Op::SpreadReach { .. }))
     };
     g.phase = 0;
     assert!(reach(&g), "the Sway phase reads the face-up card");

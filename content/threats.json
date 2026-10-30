@@ -161,7 +161,7 @@
   ],
   "effects": [
    {
-    "op": "troop",
+    "op": "troops",
     "count": 1
    },
    {
@@ -186,7 +186,8 @@
     "op": "lose_ambassador"
    },
    {
-    "op": "discord",
+    "op": "sway",
+    "side": "discord",
     "amount": 2
    }
   ]
@@ -242,7 +243,7 @@
   ],
   "effects": [
    {
-    "op": "build"
+    "op": "adversary_build"
    },
    {
     "op": "compute",
@@ -280,7 +281,7 @@
   ],
   "effects": [
    {
-    "op": "troop",
+    "op": "troops",
     "count": 2
    },
    {
@@ -359,7 +360,8 @@
     "count": 4
    },
    {
-    "op": "discord",
+    "op": "sway",
+    "side": "discord",
     "amount": 2
    }
   ]
@@ -377,7 +379,7 @@
   ],
   "effects": [
    {
-    "op": "troop",
+    "op": "troops",
     "count": 2
    },
    {

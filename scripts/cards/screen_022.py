@@ -20,12 +20,15 @@ checks at d0, d2, d4). Prints:
   above one standard error).
 """
 import collections
-import json
 import math
+import os
 import re
 import sys
 
-ROUND = re.compile(r'\.r\d\d$')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from screens import cnt, load, mean  # noqa: E402
+
+ROUND =re.compile(r'\.r\d\d$')
 CHECKS = [
     ('keep_all=1', 'keep-all'),
     ('keep_k=2', 'keep-cheapest-k'),
@@ -35,26 +38,6 @@ CHECKS = [
     ('no_counters=1', 'no-counters'),
     ('no_presence=1', 'no-presence'),
 ]
-
-
-def load(d):
-    cells = {c['cell']: c for c in json.load(open(f'{d}/results.json', encoding='utf-8'))['cells']}
-    games = collections.defaultdict(list)
-    with open(f'{d}/games.jsonl', encoding='utf-8') as f:
-        next(f)
-        for line in f:
-            g = json.loads(line)
-            g.pop('actions', None)
-            games[g['cell']].append(g)
-    return cells, games
-
-
-def cnt(g, k):
-    return g['counters'].get(k, 0)
-
-
-def mean(gs, f):
-    return sum(f(g) for g in gs) / len(gs) if gs else 0.0
 
 
 def total(g, prefix):

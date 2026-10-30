@@ -25,7 +25,6 @@
 //!   continued by `rollouts` greedy playouts for `horizon` more rounds (on
 //!   fresh guesses of the hidden cards); the best mean wins. It looks across
 //!   rounds where the beam stops at the round's end.
-//!
 //! - `engine`: the heuristic's horizon mode ([`eval::Weights::engine`]):
 //!   income and buildings are worth what they pay over the rounds the deck
 //!   clock and the threat state leave, so an investment is scored by its
@@ -35,6 +34,9 @@
 //!   rollouts across rounds (`candidates` > 0); in the 008 sweep the beam
 //!   and rollouts did worse. Built (008) to find out whether a building
 //!   engine can beat greedy's no-building play.
+//!
+//! `greedy` and `engine` keep by plan: [`policy::Policy`] wraps them, decides
+//! their keeps, and applies the dominance checks' forced behaviours.
 //!
 //! An agent is named by a spec, `kind[:key=value,...]`: `greedy`,
 //! `beam:width=4`, `rollout:rollouts=8,horizon=3`, and `w.<weight>=V` to
@@ -47,11 +49,30 @@ pub mod search;
 
 use std::collections::BTreeMap;
 
+use aic_core::content::{CardDef, TAGS};
 use aic_core::{fnv1a64, Action, Agent, GameState, Rules};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 pub use search::{Beam, Greedy};
+
+/// What a card's other costs count in credits: each antimatter this many...
+const ANTIMATTER_COST: i64 = 3;
+/// ...each insight this many...
+pub(crate) const INSIGHT_COST: i64 = 2;
+/// ...and each point of income lowered this many (energy and hardware, 1).
+const LOWERED_COST: i64 = 3;
+
+/// A card's cost in credits, with `credits` as its credit price (printed,
+/// or after a seat's discount).
+pub(crate) fn credit_equivalent(d: &CardDef, credits: i64) -> i64 {
+    credits
+        + ANTIMATTER_COST * d.antimatter
+        + d.energy
+        + d.hardware
+        + INSIGHT_COST * d.insight
+        + LOWERED_COST * d.lowers.iter().map(|(_, n)| n).sum::<i64>()
+}
 
 /// Uniform over legal actions. Seeded per game, so results do not depend on
 /// thread count or game order. A floor, not a model of a weak player.
@@ -91,25 +112,12 @@ pub struct AgentSpec {
 /// A budget parameter: name, default, what it controls.
 pub type Param = (&'static str, f64, &'static str);
 
-/// The skill tiers, weakest first, with each one's budget parameters and
-/// their defaults.
-pub const LADDER: &[(&str, &[Param])] = &[
-    ("random", &[]),
-    (
-        "greedy",
+/// A tier's own parameters, then the ones `greedy` and `engine` share (022):
+/// keeping by plan, and the dominance checks' forced behaviours.
+macro_rules! with_policy_params {
+    ($($own:expr),* $(,)?) => {
         &[
-            (
-                "samples",
-                1.0,
-                "guesses of the hidden cards averaged per decision",
-            ),
-            ("depth", 1.0, "actions looked ahead (1 = the action itself)"),
-            (
-                "choices",
-                2.0,
-                "levels of an action's own choices resolved best-first before scoring",
-            ),
-            // 022: keeping by plan, and the dominance checks' forced behaviours.
+            $($own,)*
             ("plan_keep", 1.0, "keep by a sketch of the next rounds (0: the heuristic keeps)"),
             ("plan_rounds", 3.0, "rounds the keep plan sketches, this one included"),
             ("plan_reserve", 2.0, "insight the keep plan holds back in each later round for that round's keeps"),
@@ -126,6 +134,28 @@ pub const LADDER: &[(&str, &[Param])] = &[
             ("only_tag", 0.0, "dominance check (023): keep and play only this tag (1-6: science, industry, cyber, power, diplomacy, security)"),
             ("never_tag", 0.0, "dominance check (023): never keep or play this tag (1-6 as only_tag)"),
             ("events_only", 0.0, "dominance check (023): keep and play only events"),
+        ]
+    };
+}
+
+/// The skill tiers, weakest first, with each one's budget parameters and
+/// their defaults.
+pub const LADDER: &[(&str, &[Param])] = &[
+    ("random", &[]),
+    (
+        "greedy",
+        with_policy_params![
+            (
+                "samples",
+                1.0,
+                "guesses of the hidden cards averaged per decision",
+            ),
+            ("depth", 1.0, "actions looked ahead (1 = the action itself)"),
+            (
+                "choices",
+                2.0,
+                "levels of an action's own choices resolved best-first before scoring",
+            ),
         ],
     ),
     (
@@ -167,7 +197,7 @@ pub const LADDER: &[(&str, &[Param])] = &[
     ),
     (
         "engine",
-        &[
+        with_policy_params![
             (
                 "width",
                 0.0,
@@ -188,23 +218,6 @@ pub const LADDER: &[(&str, &[Param])] = &[
                 1.0,
                 "rounds each playout looks past the current one",
             ),
-            // 022: keeping by plan, and the dominance checks' forced behaviours.
-            ("plan_keep", 1.0, "keep by a sketch of the next rounds (0: the heuristic keeps)"),
-            ("plan_rounds", 3.0, "rounds the keep plan sketches, this one included"),
-            ("plan_reserve", 2.0, "insight the keep plan holds back in each later round for that round's keeps"),
-            ("plan_hand", 0.0, "keep nothing while the hand holds this many cards (0: off)"),
-            ("plan_t2", 1.0, "share of a tier-2 card's value the keep plan counts"),
-            ("plan_credit", 3.0, "what a credit paid for a keep costs the keep plan"),
-            ("keep_all", 0.0, "dominance check: keep every drafted card"),
-            ("keep_k", 0.0, "dominance check: keep only the k cheapest drafted cards (0: off)"),
-            ("tier1_only", 0.0, "dominance check: never draft from tier 2"),
-            ("tier2_rush", 0.0, "dominance check: draft from tier 2 whenever the keep is affordable"),
-            ("no_powers", 0.0, "dominance check: never use an AI-board power"),
-            ("no_counters", 0.0, "dominance check: never counter a threat"),
-            ("no_presence", 0.0, "dominance check: place no presence beyond setup"),
-            ("only_tag", 0.0, "dominance check (023): keep and play only this tag (1-6: science, industry, cyber, power, diplomacy, security)"),
-            ("never_tag", 0.0, "dominance check (023): never keep or play this tag (1-6 as only_tag)"),
-            ("events_only", 0.0, "dominance check (023): keep and play only events"),
         ],
     ),
 ];
@@ -239,10 +252,22 @@ impl AgentSpec {
                     return Err(format!("agent {spec:?}: {k} must be >= 0"));
                 }
                 // Played as at least 1: say so rather than label a cell "0" (020).
-                // (`engine`'s width 0 means "no beam", so width only for beam and rollout.)
-                let at_least_one = ["samples", "depth"].contains(&k) || (k == "width" && (kind == "beam" || kind == "rollout"));
+                // (`engine`'s width and candidates 0 mean "no beam" and "no rollouts",
+                // so those two only for beam and rollout.)
+                let at_least_one = ["samples", "depth", "rollouts"].contains(&k)
+                    || (k == "width" && (kind == "beam" || kind == "rollout"))
+                    || (k == "candidates" && kind == "rollout");
                 if v < 1.0 && at_least_one {
                     return Err(format!("agent {spec:?}: {k} must be >= 1"));
+                }
+                // 0 is off; anything else falling off the list would be played
+                // as the plain agent under a dominance check's label.
+                let tag = k == "only_tag" || k == "never_tag";
+                if tag && (v.fract() != 0.0 || v > TAGS.len() as f64) {
+                    return Err(format!(
+                        "agent {spec:?}: {k} must be a whole number from 0 to {}",
+                        TAGS.len()
+                    ));
                 }
                 params.insert(k.to_string(), v);
             } else {
@@ -255,6 +280,22 @@ impl AgentSpec {
                         names.join(", ")
                     }
                 ));
+            }
+        }
+        if kind == "engine" {
+            // What the chosen mode never reads: set, it would only be a label.
+            let on = |k: &str| params[k].round() > 0.0;
+            let mut unread = vec!["samples"];
+            if !on("width") {
+                unread = vec!["depth", "branch", "candidates", "rollouts", "horizon"];
+            } else if !on("candidates") {
+                unread.extend(["rollouts", "horizon"]);
+            }
+            let set = known
+                .iter()
+                .find(|(k, d, _)| unread.contains(k) && params[*k] != *d);
+            if let Some((k, _, _)) = set {
+                return Err(format!("agent {spec:?}: this engine mode ignores {k}"));
             }
         }
         Ok(AgentSpec {
@@ -323,14 +364,14 @@ impl AgentSpec {
 
     /// The forced behaviours (022): keeping by plan and the dominance checks.
     pub fn forced(&self) -> policy::Forced {
-        let on = |k: &str| self.params.get(k).is_some_and(|v| *v > 0.0);
-        let tag = |k: &str| {
-            let i = self.params.get(k).map_or(0, |v| *v as usize);
-            aic_core::content::TAGS.get(i.wrapping_sub(1)).map(|t| t.to_string())
-        };
+        // An agent without these parameters is never wrapped, so its numbers
+        // are read by nothing.
+        let num = |k: &str| self.params.get(k).copied().unwrap_or(0.0);
+        let on = |k: &str| num(k) > 0.0;
+        let tag = |k: &str| TAGS.get((num(k) as usize).wrapping_sub(1)).copied();
         policy::Forced {
             keep_all: on("keep_all"),
-            keep_k: self.params.get("keep_k").map_or(0, |v| *v as usize),
+            keep_k: num("keep_k") as usize,
             tier1_only: on("tier1_only"),
             tier2_rush: on("tier2_rush"),
             no_powers: on("no_powers"),
@@ -340,11 +381,11 @@ impl AgentSpec {
             never_tag: tag("never_tag"),
             events_only: on("events_only"),
             plan_keep: on("plan_keep"),
-            plan_rounds: self.params.get("plan_rounds").map_or(3, |v| *v as usize),
-            plan_reserve: self.params.get("plan_reserve").map_or(2, |v| *v as i64),
-            plan_hand: self.params.get("plan_hand").map_or(0, |v| *v as usize),
-            plan_t2: self.params.get("plan_t2").copied().unwrap_or(1.0),
-            plan_credit: self.params.get("plan_credit").copied().unwrap_or(3.0),
+            plan_rounds: num("plan_rounds") as usize,
+            plan_reserve: num("plan_reserve") as i64,
+            plan_hand: num("plan_hand") as usize,
+            plan_t2: num("plan_t2"),
+            plan_credit: num("plan_credit"),
         }
     }
 
@@ -353,16 +394,7 @@ impl AgentSpec {
     pub fn build(&self, rules: &Rules, game_seed: u64) -> Box<dyn Agent + Send> {
         let inner = self.build_search(rules, game_seed);
         let forced = self.forced();
-        if forced
-            == (policy::Forced {
-                plan_rounds: forced.plan_rounds,
-                plan_reserve: forced.plan_reserve,
-                plan_hand: forced.plan_hand,
-                plan_t2: forced.plan_t2,
-                plan_credit: forced.plan_credit,
-                ..policy::Forced::default()
-            })
-        {
+        if !forced.is_active() {
             return inner;
         }
         Box::new(policy::Policy::new(inner, forced))
@@ -576,6 +608,18 @@ mod tests {
         assert!(AgentSpec::parse("greedy:samples=0").is_err());
         assert!(AgentSpec::parse("beam:width=0").is_err());
         assert!(AgentSpec::parse("engine:width=0").is_ok());
+        assert!(AgentSpec::parse("rollout:rollouts=0").is_err());
+        assert!(AgentSpec::parse("rollout:candidates=0").is_err());
+        assert!(AgentSpec::parse("engine:rollouts=0").is_err());
+        // A tag off the list would be the plain agent under a check's label.
+        assert!(AgentSpec::parse("engine:only_tag=7").is_err());
+        assert!(AgentSpec::parse("engine:never_tag=1.5").is_err());
+        assert!(AgentSpec::parse("engine:only_tag=6").is_ok());
+        // What the engine's mode never reads.
+        assert!(AgentSpec::parse("engine:depth=5").is_err());
+        assert!(AgentSpec::parse("engine:width=4,samples=2").is_err());
+        assert!(AgentSpec::parse("engine:width=4,rollouts=3").is_err());
+        assert!(AgentSpec::parse("engine:width=4,candidates=2,rollouts=3").is_ok());
     }
 
     /// The deck clock (011; 013 on Unity; 014 on the outright Unity win):

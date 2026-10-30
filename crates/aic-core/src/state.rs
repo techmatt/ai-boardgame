@@ -14,6 +14,7 @@ use crate::action::Action;
 use crate::config::Config;
 use crate::hex::Hex;
 use crate::rng::{as_string, RngStreams};
+use crate::vocab::Resource;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameState {
@@ -50,7 +51,7 @@ pub struct GameState {
 /// by the same team agent; hands are open.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Seat {
-    pub resources: BTreeMap<String, i64>,
+    pub resources: BTreeMap<Resource, i64>,
     /// Passed in the current decision phase.
     pub passed: bool,
     /// Ids of this seat's used (face-down) cards, sorted. Set and refreshed
@@ -146,8 +147,8 @@ impl GameState {
         self.hexes[hex].tokens.get(kind).copied().unwrap_or(0)
     }
 
-    pub fn resource(&self, seat: usize, name: &str) -> i64 {
-        self.seats[seat].resources.get(name).copied().unwrap_or(0)
+    pub fn resource(&self, seat: usize, r: Resource) -> i64 {
+        self.seats[seat].resources.get(&r).copied().unwrap_or(0)
     }
 
     pub fn var(&self, key: &str) -> i64 {

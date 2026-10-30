@@ -194,12 +194,7 @@
   },
   "text": "Gains 1 Dataset a round. Once a round: spend 2 Datasets, gain 1 insight.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
      "op": "gain",
@@ -349,12 +344,7 @@
   },
   "text": "Gains 1 Dataset a round. Once a round: spend 2 Datasets, draw 1.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
      "op": "draw",
@@ -627,12 +617,7 @@
   },
   "text": "Gains 2 Datasets a round. Once a round: spend 4 Datasets, gain 2 insight.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     4
-    ]
-   ],
+   "tokens": 4,
    "effects": [
     {
      "op": "gain",
@@ -771,12 +756,7 @@
    }
   ],
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
      "op": "draw",
@@ -960,12 +940,7 @@
   },
   "text": "Gains 1 Capital a round. Once a round: spend 1 Capital, gain 1 hardware.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     1
-    ]
-   ],
+   "tokens": 1,
    "effects": [
     {
      "op": "gain",
@@ -994,12 +969,7 @@
   },
   "text": "Gains 1 Capital a round. Once a round: spend 3 Capital, build a factory in reach.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     3
-    ]
-   ],
+   "tokens": 3,
    "effects": [
     {
      "op": "build_factory"
@@ -1409,12 +1379,7 @@
    }
   ],
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
      "op": "gain",
@@ -1563,12 +1528,7 @@
   },
   "text": "Gains 2 Capital a round. Once a round: spend 3 Capital, gain 1 antimatter.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     3
-    ]
-   ],
+   "tokens": 3,
    "effects": [
     {
      "op": "gain",
@@ -3132,12 +3092,7 @@
   },
   "text": "Gains 1 Follower a round. Once a round: spend 2 for 1 ambassador, move an ambassador up to 2 hexes.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
      "op": "gain_ambassadors",
@@ -3170,15 +3125,11 @@
   },
   "text": "Gains 1 Follower a round. Once a round: spend 2, sway 1 toward Unity, harden 1 near your presence.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
-     "op": "unity",
+     "op": "sway",
+     "side": "unity",
      "amount": 1
     },
     {
@@ -3385,7 +3336,8 @@
     "cond": "city_with_ambassador",
     "then": [
      {
-      "op": "unity",
+      "op": "sway",
+      "side": "unity",
       "amount": 2
      }
     ],
@@ -3558,7 +3510,8 @@
     "one_country": false
    },
    {
-    "op": "unity",
+    "op": "sway",
+    "side": "unity",
     "amount": 1
    }
   ]
@@ -3592,7 +3545,8 @@
     "amount": 4
    },
    {
-    "op": "unity",
+    "op": "sway",
+    "side": "unity",
     "amount": 3
    }
   ]
@@ -3646,7 +3600,7 @@
     "count": 2
    },
    {
-    "op": "spread"
+    "op": "spread_ambassadors"
    }
   ]
  },
@@ -3664,7 +3618,8 @@
   "text": "Sway 4 toward Unity.",
   "effects": [
    {
-    "op": "unity",
+    "op": "sway",
+    "side": "unity",
     "amount": 4
    }
   ]
@@ -3689,7 +3644,8 @@
     "cities": true
    },
    {
-    "op": "unity",
+    "op": "sway",
+    "side": "unity",
     "amount": 1
    }
   ]
@@ -3727,15 +3683,11 @@
   },
   "text": "Gains 2 Followers a round. Once a round: spend 2 Followers, sway 2 toward Unity, gain 1 ambassador.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
-     "op": "unity",
+     "op": "sway",
+     "side": "unity",
      "amount": 2
     },
     {
@@ -3804,12 +3756,7 @@
   },
   "text": "Gains 1 Agent a round. Once a round: spend 2 Agents, harden 2 in a country with your presence.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
      "op": "harden",
@@ -3839,12 +3786,7 @@
   },
   "text": "Gains 1 Agent a round. Once a round: spend 3 Agents, remove 2 worth in a hex in reach.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     3
-    ]
-   ],
+   "tokens": 3,
    "effects": [
     {
      "op": "damage",
@@ -3874,12 +3816,7 @@
   },
   "text": "Gains 1 Agent a round. Once a round: spend 2 Agents, shelter one country.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
+   "tokens": 2,
    "effects": [
     {
      "op": "shelter"
@@ -4074,7 +4011,8 @@
     "at": "presence_country"
    },
    {
-    "op": "unity",
+    "op": "sway",
+    "side": "unity",
     "amount": 1
    }
   ]
@@ -4316,12 +4254,7 @@
   },
   "text": "Gains 2 Agents a round. Once a round: spend 4 Agents, remove 2 worth in each hex of one country.",
   "ability": {
-   "cost": [
-    [
-     "tokens",
-     4
-    ]
-   ],
+   "tokens": 4,
    "effects": [
     {
      "op": "damage_country",

@@ -17,25 +17,20 @@ engine cells at d0, some AI power used and some building replaced (the new
 primitives are reachable and used).
 """
 import collections
-import json
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from screens import checked_cnt, load, mean  # noqa: E402
 
 ROUND = re.compile(r'\.r\d\d$')
 
 
 def main(d, short):
     sys.stdout.reconfigure(encoding='utf-8')
-    cells = {c['cell']: c for c in json.load(open(f'{d}/results.json', encoding='utf-8'))['cells']}
-    games = collections.defaultdict(list)
-    with open(f'{d}/games.jsonl', encoding='utf-8') as f:
-        next(f)
-        for line in f:
-            g = json.loads(line)
-            g.pop('actions', None)
-            games[g['cell']].append(g)
-    cnt = lambda g, k: g['counters'].get(k, 0)
-    mean = lambda gs, f: sum(f(g) for g in gs) / len(gs)
+    cells, games = load(d)
+    cnt = checked_cnt(games)
     played = lambda g: sum(v for k, v in g['counters'].items() if k.startswith('cards.played.') and not ROUND.search(k))
     kept = lambda g: sum(v for k, v in g['counters'].items() if k.startswith('cards.kept.') and not ROUND.search(k))
 

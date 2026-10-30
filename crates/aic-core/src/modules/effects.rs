@@ -1,18 +1,91 @@
-//! The player effect primitives ([`Effect`]): what cards, building
-//! abilities and growth options do. Any choice an effect needs is asked of
-//! the acting seat with `Cx::choose`.
+//! What every [`Op`] does: the one place an instant op's meaning is
+//! dispatched, whichever card, threat or board prints it. [`Ctx`] says who
+//! chooses, who is hit and where (see `op.rs`). Rules that belong to a module
+//! stay there; an arm here calls them. Standing and twist ops are read by the
+//! rule they change and never resolve.
 
-use crate::content::{Cond, CountryRule, DamageAt, Effect, HexKind, Side};
+use crate::content::{Cond, CountryRule, DamageAt, HexKind, Op, Side};
 use crate::module::{Cx, Res, World};
 use crate::state::GameState;
 
 use super::common::*;
 use super::{adversary, ai, alignment, board, cards, economy, threats};
 
-/// What earlier effects of the same card chose (the other player).
-#[derive(Debug, Default)]
+/// Who is resolving an op.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    /// A player's card, ability, growth option or power: that seat chooses.
+    Seat(usize),
+    /// An executing threat: seat 0 chooses for the team, the rest by scope.
+    Threat,
+    /// A Unity or Discord card or a project: seat 0 chooses for the team.
+    Team,
+}
+
+/// The context an op resolves in.
+#[derive(Debug)]
 pub struct Ctx {
+    pub source: Source,
+    /// Where it applies: a threat's country, or the whole board.
+    pub scope: Option<usize>,
+    /// What earlier effects of the same card chose (the other player).
     pub other: Option<usize>,
+}
+
+impl Ctx {
+    fn new(source: Source, scope: Option<usize>) -> Ctx {
+        Ctx { source, scope, other: None }
+    }
+
+    pub fn seat(seat: usize) -> Ctx {
+        Ctx::new(Source::Seat(seat), None)
+    }
+
+    pub fn threat(scope: Option<usize>) -> Ctx {
+        Ctx::new(Source::Threat, scope)
+    }
+
+    pub fn team() -> Ctx {
+        Ctx::new(Source::Team, None)
+    }
+
+    /// The seat that answers a choice.
+    fn chooser(&self) -> usize {
+        match self.source {
+            Source::Seat(s) => s,
+            Source::Threat | Source::Team => 0,
+        }
+    }
+
+    /// The seats an effect on "players" hits.
+    fn seats(&self, w: &World, g: &GameState) -> Vec<usize> {
+        match self.source {
+            Source::Seat(s) => vec![s],
+            Source::Threat | Source::Team => seats_in_scope(w, g, self.scope),
+        }
+    }
+
+    /// The hex sets an effect acts in: the scope as one, or with
+    /// `each_country` one per country in it.
+    fn regions(&self, w: &World, each_country: bool) -> Vec<Vec<usize>> {
+        if each_country {
+            scope_countries(w, self.scope)
+                .into_iter()
+                .map(|c| scope_hexes(w, Some(c)))
+                .collect()
+        } else {
+            vec![scope_hexes(w, self.scope)]
+        }
+    }
+
+    /// `threat` from a threat, else `team`: the two wordings of a shared op.
+    fn says<T>(&self, threat: T, team: T) -> T {
+        if self.source == Source::Threat {
+            threat
+        } else {
+            team
+        }
+    }
 }
 
 /// Hexes a removal effect of seat `s` may target: every card's map target
@@ -21,8 +94,7 @@ pub fn damage_hexes(w: &World, g: &GameState, seat: usize, at: DamageAt) -> Vec<
     (0..g.hexes.len())
         .filter(|&h| has_adversary(g, h) && in_reach(w, g, seat, h))
         .filter(|&h| match at {
-            DamageAt::Any => true,
-            DamageAt::Reach => in_reach(w, g, seat, h),
+            DamageAt::Reach => true,
             DamageAt::PresenceCountry => {
                 has_presence_in(w, g, seat, w.map.hexes[h].country as usize)
             }
@@ -51,7 +123,7 @@ fn guarded_cities(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
 
 /// Free industrial zones in seat `s`'s reach (a card's factory site).
 fn factory_sites(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
-    factory_hexes(w, g)
+    free_zones(w, g)
         .into_iter()
         .filter(|&h| in_reach(w, g, seat, h))
         .collect()
@@ -69,7 +141,7 @@ fn any_hex(g: &GameState, f: impl Fn(usize) -> bool) -> bool {
 
 /// Ambassadors seat `s` could move: in its supply or on the board.
 fn movable_ambassadors(g: &GameState, seat: usize) -> i64 {
-    g.resource(seat, AMBASSADORS) + board::ambassadors_on_board(g, seat)
+    g.resource(seat, Resource::Ambassadors) + board::ambassadors_on_board(g, seat)
 }
 
 /// Hexes holding seat `s`'s ambassadors on the board, in hex order.
@@ -88,47 +160,47 @@ fn walk(g: &mut GameState, cx: &mut Cx, seat: usize, from: usize, to: usize) {
 
 /// Whether every targeted effect in `effects` has something to act on
 /// (a card is not offered when it would do nothing).
-pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bool {
+pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Op]) -> bool {
     effects.iter().all(|e| match e {
-        Effect::Damage { at, .. } => !damage_hexes(w, g, seat, *at).is_empty(),
-        Effect::DamageCountry { .. } | Effect::DestroyAll => any_hex(g, |h| has_adversary(g, h)),
-        Effect::RemoveNode | Effect::CutNode => {
+        Op::Damage { at, .. } => !damage_hexes(w, g, seat, *at).is_empty(),
+        Op::DamageCountry { .. } | Op::DestroyAll => any_hex(g, |h| has_adversary(g, h)),
+        Op::RemoveNode | Op::CutNode => {
             any_hex(g, |h| g.tokens(h, NODE) > 0 && in_reach(w, g, seat, h))
         }
-        Effect::AddTokens { kind, .. } => !cards::token_cards(w, g, seat, Some(kind)).is_empty(),
-        Effect::Consolidate { .. } => ambassador_hexes(g, seat)
+        Op::AddTokens { kind, .. } => !cards::token_cards(w, g, seat, Some(*kind)).is_empty(),
+        Op::Consolidate { .. } => ambassador_hexes(g, seat)
             .iter()
             .any(|&h| in_reach(w, g, seat, h)),
-        Effect::RemoveAmbassadorsCountry { .. } => any_hex(g, |h| g.tokens(h, ADV_AMBASSADOR) > 0),
-        Effect::BuildFactory => !factory_sites(w, g, seat).is_empty(),
-        Effect::Cleanse { cities, .. } => {
+        Op::RemoveAmbassadorsCountry { .. } => any_hex(g, |h| g.tokens(h, ADV_AMBASSADOR) > 0),
+        Op::BuildFactory => !factory_sites(w, g, seat).is_empty(),
+        Op::Cleanse { cities, .. } => {
             any_hex(g, |h| cleansable(w, g, h, *cities) && in_reach(w, g, seat, h))
         }
-        Effect::ClearCity { .. } => !guarded_cities(w, g, seat).is_empty(),
-        Effect::Jam { .. } | Effect::CounterThreat => !threats::active(g).is_empty(),
-        Effect::DrainProject { .. } => adversary::projects(g)
+        Op::ClearCity { .. } => !guarded_cities(w, g, seat).is_empty(),
+        Op::Jam { .. } | Op::CounterThreat => !threats::active(g).is_empty(),
+        Op::DrainProject { .. } => adversary::projects(g)
             .iter()
             .any(|p| g.var(&adversary::project_key(p)) > 0),
-        Effect::DiscardProject => !adversary::projects(g).is_empty(),
-        Effect::DrainAll { .. } => adversary::projects(g)
+        Op::DiscardProject => !adversary::projects(g).is_empty(),
+        Op::DrainAll { .. } => adversary::projects(g)
             .iter()
             .any(|p| g.var(&adversary::project_key(p)) > 0),
         // 024: too few to count, nothing to cash in: the card would do nothing.
-        Effect::GainPerTokens { kind, per, .. } => {
-            let cards = cards::token_cards(w, g, seat, Some(kind));
+        Op::GainPerTokens { kind, per, .. } => {
+            let cards = cards::token_cards(w, g, seat, Some(*kind));
             cards.iter().map(|c| g.var(&cards::tokens_key(seat, c))).sum::<i64>() >= *per
         }
-        Effect::CashOut { kind, .. } => cards::token_cards(w, g, seat, Some(kind))
+        Op::CashOut { kind, .. } => cards::token_cards(w, g, seat, Some(*kind))
             .iter()
             .any(|c| g.var(&cards::tokens_key(seat, c)) > 0),
-        Effect::MoveAmbassadors { .. } => movable_ambassadors(g, seat) > 0,
-        Effect::PlacePresence { .. } => {
+        Op::MoveAmbassadors { .. } => movable_ambassadors(g, seat) > 0,
+        Op::PlacePresence { .. } => {
             ai::can_place(w, g, seat) && !board::presence_hexes(w, g, seat).is_empty()
         }
         // Giving needs someone to give to (Grant and Venture Capital still pay you).
-        Effect::Transfer { .. } => g.seats.len() > 1,
+        Op::Transfer { .. } => g.seats.len() > 1,
         // 023: the branch that would fire needs its targets (was always true).
-        Effect::If {
+        Op::If {
             cond: c,
             then,
             otherwise,
@@ -146,10 +218,10 @@ fn cond(w: &World, g: &GameState, seat: usize, c: Cond) -> bool {
     }
 }
 
-/// Resolves `effects` in order for `seat`.
-pub fn run(g: &mut GameState, cx: &mut Cx, seat: usize, effects: &[Effect], ctx: &mut Ctx) -> Res {
-    for e in effects {
-        one(g, cx, seat, e, ctx)?;
+/// Resolves `ops` in order.
+pub fn run(g: &mut GameState, cx: &mut Cx, ops: &[Op], ctx: &mut Ctx) -> Res {
+    for e in ops {
+        one(g, cx, e, ctx)?;
         if g.is_over() {
             break;
         }
@@ -157,68 +229,73 @@ pub fn run(g: &mut GameState, cx: &mut Cx, seat: usize, effects: &[Effect], ctx:
     Ok(())
 }
 
-fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -> Res {
+fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
     let w = cx.world;
+    let seat = ctx.chooser();
     match e {
-        Effect::Gain { resource, amount } => cx.add_resource(g, seat, resource, *amount),
-        Effect::GainPerPresence { resource, max } => {
-            let n = presence_count(g, seat).min(*max);
-            cx.add_resource(g, seat, resource, n);
+        Op::Gain { resource, amount } => {
+            for s in ctx.seats(&w, g) {
+                cx.add_resource(g, s, *resource, *amount);
+            }
         }
-        Effect::ChoosePlayer => {
+        Op::GainPerPresence { resource, max } => {
+            let n = presence_count(g, seat).min(*max);
+            cx.add_resource(g, seat, *resource, n);
+        }
+        Op::ChoosePlayer => {
             let others: Vec<usize> = (0..g.seats.len()).filter(|&s| s != seat).collect();
             let opts = others.iter().map(|&s| seat_opt(s)).collect();
             let prompt = format!("Seat {seat}: which other player?");
             ctx.other = cx.choose(seat, &prompt, opts)?.map(|i| others[i]);
         }
-        Effect::OtherGain { resource, amount } => {
+        Op::OtherGain { resource, amount } => {
             if let Some(o) = ctx.other {
-                cx.add_resource(g, o, resource, *amount);
+                cx.add_resource(g, o, *resource, *amount);
             }
         }
-        Effect::Transfer {
+        Op::Transfer {
             resource,
             max,
             bonus,
         } => {
             if let Some(o) = ctx.other {
-                let most = (*max).min(g.resource(seat, resource)).max(0);
+                let most = (*max).min(g.resource(seat, *resource)).max(0);
                 let opts = (0..=most)
                     .map(|k| opt(format!("give {k} {resource}")))
                     .collect();
                 let prompt = format!("Seat {seat}: give how much {resource} to seat {o}?");
                 let k = cx.choose(seat, &prompt, opts)?.unwrap_or(0) as i64;
                 if k > 0 {
-                    cx.add_resource(g, seat, resource, -k);
-                    cx.add_resource(g, o, resource, k + bonus);
+                    cx.add_resource(g, seat, *resource, -k);
+                    cx.add_resource(g, o, *resource, k + bonus);
                 }
             }
         }
-        Effect::Convert {
+        Op::Convert {
             from,
             to,
             max,
             rate,
         } => {
-            let most = (*max).min(g.resource(seat, from)).max(0);
+            let most = (*max).min(g.resource(seat, *from)).max(0);
             let opts = (0..=most)
                 .map(|k| opt(format!("convert {k} {from}")))
                 .collect();
             let prompt = format!("Seat {seat}: convert how much {from} into {to}?");
             let k = cx.choose(seat, &prompt, opts)?.unwrap_or(0) as i64;
             if k > 0 {
-                cx.add_resource(g, seat, from, -k);
-                cx.add_resource(g, seat, to, k * rate);
+                cx.add_resource(g, seat, *from, -k);
+                cx.add_resource(g, seat, *to, k * rate);
             }
         }
-        Effect::PlacePresence { count } => {
+        Op::PlacePresence { count } => {
             for _ in 0..*count {
                 if !board::place_presence(g, cx, seat)? {
                     break;
                 }
             }
         }
-        Effect::Damage { amount, at } => {
+        Op::Damage { amount, at } => {
             let hexes = damage_hexes(&w, g, seat, *at);
             let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
             let prompt =
@@ -227,7 +304,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 adversary::damage(g, cx, seat, hexes[i], *amount)?;
             }
         }
-        Effect::DamageCountry { amount } => {
+        Op::DamageCountry { amount } => {
             let cs = countries_where(&w, |h| has_adversary(g, h));
             let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt = format!(
@@ -245,7 +322,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::DestroyAll => {
+        Op::DestroyAll => {
             let hexes: Vec<usize> = (0..g.hexes.len())
                 .filter(|&h| has_adversary(g, h))
                 .collect();
@@ -256,7 +333,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 adversary::destroy_all(g, cx, seat, hexes[i]);
             }
         }
-        Effect::RemoveNode => {
+        Op::RemoveNode => {
             let hexes: Vec<usize> = (0..g.hexes.len())
                 .filter(|&h| g.tokens(h, NODE) > 0 && in_reach(&w, g, seat, h))
                 .collect();
@@ -266,7 +343,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 adversary::remove_node(g, cx, hexes[i]);
             }
         }
-        Effect::RemoveAmbassadorsCountry { unity_per } => {
+        Op::RemoveAmbassadorsCountry { unity_per } => {
             let cs = countries_where(&w, |h| g.tokens(h, ADV_AMBASSADOR) > 0);
             let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt =
@@ -278,7 +355,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::BuildFactory => {
+        Op::BuildFactory => {
             let hexes = factory_sites(&w, g, seat);
             let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
             let prompt = format!("Seat {seat}: build a factory on which zone?");
@@ -288,7 +365,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 cx.tally(g, "board.factories_built.player", 1);
             }
         }
-        Effect::Cleanse {
+        Op::Cleanse {
             amount,
             one_country,
             cities,
@@ -323,7 +400,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::ClearCity { max } => {
+        Op::ClearCity { max } => {
             let cities = guarded_cities(&w, g, seat);
             let opts = cities.iter().map(|&h| hex_opt(&w, h)).collect();
             let prompt = format!("Seat {seat}: clear adversary ambassadors around which corrupted city?");
@@ -341,7 +418,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::Harden { count, in_country } => {
+        Op::Harden { count, in_country } => {
             let cs: Vec<usize> = (0..w.map.countries.len())
                 .filter(|&c| match in_country {
                     CountryRule::Any => true,
@@ -378,7 +455,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::MoveAmbassadors { max } => {
+        Op::MoveAmbassadors { max } => {
             for k in 0..*max {
                 if movable_ambassadors(g, seat) == 0 {
                     break;
@@ -401,8 +478,8 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 board::move_ambassador(g, cx, seat, dest[i])?;
             }
         }
-        Effect::GainAmbassadors { count } => cx.add_resource(g, seat, AMBASSADORS, *count),
-        Effect::Shelter => {
+        Op::GainAmbassadors { count } => cx.add_resource(g, seat, Resource::Ambassadors, *count),
+        Op::Shelter => {
             let cs: Vec<usize> = (0..w.map.countries.len()).collect();
             let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt = format!("Seat {seat}: shelter the buildings of which country?");
@@ -410,8 +487,8 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 board::shelter(g, cx, cs[i]);
             }
         }
-        Effect::Peek { count } => adversary::peek(g, cx, *count),
-        Effect::Jam { amount } => {
+        Op::Peek { count } => adversary::peek(g, cx, *count),
+        Op::Jam { amount } => {
             let active = threats::active(g);
             let opts = active.iter().map(|(t, _)| opt(t.clone())).collect();
             let prompt = format!("Seat {seat}: jam which threat?");
@@ -419,15 +496,18 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 threats::jam(g, cx, &active[i].0, *amount);
             }
         }
-        Effect::CounterThreat => {
+        Op::CounterThreat => {
             let active = threats::active(g);
             let opts = active.iter().map(|(t, _)| opt(t.clone())).collect();
-            let prompt = format!("Seat {seat}: counter which threat?");
+            let prompt = match ctx.source {
+                Source::Seat(_) => format!("Seat {seat}: counter which threat?"),
+                _ => "Unity: counter which threat?".to_string(),
+            };
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 threats::counter(g, cx, &active[i].0);
             }
         }
-        Effect::DrainProject { amount } => {
+        Op::DrainProject { amount } => {
             let ids: Vec<String> = adversary::projects(g)
                 .into_iter()
                 .filter(|p| g.var(&adversary::project_key(p)) > 0)
@@ -438,7 +518,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 adversary::drain_project(g, cx, &ids[i], *amount);
             }
         }
-        Effect::DiscardProject => {
+        Op::DiscardProject => {
             let ids = adversary::projects(g);
             let opts = ids.iter().map(|p| opt(p.clone())).collect();
             let prompt = format!("Seat {seat}: discard which adversary project?");
@@ -446,31 +526,31 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 adversary::discard_project(g, cx, &ids[i]);
             }
         }
-        Effect::DrainAll { amount } => {
+        Op::DrainAll { amount } => {
             for p in adversary::projects(g) {
                 adversary::drain_project(g, cx, &p, *amount);
             }
         }
-        Effect::Draw { count } => cards::draw(g, cx, seat, *count)?,
-        Effect::GainPerTokens {
+        Op::Draw { count } => cards::draw(g, cx, seat, *count)?,
+        Op::GainPerTokens {
             resource,
             kind,
             per,
             max,
         } => {
-            let held: i64 = cards::token_cards(&w, g, seat, Some(kind))
+            let held: i64 = cards::token_cards(&w, g, seat, Some(*kind))
                 .iter()
                 .map(|c| g.var(&cards::tokens_key(seat, c)))
                 .sum();
-            cx.add_resource(g, seat, resource, (held / (*per).max(1)).min(*max));
+            cx.add_resource(g, seat, *resource, (held / (*per).max(1)).min(*max));
         }
-        Effect::CashOut {
+        Op::CashOut {
             kind,
             resource,
             max,
         } => {
             let mut n = 0;
-            for c in cards::token_cards(&w, g, seat, Some(kind)) {
+            for c in cards::token_cards(&w, g, seat, Some(*kind)) {
                 let mut k = g.var(&cards::tokens_key(seat, &c));
                 if *max > 0 {
                     k = k.min(*max - n);
@@ -478,25 +558,25 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 cards::add_tokens(g, cx, seat, &c, -k);
                 n += k;
             }
-            cx.add_resource(g, seat, resource, n * (n + 1) / 2);
+            cx.add_resource(g, seat, *resource, n * (n + 1) / 2);
         }
-        Effect::Unity { amount } => alignment::sway(g, cx, Side::Unity, *amount),
-        Effect::NextRoundInsight { amount } => economy::add_bonus_insight(g, cx, *amount),
-        Effect::NextBuildingDiscount { amount } => {
+        Op::Sway { side, amount } => alignment::sway(g, cx, *side, *amount),
+        Op::NextRoundInsight { amount } => economy::add_bonus_insight(g, cx, *amount),
+        Op::NextBuildingDiscount { amount } => {
             cx.add_key(g, cards::next_discount(seat), *amount)
         }
-        Effect::Production { resource, amount } => {
-            cx.add_key(g, economy::production_key(seat, resource), *amount)
+        Op::Production { resource, amount } => {
+            cx.add_key(g, economy::production_key(seat, *resource), *amount)
         }
-        Effect::AddTokens { kind, amount } => {
-            let ids = cards::token_cards(&w, g, seat, Some(kind));
+        Op::AddTokens { kind, amount } => {
+            let ids = cards::token_cards(&w, g, seat, Some(*kind));
             let opts = ids.iter().map(|c| opt(c.clone())).collect();
             let prompt = format!("Seat {seat}: add {amount} {kind} to which card?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 cards::add_tokens(g, cx, seat, &ids[i], *amount);
             }
         }
-        Effect::MoveOne { range } => {
+        Op::MoveOne { range } => {
             let from = ambassador_hexes(g, seat);
             let mut opts: Vec<_> = from.iter().map(|&h| hex_opt(&w, h)).collect();
             opts.push(opt("stop"));
@@ -516,7 +596,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::Spread => {
+        Op::SpreadAmbassadors => {
             // Each ambassador on the board when it starts, in hex order.
             let mut each: Vec<usize> = Vec::new();
             for h in ambassador_hexes(g, seat) {
@@ -541,7 +621,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::Consolidate { max } => {
+        Op::Consolidate { max } => {
             let dest: Vec<usize> = (0..g.hexes.len())
                 .filter(|&h| in_reach(&w, g, seat, h) && has_piece(&w, g, h))
                 .collect();
@@ -570,7 +650,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
             }
         }
-        Effect::CutNode => {
+        Op::CutNode => {
             let hexes: Vec<usize> = (0..g.hexes.len())
                 .filter(|&h| g.tokens(h, NODE) > 0 && in_reach(&w, g, seat, h))
                 .collect();
@@ -581,7 +661,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 cx.tally(g, "effects.nodes_cut", 1);
             }
         }
-        Effect::If {
+        Op::If {
             cond: c,
             then,
             otherwise,
@@ -591,8 +671,142 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             } else {
                 otherwise
             };
-            run(g, cx, seat, branch, ctx)?;
+            run(g, cx, branch, ctx)?;
         }
+
+        // Threats and the team: the wordings differ, the rule doesn't.
+        Op::Troops { count, each_country } => {
+            let prompt = ctx.says(
+                "Threat: an adversary troop lands on which hex?",
+                "An adversary troop lands on which hex?",
+            );
+            let tally = ctx.says("threats.troops", "adversary.project_troops");
+            for hexes in ctx.regions(&w, *each_country) {
+                adversary::land_troops(g, cx, &hexes, *count, prompt, tally)?;
+            }
+        }
+        Op::FlipStation { each_country } => {
+            let prompt = ctx.says(
+                "Threat: which research station flips to the adversary?",
+                "Which research station flips to the adversary?",
+            );
+            for hexes in ctx.regions(&w, *each_country) {
+                let spots: Vec<usize> = hexes
+                    .into_iter()
+                    .filter(|&h| g.tokens(h, STATION) > 0 && !corrupted(g, h))
+                    .collect();
+                let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
+                if let Some(i) = cx.choose(0, prompt, opts)? {
+                    adversary::corrupt_station(g, cx, spots[i]);
+                }
+            }
+        }
+        Op::CorruptCity => {
+            for c in scope_countries(&w, ctx.scope) {
+                let city = |h: usize| is_city(&w, h) && !corrupted(g, h);
+                if let Some(h) = adversary::most_infiltrated_city(&w, g, c, city) {
+                    adversary::corrupt_city(g, cx, h);
+                }
+            }
+        }
+        Op::PlayersLose { resource, amount } => {
+            for s in ctx.seats(&w, g) {
+                let k = (*amount).min(g.resource(s, *resource));
+                cx.add_resource(g, s, *resource, -k);
+            }
+        }
+        Op::AdversaryBuild => adversary::build_all(g, cx, ctx.scope)?,
+
+        // Threats.
+        Op::Ambassadors { at, count } => threats::place_ambassadors(g, cx, ctx.scope, *at, *count)?,
+        Op::Flag { name } => {
+            // Threats execute after production and upkeep: the flag lasts through
+            // the next round (cleanup counts it down), or it would never land (020).
+            for c in scope_countries(&w, ctx.scope) {
+                cx.set_key(g, board::flag(*name, c), 2);
+            }
+        }
+        Op::Requisition { resource, amount, cards: n } => {
+            threats::requisition(g, cx, ctx.scope, *resource, *amount, *n)?
+        }
+        Op::LoseAmbassador => threats::lose_ambassador(g, cx, ctx.scope)?,
+        Op::DiscardMostExpensive => threats::discard_most_expensive(g, cx, ctx.scope)?,
+        Op::Compute { amount } => adversary::gain_compute(g, cx, *amount)?,
+        Op::LoseTokens { amount } => threats::lose_tokens(g, cx, ctx.scope, *amount)?,
+
+        // The team.
+        Op::TeamIncome { resource, amount } => alignment::add_team_income(g, cx, *resource, *amount),
+        Op::FreePurchases { count } => alignment::add_free_purchases(g, cx, *count),
+        Op::CounterAll => {
+            for (t, _) in threats::active(g) {
+                threats::counter(g, cx, &t);
+            }
+        }
+        Op::Pushback { ambassadors } => {
+            for c in 0..w.map.countries.len() {
+                for _ in 0..*ambassadors {
+                    adversary::pushback(g, cx, c)?;
+                }
+            }
+        }
+        Op::DealThreats { count } => threats::deal_extra(g, cx, *count),
+        Op::Infiltrate { amount } => adversary::infiltrate(g, cx, *amount),
+        Op::AdversarySpread => adversary::spread(g, cx, None)?,
+        Op::Sacrifice => {
+            for s in ctx.seats(&w, g) {
+                alignment::sacrifice(g, cx, s)?;
+            }
+        }
+        Op::NodeAmbassadors { amount } => {
+            let nodes: Vec<(usize, i64)> = (0..g.hexes.len())
+                .map(|h| (h, g.tokens(h, NODE)))
+                .filter(|&(_, n)| n > 0)
+                .collect();
+            for (h, n) in nodes {
+                adversary::place(g, cx, h, n * amount);
+            }
+        }
+        Op::CleanCityAmbassadors { amount } => {
+            let cities: Vec<usize> = (0..g.hexes.len())
+                .filter(|&h| clean_city(&w, g, h))
+                .collect();
+            for h in cities {
+                adversary::place(g, cx, h, *amount);
+            }
+        }
+        Op::RemoveNodes { count } => {
+            for _ in 0..*count {
+                let nodes: Vec<usize> = (0..g.hexes.len())
+                    .filter(|&h| g.tokens(h, NODE) > 0)
+                    .collect();
+                let opts = nodes.iter().map(|&h| hex_opt(&w, h)).collect();
+                let Some(i) = cx.choose(0, "Remove the node in which hex?", opts)? else {
+                    break;
+                };
+                adversary::remove_node(g, cx, nodes[i]);
+            }
+        }
+
+        // Read, not resolved; `Content::check` keeps them out of resolving lists.
+        Op::Income { .. }
+        | Op::IncomePerTag { .. }
+        | Op::IncomeIfTags { .. }
+        | Op::BuildingDiscount { .. }
+        | Op::HardenAction
+        | Op::Slots { .. }
+        | Op::Logistics { .. }
+        | Op::UnityBonus { .. }
+        | Op::GiveBonus { .. }
+        | Op::SpreadShield
+        | Op::CivicShelter
+        | Op::TagsFromHand { .. }
+        | Op::ConvertUpkeep { .. }
+        | Op::CityBuild { .. }
+        | Op::CleanFactories { .. }
+        | Op::StationBuild { .. }
+        | Op::SpreadReach { .. }
+        | Op::CorruptSooner { .. }
+        | Op::War => unreachable!("{e:?} is read, not resolved"),
     }
     Ok(())
 }

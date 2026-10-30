@@ -46,7 +46,7 @@ pub fn determinize(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
 }
 
 fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
-    let original = g.clone();
+    let original = g.pending.is_some().then(|| g.clone());
     for key in SHUFFLED {
         if let Some(pile) = g.piles.get_mut(key) {
             // Sorted first, so the guess depends on the contents (public)
@@ -62,7 +62,7 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
         g.rng
             .insert(purpose.clone(), aic_core::rng::Stream::new(*seed, purpose));
     }
-    if let Some(p) = g.pending.as_mut() {
+    if let (Some(p), Some(original)) = (g.pending.as_mut(), &original) {
         let snap = std::sync::Arc::make_mut(&mut p.snapshot);
         // Usually the step that asked has not drawn, so its snapshot's
         // hidden piles are the same as the state's: give them the same

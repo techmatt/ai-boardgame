@@ -1,12 +1,14 @@
 """Checks that two experiment output directories hold the same games.
 
-Usage: python scripts/bench/same_results.py DIR_A DIR_B
+Usage: python scripts/bench/same_results.py DIR_A DIR_B [--ignore-content-hash]
 
 Compares games.csv row by row and results.json field by field, ignoring
 what is timing (any `ms` field or column, wall seconds, threads), record
 paths and how many games a resumed run read back. Exits 1 on any
 difference. For checking that a speed change left play unchanged, or that
 a stopped and resumed run matches an unbroken one (012).
+--ignore-content-hash is for a content refactor that renames ops but must
+play the same (025).
 """
 
 import csv
@@ -15,7 +17,7 @@ import sys
 
 TIMING = ("ms", "wall", "threads", "seconds")
 # Run bookkeeping, not play (012 added the games_* counts).
-IGNORED = ("path", "games_resumed", "games_played", "games_planned")
+IGNORED = ["path", "games_resumed", "games_played", "games_planned"]
 
 
 def timing(key):
@@ -37,7 +39,10 @@ def strip(v):
 
 def rows(path):
     with open(path, encoding="utf-8", newline="") as f:
-        return [{k: v for k, v in r.items() if not timing(k)} for r in csv.DictReader(f)]
+        return [
+            {k: v for k, v in r.items() if not timing(k) and k not in IGNORED}
+            for r in csv.DictReader(f)
+        ]
 
 
 def diff(a, b, where=""):
@@ -62,7 +67,10 @@ def diff(a, b, where=""):
 
 
 def main():
-    a, b = sys.argv[1], sys.argv[2]
+    args = [x for x in sys.argv[1:] if x != "--ignore-content-hash"]
+    if len(args) != len(sys.argv) - 1:
+        IGNORED.append("content_hash")
+    a, b = args[0], args[1]
     problems = []
     ra, rb = rows(f"{a}/games.csv"), rows(f"{b}/games.csv")
     if len(ra) != len(rb):

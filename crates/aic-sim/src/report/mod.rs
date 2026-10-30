@@ -21,7 +21,10 @@ use crate::experiment::{CardCounts, Cell, GameResult, Spec};
 
 pub use markdown::markdown;
 pub use records::{file_stem, prune_records, save_records, write_whole, SavedRecord};
-pub use stats::{card_table, groups, summarize, time_split, CellSummary, GroupSummary};
+pub use stats::{
+    card_table, groups, head_to_head, summarize, time_split, top_agent, variant_diffs, CellSummary,
+    GroupSummary, HeadToHead, VariantDiff,
+};
 pub use tables::{cards_csv, games_csv, results_json};
 
 /// One report's inputs: the spec and grid, the games and what was made of
@@ -33,6 +36,10 @@ pub struct Run<'a> {
     pub sums: &'a [CellSummary],
     pub groups: &'a [GroupSummary],
     pub cards: &'a BTreeMap<String, BTreeMap<String, CardCounts>>,
+    pub head_to_head: &'a [HeadToHead],
+    pub variant_diffs: &'a [VariantDiff],
+    /// The strongest agent, and the difficulty that says so.
+    pub top_agent: Option<(String, i64)>,
     pub records: &'a [SavedRecord],
     pub wall_s: f64,
     pub threads: usize,

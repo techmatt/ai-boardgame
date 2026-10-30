@@ -13,21 +13,17 @@ Reads DIR/games.jsonl and DIR/results.json (cell labels) as written by
 `aic-sim experiment`. Prints markdown.
 """
 import collections
-import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from screens import checked_cnt, load, mean  # noqa: E402
 
 
 def main(d):
     sys.stdout.reconfigure(encoding='utf-8')
-    cells = {c['cell']: c for c in json.load(open(f'{d}/results.json', encoding='utf-8'))['cells']}
-    games = collections.defaultdict(list)
-    with open(f'{d}/games.jsonl', encoding='utf-8') as f:
-        next(f)
-        for line in f:
-            g = json.loads(line)
-            games[g['cell']].append(g)
-    cnt = lambda g, k: g['counters'].get(k, 0)
-    mean = lambda gs, f: sum(f(g) for g in gs) / len(gs)
+    cells, games = load(d)
+    cnt = checked_cnt(games)
 
     print('| cell | variant | d | agent | games | win % | rounds | Unity tips | Discord tips | ends |')
     print('|---|---|---|---|---|---|---|---|---|---|')

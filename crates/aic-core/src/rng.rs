@@ -63,12 +63,6 @@ impl Stream {
         }
     }
 
-    pub fn next_u32(&mut self) -> u32 {
-        self.0.next_u32()
-    }
-}
-
-impl Stream {
     /// Stream id (the purpose hash) and position, for tests and checks.
     pub fn position(&self) -> (u64, u128) {
         (self.0.get_stream(), self.0.get_word_pos())

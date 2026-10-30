@@ -1,5 +1,5 @@
 // A headless Edge or Chrome page driven over the DevTools protocol, with no extra npm
-// packages. Shared by scripts/sweep.mjs (scripts/e2e.mjs keeps its own copy).
+// packages. Shared by scripts/e2e.mjs, scripts/sweep.mjs and the scripts/shots-*.mjs.
 //   AIC_BROWSER browser executable (default: Edge, then Chrome, at their usual paths)
 
 import { spawn } from 'node:child_process';
@@ -86,7 +86,7 @@ export async function openPage({ width = 1366, height = 768 } = {}) {
   }
   async function size(w, h) {
     await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
-    await sleep(100);
+    await sleep(250);
   }
   /** A PNG of the viewport (or of `clip`), as a Buffer. */
   async function shot(clip) {

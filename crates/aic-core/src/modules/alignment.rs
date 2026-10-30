@@ -9,7 +9,7 @@
 //! (module `board`).
 
 use crate::action::Action;
-use crate::content::{AlignOp, AlignmentCard, Passive, Side};
+use crate::content::{AlignmentCard, Op, Resource, Side};
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
 };
@@ -18,7 +18,7 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{adversary, ai, cards, threats};
+use super::{adversary, ai, cards, effects};
 
 const PARAMS: [ParamSpec; 15] = [
     ParamSpec::int("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
@@ -231,7 +231,7 @@ pub fn for_troop_removed(g: &mut GameState, cx: &mut Cx, seat: Option<usize>) {
         cards::passives(&w, g, s)
             .iter()
             .map(|p| match p {
-                Passive::UnityBonus { amount } => *amount,
+                Op::UnityBonus { amount } => *amount,
                 _ => 0,
             })
             .sum()
@@ -264,138 +264,22 @@ fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
     adversary::under_bar(w, g, level)
 }
 
-/// Resolves one Alignment-card or adversary-project effect. Team choices
-/// are asked of seat 0; a sacrifice of each player.
-pub fn resolve(g: &mut GameState, cx: &mut Cx, op: &AlignOp) -> Res {
-    let w = cx.world;
-    match op {
-        AlignOp::Income { credits } => cx.add_key(g, INCOME_BONUS.into(), *credits),
-        AlignOp::InsightIncome { insight } => cx.add_key(g, INSIGHT_BONUS.into(), *insight),
-        AlignOp::Credits { credits } => {
-            for s in 0..g.seats.len() {
-                cx.add_resource(g, s, "credits", *credits);
-            }
-        }
-        AlignOp::FreePurchases { count } => cx.add_key(g, FREE_LEFT.into(), *count),
-        AlignOp::CounterThreat => {
-            let active = threats::active(g);
-            let opts = active.iter().map(|(t, _)| opt(t.clone())).collect();
-            if let Some(i) = cx.choose(0, "Unity: counter which threat?", opts)? {
-                threats::counter(g, cx, &active[i].0);
-            }
-        }
-        AlignOp::CounterAll => {
-            for (t, _) in threats::active(g) {
-                threats::counter(g, cx, &t);
-            }
-        }
-        AlignOp::Pushback { ambassadors } => {
-            for c in 0..w.map.countries.len() {
-                for _ in 0..*ambassadors {
-                    adversary::pushback(g, cx, c)?;
-                }
-            }
-        }
-        AlignOp::Sway { side, amount } => sway(g, cx, *side, *amount),
-        AlignOp::Threats { count } => threats::deal_extra(g, cx, *count),
-        AlignOp::Infiltrate { amount } => adversary::infiltrate(g, cx, *amount),
-        AlignOp::Build => adversary::build_all(g, cx, None)?,
-        AlignOp::Spread => adversary::spread(g, cx, None)?,
-        AlignOp::Sacrifice => {
-            for s in 0..g.seats.len() {
-                sacrifice(g, cx, s)?;
-            }
-        }
-        AlignOp::NodeAmbassadors { amount } => {
-            let nodes: Vec<(usize, i64)> = (0..g.hexes.len())
-                .map(|h| (h, g.tokens(h, NODE)))
-                .filter(|&(_, n)| n > 0)
-                .collect();
-            for (h, n) in nodes {
-                adversary::place(g, cx, h, n * amount);
-            }
-        }
-        AlignOp::CorruptCities => {
-            for c in 0..w.map.countries.len() {
-                let city = |h: usize| is_city(&w, h) && !corrupted(g, h);
-                if let Some(h) = adversary::most_infiltrated_city(&w, g, c, city) {
-                    adversary::corrupt_city(g, cx, h);
-                }
-            }
-        }
-        AlignOp::RemoveNodes { count } => {
-            for _ in 0..*count {
-                let nodes: Vec<usize> = (0..g.hexes.len())
-                    .filter(|&h| g.tokens(h, NODE) > 0)
-                    .collect();
-                let opts = nodes.iter().map(|&h| hex_opt(&w, h)).collect();
-                let Some(i) = cx.choose(0, "Remove the node in which hex?", opts)? else {
-                    break;
-                };
-                adversary::remove_node(g, cx, nodes[i]);
-            }
-        }
-        AlignOp::CleanCityAmbassadors { amount } => {
-            let cities: Vec<usize> = (0..g.hexes.len())
-                .filter(|&h| clean_city(&w, g, h))
-                .collect();
-            for h in cities {
-                adversary::place(g, cx, h, *amount);
-            }
-        }
-        AlignOp::Troops { count } => {
-            for c in 0..w.map.countries.len() {
-                let hexes = &w.map.countries[c].hexes;
-                for _ in 0..*count {
-                    let mut spots: Vec<usize> = hexes
-                        .iter()
-                        .copied()
-                        .filter(|&h| g.tokens(h, FACTORY) > 0)
-                        .collect();
-                    if spots.is_empty() {
-                        spots = hexes.iter().copied().filter(|&h| is_city(&w, h)).collect();
-                    }
-                    let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
-                    let Some(i) = cx.choose(0, "An adversary troop lands on which hex?", opts)?
-                    else {
-                        break;
-                    };
-                    adversary::place_troop(g, cx, spots[i]);
-                    cx.per_round(g, adversary::OPS, 1);
-                    cx.tally(g, "adversary.project_troops", 1);
-                }
-            }
-        }
-        AlignOp::FlipStations => {
-            for c in 0..w.map.countries.len() {
-                let spots: Vec<usize> = w.map.countries[c]
-                    .hexes
-                    .iter()
-                    .copied()
-                    .filter(|&h| g.tokens(h, STATION) > 0 && !corrupted(g, h))
-                    .collect();
-                let opts = spots.iter().map(|&h| hex_opt(&w, h)).collect();
-                if let Some(i) =
-                    cx.choose(0, "Which research station flips to the adversary?", opts)?
-                {
-                    adversary::corrupt_station(g, cx, spots[i]);
-                }
-            }
-        }
-        AlignOp::PlayersLose { resource, amount } => {
-            for s in 0..g.seats.len() {
-                let k = (*amount).min(g.resource(s, resource));
-                cx.add_resource(g, s, resource, -k);
-            }
-        }
-    }
-    Ok(())
+/// Every player's `resource` income rises by `n` for good (credits or
+/// insight: `Content::check` holds it to those).
+pub fn add_team_income(g: &mut GameState, cx: &mut Cx, resource: Resource, n: i64) {
+    let key = if resource == Resource::Insight { INSIGHT_BONUS } else { INCOME_BONUS };
+    cx.add_key(g, key.into(), n);
+}
+
+/// The next `n` card purchases are free.
+pub fn add_free_purchases(g: &mut GameState, cx: &mut Cx, n: i64) {
+    cx.add_key(g, FREE_LEFT.into(), n);
 }
 
 /// Seat `s` sacrifices one of their ambassadors (from their supply or a
 /// hex) or one of their presence tokens, their choice; with none, nothing.
 /// A sacrificed presence leaves the game.
-fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
+pub fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
     let w = cx.world;
     let k = ambassador(s);
     let ambs: Vec<usize> = (0..g.hexes.len())
@@ -412,7 +296,7 @@ fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
         o
     };
     let mut opts = Vec::new();
-    if g.resource(s, AMBASSADORS) > 0 {
+    if g.resource(s, Resource::Ambassadors) > 0 {
         opts.push(opt("an ambassador from your supply"));
     }
     let off = opts.len();
@@ -423,7 +307,7 @@ fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
         return Ok(());
     };
     if i < off {
-        cx.add_resource(g, s, AMBASSADORS, -1);
+        cx.add_resource(g, s, Resource::Ambassadors, -1);
         cx.tally(g, "alignment.sacrificed_ambassadors", 1);
     } else if i - off < ambs.len() {
         cx.add_tokens(g, ambs[i - off], &k, -1);
@@ -522,12 +406,7 @@ impl Alignment {
                 .rev()
                 .find(|st| before >= st.at)
                 .map_or(&c.effects, |st| &st.effects);
-            for op in effects {
-                resolve(g, cx, op)?;
-                if g.is_over() {
-                    return Ok(());
-                }
-            }
+            effects::run(g, cx, effects, &mut effects::Ctx::team())?;
             cx.tally(g, &format!("alignment.card.{id}"), 1);
         }
         Ok(())
@@ -597,7 +476,7 @@ impl Module for Alignment {
             return Err(Halt::Illegal("no antimatter action left this round".into()));
         }
         cx.add_key(g, used_key(s), 1);
-        cx.add_resource(g, s, "antimatter", 1);
+        cx.add_resource(g, s, Resource::Antimatter, 1);
         sway(g, cx, Side::Discord, n);
         cx.count(g, "antimatter_actions", 1);
         Ok(())
@@ -692,7 +571,7 @@ impl Module for Alignment {
             "Discord tips so far; Discord cards print stronger steps by this count",
         );
         let level = bar_level(w, g);
-        let mut text = adversary::win_text(w, level);
+        let mut text = adversary::win_text(level);
         let stage = w.int("alignment.clear_win_stage");
         if level == 0 && g.var(adversary::STAGE) < stage {
             text += &format!(" (from adversary stage {stage})");

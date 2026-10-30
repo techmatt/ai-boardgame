@@ -14,7 +14,8 @@ pub struct Config {
     /// A label for humans. Not part of the config hash.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
-    /// Number of countries (= seats = megacorps), 1-5.
+    /// Number of countries (= seats = megacorps): any count with a layout in
+    /// `content/map.json`, 1-4 today.
     pub countries: u8,
     /// Module instances, at most one per module id.
     pub modules: Vec<ModuleConfig>,
@@ -29,12 +30,11 @@ pub struct Config {
 pub struct ModuleConfig {
     pub module: String,
     pub variant: String,
-    /// Every parameter the variant declares (and every parameter its
-    /// selected content refers to) must be given; unknown names are errors.
-    #[serde(default)]
+    /// Every parameter the variant declares must be given; unknown names
+    /// are errors.
     pub params: BTreeMap<String, ParamValue>,
     /// Card ids this module uses, for modules that play cards.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub cards: Vec<String>,
 }
 
@@ -79,13 +79,6 @@ impl TryFrom<RawModuleConfig> for ModuleConfig {
 pub enum ParamValue {
     Int(i64),
     List(Vec<i64>),
-}
-
-impl<'de> Deserialize<'de> for ParamValue {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let v = serde_json::Value::deserialize(d)?;
-        ParamValue::from_json(&v).map_err(serde::de::Error::custom)
-    }
 }
 
 impl ParamValue {
@@ -154,7 +147,10 @@ impl Config {
             None => {
                 // 020: name the modules there are, as a config file's typo does.
                 let have: Vec<&str> = self.modules.iter().map(|m| m.module.as_str()).collect();
-                Err(format!("config has no module {id:?} (it has: {})", have.join(", ")))
+                Err(format!(
+                    "config has no module {id:?} (it has: {})",
+                    have.join(", ")
+                ))
             }
         }
     }
@@ -222,15 +218,16 @@ impl Config {
         } else if value.is_empty() {
             m.params.remove(param);
         } else {
-            m.params
-                .insert(param.to_string(), ParamValue::parse(value).map_err(|e| format!("{module}.{param}: {e}"))?);
+            let parsed = ParamValue::parse(value).map_err(|e| format!("{module}.{param}: {e}"))?;
+            m.params.insert(param.to_string(), parsed);
         }
         Ok(())
     }
 
     /// Stable hash of the config's content (not its `name`), as 16 hex
     /// digits. Meaningful on a *resolved* config (`Rules::config`), where
-    /// defaults are filled in, so equal games always hash equal.
+    /// `round` is filled in and lists are normalized, so equal games always
+    /// hash equal.
     pub fn hash(&self) -> String {
         let mut c = self.clone();
         c.name.clear();

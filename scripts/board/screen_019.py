@@ -20,22 +20,18 @@ the bar is above zero, not one a game) and some presence placed back from the
 reserve (troops bite and players recover).
 """
 import collections
-import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from screens import checked_cnt, load, mean  # noqa: E402
 
 
 def main(d, short):
     sys.stdout.reconfigure(encoding='utf-8')
-    cells = {c['cell']: c for c in json.load(open(f'{d}/results.json', encoding='utf-8'))['cells']}
-    games = collections.defaultdict(list)
-    with open(f'{d}/games.jsonl', encoding='utf-8') as f:
-        next(f)
-        for line in f:
-            g = json.loads(line)
-            games[g['cell']].append(g)
-    cnt = lambda g, k: g['counters'].get(k, 0)
+    cells, games = load(d)
+    cnt = checked_cnt(games)
     mar = lambda g, k: g['margin'].get(k, 0)
-    mean = lambda gs, f: sum(f(g) for g in gs) / len(gs)
 
     print('| variant | d | agent | games | win % | rounds | left: corrupted / nodes / troops | Unity / Discord tips | ends |')
     print('|---|---|---|---|---|---|---|---|---|')

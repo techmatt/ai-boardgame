@@ -7,6 +7,7 @@ use aic_core::SavedGame;
 use serde::Serialize;
 
 use super::stats::{lock_in_round, measured_rank};
+use super::CellSummary;
 use crate::experiment::{Cell, GameResult, Spec};
 
 #[derive(Debug, Clone, Serialize)]
@@ -46,16 +47,18 @@ pub fn save_records(
     spec: &Spec,
     cells: &[Cell],
     games: &[GameResult],
+    sums: &[CellSummary],
 ) -> Result<Vec<SavedRecord>, String> {
     let rec_dir = format!("{dir}/records");
     std::fs::create_dir_all(&rec_dir).map_err(|e| format!("{rec_dir}: {e}"))?;
     let top_d = cells.iter().map(|c| c.difficulty).max().unwrap_or(0);
     // Agents ranked by measured strength, not by ladder tier (011): the
     // ladder's top tier is not always the strongest agent.
-    let strength = measured_rank(cells, games);
-    let rank = |c: &Cell| strength.get(&c.agent.label()).copied().unwrap_or(0);
-    let top_tier = strength.values().copied().max().unwrap_or(0);
-    let low_tier = 0;
+    // An agent not measured yet (a partial report) ranks `None`, not weakest.
+    let strength = measured_rank(cells, sums);
+    let rank = |c: &Cell| strength.get(&c.agent.label()).copied();
+    let top_tier = strength.values().copied().max();
+    let low_tier = Some(0);
     let mut picked: Vec<(String, usize, String)> = Vec::new();
     let mut taken = BTreeSet::new();
     let mut take =

@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 
 use aic_core::content_hash;
 
-use super::stats::{head_to_head, plays, standing, top_agent, variant_diffs};
+use super::stats::{plays, standing};
 use super::Run;
 use crate::experiment::{CardCounts, Cell, GameResult};
 
@@ -103,7 +103,7 @@ pub fn cards_csv(cells: &[Cell], games: &[GameResult]) -> String {
 }
 
 pub fn results_json(run: &Run) -> String {
-    let vds = variant_diffs(run.spec, run.cells, run.games);
+    let vds = run.variant_diffs;
     // What a module is worth: the base's win rate minus the variant's that
     // switches it off, on the same seeds.
     let removals: Vec<serde_json::Value> = vds
@@ -137,8 +137,8 @@ pub fn results_json(run: &Run) -> String {
         "content_hash": content_hash(),
         "cells": run.sums,
         "groups": run.groups,
-        "top_agent": top_agent(run.cells, run.sums).map(|(a, d)| serde_json::json!({"agent": a, "difficulty": d})),
-        "head_to_head": head_to_head(run.cells, run.games),
+        "top_agent": run.top_agent.as_ref().map(|(a, d)| serde_json::json!({"agent": a, "difficulty": d})),
+        "head_to_head": run.head_to_head,
         "variants": vds,
         "removals": removals,
         "cards": run.cards,
