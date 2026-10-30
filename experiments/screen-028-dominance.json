@@ -1,0 +1,76 @@
+{
+  "name": "screen-028-dominance",
+  "note": "028 dominance gate (r17): 027's checks plus unity_farm, under the engine and the planner, d2, 2 and 3 countries, 32 seeds (run with --quick --games 32). Summary: python scripts/cards/screen_028.py --gate DIR.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    2
+  ],
+  "agents": [
+    "engine",
+    "engine:keep_all=1",
+    "engine:keep_k=2",
+    "engine:tier1_only=1",
+    "engine:tier2_rush=1",
+    "engine:no_powers=1",
+    "engine:no_counters=1",
+    "engine:no_presence=1",
+    "engine:only_tag=1",
+    "engine:only_tag=2",
+    "engine:only_tag=3",
+    "engine:only_tag=4",
+    "engine:only_tag=5",
+    "engine:only_tag=6",
+    "engine:never_tag=1",
+    "engine:never_tag=2",
+    "engine:never_tag=3",
+    "engine:never_tag=4",
+    "engine:never_tag=5",
+    "engine:never_tag=6",
+    "engine:events_only=1",
+    "engine:ignore_threats=1",
+    "engine:turtle=1",
+    "engine:free_only=1",
+    "engine:unity_farm=1",
+    "planner",
+    "planner:keep_all=1",
+    "planner:keep_k=2",
+    "planner:tier1_only=1",
+    "planner:tier2_rush=1",
+    "planner:no_powers=1",
+    "planner:no_counters=1",
+    "planner:no_presence=1",
+    "planner:only_tag=1",
+    "planner:only_tag=2",
+    "planner:only_tag=3",
+    "planner:only_tag=4",
+    "planner:only_tag=5",
+    "planner:only_tag=6",
+    "planner:never_tag=1",
+    "planner:never_tag=2",
+    "planner:never_tag=3",
+    "planner:never_tag=4",
+    "planner:never_tag=5",
+    "planner:never_tag=6",
+    "planner:events_only=1",
+    "planner:ignore_threats=1",
+    "planner:turtle=1",
+    "planner:free_only=1",
+    "planner:unity_farm=1"
+  ],
+  "games": 32,
+  "records": 0
+}

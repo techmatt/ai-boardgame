@@ -14,11 +14,11 @@
 //! candidates) in value-per-cost order, filled into each round's budget.
 
 use aic_core::content::{CardDef, Op, Resource, Tag};
-use aic_core::modules::{ai, cards, economy, effects};
+use aic_core::modules::{ai, cards, common, economy, effects};
 use aic_core::module::World;
-use aic_core::{Action, Agent, GameState, Rules};
+use aic_core::{fnv1a64, Action, Agent, GameState, Rules};
 
-use super::{credit_equivalent, id_order};
+use super::credit_equivalent;
 
 /// A play's value falls by this share for each round it waits.
 const WAIT: f64 = 0.15;
@@ -30,6 +30,10 @@ pub struct Forced {
     pub keep_all: bool,
     /// Keep only its `keep_k` cheapest drafted cards (0: off).
     pub keep_k: usize,
+    /// Sanity check (028): keep no drafted card.
+    pub keep_none: bool,
+    /// Sanity check (028): keep each drafted card on a coin toss.
+    pub keep_random: bool,
     /// Never draft from tier 2.
     pub tier1_only: bool,
     /// Draft from tier 2 whenever it can afford the keep.
@@ -55,6 +59,10 @@ pub struct Forced {
     /// Exploit check (027): only free cities: Diplomacy cards, the ambassador,
     /// move and remove standard actions, no counters, no presence, no powers.
     pub free_only: bool,
+    /// Exploit check (028): farm the Unity deck. Every seat buys ambassadors
+    /// and lands them on bases and factories, each worth Unity when it produces,
+    /// before anything else; the rest of its play is the agent's.
+    pub unity_farm: bool,
     /// Keep by plan (off: the wrapped agent's heuristic decides keeps).
     pub plan_keep: bool,
     /// Rounds the keep plan looks at: this round's action phase and the
@@ -84,6 +92,8 @@ impl Forced {
         let Forced {
             keep_all,
             keep_k,
+            keep_none,
+            keep_random,
             tier1_only,
             tier2_rush,
             no_powers,
@@ -95,6 +105,7 @@ impl Forced {
             ignore_threats,
             turtle,
             free_only,
+            unity_farm,
             plan_keep,
             plan_rounds: _,
             plan_reserve: _,
@@ -104,6 +115,8 @@ impl Forced {
         } = self;
         *keep_all
             || *keep_k > 0
+            || *keep_none
+            || *keep_random
             || *tier1_only
             || *tier2_rush
             || *no_powers
@@ -115,6 +128,7 @@ impl Forced {
             || *ignore_threats
             || *turtle
             || *free_only
+            || *unity_farm
             || *plan_keep
     }
 
@@ -169,14 +183,19 @@ impl Policy {
         let world = rules.world();
         let drafted = g.pile(&cards::drafted(s)).to_vec();
         let full = self.forced.plan_hand > 0 && g.pile(&cards::hand(s)).len() >= self.forced.plan_hand;
-        let set = if self.forced.keep_all {
+        let set = if self.forced.keep_none {
+            Vec::new()
+        } else if self.forced.keep_random {
+            let coin = |id: &String| fnv1a64(format!("{}:{round}:{id}", g.seed).as_bytes()) & 1 == 0;
+            drafted.into_iter().filter(coin).collect()
+        } else if self.forced.keep_all {
             drafted
         } else if self.forced.keep_k > 0 {
             let mut d = drafted;
             d.sort_by(|a, b| {
                 list_cost(cards::def(&world, a))
                     .cmp(&list_cost(cards::def(&world, b)))
-                    .then_with(|| id_order(a, b))
+                    .then_with(|| a.cmp(b))
             });
             d.truncate(self.forced.keep_k);
             d
@@ -236,7 +255,11 @@ impl Agent for Policy {
         // Keeping: by plan, or by the forced rule.
         let keeps = phase == "cards.keep"
             && !pending
-            && (self.forced.plan_keep || self.forced.keep_all || self.forced.keep_k > 0);
+            && (self.forced.plan_keep
+                || self.forced.keep_all
+                || self.forced.keep_k > 0
+                || self.forced.keep_none
+                || self.forced.keep_random);
         if keeps {
             if let Some(s) = legal.first().map(|a| a.seat() as usize) {
                 let set = self.keep_set(rules, g, s);
@@ -251,6 +274,11 @@ impl Agent for Policy {
                 {
                     return i;
                 }
+            }
+        }
+        if self.forced.unity_farm {
+            if let Some(i) = farm(&world, g, legal) {
+                return i;
             }
         }
         // Tier-2 rush: tier 2 whenever the keep is affordable.
@@ -270,6 +298,46 @@ impl Agent for Policy {
         let sub: Vec<Action> = keep.iter().map(|&i| legal[i].clone()).collect();
         keep[self.inner.choose(rules, g, &sub)]
     }
+}
+
+/// Whether hex `h` pays Unity for a player ambassador when it produces and
+/// holds none yet (028).
+fn farm_site(w: &World, g: &GameState, h: usize) -> bool {
+    (common::is_base(w, h) || g.tokens(h, common::FACTORY) > 0)
+        && common::player_ambassador(g, h).is_none()
+        && g.tokens(h, common::ADV_AMBASSADOR) == 0
+}
+
+/// The Unity farmer's move (028), if it has one: send an ambassador to a free
+/// farm site in reach, or buy one to send.
+fn farm(w: &World, g: &GameState, legal: &[Action]) -> Option<usize> {
+    if let Some(p) = &g.pending {
+        let hex = |t: &aic_core::hex::Hex| (0..g.hexes.len()).find(|&h| w.map.hexes[h].hex == *t);
+        if p.ask.prompt.contains("move which ambassador") {
+            return legal.iter().position(|a| matches!(a, Action::Choose { option, .. } if option == "from your supply"));
+        }
+        return p.ask.prompt.contains(": move on which hex").then(|| {
+            legal.iter().position(|a| {
+                matches!(a, Action::Choose { target: Some(t), .. }
+                    if hex(t).is_some_and(|h| farm_site(w, g, h)))
+            })
+        })?;
+    }
+    let sites = |s: usize| {
+        (0..g.hexes.len())
+            .filter(|&h| farm_site(w, g, h) && common::in_reach(w, g, s, h))
+            .count() as i64
+    };
+    let act = |want: &str| {
+        legal.iter().position(|a| {
+            matches!(a, Action::Standard { seat, act } if act == want && {
+                let s = *seat as usize;
+                let held = g.resource(s, Resource::Ambassadors);
+                sites(s) > if want == "move" { 0 } else { held } && (want != "move" || held > 0)
+            })
+        })
+    };
+    act("move").or_else(|| act("ambassador"))
 }
 
 /// A card's printed cost in credits (antimatter, insight, energy, chips
@@ -304,7 +372,7 @@ pub fn plan_keeps(w: &World, g: &GameState, s: usize, f: &Forced) -> Vec<String>
         ids.sort_by(|a, b| {
             ratio(w, g, s, b)
                 .total_cmp(&ratio(w, g, s, a))
-                .then_with(|| id_order(a, b))
+                .then_with(|| a.cmp(b))
         })
     };
     order(&mut drafted);
@@ -405,7 +473,7 @@ fn plan(
     pool.sort_by(|a, b| {
         ratio(w, g, s, b)
             .total_cmp(&ratio(w, g, s, a))
-            .then_with(|| id_order(a, b))
+            .then_with(|| a.cmp(b))
     });
     let mut planned: Vec<String> = Vec::new();
     let mut total = 0.0;

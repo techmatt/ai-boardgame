@@ -1,0 +1,28 @@
+{
+  "name": "screen-028",
+  "note": "028 screen (r17): engine and planner, d2, 2 and 3 countries, 32 seeds (run with --quick --games 32). Summary: python scripts/cards/screen_028.py DIR.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    2
+  ],
+  "agents": [
+    "engine",
+    "planner"
+  ],
+  "games": 32,
+  "records": 0
+}

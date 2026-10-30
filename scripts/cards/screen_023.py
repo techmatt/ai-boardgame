@@ -2,9 +2,9 @@
 
     python scripts/cards/screen_023.py CARDS_DIR [DOMINANCE_DIR]
 
-CARDS_DIR is an `aic-sim experiment` output of experiments/screen-023-cards.json
+CARDS_DIR is an `aic-sim experiment` output of experiments/archive/screen-023-cards.json
 (random, greedy, engine at d0-d4, 2 and 3 countries); DOMINANCE_DIR one of
-experiments/screen-023-dominance.json (the engine, 022's seven checks and 023's
+experiments/archive/screen-023-dominance.json (the engine, 022's seven checks and 023's
 mono-tag x6, ignore-X x6 and event-hoarder, d2 only, 32 seeds). Prints:
 
 - win rates per cell, the card economy per game (kept / played, insight on keeps

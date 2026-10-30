@@ -18,7 +18,7 @@ fn the_build_forecast_matches_the_build_step() {
         let rules = Rules::new(&c).unwrap();
         for seed in 0..3 {
             let mut g0 = rules.new_game(seed);
-            let players: Vec<String> = (0..g0.seats.len()).map(ambassador).collect();
+            let players: Vec<String> = (0..g0.seats.len()).map(|s| ambassador(s).to_string()).collect();
             for h in g0.hexes.iter_mut() {
                 h.tokens.retain(|k, _| !players.contains(k));
             }

@@ -144,6 +144,12 @@ pub struct Greedy {
     /// This phase's own moves (round, phase, actions): a move that undoes
     /// one of them is not offered, so a look-ahead cannot cycle.
     history: (u32, usize, Vec<Action>),
+    /// When above 0: after a decision phase's first full scoring, each seat
+    /// keeps only this many actions for the rest of the phase (the planner's
+    /// rollouts, 028: a wide menu's tail rarely comes back).
+    prune: usize,
+    /// The actions dropped this phase, once it has been scored.
+    dropped: Option<HashSet<Action>>,
 }
 
 impl Greedy {
@@ -155,7 +161,51 @@ impl Greedy {
             depth,
             choices,
             history: (0, 0, Vec::new()),
+            prune: 0,
+            dropped: None,
         }
+    }
+
+    pub fn pruned(mut self, prune: usize) -> Self {
+        self.prune = prune;
+        self
+    }
+
+    /// Scores `legal`, skipping what this phase has dropped, and at the
+    /// phase's first full scoring drops all but each seat's best `prune`.
+    fn scores(&mut self, rules: &Rules, state: &GameState, legal: &[Action]) -> Vec<f64> {
+        if self.prune == 0 || state.pending.is_some() {
+            return greedy_scores(
+                rules, &self.ev, &mut self.rng, state, legal, self.samples, self.depth, self.choices,
+            );
+        }
+        let live: Vec<usize> = (0..legal.len())
+            .filter(|&i| self.dropped.as_ref().is_none_or(|d| !d.contains(&legal[i])))
+            .collect();
+        let menu: Vec<Action> = live.iter().map(|&i| legal[i].clone()).collect();
+        let found = greedy_scores(
+            rules, &self.ev, &mut self.rng, state, &menu, self.samples, self.depth, self.choices,
+        );
+        let mut out = vec![f64::NEG_INFINITY; legal.len()];
+        for (k, &i) in live.iter().enumerate() {
+            out[i] = found[k];
+        }
+        if self.dropped.is_none() {
+            let mut ranked: Vec<usize> = (0..legal.len()).collect();
+            ranked.sort_by(|&x, &y| out[y].total_cmp(&out[x]));
+            let mut taken = [0usize; 256];
+            let mut dropped = HashSet::new();
+            for i in ranked {
+                let a = &legal[i];
+                let n = &mut taken[a.seat() as usize];
+                *n += 1;
+                if *n > self.prune && !matches!(a, Action::Pass { .. }) {
+                    dropped.insert(a.clone());
+                }
+            }
+            self.dropped = Some(dropped);
+        }
+        out
     }
 }
 
@@ -166,17 +216,9 @@ impl Agent for Greedy {
         }
         if (self.history.0, self.history.1) != (state.round, state.phase) {
             self.history = (state.round, state.phase, Vec::new());
+            self.dropped = None;
         }
-        let mut s = greedy_scores(
-            rules,
-            &self.ev,
-            &mut self.rng,
-            state,
-            legal,
-            self.samples,
-            self.depth,
-            self.choices,
-        );
+        let mut s = self.scores(rules, state, legal);
         for (i, a) in legal.iter().enumerate() {
             if undoes(&self.history.2, a) {
                 s[i] = f64::NEG_INFINITY;
@@ -240,7 +282,7 @@ fn moves_cost(seq: &[Action]) -> f64 {
 }
 
 /// Moves that only undo an earlier move of the same sequence.
-fn undoes(seq: &[Action], a: &Action) -> bool {
+pub(crate) fn undoes(seq: &[Action], a: &Action) -> bool {
     match a {
         Action::Give { seat, to } => seq.iter().any(|b| matches!(b, Action::Give { seat: s, to: t } if s == to && t == seat)),
         Action::Withdraw { seat, threat, resource } => seq.iter().any(|b| {

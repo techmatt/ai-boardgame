@@ -742,6 +742,14 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
                 }
             }
         }
+        Op::EachDestroyPresence { count } => {
+            let hexes = scope_hexes(&w, ctx.scope);
+            for s in ctx.seats(&w, g) {
+                for _ in 0..*count {
+                    board::destroy_own_presence(g, cx, s, &hexes, board::Cause::Effect(ctx.label))?;
+                }
+            }
+        }
         Op::PullUnity { amount } => alignment::pull_unity(g, cx, *amount),
         Op::LoseInsight { amount } => {
             for s in ctx.seats(&w, g) {

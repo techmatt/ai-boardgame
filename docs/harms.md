@@ -6,7 +6,7 @@ One row per harm, one column per kind of source. A number is how many printed ca
 
 | Harm | tier-1 threats | tier-2 threats | Discord cards | adversary twists | adversary projects | arrivals | build and spread | corruption | war | march |
 |---|---|---|---|---|---|---|---|---|---|---|
-| presence destroyed | 1 | 3 | 2 |  | 1 |  |  | yes | yes |  |
+| presence destroyed | 1 | 3 | 5 |  | 1 |  |  | yes | yes |  |
 | credits or income lost | 1 |  | 1 |  | 1 |  |  |  |  |  |
 | cards discarded | 2 | 2 |  |  |  |  |  |  |  |  |
 | insight lost | 1 |  |  |  |  |  | yes |  |  |  |
@@ -21,7 +21,7 @@ One row per harm, one column per kind of source. A number is how many printed ca
 | Unity pulled back | 1 |  | 1 |  |  |  |  |  |  |  |
 | actions or claims blocked | 1 |  |  |  |  |  | yes |  |  |  |
 
-**Checks** (`aic-sim docs --check`, and a fast test): every harm in at least 2 kinds of source; each threat tier at least 5 kinds of harm; no kind of source more than about half of the printed presence destruction. Measured shares are in the 027 screen.
+**Checks** (`aic-sim docs --check`, and a fast test): every harm in at least 2 kinds of source; each threat tier at least 5 kinds of harm; no kind of source more than about half of the printed presence destruction. Measured shares are in the 028 screen.
 
 ## The board's rules
 

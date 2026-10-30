@@ -192,7 +192,7 @@ places or removes adversary ambassadors goes through `adversary::place`, `remove
 `remove_piece`, `build_all`, `spread`, `corrupt_city` and `corrupt_station`, so the supply,
 cancellation and node-making hold everywhere; `build_all` places what
 `plan::build_plan` reads, the same plan the agents forecast with. Buildings and
-presence are destroyed only through `board::destroy_building`, which applies Shelter
+presence are destroyed through `board::destroy_building` (except that corruption, sacrifice, Eviction and war's factory-hex hit call `board::lose_presence`, unabsorbed), which applies Shelter
 Order, a base's troop (adversary strikes), hardening, a player ambassador's defense and
 Civic Shelter, and sways the Discord. Presence lives in the board module
 (`board::place_presence`, `board::track_taken`); AI boards read their track through

@@ -30,7 +30,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `crates/aic-core` | The rules engine. No I/O, no clock, seeded per-purpose RNG streams in the state, serde state, exact replay. `Rules::new(config)` then `new_game` / `legal_actions_into` / `apply_mut`, plus the convenient free functions `new_game`, `legal_actions`, `apply`. |
 | `crates/aic-core/src/modules/` | One file per rules area (`board`, `adversary`, `threats`, `alignment`, `economy`, `ai`, `cards`), shared code (`common`, `effects`), read-only forecasts for agents and clients (`plan`: the adversary's next build), the registry in `mod.rs`. |
 | `crates/aic-sim` | Native CLI: seeded games over a seed range, one config or two side by side, with every game replay-checked; the agent skill ladder (`agents/`) and the experiment harness (`experiment.rs`, `report.rs`). |
-| `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history and does not replay. `archive/`: specs the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
+| `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history and does not replay. `archive/`: specs of past revisions (since 028 every spec not tied to the current one) and those the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces with their cities, ocean, setup buildings and megaproject), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, `alignment.json` (the Unity and Discord decks), all built from code primitives. |
 | `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects and 023's 150-card set, r16 (2 countries, difficulty 0; 018 calibrated it, 019, 021, 022, 023, 024 and 027 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. (021 removed the `cards.variant=free_keep` opt-in: keeps cost insight.) The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
@@ -56,8 +56,8 @@ Current:
 - `wasm-smoke.mjs`: plays one game through the wasm package in Node. `wasm-parity.mjs`
   (020): replays aic-sim records of every variant in wasm.
 - `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline.
-- `cards/cards_doc.py`: regenerates `docs/cards.md`. `cards/screen_027.py`: the r16
-  screen summary and gate; `cards/screen_024.py`: the r15 ones; `screen_023.py` and `screen_022.py` still read r15.
+- `cards/cards_doc.py`: regenerates `docs/cards.md`. `cards/screen_028.py`: the r17
+  screen summary and gate, each check against its own agent; `cards/screen_027.py`: the r16 ones; `cards/screen_024.py`: the r15 ones; `screen_023.py` and `screen_022.py` still read r15.
 - `board/screen_summary.py` (014), `alignment/screen_summary.py` (013): screen summaries
   whose counters still exist.
 - `bench/same_results.py` (012): compares two experiment outputs. `--map OLD=NEW` (026)
@@ -71,8 +71,7 @@ Current:
 
 Historical, kept for the record and not expected to run on current rules:
 `board/screen_016.py` to `screen_019.py`, `cards/screen_021.py` (they read counters and
-cards that are gone and print zeros, not errors), and `payback/` (009; its content patches
-name cards and fields that no longer exist). See
+cards that are gone and print zeros, not errors). See
 [experiments/history.md](experiments/history.md).
 
 ## Viewer
@@ -227,7 +226,7 @@ browser; `npm ci` first):
 ```sh
 cargo build --workspace
 cargo test --workspace                             # fast lane: ~4 s once built, ~13 s after an edit in aic-sim (rebuild included); after every change
-cargo test-all                                     # full run, slow lane included: ~2.2 min at r16 (027), the aic-sim slow tests ~160 s
+cargo test-all                                     # full run, slow lane included: ~2.2 min at r16 (027), the aic-sim slow tests ~160 s; ~7 min at r17 on a busy machine (028, not remeasured free)
 cargo test-slow                                    # the slow lane alone: nearly all of that
 cargo build --release -p aic-sim                   # ~12 s
 ./target/release/aic-sim docs                      # regenerate the docs built from content and configs (--check: report only)
@@ -375,7 +374,7 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
   not yet corrupted (`pressure` 0.7 × `corrupted` × (ambassadors / threshold)², the
   threshold and the next build read off the face-up card; the build is the core's
   `plan::next_build`), troops (`troop` 12); the
-  Discord deck (`discord_danger` 40 per card short of 3 left: the empty tip loses); the bar's blockers
+  Discord deck (`discord_danger` 40 per card short of 3 left: the empty tip loses) and the Unity deck (`unity_deck` 40 the same way: the last card wins, 028); the bar's blockers
   (`blocker` 2); Alignment (Unity and Discord tips made, each bucket's fill as a share of
   its next tip, the bar level, and each visible adversary project's fill as a share of
   its cost, `project` 8, 017); the players' board (presence
@@ -392,7 +391,14 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
 | `greedy` | One action at a time: each scored by the heuristic after it, its own choices resolved best-first. A pass scores the table as it is (else stalling beats stopping). | `samples` 1 (guesses averaged), `depth` 1 (actions looked ahead), `choices` 2 |
 | `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all), `choices` 2 (levels of an action's own choices resolved before scoring it; with 1, placing presence, which asks a hex, looks worthless and beam stops growing its engine) |
 | `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `choices` 2, `candidates` 3, `rollouts` 4, `horizon` 2 |
-| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and board production (aligned cities' energy, less what adversary ambassadors divert; presence compute is track income) `w.production` of that (014: 1 won 65% at d0 against 37% with 0 on the checkpoint's map; level within noise at d1–d3 on the map since edited); the rounds left are the adversary deck's clock (deck plus the face-up card), cut short by when the team is on course to win (Unity Sway still needed for the outright Unity win at its rate so far, `w.unity_rate_start`, `w.win_lag`) and discounted by danger (`w.risk` per unpaid threat per country, supply slack ≤ 2 against the next build, 2 or fewer cities not corrupted); a building without income, and (023) a program in play with an ability, earns `w.ability` per round left; a card dealt into the draft packet counts as drafted less `w.packet_keep` × its keep price (023); a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left; and the **deck clock** (011, `w.clock`): a penalty per round the team, at its Unity rate so far, would still be short of the outright Unity win (`alignment.unity_win`, 8 tips; with it 0, the last bar drop) when the deck runs out. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `unity_rate_start` 2 (`opp_rate` still accepted), `win_lag` 1, `production` 1, `insight_wait` 0, `clock` 30, `packet_keep` 1 (023) |
+| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and board production (aligned cities' energy, less what adversary ambassadors divert; presence compute is track income) `w.production` of that (014: 1 won 65% at d0 against 37% with 0 on the checkpoint's map; level within noise at d1–d3 on the map since edited); the rounds left are the adversary deck's clock (deck plus the face-up card), cut short by when the team is on course to win (Unity Sway still needed for the Unity deck's last card at its rate so far, `w.unity_rate_start`, `w.win_lag`) and discounted by danger (`w.risk` per unpaid threat per country, supply slack ≤ 2 against the next build, 2 or fewer cities not corrupted); a building without income, and (023) a program in play with an ability, earns `w.ability` per round left; a card dealt into the draft packet counts as drafted less `w.packet_keep` × its keep price (023); a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left; and the **deck clock** (011, `w.clock`): a penalty per round the team, at its Unity rate so far, would still be short of the Unity deck's last card (`alignment.unity_cards`) when the deck runs out. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `unity_rate_start` 2 (`opp_rate` still accepted), `win_lag` 1, `production` 1, `insight_wait` 0, `clock` 30, `packet_keep` 1 (023) |
+
+| `planner` | 028 (`agents/planner.rs`): the engine, with a shortlist of alternatives in the action phase each rolled out to the first decision of round `horizon` rounds on, with the engine as the policy, and the best line by the heuristic taken. A line runs on the real state (**full information**, Matt, 2026-10-29), so it is the game that follows; each decision inside it is still scored on a guess, because scored on open decks the one-step heuristic wins 19% against 59% (it drafts by printed cost). Draft and keeps follow the engine. **Speed:** the line being followed is reused, so a decision pays only for its alternatives. | `horizon` 2, `alts` 2 a decision, `budget` 8 a round, `margin` 40 (only actions this close to the engine's best), `choices` 2, `samples` 1, `prune` 6 (actions each seat keeps through a phase of a rollout, after the phase's first full scoring). Its keep and dominance parameters are the engine's: `planner:never_tag=2` holds the check in its rollouts too. `--quick` keeps it. |
+
+**Planner speed (028, r16 d2, one thread's time a game; 12 threads run 12 at once):** 19 s at
+2 countries and 56 s at 3, against the engine's 2.9 s and 8.6 s: about 37 and 13 games a minute
+on 12 threads, against 250 and 84. A 32-seed d2 screen at both sizes with both agents takes
+about 4 min at r16, about 7 at r17 (thread time, 12 free threads). `budget` 8 with `prune` 0 cost twice that and won no more within noise.
 
 **Keeping by plan and the dominance checks (022, `agents/policy.rs`).** Greedy and
 engine keep drafted cards by a plan (`plan_keep` 1; 0 lets the heuristic decide keeps,
@@ -427,8 +433,8 @@ S=target/release/aic-sim
 $S experiment experiments/ladder-v0.json                    # -> out/experiments/ladder-v0/
 $S experiment experiments/smoke.json --out out/smoke        # a quick check (6 seeds)
 $S experiment experiments/ladder-v0.json --games 20 --seed 1000 --threads 6
-$S experiment experiments/screen-014-board.json --quick     # scoping: shallow agents, 16 seeds, no probes
-$S experiment experiments/screen-014-board.json --quick --resume  # continue a stopped run: the same flags (--quick, --out, --games, --seed) as it started with
+$S experiment experiments/archive/screen-014-board.json --quick     # scoping: shallow agents, 16 seeds, no probes
+$S experiment experiments/archive/screen-014-board.json --quick --resume  # continue a stopped run: the same flags (--quick, --out, --games, --seed) as it started with
 ```
 
 **Tuning sweeps** (`scripts/tune/`, from the repo root): `sweep.py` runs `aic-sim run --json`
@@ -446,7 +452,7 @@ python scripts/tune/sweep.py --agents "greedy;beam" --games 64 --tag try1 \
 [experiments/history.md](experiments/history.md). Their write-ups are
 `experiments/tuning-007.md`, `engine-008.md`, `payback-009.md` and `proposals-011.md`.
 
-**Alignment screen (013)**, `experiments/screen-013-alignment.json` (base, `no_am` and
+**Alignment screen (013)**, `experiments/archive/screen-013-alignment.json` (base, `no_am` and
 `off` × d0, d4 × greedy, engine × 32 seeds = 384 games): **45 s** alone on 12 threads
 with `--quick --games 32`. `python scripts/alignment/screen_summary.py DIR` turns its
 `games.jsonl` into the Alignment table (tips per game per side, the round of each tip,
@@ -454,9 +460,9 @@ antimatter actions, cards resolved); committed with the report in
 `experiments/results/screen-013-alignment/` (`alignment.md`). Tips by round come from
 the counters `alignment.tip_<side>.rNN`, so `aic-sim run` shows them too.
 
-**Board screen (014)**, `experiments/screen-014-board.json` (`c2` and `c3`, that is 2
+**Board screen (014)**, `experiments/archive/screen-014-board.json` (`c2` and `c3`, that is 2
 and 3 countries, × d0, d4 × greedy, engine): `aic-sim experiment
-experiments/screen-014-board.json --quick` (16 seeds a cell, 128 games), then `python
+experiments/archive/screen-014-board.json --quick` (16 seeds a cell, 128 games), then `python
 scripts/board/screen_summary.py DIR` reads its `games.jsonl` and `results.json` and
 prints markdown: per cell the win rate, rounds, the round of the first new corruption,
 cities corrupted at the end, destructions per war round, Unity and Discord tips,
@@ -464,17 +470,23 @@ standard actions and how games ended; then adversary ambassadors on the board by
 and standard actions by kind. Committed with the report and records in
 `experiments/results/screen-014-board/` (`board.md`).
 
-**Endgame screen and gate (027, r16)**: `experiments/screen-027-cards.json` and
-`experiments/screen-027-dominance.json` (024's checks plus `ignore_threats`, `turtle`,
+**Rollout screen and gate (028, r17)**: `experiments/screen-028.json` (engine and planner, d2,
+`c2`, `c3`) and `experiments/screen-028-dominance.json` (027's checks and `unity_farm`, under
+both agents), with `--quick --games 32`, then `python scripts/cards/screen_028.py DIR` and
+`--gate DIR`. `experiments/screen-028-draft.json` is the drafting sanity check. Results and
+timings: `experiments/results/screen-028-rollout/rollout.md`.
+
+**Endgame screen and gate (027, r16)**: `experiments/archive/screen-027-cards.json` and
+`experiments/archive/screen-027-dominance.json` (024's checks plus `ignore_threats`, `turtle`,
 `free_only`), run with `--quick` (the gate `--games 32`), then `python
 scripts/cards/screen_027.py DIR` and `--gate DIR`; `screen-027-tune.json` is the tuning probe
 (engine, d0 and d2, ~3 min on 12 threads). Results: `experiments/results/screen-027-endgame/`.
 
-**Scarier-adversary screen and dominance gate (024, r15)**: `experiments/screen-024-cards.json`
-and `experiments/screen-024-dominance.json` (023's two specs at r15; same cells), run with the
+**Scarier-adversary screen and dominance gate (024, r15)**: `experiments/archive/screen-024-cards.json`
+and `experiments/archive/screen-024-dominance.json` (023's two specs at r15; same cells), run with the
 same flags, then `python scripts/cards/screen_024.py out/screen-024-cards
 out/screen-024-dominance --before DIR` (DIR: the same cards screen on the r14 binary). **~3 min** the cards screen and **~12 min** the gate, side by side on 12 threads.
-`experiments/tune-024.json` is the small probe (greedy and engine, d0 and d2).
+`experiments/archive/tune-024.json` is the small probe (greedy and engine, d0 and d2).
 Agent changes in 024: the keep plan (`agents/policy.rs`) charges credits paid for keeps
 (`plan_credit` 3; the opening's 5-credit keeps took all 20 starting credits: this one
 change took the engine at c2 d2 from 37% to 81%), skips cards it can't play now (a built-over
@@ -487,18 +499,18 @@ run: wait on the process or the log's per-cell lines, not on the file. Committed
 `experiments/results/screen-024-adversary/`.
 
 **Card-set screen and dominance gate (023, r14)**: two specs.
-`experiments/screen-023-cards.json` (`c2`, `c3` × d0–d4 × random, greedy, engine; 480
-games) and `experiments/screen-023-dominance.json` (d2 only, `c2`, `c3` × the engine,
+`experiments/archive/screen-023-cards.json` (`c2`, `c3` × d0–d4 × random, greedy, engine; 480
+games) and `experiments/archive/screen-023-dominance.json` (d2 only, `c2`, `c3` × the engine,
 022's seven checks and 023's mono-tag ×6 (`only_tag=1..6`), ignore-X ×6
 (`never_tag=1..6`) and event-hoarder (`events_only=1`); 1,344 games): `aic-sim experiment
-experiments/screen-023-cards.json --quick --out out/screen-023-cards` (**~3 min** alone,
-~5 min beside the gate) and `aic-sim experiment experiments/screen-023-dominance.json
+experiments/archive/screen-023-cards.json --quick --out out/screen-023-cards` (**~3 min** alone,
+~5 min beside the gate) and `aic-sim experiment experiments/archive/screen-023-dominance.json
 --quick --games 32 --out out/screen-023-dominance` (**~12 min** on 12 threads, most of it
 3-country engine games at 5–15 s each), then `python scripts/cards/screen_023.py
 out/screen-023-cards out/screen-023-dominance`: win rates, the strategy-health gate
 (021's, plus engine at d0 ≥ 85%), the card economy and by-round tables, the tags in the
 engine's wins, per-card keep and play rates with the dead cards and must-picks named,
-and the dominance table with each gap's standard error. `experiments/tune-023.json` is
+and the dominance table with each gap's standard error. `experiments/archive/tune-023.json` is
 the small probe used for tuning (engine at d0 and d2; ~1.5 min). `python
 scripts/cards/cards_doc.py` regenerates [docs/cards.md](docs/cards.md) and prints the
 set's shape against 023's targets. Committed in `experiments/results/screen-023-cards/`
@@ -509,9 +521,9 @@ is a choice (before, tier 2 was drafted only once the tier-1 deck ran dry: 52 ca
 dry, 108 don't); a program in play with an ability earns `w.ability` a round like a
 building. Counter new in 023: `cards.drawn`.
 
-**Insight and dominance screen (022, r13)**: two specs. `experiments/screen-022-cards.json`
+**Insight and dominance screen (022, r13)**: two specs. `experiments/archive/screen-022-cards.json`
 (`c2`, `c3` × d0–d4 × random, greedy, engine; 480 games) and
-`experiments/screen-022-dominance.json` (`c2`, `c3` × d0, d2, d4 × the engine and the seven
+`experiments/archive/screen-022-dominance.json` (`c2`, `c3` × d0, d2, d4 × the engine and the seven
 dominance checks, `engine:keep_all=1` and so on; 768 games): `aic-sim experiment
 <spec> --quick --out out/<name>` (**~6 min** the cards screen and **~8.5 min** the
 dominance screen, run side by side on 12 threads; alone, about half that: engine games
@@ -524,9 +536,9 @@ standard error, and the gate (`docs/principles.md`, *Dominance checks*). Counter
 022: `cards.insight_kept`, `cards.insight_played` (also per round), `threats.short`.
 Committed in `experiments/results/screen-022-insight/`.
 
-**Card and resource screen (021, r12)**, `experiments/screen-021-cards.json` (`c2`, `c3` ×
+**Card and resource screen (021, r12)**, `experiments/archive/screen-021-cards.json` (`c2`, `c3` ×
 d0–d4 × random, greedy, engine; 480 games): `aic-sim experiment
-experiments/screen-021-cards.json --quick --out out/screen-021` (**~3 min** wall on 12
+experiments/archive/screen-021-cards.json --quick --out out/screen-021` (**~3 min** wall on 12
 threads: engine games take 3–11 s each at r12, about twice r11's, from the bigger hands
 and the per-card tier picks), then `python scripts/cards/screen_021.py out/screen-021`:
 per cell the win rate and ends; the card economy per game (kept, played, tier-2 dealt,
@@ -540,9 +552,9 @@ per-round `cards.hand_size`, `.kept`, `.played`, `.insight_after_keep`,
 `economy.credits_unspent`, `.insight_unspent`, which `aic-sim experiment` writes into
 `games.jsonl` as `<key>.rNN` (summed over seats; 021).
 
-**Troop and node screen (019, r10)**, `experiments/screen-019-troops.json` (`c2`, `c3` ×
+**Troop and node screen (019, r10)**, `experiments/archive/screen-019-troops.json` (`c2`, `c3` ×
 d0–d4 × random, greedy, engine; 480 games): `aic-sim experiment
-experiments/screen-019-troops.json --quick --out out/screen-019` (**~2 min** wall on 12
+experiments/archive/screen-019-troops.json --quick --out out/screen-019` (**~2 min** wall on 12
 threads with the tuned r10, 107–129 s; 211 s for r10 before tuning, whose games ran to
 the deck's end), then `python scripts/board/screen_019.py out/screen-019`: per cell the win
 rate, rounds and the purge's blockers left; then the troops (built, march steps, moves,
@@ -558,9 +570,9 @@ overrides (lists comma-separated, `alignment.unity_ease=1,1,2`), as in
 `experiments/results/screen-019-troops/tuning.md`. Committed in
 `experiments/results/screen-019-troops/` (`troops.md`, `before-tuning.md`, `tuning.md`).
 
-**Calibration screen (018, r9)**, `experiments/screen-018-calibration.json` (`c2`, `c3`
+**Calibration screen (018, r9)**, `experiments/archive/screen-018-calibration.json` (`c2`, `c3`
 × d0–d4 × random, greedy, engine; 480 games): `aic-sim experiment
-experiments/screen-018-calibration.json --quick --out out/screen-018` (**~3 min** wall on
+experiments/archive/screen-018-calibration.json --quick --out out/screen-018` (**~3 min** wall on
 12 threads: r9 games run longer, 6–12 rounds, and c3 engine games go the full 11),
 then `python scripts/board/screen_018.py out/screen-018`: per cell the win rate,
 rounds, what was left on the board at the end (corrupted cities, nodes, troops: the
@@ -570,8 +582,8 @@ removed, compute blocked by a player ambassador on a node, Security Patch, citie
 freed, cards). `margin.nodes_end` / `troops_end` in `games.jsonl` are new in 018.
 Committed in `experiments/results/screen-018-calibration/` (`calibration.md`).
 
-**Projects screen (017, r8)**, `experiments/screen-017-projects.json` (the same cells):
-`aic-sim experiment experiments/screen-017-projects.json --quick --out out/screen-017`
+**Projects screen (017, r8)**, `experiments/archive/screen-017-projects.json` (the same cells):
+`aic-sim experiment experiments/archive/screen-017-projects.json --quick --out out/screen-017`
 (128 games, **~8 s** wall on 12 threads: r8 games are short, ~4 rounds at d0), then
 `python scripts/board/screen_017.py out/screen-017`: per cell the win rate, rounds,
 tips and ends, then per game projects resolved (cheap, big), adversary compute made and
@@ -581,8 +593,8 @@ project; then standard actions by kind. Committed in
 Python script printing an en dash to a redirected stdout writes cp1252, not UTF-8;
 `screen_017.py` reconfigures stdout to UTF-8.
 
-**Presence screen (016, r7)**, `experiments/screen-016-presence.json` (the same cells
-as 014's): `aic-sim experiment experiments/screen-016-presence.json --quick` (128 games,
+**Presence screen (016, r7)**, `experiments/archive/screen-016-presence.json` (the same cells
+as 014's): `aic-sim experiment experiments/archive/screen-016-presence.json --quick` (128 games,
 **20 s** wall on 12 threads; d0 engine at 3 countries is the slowest cell, ~5 s a
 game per worker), then `python scripts/board/screen_016.py DIR`: per cell the win rate,
 rounds, tips and ends, then per game presence placed, node peaks per board, nodes made

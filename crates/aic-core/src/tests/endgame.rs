@@ -3,7 +3,7 @@
 
 use super::alignment::give;
 use super::*;
-use crate::modules::common::{ambassador, presence};
+use crate::modules::common::{ambassador, presence, NODE};
 use crate::modules::{adversary, board};
 
 /// The baseline playing only the action phase, after setup.
@@ -167,7 +167,7 @@ fn the_hold_is_never_below_its_minimum() {
 
 #[test]
 fn a_city_that_corrupts_destroys_presence_on_it_to_the_destroyed_pile() {
-    let (rules, mut g) = lab(&[]);
+    let (rules, mut g) = lab_with(&[], &["board.presence_returns=1"]);
     let h = rules.map.numbered(0, piece(0).cities[0]);
     let far = rules.map.numbered(1, piece(1).cities[0]);
     put(&mut g, h, &presence(0), 1);
@@ -228,4 +228,104 @@ fn a_choice_threat_never_takes_a_last_presence() {
     .unwrap();
     assert_eq!(g.tokens(h, &presence(0)), 1);
     assert_eq!(g.resource(0, Resource::Credits), 0);
+}
+
+// 028: rules revision 17.
+
+/// Lands `s`'s presence on `n` free land hexes and counts them on the track.
+fn presence_on_track(g: &mut GameState, s: usize, hexes: &[usize]) {
+    for &h in hexes {
+        put(g, h, presence(s), 1);
+    }
+    g.vars.insert(board::track_key(s), hexes.len() as i64);
+}
+
+#[test]
+fn a_destroyed_presence_covers_its_track_space_again() {
+    use crate::modules::ai;
+    let (rules, mut g) = lab_with(&[], &["board.presence_returns=2"]);
+    let (a, b) = (rules.map.numbered(0, piece(0).presence), rules.map.numbered(0, piece(0).cities[0]));
+    let c = rules.map.hexes[a].neighbours[0];
+    presence_on_track(&mut g, 0, &[a, b, c]);
+    let w = rules.world();
+    let income = ai::track_income(&w, &g, 0);
+    let credits = |inc: &[(Resource, i64)]| inc.iter().filter(|(r, _)| *r == Resource::Credits).map(|(_, n)| n).sum::<i64>();
+    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, c, 0, "test"));
+    assert_eq!(board::track_taken(&g, 0), 2);
+    assert_eq!(g.resource(0, Resource::PresenceReserve), 0);
+    assert!(credits(&ai::track_income(&w, &g, 0)) < credits(&income), "the space's income is gone");
+    // The first space never covers: its token starts on the board.
+    g.vars.insert(board::track_key(0), 1);
+    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, b, 0, "test"));
+    assert_eq!(board::track_taken(&g, 0), 1);
+}
+
+#[test]
+fn a_returned_presence_comes_off_the_second_track_when_it_is_further_along() {
+    let (rules, mut g) = lab_with(&[], &["board.presence_returns=2"]);
+    let a = rules.map.numbered(0, piece(0).presence);
+    put(&mut g, a, presence(0), 1);
+    g.vars.insert(board::track_key(0), 1);
+    g.vars.insert(board::track2_key(0), 1);
+    with_cx(&rules, |cx| board::lose_presence(&mut g, cx, a, 0, "test"));
+    assert_eq!((board::track_taken(&g, 0), board::track2_taken(&g, 0)), (1, 0));
+}
+
+#[test]
+fn each_player_destroys_a_presence_of_their_choice_but_not_a_stage_one_last() {
+    use crate::modules::common::hex_name;
+    let (rules, mut g) = lab_with(&[], &["board.last_safe_stage=2"]);
+    let (a, b) = (rules.map.numbered(0, piece(0).presence), rules.map.numbered(0, piece(0).cities[0]));
+    let last = rules.map.numbered(1, piece(1).presence);
+    put(&mut g, a, presence(0), 1);
+    put(&mut g, b, presence(0), 1);
+    put(&mut g, last, presence(1), 1);
+    g.vars.insert(STAGE.into(), 1);
+    let hit = |g: &mut GameState, cx: &mut module::Cx, s: usize, h: usize| {
+        let hexes = [h, b];
+        board::destroy_own_presence(g, cx, s, &hexes, board::Cause::Effect("discord")).unwrap();
+    };
+    with_cx(&rules, |cx| hit(&mut g, cx, 1, last));
+    assert_eq!(g.tokens(last, presence(1)), 1, "stage I: it stays");
+    // The player picks which: here the second of seat 0's two.
+    let pick = crate::state::Pick { option: hex_name(&rules.world(), b), target: Some(rules.map.hexes[b].hex) };
+    with_cx_picks(&rules, vec![pick], |cx| hit(&mut g, cx, 0, a));
+    assert_eq!((g.tokens(a, presence(0)), g.tokens(b, presence(0))), (1, 0));
+    g.vars.insert(STAGE.into(), 2);
+    with_cx(&rules, |cx| hit(&mut g, cx, 1, last));
+    assert_eq!(g.tokens(last, presence(1)), 0, "stage II: it goes");
+}
+
+#[test]
+fn a_game_deals_the_unity_deck_it_is_told_to() {
+    let (_, g) = action_only(&["alignment.unity_cards=3,2"]);
+    assert_eq!(g.pile("alignment.deck.unity.1").len(), 3);
+    assert_eq!(g.pile("alignment.deck.unity.2").len(), 2);
+}
+
+#[test]
+fn removing_a_node_clears_a_hack_on_its_hex() {
+    let (rules, mut g) = lab(&[]);
+    let h = rules.map.numbered(0, piece(0).cities[0]);
+    put(&mut g, h, NODE, 1);
+    g.vars.insert(adversary::cut_key(h), 1);
+    with_cx(&rules, |cx| adversary::remove_node(&mut g, cx, h));
+    assert_eq!(g.var(&adversary::cut_key(h)), 0);
+}
+
+/// A Discord tip that leaves a seat with no presence loses before a Unity tip
+/// in the same check can draw the last card.
+#[test]
+fn a_lost_last_presence_comes_before_a_unity_tip_in_the_same_check() {
+    let (rules, mut g) = action_only(&[]);
+    for h in 0..g.hexes.len() {
+        put(&mut g, h, &presence(1), 0);
+    }
+    empty_deck(&mut g, "unity");
+    g.piles.insert("alignment.deck.unity.1".into(), vec!["civil_defense".into()]);
+    fill_bucket(&rules, &mut g, Side::Discord);
+    fill_bucket(&rules, &mut g, Side::Unity);
+    give(&rules, &mut g);
+    let o = g.outcome.as_ref().expect("a loss");
+    assert_eq!((o.won, o.reason.as_str()), (false, "presence"));
 }

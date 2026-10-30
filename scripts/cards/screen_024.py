@@ -3,8 +3,8 @@
     python scripts/cards/screen_024.py CARDS_DIR [DOMINANCE_DIR] [--before BEFORE_DIR]
     python scripts/cards/screen_024.py --brief DIR ...
 
-CARDS_DIR is an `aic-sim experiment` output of experiments/screen-024-cards.json,
-DOMINANCE_DIR of experiments/screen-024-dominance.json, BEFORE_DIR the same cards
+CARDS_DIR is an `aic-sim experiment` output of experiments/archive/screen-024-cards.json,
+DOMINANCE_DIR of experiments/archive/screen-024-dominance.json, BEFORE_DIR the same cards
 screen run on the r14 binary. Prints what 023's summary prints (screen_023.py) and
 024's gates:
 

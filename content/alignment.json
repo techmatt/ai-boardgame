@@ -128,7 +128,7 @@
   "name": "Incursion",
   "side": "discord",
   "tier": 1,
-  "text": "Deal one extra threat (5+ Discord tips: three).",
+  "text": "Deal one extra threat (5+ Discord tips: three, and each player destroys 7 presence of theirs).",
   "effects": [
    {
     "op": "deal_threats",
@@ -142,6 +142,10 @@
      {
       "op": "deal_threats",
       "count": 3
+     },
+     {
+      "op": "each_destroy_presence",
+      "count": 7
      }
     ]
    }
@@ -152,7 +156,7 @@
   "name": "Blight",
   "side": "discord",
   "tier": 1,
-  "text": "In each country, the clean city with the most adversary ambassadors gains 1 more (5+ Discord tips: 3).",
+  "text": "In each country, the clean city with the most adversary ambassadors gains 1 more (5+ Discord tips: 3, and each player destroys 7 presence of theirs).",
   "effects": [
    {
     "op": "infiltrate",
@@ -166,6 +170,10 @@
      {
       "op": "infiltrate",
       "amount": 3
+     },
+     {
+      "op": "each_destroy_presence",
+      "count": 7
      }
     ]
    }
@@ -176,7 +184,7 @@
   "name": "Propaganda",
   "side": "discord",
   "tier": 1,
-  "text": "Every player loses 4 credits (5+ Discord tips: 8); 2 Sway leaves the Unity bucket.",
+  "text": "Every player loses 4 credits; 2 Sway leaves the Unity bucket (5+ Discord tips: every player loses 8 credits and destroys 7 presence of theirs, and 2 Sway leaves the Unity bucket).",
   "effects": [
    {
     "op": "players_lose",
@@ -198,6 +206,10 @@
       "amount": 8
      },
      {
+      "op": "each_destroy_presence",
+      "count": 7
+     },
+     {
       "op": "pull_unity",
       "amount": 2
      }
@@ -210,7 +222,7 @@
   "name": "Offensive",
   "side": "discord",
   "tier": 2,
-  "text": "The adversary spreads now (4+ Discord tips: it builds, then spreads); then all presence on the board's most threatened hex is destroyed.",
+  "text": "The adversary spreads now, then all presence on the board's most threatened hex is destroyed (4+ Discord tips: it builds, then spreads, and each player destroys 2 presence of theirs).",
   "effects": [
    {
     "op": "adversary_spread"
@@ -230,7 +242,8 @@
       "op": "adversary_spread"
      },
      {
-      "op": "destroy_presence"
+      "op": "each_destroy_presence",
+      "count": 2
      }
     ]
    }
@@ -265,7 +278,7 @@
   "name": "Firestorm",
   "side": "discord",
   "tier": 2,
-  "text": "In each country, the clean city with the most adversary ambassadors gains 2 more (4+ Discord tips: 3, and all presence on the board's most threatened hex is destroyed).",
+  "text": "In each country, the clean city with the most adversary ambassadors gains 2 more (4+ Discord tips: 3, and each player destroys 2 presence of theirs).",
   "effects": [
    {
     "op": "infiltrate",
@@ -281,7 +294,8 @@
       "amount": 3
      },
      {
-      "op": "destroy_presence"
+      "op": "each_destroy_presence",
+      "count": 2
      }
     ]
    }

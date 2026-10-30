@@ -10,7 +10,7 @@ paths are as they were then (the refused specs now live in [`archive/`](archive/
 
 The 007 run's log, change log and proposals: `experiments/tuning-007.md`. The 008
 engine agent, its sweep and the building-engine verdict: `experiments/engine-008.md`;
-rerun `experiments/engine-agent-008.json` (~28 min alone on 12 threads, 2,400 games:
+rerun `experiments/archive/engine-agent-008.json` (~28 min alone on 12 threads, 2,400 games:
 greedy-search agents take 6–16 s a game each with every core busy) to judge a payback
 lever.
 
@@ -134,10 +134,10 @@ under load:
 | `beam` | 45–60 | ~0.2–0.25 games/s |
 | `rollout` | 60–80 | ~0.15–0.2 games/s |
 
-- `experiments/tune-after.json` (2,000 games: random and greedy × d0–d4 × 200, 10 seeds
+- `experiments/archive/tune-after.json` (2,000 games: random and greedy × d0–d4 × 200, 10 seeds
   per cell probed for win probability): **45 minutes**. The probes are most of it;
   without them it is about 12 minutes.
-- `experiments/tune-after-search.json` (greedy, beam, rollout × d0, d4 × 24): 8 minutes.
+- `experiments/archive/tune-after-search.json` (greedy, beam, rollout × d0, d4 × 24): 8 minutes.
 - `experiments/variants-modules.json` (3,072 games, no probes): 11 minutes.
 - `experiments/payback-009-singles.json` (4,992 greedy + engine games): 46 minutes;
   `payback-009-combos.json` (1,152): about 20 minutes alone. A content-patch spec (384

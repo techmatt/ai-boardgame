@@ -157,7 +157,7 @@ fn a_clean_citys_factory_goes_to_the_most_presence_by_its_zone() {
     assert_eq!(p.ask.options.len(), 2);
     answer_with(&rules, &mut g, "seat 1");
     answer_all(&rules, &mut g);
-    let c = |s: usize| Some(cube(s));
+    let c = |s: usize| Some(cube(s).to_string());
     assert_eq!(owners(&g), [c(1), c(1), c(0)]);
     let built = |g: &GameState| {
         g.stats
@@ -291,4 +291,16 @@ fn a_troop_at_a_base_absorbs_a_strike_next_to_it() {
         (1, 0, discord)
     );
     assert_eq!(g.stats.counters["board.base_absorbed"], 1);
+}
+
+/// 028: an adversary-owned factory's ambassador is used up making its troop.
+#[test]
+fn an_ambassador_on_an_adversary_factory_is_used_up_making_its_troop() {
+    let (rules, mut g) = lab(&["board.bases"]);
+    let f = rules.map.numbered(0, piece(0).factories[0]);
+    put(&mut g, f, FACTORY, 1);
+    put(&mut g, f, ADV_CUBE, 1);
+    put(&mut g, f, ADV_AMBASSADOR, 2);
+    run(&rules, &mut g);
+    assert_eq!((g.tokens(f, TROOP), g.tokens(f, ADV_AMBASSADOR)), (1, 1));
 }

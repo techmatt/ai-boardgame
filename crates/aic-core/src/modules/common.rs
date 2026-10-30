@@ -29,19 +29,26 @@ pub const HARDEN: &str = "harden";
 /// An adversary node: persistent, makes adversary compute, blocks claims next to it.
 pub const NODE: &str = "node";
 
+/// Seat keys are tables, not `format!`: the search asks for them on every hex
+/// of every position it scores (028: a tenth of the engine's time). A game has
+/// at most 4 countries, so at most 4 seats.
+const PRESENCE: [&str; 4] = ["presence:0", "presence:1", "presence:2", "presence:3"];
+const CUBE: [&str; 4] = ["cube:0", "cube:1", "cube:2", "cube:3"];
+const AMBASSADOR: [&str; 4] = ["ambassador:0", "ambassador:1", "ambassador:2", "ambassador:3"];
+
 /// Seat `s`'s presence on a hex.
-pub fn presence(seat: usize) -> String {
-    format!("presence:{seat}")
+pub fn presence(seat: usize) -> &'static str {
+    PRESENCE[seat]
 }
 
 /// Seat `s`'s owner cube (an aligned city or an owned station).
-pub fn cube(seat: usize) -> String {
-    format!("cube:{seat}")
+pub fn cube(seat: usize) -> &'static str {
+    CUBE[seat]
 }
 
 /// Seat `s`'s player ambassador on a piece.
-pub fn ambassador(seat: usize) -> String {
-    format!("ambassador:{seat}")
+pub fn ambassador(seat: usize) -> &'static str {
+    AMBASSADOR[seat]
 }
 
 pub fn is_city(w: &World, h: usize) -> bool {
@@ -185,6 +192,7 @@ pub fn seats_in_scope(w: &World, g: &GameState, scope: Option<usize>) -> Vec<usi
 pub fn piece_name(kind: &str) -> String {
     match kind.split_once(':') {
         Some(("presence", s)) => format!("seat {s}'s presence"),
+        Some((kind, "adversary")) => format!("adversary {kind}"),
         _ if kind == STATION => "research station".into(),
         _ => kind.replace('_', " "),
     }

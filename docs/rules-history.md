@@ -7,6 +7,22 @@ What each rules revision changed, what it replaced and whether it is **locked** 
 record, moved out of it in 025 otherwise as written, so a row quoting a number or a card
 is as of its revision. Add a table here with every rules change.
 
+**Revision 17 (028): presence loss that bites, a Unity deck that can run out.**
+
+| What | Was | Now | Status |
+|---|---|---|---|
+| Destroyed presence | a destroyed pile, its track space stayed uncovered | back on the track, covering the furthest uncovered space (`presence_returns` 2) | candidate |
+| Late presence hits | one hex a hit | each player destroys presence of their own: the higher Discord steps, Manhunt, Siege (op `each_destroy_presence`) | candidate |
+| Unity deck | all 9 cards | a game deals `unity_cards` of the 9 printed | candidate |
+| Hold | `hold_base` 2 | `hold_base` 3, the brief's number, which a planning agent can gather | candidate |
+| Aligned cities | a second spreading ambassador made a node | collect ambassadors as clean cities do | candidate |
+| A corrupted factory's adversary ambassador | stayed forever | used up when it makes its troop | candidate |
+| A hack on a node's hex | outlived the node and cut a node formed there later | cleared with the node | candidate |
+| Discord steps and threats | Offensive and Firestorm at 4+ took one hex; Manhunt took one hex; Siege's troops took presence where they landed | Offensive and Firestorm at 4+: each player destroys 2; Incursion, Blight and Propaganda at 5+: each player destroys 7; Manhunt and Siege: each player here destroys 1 | candidate |
+
+Unchanged and **locked**: the Discord-deck loss and the presence loss. Screen:
+`experiments/results/screen-028-rollout/rollout.md`.
+
 **Revision 16 (027): steady pressure, two decks as the clocks, presence loss.**
 
 | What | Was | Now | Status |
@@ -27,7 +43,7 @@ is as of its revision. Add a table here with every rules change.
 
 Screen: `experiments/results/screen-027-endgame/endgame.md`.
 
-What the code implements: **rules revision 16** (027: **steady pressure, two decks as the
+What the code implemented at r16: **rules revision 16** (027: **steady pressure, two decks as the
 clocks, presence loss**, above; on 024's revision 15: **a scarier adversary**, a purge
 that can't come early, and credits that matter, below; on 023's revision 14: **the player card set**, about 150
 cards built on 021's primitives and 022's costs, with four new effect primitives, §8; on

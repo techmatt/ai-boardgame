@@ -691,9 +691,9 @@ pub fn place(g: &mut GameState, cx: &mut Cx, h: usize, n: i64) {
 
 /// One adversary ambassador arrives on hex `h` (from the supply or by
 /// spreading): it cancels a player ambassador there (both are removed, no
-/// Unity); spreading onto a piece that already holds one (not a clean city,
-/// which collects them, and not a node) makes a node there, and both
-/// ambassadors return to the supply.
+/// Unity); spreading onto a piece that already holds one (not a city that
+/// isn't corrupted, clean or aligned, which collects them, and not a node)
+/// makes a node there, and both ambassadors return to the supply.
 fn arrive(g: &mut GameState, cx: &mut Cx, h: usize, spreading: bool) {
     let w = cx.world;
     if let Some(s) = player_ambassador(g, h) {
@@ -704,7 +704,7 @@ fn arrive(g: &mut GameState, cx: &mut Cx, h: usize, spreading: bool) {
     }
     if spreading
         && g.tokens(h, ADV_AMBASSADOR) > 0
-        && !clean_city(&w, g, h)
+        && !(is_city(&w, h) && !corrupted(g, h))
         && g.tokens(h, NODE) == 0
     {
         remove(g, cx, h, 1);
@@ -722,6 +722,8 @@ fn arrive(g: &mut GameState, cx: &mut Cx, h: usize, spreading: bool) {
 pub fn remove_node(g: &mut GameState, cx: &mut Cx, h: usize) {
     if g.tokens(h, NODE) > 0 {
         cx.add_tokens(g, h, NODE, -1);
+        // A node formed here later is a new one: the hack cut this one (028).
+        cx.set_key(g, cut_key(h), 0);
         cx.tally(g, "adversary.nodes_removed", 1);
         alignment::for_node_removed(g, cx);
     }
@@ -875,7 +877,7 @@ fn destinations(w: &World, g: &GameState, from: usize, range: i32) -> Vec<usize>
         if shields.iter().any(|&s| g.tokens(h, &presence(s)) > 0) {
             continue;
         }
-        let city = clean_city(w, g, h);
+        let city = is_city(w, h) && !corrupted(g, h);
         if g.tokens(h, ADV_AMBASSADOR) > 0 && !city && g.tokens(h, NODE) > 0 {
             continue;
         }
@@ -965,7 +967,7 @@ pub fn damage(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize, amount: i64
         }
         let opts = kinds
             .iter()
-            .map(|k| opt(format!("remove {k} at {}", hex_name(&w, h))))
+            .map(|k| opt(format!("remove {} at {}", piece_name(k), hex_name(&w, h))))
             .collect();
         let prompt = format!("Seat {seat}: remove which piece ({left} left)?");
         let Some(i) = cx.choose(seat, &prompt, opts)? else {

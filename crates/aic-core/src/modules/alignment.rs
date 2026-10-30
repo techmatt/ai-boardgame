@@ -20,7 +20,7 @@ use crate::view::{CardView, ViewOut};
 use super::common::*;
 use super::{adversary, ai, board, cards, effects};
 
-const PARAMS: [ParamSpec; 15] = [
+const PARAMS: [ParamSpec; 16] = [
     ParamSpec::int("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
     ParamSpec::int("tip_per_player", 1, 50, "the Unity bucket tips when it holds this many Sway per player"),
     ParamSpec::int("discord_tip_per_player", 1, 50, "the Discord bucket tips when it holds this many Sway per player"),
@@ -33,6 +33,7 @@ const PARAMS: [ParamSpec; 15] = [
     ParamSpec::int("antimatter_discord", 0, 5, "the antimatter action: Sway toward Discord to produce 1 antimatter (0: no such action)"),
     ParamSpec::int("antimatter_uses", 0, 5, "times each player may take the antimatter action per round"),
     ParamSpec::list("unity_ease", 0, 50, "Unity tip counts at which the clear-board bar drops a level: ambassadors, then troops, then nodes stop counting (the first also starts the stronger Unity cards)"),
+    ParamSpec::list("unity_cards", 1, 6, "Unity cards a game deals from the printed deck, tier 1 then tier 2 (drawing the last one wins)"),
     ParamSpec::int("discord_tier2", 1, 50, "Discord tip count from which a Discord tip draws the stronger tier"),
     ParamSpec::int("presence_loss", 0, 1, "1: a player with no presence on the board loses the game for everyone"),
     ParamSpec::int("clear_win_stage", 1, 3, "the bar-0 win counts only once this round's adversary card is of this stage (1: any time)"),
@@ -89,6 +90,9 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     let v = b.list("unity_ease")?;
     if v.is_empty() || v.iter().any(|&x| x < 1) || v.windows(2).any(|p| p[0] > p[1]) {
         return Err("alignment.unity_ease: give tip counts of 1 or more, in order".into());
+    }
+    if b.list("unity_cards")?.len() != 2 {
+        return Err("alignment.unity_cards: give two counts, tier 1 and tier 2".into());
     }
     // Sway only moves between the Undecided and the buckets: with less than a
     // tip in all, nothing could ever tip (020).
@@ -294,8 +298,8 @@ pub fn pull_unity(g: &mut GameState, cx: &mut Cx, n: i64) {
 
 /// Seat `s` sacrifices one of their ambassadors (from their supply or a
 /// hex) or one of their presence tokens, their choice; with none, nothing.
-/// A last presence is never offered (027); a sacrificed presence goes to
-/// the destroyed pile.
+/// A last presence is never offered (027); a sacrificed presence goes back on
+/// its track, as a destroyed one does.
 pub fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
     let w = cx.world;
     let k = ambassador(s);
@@ -400,6 +404,11 @@ impl Alignment {
     }
 }
 
+/// Whether some seat has no presence on the board.
+fn presence_gone(g: &GameState) -> bool {
+    (0..g.seats.len()).any(|s| presence_count(g, s) == 0)
+}
+
 impl Module for Alignment {
     fn setup(&self, g: &mut GameState, cx: &mut Cx) {
         let w = cx.world;
@@ -421,6 +430,12 @@ impl Module for Alignment {
                 if side == Side::Discord && tier == 1 && adversary::level(&w, 4) {
                     let cut = w.int("adversary.discord_removed") as usize;
                     ids.truncate(ids.len().saturating_sub(cut));
+                }
+                // 028: the game deals a few of the printed Unity cards, so the
+                // last one can be drawn.
+                if side == Side::Unity {
+                    let dealt = w.list("alignment.unity_cards");
+                    ids.truncate(dealt[tier as usize - 1] as usize);
                 }
                 cx.set_pile(g, &deck(side, tier), ids);
             }
@@ -488,6 +503,11 @@ impl Module for Alignment {
                     self.tip(g, cx, side)?;
                     if g.is_over() {
                         return Ok(());
+                    }
+                    // 028: a card that takes a last presence loses here, before
+                    // a Unity tip can win a game with no player on the board.
+                    if w.int("alignment.presence_loss") > 0 && presence_gone(g) {
+                        break;
                     }
                     continue 'tips;
                 }

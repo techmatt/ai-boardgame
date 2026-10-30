@@ -80,7 +80,7 @@ pub const RULE_HARMS: [(&str, &str, &str); 16] = [
 /// The harms one op does.
 fn op_harms(op: &Op) -> Vec<&'static str> {
     match op {
-        Op::DestroyPresence | Op::LosePresenceOr { .. } => vec![HARMS[0]],
+        Op::DestroyPresence | Op::EachDestroyPresence { .. } | Op::LosePresenceOr { .. } => vec![HARMS[0]],
         Op::Sacrifice => vec![HARMS[0], HARMS[4]],
         Op::PlayersLose { resource: Resource::Credits, .. } => vec![HARMS[1]],
         Op::Requisition { .. } | Op::DiscardMostExpensive => vec![HARMS[2]],
@@ -220,7 +220,7 @@ fn harms_md() -> String {
          `board.ambassador_discord` are 0, so neither war nor an ambassador on a clean city sways).\n\n{}\n\
          **Checks** (`aic-sim docs --check`, and a fast test): every harm in at least 2 kinds of \
          source; each threat tier at least 5 kinds of harm; no kind of source more than about half \
-         of the printed presence destruction. Measured shares are in the 027 screen.\n\n\
+         of the printed presence destruction. Measured shares are in the 028 screen.\n\n\
          ## The board's rules\n\n{notes}",
         table(&head, rows)
     )

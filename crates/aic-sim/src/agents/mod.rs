@@ -35,7 +35,11 @@
 //!   and rollouts did worse. Built (008) to find out whether a building
 //!   engine can beat greedy's no-building play.
 //!
-//! `greedy` and `engine` keep by plan: [`policy::Policy`] wraps them, decides
+//! - `planner` (028): the engine, trying a shortlist of alternatives in the
+//!   action phase by rolling each out `horizon` rounds with the engine as
+//!   the policy, on full information ([`planner`]).
+//!
+//! `greedy`, `engine` and `planner` keep by plan: [`policy::Policy`] wraps them, decides
 //! their keeps, and applies the dominance checks' forced behaviours.
 //!
 //! An agent is named by a spec, `kind[:key=value,...]`: `greedy`,
@@ -44,6 +48,7 @@
 
 pub mod determinize;
 pub mod eval;
+pub mod planner;
 pub mod policy;
 pub mod search;
 
@@ -72,16 +77,6 @@ pub(crate) fn credit_equivalent(d: &CardDef, credits: i64) -> i64 {
         + d.chips
         + INSIGHT_COST * d.insight
         + LOWERED_COST * d.lowers.iter().map(|(_, n)| n).sum::<i64>()
-}
-
-/// The order agents sort card ids in, for tie-breaks and before a guess: the
-/// ids' own, with Chip Spot Market in the place of its id until 026,
-/// `hardware_spot_market`. The new word would sort it elsewhere, and every
-/// guess of a deck and every keep tie with it, so a rename would change play.
-/// Goes at the next `RULES_REVISION` bump, when play may change anyway.
-pub(crate) fn id_order(a: &str, b: &str) -> std::cmp::Ordering {
-    let place = |id| if id == "chip_spot_market" { "hardware_spot_market" } else { id };
-    place(a).cmp(place(b))
 }
 
 /// Uniform over legal actions. Seeded per game, so results do not depend on
@@ -136,6 +131,8 @@ macro_rules! with_policy_params {
             ("plan_credit", 3.0, "what a credit paid for a keep costs the keep plan"),
             ("keep_all", 0.0, "dominance check: keep every drafted card"),
             ("keep_k", 0.0, "dominance check: keep only the k cheapest drafted cards (0: off)"),
+            ("keep_none", 0.0, "sanity check (028): keep no drafted card"),
+            ("keep_random", 0.0, "sanity check (028): keep each drafted card on a coin toss"),
             ("tier1_only", 0.0, "dominance check: never draft from tier 2"),
             ("tier2_rush", 0.0, "dominance check: draft from tier 2 whenever the keep is affordable"),
             ("no_powers", 0.0, "dominance check: never use an AI-board power"),
@@ -147,6 +144,7 @@ macro_rules! with_policy_params {
             ("ignore_threats", 0.0, "exploit check (027): no counters, no card that counters a threat"),
             ("turtle", 0.0, "exploit check (027): no presence beyond setup; only remove, ambassador and hardening actions"),
             ("free_only", 0.0, "exploit check (027): only Diplomacy cards and the ambassador, move and remove actions"),
+            ("unity_farm", 0.0, "exploit check (028): before anything else, buy ambassadors and land them on bases and factories"),
         ]
     };
 }
@@ -233,6 +231,18 @@ pub const LADDER: &[(&str, &[Param])] = &[
             ),
         ],
     ),
+    (
+        "planner",
+        with_policy_params![
+            ("horizon", 2.0, "rounds a rollout runs past the current one's start"),
+            ("alts", 2.0, "alternatives rolled out per decision"),
+            ("budget", 8.0, "alternatives rolled out per round"),
+            ("margin", 40.0, "only actions within this of the engine's best score are tried"),
+            ("choices", 2.0, "levels of an action's own choices resolved before scoring"),
+            ("samples", 1.0, "guesses of the hidden cards averaged per decision"),
+            ("prune", 6.0, "actions each seat keeps through a phase of a rollout (0: all)"),
+        ],
+    ),
 ];
 
 impl AgentSpec {
@@ -267,7 +277,8 @@ impl AgentSpec {
                 // Played as at least 1: say so rather than label a cell "0" (020).
                 // (`engine`'s width and candidates 0 mean "no beam" and "no rollouts",
                 // so those two only for beam and rollout.)
-                let at_least_one = ["samples", "depth", "rollouts"].contains(&k)
+                let at_least_one = (k == "horizon" && kind == "planner")
+                    || ["samples", "depth", "rollouts"].contains(&k)
                     || (k == "width" && (kind == "beam" || kind == "rollout"))
                     || (k == "candidates" && kind == "rollout");
                 if v < 1.0 && at_least_one {
@@ -355,6 +366,8 @@ impl AgentSpec {
             "random" => true,
             "greedy" => self.p("samples") <= 1 && self.p("depth") <= 1,
             "engine" => self.p("width") == 0 && self.p("samples") <= 1,
+            // 028: built to be run on screens, whatever the rules' stage.
+            "planner" => true,
             _ => false,
         }
     }
@@ -364,7 +377,7 @@ impl AgentSpec {
     }
 
     fn weights(&self) -> eval::Weights {
-        let mut w = if self.kind == "engine" {
+        let mut w = if self.kind == "engine" || self.kind == "planner" {
             eval::Weights::engine()
         } else {
             eval::Weights::default()
@@ -385,6 +398,8 @@ impl AgentSpec {
         policy::Forced {
             keep_all: on("keep_all"),
             keep_k: num("keep_k") as usize,
+            keep_none: on("keep_none"),
+            keep_random: on("keep_random"),
             tier1_only: on("tier1_only"),
             tier2_rush: on("tier2_rush"),
             no_powers: on("no_powers"),
@@ -396,6 +411,7 @@ impl AgentSpec {
             ignore_threats: on("ignore_threats"),
             turtle: on("turtle"),
             free_only: on("free_only"),
+            unity_farm: on("unity_farm"),
             plan_keep: on("plan_keep"),
             plan_rounds: num("plan_rounds") as usize,
             plan_reserve: num("plan_reserve") as i64,
@@ -470,6 +486,21 @@ impl AgentSpec {
                     horizon: self.p("horizon"),
                 }),
             )),
+            "planner" => Box::new(planner::Planner::new(
+                rules,
+                self.weights(),
+                self.forced(),
+                rng,
+                planner::PlannerCfg {
+                    horizon: self.p("horizon").max(1) as u32,
+                    alts: self.p("alts"),
+                    budget: self.p("budget"),
+                    margin: self.params["margin"],
+                    choices: self.p("choices"),
+                    samples: self.p("samples").max(1),
+                    prune: self.p("prune"),
+                },
+            )),
             k => unreachable!("agent kind {k} is checked in parse"),
         }
     }
@@ -502,6 +533,7 @@ mod tests {
     const ROLLOUT: &str = "rollout:width=2,candidates=2,rollouts=1,horizon=1";
     // The engine's beam is beam's code with another heuristic.
     const ENGINE: &str = "engine";
+    const PLANNER: &str = "planner:budget=2";
 
     /// The agent plays seed 3 at difficulty 0 for up to `max_actions`; the
     /// game replays from seed + actions, and the same agent on the same seed
@@ -523,21 +555,11 @@ mod tests {
         assert_eq!(rec.actions, again.actions, "{}", spec.label());
     }
 
-    /// What keeps the rename out of play: sorted, a chip card sits under its
-    /// old word, not its new one.
-    #[test]
-    fn card_ids_sort_with_chip_spot_market_at_its_old_place() {
-        use std::cmp::Ordering::Less;
-        assert_eq!(id_order("cyber_range", "chip_spot_market"), Less);
-        assert_eq!(id_order("chip_spot_market", "hyperscale_botnet"), Less);
-        assert_eq!(id_order("alpha", "beta"), Less);
-    }
-
     /// Fast lane: the first 30 actions, which take every agent into round 2
     /// (about 1 s; whole games are 200–300 actions).
     #[test]
     fn agents_replay_and_repeat_opening() {
-        for spec in [GREEDY, BEAM, ROLLOUT, ENGINE] {
+        for spec in [GREEDY, BEAM, ROLLOUT, ENGINE, PLANNER] {
             replay_and_repeat(spec, 30, false);
         }
     }
@@ -557,6 +579,10 @@ mod tests {
             "engine:ignore_threats=1",
             "engine:turtle=1",
             "engine:free_only=1",
+            "engine:unity_farm=1",
+            "engine:keep_none=1",
+            "engine:keep_random=1",
+            "planner:budget=2,never_tag=2",
         ] {
             assert_eq!(AgentSpec::parse(spec).unwrap().label(), spec);
             replay_and_repeat(spec, 60, false);
@@ -590,6 +616,12 @@ mod tests {
     #[ignore = "slow lane: a whole search-agent game"]
     fn engine_replays_and_repeats() {
         replay_and_repeat(ENGINE, 3000, true);
+    }
+
+    #[test]
+    #[ignore = "slow lane: a whole search-agent game"]
+    fn planner_replays_and_repeats() {
+        replay_and_repeat(PLANNER, 3000, true);
     }
 
     /// An agent's decision is the same on two tables that differ only in
@@ -651,7 +683,7 @@ mod tests {
         assert!(AgentSpec::parse("engine:width=4,candidates=2,rollouts=3").is_ok());
     }
 
-    /// The deck clock (011; 013 on Unity; 014 on the outright Unity win):
+    /// The deck clock (011; 013 on Unity; 028 on the Unity deck's last card):
     /// `w.clock` per round the team, at its Unity rate so far, would still
     /// be short of its Unity target when the deck runs out; nothing while it
     /// is on course.
@@ -664,15 +696,16 @@ mod tests {
             w.clock = clock;
             eval::Eval::new(&r, w).value(&r, g)
         };
-        // Round 4, one Unity tip (4 Sway: 1 a round), 4 tips (16 Sway) for
-        // the last bar drop: 12 rounds needed. Two cards left (the face-up
-        // one and one in the deck): 2 action phases after this one. 10 short.
+        // Round 4, one Unity tip (4 Sway: 1 a round), 6 tips (24 Sway) for the
+        // Unity deck's last card: 20 rounds needed. Two cards left (the
+        // face-up one and one in the deck): 2 action phases after this one.
+        // 18 short.
         g.round = 4;
         g.vars.insert("alignment.unity_tips".into(), 1);
         assert_eq!(g.pile("adversary.next").len(), 1);
         let deck = g.pile("adversary.deck").to_vec();
         g.piles.insert("adversary.deck".into(), deck[..1].to_vec());
-        assert!((value(0.0, &g) - value(2.0, &g) - 2.0 * 10.0).abs() < 1e-9);
+        assert!((value(0.0, &g) - value(2.0, &g) - 2.0 * 18.0).abs() < 1e-9);
         // On course (4 tips by round 4): no cost.
         g.vars.insert("alignment.unity_tips".into(), 4);
         assert_eq!(value(0.0, &g), value(2.0, &g));

@@ -338,3 +338,35 @@ fn twists_before_the_build_step_are_the_face_up_cards() {
     g.phase = 2;
     assert!(!reach(&g), "after the build step, this round's card");
 }
+
+/// 028: an aligned city collects spreading ambassadors as a clean one does,
+/// and no node forms on it.
+#[test]
+fn an_aligned_city_collects_ambassadors_and_never_forms_a_node() {
+    use crate::modules::common::{cube, NODE};
+    let (rules, mut g) = lab(&["adversary.spread"]);
+    let m = &rules.map;
+    let city = m.numbered(0, piece(0).corrupted[0]);
+    let target = cities(m)
+        .into_iter()
+        .find(|&h| m.adjacent(h, city))
+        .expect("a city next to it");
+    let far = cities(m)
+        .into_iter()
+        .find(|&h| m.distance(h, city) > 2)
+        .unwrap();
+    corrupt_cities_except(m, &mut g, &[far, target]);
+    put(&mut g, target, ADV_CUBE, 0);
+    put(&mut g, target, cube(0), 1);
+    put(&mut g, city, ADV_AMBASSADOR, 2);
+    put(&mut g, target, ADV_AMBASSADOR, 1);
+    for h in 0..m.hexes.len() {
+        if h != city && h != target && m.distance(h, city) <= 2 && (kind(m, h) == HexKind::City || kind(m, h) == HexKind::Base) {
+            put(&mut g, h, ADV_AMBASSADOR, 1);
+            put(&mut g, h, NODE, 1);
+        }
+    }
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!((g.tokens(target, NODE), g.tokens(target, ADV_AMBASSADOR)), (0, 2));
+}

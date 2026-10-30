@@ -320,6 +320,9 @@ pub enum Op {
     /// with the most adversary ambassadors and troops; ties: the first in
     /// board order) is destroyed, unless absorbed (027).
     DestroyPresence,
+    /// Each player in scope destroys `count` of their presence in scope, their
+    /// choice, unless absorbed; a last presence is safe in stage I (028).
+    EachDestroyPresence { count: i64 },
     /// Each player in scope loses a presence in scope, or pays `amount`
     /// `resource` (their choice). Losing it needs 2 or more presence on the
     /// board, so this never takes a last presence (027).
@@ -534,6 +537,7 @@ impl Op {
             | Op::CorruptCity
             | Op::PlayersLose { .. }
             | Op::DestroyPresence
+            | Op::EachDestroyPresence { .. }
             | Op::PullUnity { .. }
             | Op::LoseInsight { .. }
             | Op::AdversaryBuild => &[Threat, Team],

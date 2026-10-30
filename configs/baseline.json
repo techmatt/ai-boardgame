@@ -27,7 +27,7 @@
         "base_discord": 1,
         "base_unity": 2,
         "factory_unity": 1,
-        "hold_base": 2,
+        "hold_base": 3,
         "last_safe_stage": 2,
         "hold_min": 2,
         "free_leaves": 1,
@@ -35,7 +35,7 @@
         "troop_spent": 1,
         "troop_steps": 2,
         "troop_presence": 4,
-        "presence_returns": 1,
+        "presence_returns": 2,
         "presence_energy": 1,
         "build_energy": 2,
         "station_chips": 2,
@@ -114,6 +114,10 @@
         "adversary_discord": 0,
         "antimatter_discord": 1,
         "antimatter_uses": 1,
+        "unity_cards": [
+          3,
+          3
+        ],
         "unity_ease": [
           2,
           2,

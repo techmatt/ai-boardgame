@@ -1,0 +1,29 @@
+{
+  "name": "screen-028-draft",
+  "note": "028 sanity check: drafting improves the agent's win chance (engine against keeping nothing and keeping at random), d2, 32 seeds (--quick --games 32).",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    2
+  ],
+  "agents": [
+    "engine",
+    "engine:keep_none=1",
+    "engine:keep_random=1"
+  ],
+  "games": 32,
+  "records": 0
+}

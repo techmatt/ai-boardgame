@@ -49,7 +49,7 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("troop_spent", 0, 1, "1: an adversary troop that strikes a target is used up"),
             ParamSpec::int("troop_steps", 0, 5, "steps each adversary troop takes in the march: destroy a target on or next to it, else move 1 hex toward the nearest"),
             ParamSpec::int("troop_presence", 0, 4, "adversary troops strike presence from this stage of adversary card on (0: always, 4: never)"),
-            ParamSpec::int("presence_returns", 0, 1, "1: a destroyed presence goes to its owner's destroyed pile, placed before the track"),
+            ParamSpec::int("presence_returns", 0, 2, "2: a destroyed presence goes back on its owner's track, covering a space; 1: to a destroyed pile, placed before the track; 0: out of the game"),
             ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence"),
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_chips", 0, 20, "standard action: chips to build a research station"),
@@ -644,9 +644,22 @@ pub fn last_presence_safe(w: &World, g: &GameState, s: usize) -> bool {
     g.var(adversary::STAGE) < w.int("board.last_safe_stage") && presence_count(g, s) <= 1
 }
 
+/// A presence goes back on seat `s`'s tracks (028): it covers the furthest
+/// uncovered space, the first track's on a tie. The first track's first space
+/// stays uncovered (its token starts on the board).
+fn return_to_track(g: &mut GameState, cx: &mut Cx, s: usize) {
+    let (t1, t2) = (track_taken(g, s), track2_taken(g, s));
+    if t2 > t1 || (t1 <= 1 && t2 > 0) {
+        cx.add_key(g, track2_key(s), -1);
+    } else if t1 > 1 {
+        cx.add_key(g, track_key(s), -1);
+    }
+}
+
 /// Seat `s` loses its presence on hex `h`, unless it is safe as their last.
-/// It goes to the destroyed pile (the resource `PresenceReserve`); its track
-/// space stays uncovered. The tally names `source`. Returns whether it went.
+/// By `presence_returns` it goes back on the track, covering the space again
+/// (028), to the destroyed pile (the resource `PresenceReserve`), or out of
+/// the game. The tally names `source`. Returns whether it went.
 pub fn lose_presence(g: &mut GameState, cx: &mut Cx, h: usize, s: usize, source: &str) -> bool {
     let w = cx.world;
     if last_presence_safe(&w, g, s) {
@@ -654,8 +667,10 @@ pub fn lose_presence(g: &mut GameState, cx: &mut Cx, h: usize, s: usize, source:
         return false;
     }
     cx.add_tokens(g, h, &presence(s), -1);
-    if w.int("board.presence_returns") > 0 {
-        cx.add_resource(g, s, Resource::PresenceReserve, 1);
+    match w.int("board.presence_returns") {
+        2 => return_to_track(g, cx, s),
+        1 => cx.add_resource(g, s, Resource::PresenceReserve, 1),
+        _ => {}
     }
     cx.tally(g, "board.presence_lost", 1);
     cx.tally(g, &format!("board.presence_lost.{source}"), 1);
@@ -736,6 +751,33 @@ pub fn destroy_building(
     true
 }
 
+/// Seat `s` destroys one of its presence in `hexes`, its choice (028): a hit
+/// on the player, not a hex. Absorbed as any destruction is, so a player may
+/// pick a token it has shielded. Safe as a last presence in stage I.
+pub fn destroy_own_presence(
+    g: &mut GameState,
+    cx: &mut Cx,
+    s: usize,
+    hexes: &[usize],
+    cause: Cause,
+) -> Res {
+    let w = cx.world;
+    let mine: Vec<usize> = hexes.iter().copied().filter(|&h| g.tokens(h, presence(s)) > 0).collect();
+    if mine.is_empty() {
+        return Ok(());
+    }
+    if last_presence_safe(&w, g, s) {
+        cx.tally(g, "board.last_presence_safe", 1);
+        return Ok(());
+    }
+    let opts = mine.iter().map(|&h| hex_opt(&w, h)).collect();
+    let prompt = format!("Seat {s}: destroy which of your presence?");
+    if let Some(i) = cx.choose(s, &prompt, opts)? {
+        destroy_building(g, cx, mine[i], presence(s), cause);
+    }
+    Ok(())
+}
+
 /// Uses a seat's `CivicShelter` passive (Aegis Dome Array) for a building
 /// destruction in `country`, if one applies.
 fn civic_shelter(g: &mut GameState, cx: &mut Cx, country: usize) -> bool {
@@ -811,7 +853,8 @@ fn produce_units(g: &mut GameState, cx: &mut Cx) -> Res {
             continue;
         }
         if g.tokens(h, ADV_AMBASSADOR) > 0 || corrupted(g, h) {
-            if !corrupted(g, h) {
+            // 028: an adversary-owned factory uses its ambassador up too.
+            if g.tokens(h, ADV_AMBASSADOR) > 0 {
                 adversary::remove(g, cx, h, 1);
             } else if let Some(s) = player_ambassador(g, h) {
                 // 022 (D1): a player ambassador on an adversary-owned factory
@@ -1053,7 +1096,7 @@ fn troop_targets_on(w: &World, g: &GameState, h: usize) -> Vec<String> {
     }
     if g.var(adversary::STAGE) >= w.int("board.troop_presence") {
         if let Some(s) = presence_owner(g, h) {
-            out.push(presence(s));
+            out.push(presence(s).to_string());
         }
     }
     out
@@ -1639,7 +1682,7 @@ impl Module for Board {
                 "presence left on track 1",
                 left as i64,
                 None,
-                "presence tokens still on your AI board's first track (the second shows on the board; your destroyed pile is separate)",
+                "presence tokens still on your AI board's first track (the second shows on the board)",
             );
         }
     }

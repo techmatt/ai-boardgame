@@ -88,7 +88,7 @@ export function statusHtml(v: View): string {
     parts.push(`<div class="alignment">
       <span class="alabel">Alignment</span>
       <span class="tug">${bucketBar(unity, 'unity', 'Unity')}${undHtml}${bucketBar(discord, 'discord', 'Discord')}</span>
-      ${tipsChip(findValue(g, 'alignment.unity_tips'), 'unity', 'Unity')}${tipsChip(findValue(g, 'alignment.discord_tips'), 'discord', 'Discord')}${winAt}
+      ${tipsChip(findValue(g, 'alignment.unity_tips'), 'unity', 'Unity')}${tipsChip(findValue(g, 'alignment.discord_tips'), 'discord', 'Discord')}
       ${bar ? `<span class="level" data-value="${esc(bar.key)}" data-scope="global">bar <b>${level}</b>/${max}</span><span class="win">${esc(bar.doc ?? '')}</span>` : ''}
     </div>`);
     const groups = ([['alignment.resolved.unity', 'unity'], ['alignment.resolved.discord', 'discord']] as const)

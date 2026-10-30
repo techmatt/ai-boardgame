@@ -54,9 +54,10 @@ pub struct Weights {
     /// times (ambassadors / the next corrupt threshold)², capped at 1.
     pub pressure: f64,
     /// Each adversary ambassador on a player piece, base or factory (it
-    /// diverts the piece's production toward Discord).
+    /// diverts the piece's production).
     pub on_piece: f64,
-    /// Extra per adversary ambassador on a factory (it builds a troop).
+    /// Extra per factory holding any adversary ambassador, however many (it
+    /// makes one troop a production step).
     pub on_factory: f64,
     /// Each adversary troop (it destroys a building every round).
     pub troop: f64,
@@ -66,6 +67,8 @@ pub struct Weights {
     /// Each adversary piece that keeps the current clear-board bar from
     /// being met (the win condition).
     pub blocker: f64,
+    /// Per Unity card short of 3 left in the deck (028: drawing the last wins).
+    pub unity_deck: f64,
     /// Each Unity tip made; Sway in the Unity bucket counts as its share of
     /// the next tip (so a tip about to happen is worth nearly a tip).
     pub unity_tip: f64,
@@ -207,6 +210,7 @@ impl Default for Weights {
             on_factory: 6.0,
             troop: 12.0,
             discord_danger: 40.0,
+            unity_deck: 40.0,
             blocker: 2.0,
             // 013: a Unity tip replaces about 4 opposition points (24) and
             // brings a card; a Discord tip brings one of the adversary's.
@@ -322,7 +326,7 @@ pub struct Eval {
     pub w: Weights,
     card_value: BTreeMap<String, f64>,
     seats: usize,
-    /// Unity tip count the team aims for: the last bar drop.
+    /// Unity tip count the team aims for: the deck's last card.
     target_tips: i64,
     corrupt_at: i64,
     city_energy: i64,
@@ -339,11 +343,8 @@ impl Eval {
             .map(|c| (c.id.clone(), credit_equivalent(c, c.cost).max(0) as f64))
             .collect();
         let seats = rules.config.countries as usize;
-        let target_tips = world
-            .list("alignment.unity_ease")
-            .last()
-            .copied()
-            .unwrap_or(1);
+        // 028: the Unity deck's last card wins, and it comes before the last bar drop.
+        let target_tips = world.list("alignment.unity_cards").iter().sum();
         Eval {
             w,
             card_value,
@@ -407,6 +408,25 @@ impl Eval {
         }
     }
 
+    /// Each seat's reach as a bit per hex (a board has at most 4 × 16 hexes),
+    /// worked out once a position: `in_reach` per hex was a tenth of the
+    /// search's time (028).
+    fn reach_masks(&self, rules: &Rules, g: &GameState) -> [u64; 4] {
+        let world = rules.world();
+        let mut near = [0u64; 4];
+        for (h, hex) in world.map.hexes.iter().enumerate() {
+            for (s, mask) in near.iter_mut().enumerate().take(g.seats.len()) {
+                if g.tokens(h, common::presence(s)) > 0 {
+                    *mask |= 1 << h;
+                    for &n in &hex.neighbours {
+                        *mask |= 1 << n;
+                    }
+                }
+            }
+        }
+        near
+    }
+
     /// The value of `g`. Finished games score `±win` plus a margin bonus.
     pub fn value(&self, rules: &Rules, g: &GameState) -> f64 {
         let w = &self.w;
@@ -422,6 +442,7 @@ impl Eval {
         let mut v = 0.0;
         let mut corrupted = 0i64;
         let mut reach = 0i64;
+        let near = self.reach_masks(rules, g);
         for h in 0..g.hexes.len() {
             let city = common::is_city(&world, h);
             let adv = g.tokens(h, ADV_AMBASSADOR);
@@ -431,7 +452,7 @@ impl Eval {
                     corrupted += 1;
                     let on = board::ambassadors_on(g, h) as f64;
                     let held: i64 = (0..g.seats.len())
-                        .filter(|&s| common::in_reach(&world, g, s, h))
+                        .filter(|&s| near[s] >> h & 1 != 0)
                         .map(|s| g.resource(s, Resource::Ambassadors))
                         .sum();
                     let need = board::hold(&world, g, h).max(1) as f64;
@@ -447,8 +468,8 @@ impl Eval {
                     v += w.corrupted * w.freeing * share;
                     v += (w.ambassador - w.ambassador_board) * on;
                     let around = world.map.hexes[h].neighbours.iter();
-                    let near: i64 = around.map(|&n| g.tokens(n, ADV_AMBASSADOR)).sum();
-                    v -= w.guard * near as f64;
+                    let guards: i64 = around.map(|&n| g.tokens(n, ADV_AMBASSADOR)).sum();
+                    v -= w.guard * guards as f64;
                 } else {
                     if common::cube_owner(g, h).is_some() {
                         v += w.aligned;
@@ -494,7 +515,7 @@ impl Eval {
                 v += w.ambassador_board * g.tokens(h, &common::ambassador(s)) as f64;
             }
             let counts = city || common::is_base(&world, h) || g.tokens(h, STATION) > 0;
-            if counts && (0..self.seats).any(|s| common::in_reach(&world, g, s, h)) {
+            if counts && (0..self.seats).any(|s| near[s] >> h & 1 != 0) {
                 reach += 1;
             }
         }
@@ -511,6 +532,7 @@ impl Eval {
         // The Discord deck: the tip that finds it empty loses.
         let discord_left = alignment::cards_left(g, Side::Discord) as i64;
         v -= w.discord_danger * (3 - discord_left).max(0) as f64;
+        v += w.unity_deck * (3 - alignment::cards_left(g, Side::Unity) as i64).max(0) as f64;
         // Megaprojects: each player cube pays when the project completes.
         for c in 0..world.map.countries.len() {
             if g.var(&board::project_done(c)) > 0 {

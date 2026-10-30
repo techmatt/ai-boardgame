@@ -438,7 +438,7 @@
   "id": "siege",
   "name": "Siege",
   "tier": 2,
-  "text": "2 adversary troops land on factories here (players choose; with no factory, on cities), each destroying any presence on its hex, and each player here loses an ambassador (from supply, else from the board); the adversary gains 3 compute.",
+  "text": "2 adversary troops land on factories here (players choose; with no factory, on cities), and each player here destroys a presence of theirs here and loses an ambassador (from supply, else from the board); the adversary gains 3 compute.",
   "counter": [
    [
     "credits",
@@ -448,11 +448,14 @@
   "effects": [
    {
     "op": "troops",
-    "count": 2,
-    "destroy": true
+    "count": 2
    },
    {
     "op": "lose_ambassador"
+   },
+   {
+    "op": "each_destroy_presence",
+    "count": 1
    },
    {
     "op": "compute",
@@ -464,7 +467,7 @@
   "id": "manhunt",
   "name": "Manhunt",
   "tier": 2,
-  "text": "Destroy all presence on the most threatened hex here (the presence hex with the most adversary ambassadors and troops).",
+  "text": "Each player here destroys a presence of theirs here.",
   "counter": [
    [
     "credits",
@@ -473,7 +476,8 @@
   ],
   "effects": [
    {
-    "op": "destroy_presence"
+    "op": "each_destroy_presence",
+    "count": 1
    }
   ]
  }
