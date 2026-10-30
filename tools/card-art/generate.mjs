@@ -1,8 +1,9 @@
-// `npm run gen -- <direction>-<seed>… [--pool=N] [--raw=<tag>]`: draw program tier-1 frames.
+// `npm run gen -- <direction>-<kind>-<seed>… [--pool=N]`: draw tier-1 frames.
 // The image tool has no seed parameter: a "seed" is an independent draw, keyed 1, 2, …
-// A redraw of `steel-1` replaces it; the earlier original stays as steel-1.try<n>.png.
-// Originals and log.jsonl go to the originals folder (lib.mjs). Print-size PNGs go
-// next to them in frames/; a web-size JPEG, the committed template, to art/frames/r1/.
+// A redraw of `steel-program-1` replaces it; the earlier original stays as
+// steel-program-1.try<n>.png. Originals and log.jsonl go to the originals folder
+// (lib.mjs). Print-size PNGs go next to them in frames/; a web-size JPEG, the committed
+// template, to art/frames/r2/.
 // Stops at the first usage-limit message.
 import { appendFile, copyFile, mkdir, readFile, readdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -18,20 +19,19 @@ const ids = argv.filter((a) => !a.startsWith('--'));
 const p = await readJson(path.join(TOOL, 'prompts.json'));
 const l = await layout();
 const [W, H] = l.print_px;
-const guide = path.join(ART, 'guides', 'program-t1-blocks.png');
-const origDir = path.join(ORIGINALS, 'card-frames-r1');
-const printDir = path.join(ORIGINALS, 'card-frames-r1', 'frames');
-const webDir = path.join(ART, 'frames', 'r1');
+const origDir = path.join(ORIGINALS, 'card-frames-r2');
+const printDir = path.join(ORIGINALS, 'card-frames-r2', 'frames');
+const webDir = path.join(ART, 'frames', 'r2');
 await mkdir(printDir, { recursive: true });
 await mkdir(webDir, { recursive: true });
 
-export const framePrompt = (dir) =>
+export const framePrompt = (dir, kind) =>
   [
     'Use your built-in image_gen tool ($imagegen) exactly once to generate the image below.',
     'Do not read any files, run any commands, or try to save the image anywhere: just generate it, then stop.',
     'Image shape: portrait, width to height 69:94, the attached guide\'s shape.',
     '',
-    p.frame + p.directions[dir].style,
+    p.frame.replace('{top}', kind === 'building' ? p.top : '').replace('{kind}', p.kinds[kind].colour) + p.directions[dir].style,
   ].join('\n');
 
 /** Crop centred to the bleed's shape, then scale: the kept original is untouched. */
@@ -48,13 +48,15 @@ async function cut(src, id) {
 
 let stop = false;
 async function one(id) {
-  const dir = id.split('-')[0];
+  const [dir, kind] = id.split('-');
   if (!p.directions[dir]) throw new Error(`no direction ${dir}`);
-  let run = await runCodex(framePrompt(dir), guide);
+  if (!p.kinds[kind]) throw new Error(`no kind ${kind}`);
+  const guide = path.join(ART, 'guides', `${kind}-t1-blocks.png`);
+  let run = await runCodex(framePrompt(dir, kind), guide);
   let ref = !!run.image;
   if (!run.image && !run.limit) {
     console.error(`gen: ${id}: no image with the guide (${run.message ?? '?'}); retrying with text alone`);
-    run = await runCodex(framePrompt(dir));
+    run = await runCodex(framePrompt(dir, kind));
     ref = false;
   }
   await appendFile(path.join(origDir, 'log.jsonl'), `${JSON.stringify({ id, at: new Date().toISOString(), ref, seconds: run.seconds, thread: run.thread, limit: run.limit, usage: run.usage, message: run.image ? undefined : run.message })}\n`);

@@ -1,5 +1,5 @@
 {
-  "_note": "Card geometry in mm from the bleed's top-left corner. The one source for guides, frame prompts and the card renderer. Candidate layout: close guides, not exact.",
+  "_note": "Card geometry in mm from the bleed's top-left corner. The one source for guides, frame prompts and the card renderer. Candidate layout: close guides, not exact. Painted: frame, strip, cost octagon, banner, art, top, effect. Drawn by the renderer, never painted: insight, requirement, tags.",
   "bleed_mm": [69, 94],
   "trim_mm": [63, 88],
   "safe": { "x0": 6, "y0": 6, "x1": 63, "y1": 88 },
@@ -8,20 +8,19 @@
     "frame": [3.9, 3.9, 65.1, 90.3],
     "strip": [4.9, 4.9, 64.1, 16.0],
     "cost": [6.0, 5.6, 15.4, 15.1],
-    "insight": [16.5, 7.5, 23.5, 13.1],
-    "requirement": [24.5, 7.5, 37.5, 13.1],
-    "tags": [37.8, 6.3, 63.0, 14.4],
-    "banner": [4.9, 16.0, 64.1, 24.3],
-    "number": [55.5, 85.8, 64.1, 89.3]
+    "insight": [12.0, 7.5, 25.8, 13.1],
+    "requirement": [26.3, 7.5, 40.1, 13.1],
+    "tags": [40.6, 7.0, 63.0, 13.8],
+    "banner": [4.9, 16.0, 64.1, 24.3]
   },
   "kinds": {
-    "program": { "art": [4.9, 24.3, 64.1, 61.4], "effect": [4.9, 61.4, 64.1, 85.8] },
-    "event": { "art": [4.9, 24.3, 64.1, 61.4], "effect": [4.9, 61.4, 64.1, 85.8] },
+    "program": { "art": [4.9, 24.3, 64.1, 62.4], "effect": [4.9, 62.4, 64.1, 87.8] },
+    "event": { "art": [4.9, 24.3, 64.1, 62.4], "effect": [4.9, 62.4, 64.1, 87.8] },
     "building": {
       "top": [4.9, 24.3, 64.1, 41.8],
-      "art": [4.9, 41.8, 64.1, 70.5],
-      "effect": [4.9, 70.5, 64.1, 85.8]
+      "art": [4.9, 41.8, 64.1, 72.5],
+      "effect": [4.9, 72.5, 64.1, 87.8]
     }
   },
-  "kind_colour": { "program": "#1f5a3a", "building": "#d9731a", "event": "#10182e" }
+  "kind_colour": { "program": "#0e7a3e", "building": "#f27a12", "event": "#0c1a52" }
 }

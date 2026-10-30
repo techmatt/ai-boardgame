@@ -1,7 +1,8 @@
-// `npm run render -- [ids…]`: compose the sample card over each frame in art/frames/r1/
-// (all of them, or the named ids) into out/cards/<id>.png at 300 dpi. Composed cards are
-// build outputs, never committed. Fails if a font fell back or anything printed leaves
-// the safe zone. `--pdf` also writes out/cards/<id>.pdf at true size.
+// `npm run render -- [ids…]`: compose the kind's sample card over each frame in
+// art/frames/r2/ (all of them, or the named ids) into out/cards/<id>.png at 300 dpi.
+// Composed cards are build outputs, never committed. Fails if a font fell back, anything
+// printed leaves the safe zone or the requirement plate reaches the tags. `--pdf` also
+// writes out/cards/<id>.pdf at true size.
 import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -13,10 +14,12 @@ import { renderCard } from '../../web/card/card.js';
 const argv = process.argv.slice(2);
 const pdf = argv.includes('--pdf');
 const named = argv.filter((a) => !a.startsWith('--'));
-const framesDir = path.join(ART, 'frames', 'r1');
+const framesDir = path.join(ART, 'frames', 'r2');
 const ids = named.length ? named : (await readdir(framesDir)).filter((f) => f.endsWith('.jpg')).map((f) => f.slice(0, -4));
 const l = await layout();
-const card = await readJson(path.join(CARD, 'sample', 'sentiment_mining.json'));
+const SAMPLE = { program: 'sentiment_mining', building: 'orbital_embassy', event: 'killswitch_directive' };
+const samples = {};
+for (const [kind, name] of Object.entries(SAMPLE)) samples[kind] = await readJson(path.join(CARD, 'sample', `${name}.json`));
 const fitFile = path.join(framesDir, 'fit.json');
 const fits = existsSync(fitFile) ? await readJson(fitFile) : {};
 await mkdir(OUT, { recursive: true });
@@ -36,7 +39,7 @@ for (const id of ids) {
   const frame = pathToFileURL(path.join(framesDir, `${id}.jpg`)).href;
   const css = await readFile(stub, 'utf8');
   const base = pathToFileURL(CARD + path.sep).href;
-  await p.setContent(`<!doctype html><html><head><base href="${base}"><style>body{margin:0}${css}</style></head><body>${renderCard(card, l, frame, fits[id])}</body></html>`, { waitUntil: 'load' });
+  await p.setContent(`<!doctype html><html><head><base href="${base}"><style>body{margin:0}${css}</style></head><body>${renderCard(samples[id.split('-')[1]], l, frame, fits[id])}</body></html>`, { waitUntil: 'load' });
   await p.evaluate(() => document.fonts.ready);
   const check = await p.evaluate(({ safe, mm }) => {
     const bad = [];
@@ -51,6 +54,9 @@ for (const id of ids) {
       const [x0, y0, x1, y1] = [t.left / mm, e.top / mm, t.right / mm, e.bottom / mm];
       if (x0 < safe.x0 - 0.01 || y0 < safe.y0 - 0.01 || x1 > safe.x1 + 0.01 || y1 > safe.y1 + 0.01) bad.push(`${el.className || el.textContent.slice(0, 20)} at ${[x0, y0, x1, y1].map((v) => v.toFixed(1))}`);
     }
+    const plate = document.querySelector('.requirement')?.getBoundingClientRect();
+    const tag = document.querySelector('.tag')?.getBoundingClientRect();
+    if (plate && tag && plate.right > tag.left) bad.push(`requirement reaches the tags at ${(plate.right / mm).toFixed(1)}`);
     return bad;
   }, { safe: l.safe, mm: PX_PER_MM_CSS });
   if (check.length) {

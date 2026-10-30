@@ -8,6 +8,7 @@ const svg = (body, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" ari
 const ICONS = {
   // Resource: a square tile.
   insight: () => '<rect x="2" y="2" width="20" height="20" rx="3" fill="#6d3fa8"/><circle cx="12" cy="12" r="4" fill="none" stroke="#fff" stroke-width="2"/><path d="M4 12 Q12 3 20 12 Q12 21 4 12Z" fill="none" stroke="#fff" stroke-width="2"/>',
+  credit: () => '<rect x="2" y="2" width="20" height="20" rx="3" fill="#d9a520"/><circle cx="12" cy="12" r="6.5" fill="none" stroke="#fff" stroke-width="2.2"/>',
   // Card token: a disc.
   dataset: () => '<circle cx="12" cy="12" r="10.5" fill="#1f6f9c" stroke="#0d3a54" stroke-width="1.5"/><g fill="none" stroke="#fff" stroke-width="1.8"><ellipse cx="12" cy="7.5" rx="5.5" ry="2.2"/><path d="M6.5 7.5v9c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2v-9M6.5 12c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2"/></g>',
   // "Any of your cards": a card with a dashed outline.
@@ -20,6 +21,8 @@ const ICONS = {
 
 const TAGS = {
   science: { ring: '#2c7fb8', glyph: '<path d="M9 3h6M10 3v7l-5.5 9.5c-.5 1 .2 2 1.2 2h12.6c1 0 1.7-1 1.2-2L14 10V3" fill="none" stroke="#fff" stroke-width="2"/><path d="M7.5 16h9" stroke="#fff" stroke-width="2"/>' },
+  power: { ring: '#d6a11e', glyph: '<path d="M13.5 2 6 13.5h5L9.5 22 18 10h-5.5z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>' },
+  cyber: { ring: '#3fa66b', glyph: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" stroke="#fff" stroke-width="2"/>' },
   diplomacy: { ring: '#b8862c', glyph: '<path d="M2 11l5-4 5 2 5-2 5 4-8 8z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/><path d="M8 13l4 4" stroke="#fff" stroke-width="2"/>' },
 };
 

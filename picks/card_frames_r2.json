@@ -1,0 +1,295 @@
+{
+ "name": "card_frames_r2",
+ "title": "Card frames, round 2: Lab glass and Brushed steel, in three kinds",
+ "intro": "One row per draw, by direction, then kind: the composed sample on the left, the bare frame on the right. To carry a frame forward, select its bare-frame tile; leave the left tile selected to drop it. Use the note for what to change. Art windows are empty on purpose; icons are placeholders. The building and event samples are tier-2 cards on tier-1 frames (tier 2 comes once a direction is final); the event has its insight cost removed to show the octagon alone, and the building leaves off its chip and antimatter costs.",
+ "rows": [
+  {
+   "id": "bioreactor-program-1",
+   "label": "Lab glass, Program, draw 1",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-program-1.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-program-1-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "bioreactor-program-2",
+   "label": "Lab glass, Program, draw 2",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-program-2.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-program-2-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "bioreactor-program-3",
+   "label": "Lab glass, Program, draw 3",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-program-3.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-program-3-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "bioreactor-building-1",
+   "label": "Lab glass, Building, draw 1",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-building-1.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-building-1-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "bioreactor-building-2",
+   "label": "Lab glass, Building, draw 2",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-building-2.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-building-2-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "bioreactor-building-3",
+   "label": "Lab glass, Building, draw 3",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-building-3.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-building-3-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "bioreactor-event-1",
+   "label": "Lab glass, Event, draw 1",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-event-1.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-event-1-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "bioreactor-event-2",
+   "label": "Lab glass, Event, draw 2",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-event-2.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-event-2-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "bioreactor-event-3",
+   "label": "Lab glass, Event, draw 3",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-event-3.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/bioreactor-event-3-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-program-1",
+   "label": "Brushed steel, Program, draw 1",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-program-1.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-program-1-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-program-2",
+   "label": "Brushed steel, Program, draw 2",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-program-2.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-program-2-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-program-3",
+   "label": "Brushed steel, Program, draw 3",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-program-3.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-program-3-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-building-1",
+   "label": "Brushed steel, Building, draw 1",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-building-1.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-building-1-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-building-2",
+   "label": "Brushed steel, Building, draw 2",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-building-2.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-building-2-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-building-3",
+   "label": "Brushed steel, Building, draw 3",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-building-3.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-building-3-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-event-1",
+   "label": "Brushed steel, Event, draw 1",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-event-1.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-event-1-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-event-2",
+   "label": "Brushed steel, Event, draw 2",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-event-2.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-event-2-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  },
+  {
+   "id": "steel-event-3",
+   "label": "Brushed steel, Event, draw 3",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r2/steel-event-3.jpg",
+     "label": "composed sample"
+    },
+    {
+     "key": "carry",
+     "image": "../art-originals/picks/card_frames_r2/steel-event-3-frame.jpg",
+     "label": "bare frame: select to carry forward"
+    }
+   ]
+  }
+ ]
+}

@@ -9,16 +9,25 @@
 .card .content { position: absolute; inset: 0; }
 .card .content > div { position: absolute; display: flex; align-items: center; justify-content: center; }
 
-.card .cost, .card .insight, .card .number {
+.card .cost, .card .insight {
   font-family: 'Saira Condensed', sans-serif; font-weight: 700; line-height: 1;
   color: #101215; paint-order: stroke fill; -webkit-text-stroke: 0.5mm #f4f1e8;
 }
 .card .cost { font-size: 19pt; }
-.card .cost span { display: block; line-height: 0.76; }
-.card .insight { font-size: 12pt; gap: 0.5mm; }
+.card .cost span { display: block; line-height: 0.72; }
+
+/* Drawn, not painted: these change card by card. */
+.card .plate {
+  box-sizing: border-box; background: var(--plate, #efeadc);
+  border: 0.3mm solid #23262a;
+  box-shadow: 0 0 0 0.2mm #e9edf0, 0 0.35mm 0.7mm 0.2mm rgb(0 0 0 / 45%), inset 0 0.25mm 0.3mm rgb(255 255 255 / 70%), inset 0 -0.2mm 0.4mm rgb(0 0 0 / 18%);
+}
+.card .insight { font-size: 12pt; gap: 0.5mm; padding-right: 1.4mm; border-radius: 0 2.8mm 2.8mm 0; }
+.card .content > .insight { justify-content: flex-end; }
 .card .insight .ico { width: 3.4mm; height: 3.4mm; }
-.card .content .number { font-size: 5.8pt; font-weight: 600; -webkit-text-stroke: 0.25mm #f4f1e8; }
-.card .number span { display: block; line-height: 0.72; }
+.card .requirement { gap: 0.4mm; padding: 0 0.9mm; border-radius: 1mm; }
+.card .requirement .medallion { width: 3.8mm; height: 3.8mm; display: block; }
+.card .tag { border-radius: 50%; box-shadow: 0 0 0 0.2mm #e9edf0, 0 0 0 0.35mm #23262a, 0 0.3mm 0.6mm 0.35mm rgb(0 0 0 / 40%); }
 
 .card .name { font-family: 'Saira Condensed', sans-serif; font-weight: 600; font-size: 15pt; letter-spacing: 0.02em; line-height: 1; padding-bottom: 0.7mm; box-sizing: border-box; }
 .card .tag .medallion { width: 100%; height: 100%; display: block; }
@@ -30,4 +39,5 @@
 .card .fx-line .ico { width: 6mm; height: 6mm; }
 .card .fx-line .anycard { height: 8mm; width: 5.4mm; }
 .card .fx-line .arrow { width: 4.2mm; height: 4.2mm; }
-.card .rules { margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 7.5pt; line-height: 1.22; text-align: center; }
+.card .income { display: flex; align-items: center; gap: 0.9mm; padding: 0.5mm 1.8mm; border-radius: 1mm; background: #a9764a; box-shadow: inset 0 0 0 0.3mm #5e3c20; }
+.card .rules { margin: 0; max-width: 55mm; font-family: 'Source Serif 4', Georgia, serif; font-size: 7.5pt; line-height: 1.22; text-align: center; }

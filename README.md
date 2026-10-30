@@ -143,44 +143,53 @@ bundled `fonts/`): `renderCard(card, layout, frameUrl)` turns card content into 
 mm, so one template serves print and, later, the web client. **Cards are composed live,
 never pre-baked:** composed cards and print sheets go to `out/cards/` (git-ignored).
 Committed: frame templates (`art/frames/`), guides (`art/guides/`), fonts. Changing a
-card's text or numbers changes no asset. The one exception is `art/picks/card_frames_r1/`,
-small composed previews that exist only because a picker reads committed images: delete
-them, with `picks/card_frames_r1.json`, once the picks are in. Each card's art prompt
-stays beside its content (`art_prompt`; so far on the sample,
-`web/card/sample/sentiment_mining.json`). Icons are placeholders.
+card's text or numbers changes no asset. Picker previews are never committed: they go to
+the shared `art-originals/picks/<picker>/`. Card art prompts live in `art/prompts.json`,
+keyed by card id with the shared style block, apart from content, so changing a card's
+mechanics changes neither its art nor its prompt. So far it holds the sample only. Icons
+are placeholders.
+
+The frame paints the fixed structure only: frame, strip, cost octagon, name banner, art
+window and effect panel (on buildings, also the top box for lasting effects). The
+renderer draws what varies: the insight plate (omitted at 0), the requirement plate
+(as wide as the card needs) and 0–3 tag sockets, so no socket ever shows empty. The
+insight plate tucks under the octagon by drawing the frame a second time, clipped to the
+octagon, over it. `web/card/sample/` holds one sample per kind, for layout only.
 
 Run from `tools/card-art/` (Node 24, system Chrome through `playwright-core`, one
 browser; `npm ci` first):
 
 - `npm run guides`: six labelled guides plus unlabelled `-blocks` twins, from
   `layout.json`. The twins are what the image tool sees: labels invite text.
-- `npm run gen -- steel-1 holo-2 … --pool=3`: draws frames with Codex CLI's `$imagegen` on
+- `npm run gen -- steel-program-1 bioreactor-event-2 … --pool=3`: draws tier-1 frames
+  (`<direction>-<kind>-<seed>`) with Codex CLI's `$imagegen` on
   Matt's ChatGPT Plus login, the wordwarriors route: `codex exec --json -s read-only`, the
   prompt on stdin, the guide on `-i`, the PNG collected from
   `~/.codex/generated_images/<thread>/`. No API key. Prompts are in `prompts.json`. The tool
   has no seed parameter, so a "seed" is an independent draw. Redrawing an id keeps the old
   original as `<id>.try<n>.png`. It stops at the first usage-limit message.
-- `npm run fit`: measures each frame's real plates into `art/frames/r1/fit.json`, which the
-  renderer uses instead of the guide. Run it after any draw: the tool lands sockets up to
-  about 2 mm off the guide, and not uniformly, so no single offset fixes a frame.
-- `npm run render -- [ids] [--pdf]`: composes the sample at 300 dpi (815×1110). Fails if a
-  font fell back or anything printed leaves the safe zone (x 6–63, y 6–88 mm). All 20
-  with `--pdf` takes about a minute.
+- `npm run fit`: measures each frame's real zones into `art/frames/r2/fit.json`, which the
+  renderer uses instead of the guide, and the octagon's inside colour for the drawn plates.
+  Run it after any draw: the tool lands zones up to about 3.5 mm off the guide, and not
+  uniformly, so no single offset fixes a frame.
+- `npm run render -- [ids] [--pdf]`: composes each kind's sample at 300 dpi (815×1110).
+  Fails if a font fell back, anything printed leaves the safe zone (x 6–63, y 6–88 mm) or
+  the requirement plate reaches the tags.
 - `node sheet.mjs <out.png> <images…>`: a one-row inspection sheet.
-- `npm run picker`: writes the previews and `picks/card_frames_r1.json` from `out/cards/`.
+- `npm run picker`: writes `picks/card_frames_r2.json` from `out/cards/`, with its images
+  in `art-originals/picks/card_frames_r2/`. Stops if that folder isn't reachable.
 
 - **Numbers (2026-10-30, 026):** asking for 69:94 with a same-shape guide returns
   1075×1464, the right shape already, so the crop takes at most a pixel. 44–71 s an image,
-  about 0.35% of the 5-hour Plus window each; three at once ran fine.
+  about 0.35% of the 5-hour Plus window each; three at once ran fine. Round 2 (029):
+  23 draws, 48–73 s each, about 7% of the window.
 - **Originals:** `art-originals/` is a git-ignored junction to
   `C:\Code\gdrive-sync\aicomplete\art-originals` (`mklink /J art-originals <that path>`).
-  The scripts fall back to that path in a checkout without the junction;
-  `AIC_ART_ORIGINALS` overrides it. Round 1 is in `card-frames-r1/`: full-size originals,
-  `frames/` (815×1110 PNG) and `log.jsonl`.
-- **Sockets in the frame are fixed:** a painted frame shows every plate and socket whether
-  or not the card fills it.
-- **The guide's number tab crosses the safe zone** (to y 89.3, x 64.1), so the number sits
-  high in it; the octagon's top (y 5.6) does too, but its figure is inside.
+  The scripts other than the picker, which needs the junction, fall back to that path;
+  `AIC_ART_ORIGINALS` overrides it. Each round has its folder (`card-frames-r2/`):
+  full-size originals, `frames/` (815×1110 PNG) and `log.jsonl`.
+- **The octagon's top (y 5.6) crosses the safe zone;** its figure is inside.
+- **`art/frames/r1/` is the old layout** (all sockets painted): the renderer no longer fits it.
 
 ## Toolchain
 

@@ -1,0 +1,7 @@
+{
+  "_note": "Card art prompts, keyed by card id, apart from card content: changing a card's mechanics changes neither its art nor its prompt. A card's full prompt is style + its entry. Per-card prompts for the whole set come later.",
+  "style": "Painted science-fiction illustration for a board game card, wide landscape composition, dramatic but readable at card size, rich light and colour, a single clear subject, no text, letters, numbers, logos or interface.",
+  "cards": {
+    "sentiment_mining": "Rows of glowing faces and speech bubbles in a dark data centre, being sifted into streams of light."
+  }
+}
