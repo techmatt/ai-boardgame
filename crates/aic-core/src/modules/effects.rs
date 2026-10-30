@@ -96,12 +96,24 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
             .iter()
             .any(|p| g.var(&adversary::project_key(p)) > 0),
         Effect::DiscardProject => !adversary::projects(g).is_empty(),
+        Effect::DrainAll { .. } => adversary::projects(g)
+            .iter()
+            .any(|p| g.var(&adversary::project_key(p)) > 0),
+        Effect::CashOut { kind, .. } => cards::token_cards(w, g, seat, Some(kind))
+            .iter()
+            .any(|c| g.var(&cards::tokens_key(seat, c)) > 0),
         Effect::MoveAmbassadors { .. } => movable_ambassadors(g, seat) > 0,
         Effect::PlacePresence { .. } => {
             ai::can_place(w, g, seat) && !board::presence_hexes(w, g, seat).is_empty()
         }
         // Giving needs someone to give to (Grant and Venture Capital still pay you).
         Effect::Transfer { .. } => g.seats.len() > 1,
+        // 023: the branch that would fire needs its targets (was always true).
+        Effect::If {
+            cond: c,
+            then,
+            otherwise,
+        } => feasible(w, g, seat, if cond(w, g, seat, *c) { then } else { otherwise }),
         _ => true,
     })
 }
@@ -395,6 +407,40 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 adversary::discard_project(g, cx, &ids[i]);
             }
+        }
+        Effect::DrainAll { amount } => {
+            for p in adversary::projects(g) {
+                adversary::drain_project(g, cx, &p, *amount);
+            }
+        }
+        Effect::Draw { count } => cards::draw(g, cx, seat, *count)?,
+        Effect::GainPerTokens {
+            resource,
+            kind,
+            per,
+            max,
+        } => {
+            let held: i64 = cards::token_cards(&w, g, seat, Some(kind))
+                .iter()
+                .map(|c| g.var(&cards::tokens_key(seat, c)))
+                .sum();
+            cx.add_resource(g, seat, resource, (held / (*per).max(1)).min(*max));
+        }
+        Effect::CashOut {
+            kind,
+            resource,
+            max,
+        } => {
+            let mut n = 0;
+            for c in cards::token_cards(&w, g, seat, Some(kind)) {
+                let mut k = g.var(&cards::tokens_key(seat, &c));
+                if *max > 0 {
+                    k = k.min(*max - n);
+                }
+                cards::add_tokens(g, cx, seat, &c, -k);
+                n += k;
+            }
+            cx.add_resource(g, seat, resource, n * (n + 1) / 2);
         }
         Effect::Unity { amount } => alignment::sway(g, cx, Side::Unity, *amount),
         Effect::NextRoundInsight { amount } => economy::add_bonus_insight(g, cx, *amount),

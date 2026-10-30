@@ -117,6 +117,13 @@ The strategy-health gate runs them beside the engine at d0, d2 and d4
 | no-powers (022) | `no_powers=1` | never uses an AI-board power |
 | no-counters (022) | `no_counters=1` | never pays toward a threat's counter |
 | no-presence (022) | `no_presence=1` | places no presence beyond setup (no standard action, card or growth that places one) |
+| mono-tag (023), one per tag | `only_tag=N` (1-6: Science, Industry, Cyber, Power, Diplomacy, Security) | keeps and plays only cards carrying that tag (AI-unique cards exempt) |
+| ignore-X (023), one per tag | `never_tag=N` | never keeps or plays a card carrying that tag |
+| event-hoarder (023) | `events_only=1` | keeps and plays only events |
+
+**Since 023 the gate runs at d2 only, 32 seeds a cell** (`experiments/screen-023-dominance.json`
+with `--quick --games 32`, summarised by `scripts/cards/screen_023.py`): 022's d4 half
+could not pass while d4 is not winnable, and 16 seeds left gaps inside the noise.
 
 Weigh each measure's cost against the decision it informs: screen cheaply first, and run expensive measures only on finalists.
 

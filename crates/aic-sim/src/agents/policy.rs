@@ -45,11 +45,31 @@ pub struct Forced {
     /// Place no presence beyond setup (no standard action, card or growth
     /// that places one).
     pub no_presence: bool,
+    /// Mono-tag (023): keep and play only cards carrying this tag.
+    pub only_tag: Option<String>,
+    /// Ignore-X (023): never keep or play a card carrying this tag.
+    pub never_tag: Option<String>,
+    /// Event-hoarder (023): keep and play only events.
+    pub events_only: bool,
     /// Keep by plan (off: the wrapped agent's heuristic decides keeps).
     pub plan_keep: bool,
     /// Rounds the keep plan looks at: this round's action phase and the
     /// ones after it.
     pub plan_rounds: usize,
+}
+
+impl Forced {
+    /// Whether the card restrictions (mono-tag, ignore-X, event-hoarder)
+    /// let this seat keep or play `d`. AI-unique cards (tier 0) are exempt.
+    pub fn allows(&self, d: &CardDef) -> bool {
+        if d.tier == 0 {
+            return true;
+        }
+        let has = |t: &Option<String>| t.as_ref().is_some_and(|t| d.tags.contains(t));
+        (self.only_tag.is_none() || has(&self.only_tag))
+            && !has(&self.never_tag)
+            && (!self.events_only || d.is_event())
+    }
 }
 
 pub struct Policy {
@@ -87,6 +107,10 @@ impl Policy {
         } else {
             plan_keeps(&world, g, s, self.forced.plan_rounds)
         };
+        let set: Vec<String> = set
+            .into_iter()
+            .filter(|id| self.forced.allows(cards::def(&world, id)))
+            .collect();
         self.keeps.retain(|(r, _, _)| *r == round);
         self.keeps.push((round, s, set.clone()));
         set
@@ -101,8 +125,10 @@ impl Policy {
             Action::Pay { .. } => f.no_counters,
             Action::Standard { act, .. } => f.no_presence && act == "presence",
             Action::Play { card, .. } => {
-                f.no_presence && places_presence(&cards::def(world, card).effects)
+                let d = cards::def(world, card);
+                (f.no_presence && places_presence(&d.effects)) || !f.allows(d)
             }
+            Action::Keep { card, .. } => !f.allows(cards::def(world, card)),
             Action::Growth { seat, option } => {
                 f.no_presence
                     && ai::board(world, *seat as usize)

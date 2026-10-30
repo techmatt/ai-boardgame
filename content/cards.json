@@ -1,964 +1,5 @@
 [
  {
-  "id": "fab_line",
-  "name": "Fab Line",
-  "tier": 1,
-  "kind": "building",
-  "cost": 4,
-  "insight": 1,
-  "tags": [
-   "industry"
-  ],
-  "text": "+1 credit and +1 hardware income.",
-  "passives": [
-   {
-    "op": "income",
-    "resource": "credits",
-    "amount": 1
-   },
-   {
-    "op": "income",
-    "resource": "hardware",
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "trade_office",
-  "name": "Trade Office",
-  "tier": 1,
-  "kind": "building",
-  "cost": 5,
-  "insight": 1,
-  "tags": [
-   "industry"
-  ],
-  "text": "When built: +1 credit production for the rest of the game (kept if built over). +1 credit income per 2 Industry tags you have.",
-  "passives": [
-   {
-    "op": "income_per_tag",
-    "resource": "credits",
-    "tag": "industry",
-    "per": 2,
-    "max": 99
-   }
-  ],
-  "effects": [
-   {
-    "op": "production",
-    "resource": "credits",
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "assembly_cluster",
-  "name": "Assembly Cluster",
-  "tier": 1,
-  "kind": "building",
-  "cost": 6,
-  "insight": 1,
-  "tags": [
-   "industry",
-   "power"
-  ],
-  "text": "Your buildings cost 1 less.",
-  "passives": [
-   {
-    "op": "building_discount",
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "logistics_ai",
-  "name": "Logistics AI",
-  "tier": 1,
-  "kind": "building",
-  "cost": 5,
-  "insight": 1,
-  "tags": [
-   "industry"
-  ],
-  "text": "Whenever a threat you paid toward is countered, gain 2 credits.",
-  "passives": [
-   {
-    "op": "logistics",
-    "resource": "credits",
-    "amount": 2
-   }
-  ]
- },
- {
-  "id": "solar_field",
-  "name": "Solar Field",
-  "tier": 1,
-  "kind": "building",
-  "cost": 3,
-  "insight": 1,
-  "tags": [
-   "power"
-  ],
-  "text": "+1 energy income.",
-  "passives": [
-   {
-    "op": "income",
-    "resource": "energy",
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "microgrid",
-  "name": "Microgrid",
-  "tier": 1,
-  "kind": "building",
-  "cost": 3,
-  "insight": 1,
-  "tags": [
-   "power"
-  ],
-  "text": "+1 energy income; +1 more if you have 2 Power tags.",
-  "passives": [
-   {
-    "op": "income",
-    "resource": "energy",
-    "amount": 1
-   },
-   {
-    "op": "income_if_tags",
-    "resource": "energy",
-    "tag": "power",
-    "count": 2,
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "grid_battery",
-  "name": "Grid Battery",
-  "tier": 1,
-  "kind": "building",
-  "cost": 4,
-  "insight": 1,
-  "tags": [
-   "power"
-  ],
-  "text": "Once a round: pay 1 credit, gain 2 energy.",
-  "ability": {
-   "cost": [
-    [
-     "credits",
-     1
-    ]
-   ],
-   "effects": [
-    {
-     "op": "gain",
-     "resource": "energy",
-     "amount": 2
-    }
-   ]
-  }
- },
- {
-  "id": "server_farm",
-  "name": "Server Farm",
-  "tier": 1,
-  "kind": "building",
-  "cost": 5,
-  "insight": 1,
-  "tags": [
-   "cyber"
-  ],
-  "text": "+1 credit income; place 1 presence.",
-  "effects": [
-   {
-    "op": "place_presence",
-    "count": 1
-   }
-  ],
-  "passives": [
-   {
-    "op": "income",
-    "resource": "credits",
-    "amount": 1
-   }
-  ],
-  "hardware": 1
- },
- {
-  "id": "overclock_rig",
-  "name": "Overclock Rig",
-  "tier": 1,
-  "kind": "building",
-  "cost": 6,
-  "insight": 1,
-  "tags": [
-   "science",
-   "cyber"
-  ],
-  "text": "+1 insight income; in upkeep pay 1 energy or it does nothing next round.",
-  "passives": [
-   {
-    "op": "income",
-    "resource": "insight",
-    "amount": 1
-   }
-  ],
-  "upkeep": [
-   [
-    "energy",
-    1
-   ]
-  ]
- },
- {
-  "id": "firewall_node",
-  "name": "Firewall Node",
-  "tier": 1,
-  "kind": "building",
-  "cost": 4,
-  "insight": 1,
-  "tags": [
-   "cyber",
-   "security"
-  ],
-  "text": "The adversary's spread places no ambassador on hexes holding your presence.",
-  "passives": [
-   {
-    "op": "spread_shield"
-   }
-  ]
- },
- {
-  "id": "watchtower_net",
-  "name": "Watchtower Net",
-  "tier": 1,
-  "kind": "building",
-  "cost": 4,
-  "insight": 1,
-  "tags": [
-   "security"
-  ],
-  "text": "Once a round: pay 2 energy to remove 1 worth of adversary pieces (an ambassador) in one hex of a country where you have a presence.",
-  "ability": {
-   "cost": [
-    [
-     "energy",
-     2
-    ]
-   ],
-   "effects": [
-    {
-     "op": "damage",
-     "amount": 1,
-     "at": "presence_country"
-    }
-   ]
-  }
- },
- {
-  "id": "unity_network",
-  "name": "Unity Network",
-  "tier": 1,
-  "kind": "building",
-  "cost": 5,
-  "insight": 1,
-  "tags": [
-   "security",
-   "diplomacy"
-  ],
-  "text": "Removing an adversary troop sways 1 more toward Unity.",
-  "passives": [
-   {
-    "op": "unity_bonus",
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "civic_shelter",
-  "name": "Civic Shelter",
-  "tier": 1,
-  "kind": "building",
-  "cost": 4,
-  "insight": 1,
-  "tags": [
-   "diplomacy"
-  ],
-  "text": "Once a round, prevent the first building destruction in a country where you have a presence.",
-  "passives": [
-   {
-    "op": "civic_shelter"
-   }
-  ]
- },
- {
-  "id": "recruitment_hub",
-  "name": "Recruitment Hub",
-  "tier": 1,
-  "kind": "building",
-  "cost": 5,
-  "insight": 1,
-  "tags": [
-   "diplomacy"
-  ],
-  "text": "When built, gain 2 ambassadors. When you give insight, the receiver also gains 2 credits.",
-  "passives": [
-   {
-    "op": "give_bonus",
-    "resource": "credits",
-    "amount": 2
-   }
-  ],
-  "effects": [
-   {
-    "op": "gain_ambassadors",
-    "count": 2
-   }
-  ]
- },
- {
-  "id": "contract_bid",
-  "name": "Contract Bid",
-  "tier": 1,
-  "kind": "event",
-  "cost": 0,
-  "tags": [
-   "industry"
-  ],
-  "text": "Gain 3 credits.",
-  "effects": [
-   {
-    "op": "gain",
-    "resource": "credits",
-    "amount": 3
-   }
-  ]
- },
- {
-  "id": "emergency_fab",
-  "name": "Emergency Fab",
-  "tier": 1,
-  "kind": "program",
-  "cost": 2,
-  "insight": 1,
-  "tags": [
-   "industry"
-  ],
-  "text": "Build a factory on an empty open hex touching a city.",
-  "effects": [
-   {
-    "op": "build_factory"
-   }
-  ]
- },
- {
-  "id": "rebuild",
-  "name": "Rebuild",
-  "tier": 1,
-  "kind": "program",
-  "cost": 3,
-  "insight": 1,
-  "tags": [
-   "industry"
-  ],
-  "text": "Take the adversary cube off 1 corrupted city or research station.",
-  "effects": [
-   {
-    "op": "cleanse",
-    "amount": 1,
-    "one_country": false
-   }
-  ]
- },
- {
-  "id": "liquidate_reserves",
-  "name": "Liquidate Reserves",
-  "tier": 1,
-  "kind": "program",
-  "cost": 0,
-  "tags": [
-   "power"
-  ],
-  "text": "Convert up to 3 energy into 2 credits each.",
-  "effects": [
-   {
-    "op": "convert",
-    "from": "energy",
-    "to": "credits",
-    "max": 3,
-    "rate": 2
-   }
-  ]
- },
- {
-  "id": "data_mining",
-  "name": "Data Mining",
-  "tier": 1,
-  "kind": "program",
-  "cost": 0,
-  "tags": [
-   "science",
-   "cyber"
-  ],
-  "text": "Hack: cut a node in your reach off (it makes no compute in the next build); remove 1 compute from an adversary project.",
-  "effects": [
-   {
-    "op": "cut_node"
-   },
-   {
-    "op": "drain_project",
-    "amount": 1
-   }
-  ],
-  "keywords": [
-   "hack"
-  ]
- },
- {
-  "id": "fork_process",
-  "name": "Fork Process",
-  "tier": 1,
-  "kind": "program",
-  "cost": 2,
-  "tags": [
-   "cyber"
-  ],
-  "text": "Place 1 presence.",
-  "effects": [
-   {
-    "op": "place_presence",
-    "count": 1
-   }
-  ]
- },
- {
-  "id": "recon_sweep",
-  "name": "Recon Sweep",
-  "tier": 1,
-  "kind": "program",
-  "cost": 1,
-  "tags": [
-   "science",
-   "cyber"
-  ],
-  "text": "Look at the next 2 adversary cards; gain 1 credit.",
-  "effects": [
-   {
-    "op": "peek",
-    "count": 2
-   },
-   {
-    "op": "gain",
-    "resource": "credits",
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "jam_signals",
-  "name": "Jam Signals",
-  "tier": 1,
-  "kind": "event",
-  "cost": 2,
-  "tags": [
-   "cyber",
-   "security"
-  ],
-  "text": "One threat needs 1 less of each resource it asks for.",
-  "effects": [
-   {
-    "op": "jam",
-    "amount": 1
-   }
-  ],
-  "keywords": [
-   "hack"
-  ]
- },
- {
-  "id": "precision_strike",
-  "name": "Precision Strike",
-  "tier": 1,
-  "kind": "event",
-  "cost": 2,
-  "insight": 1,
-  "tags": [
-   "security"
-  ],
-  "text": "Remove 2 worth of adversary pieces in one hex (an ambassador is 1, a troop 2).",
-  "effects": [
-   {
-    "op": "damage",
-    "amount": 2,
-    "at": "any"
-   }
-  ]
- },
- {
-  "id": "sweep",
-  "name": "Sweep",
-  "tier": 1,
-  "kind": "event",
-  "cost": 3,
-  "insight": 1,
-  "tags": [
-   "security"
-  ],
-  "text": "Remove 1 worth of adversary pieces (an ambassador) in each hex of one country that holds them.",
-  "effects": [
-   {
-    "op": "damage_country",
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "scavenge",
-  "name": "Scavenge",
-  "tier": 1,
-  "kind": "event",
-  "cost": 0,
-  "tags": [
-   "security"
-  ],
-  "text": "If you removed an adversary troop this round, gain 3 credits; otherwise gain 2 energy.",
-  "effects": [
-   {
-    "op": "if",
-    "cond": "removed_troop",
-    "then": [
-     {
-      "op": "gain",
-      "resource": "credits",
-      "amount": 3
-     }
-    ],
-    "else": [
-     {
-      "op": "gain",
-      "resource": "energy",
-      "amount": 2
-     }
-    ]
-   }
-  ]
- },
- {
-  "id": "evacuate",
-  "name": "Evacuate",
-  "tier": 1,
-  "kind": "program",
-  "cost": 1,
-  "tags": [
-   "diplomacy"
-  ],
-  "text": "Move up to 3 of your ambassadors onto pieces within your reach.",
-  "effects": [
-   {
-    "op": "move_ambassadors",
-    "max": 3
-   }
-  ]
- },
- {
-  "id": "shore_up",
-  "name": "Shore Up",
-  "tier": 1,
-  "kind": "program",
-  "cost": 1,
-  "tags": [
-   "diplomacy"
-  ],
-  "text": "Harden 3 buildings in one country.",
-  "effects": [
-   {
-    "op": "harden",
-    "count": 3,
-    "where": "any"
-   }
-  ]
- },
- {
-  "id": "rally",
-  "name": "Rally",
-  "tier": 1,
-  "kind": "program",
-  "cost": 1,
-  "tags": [
-   "diplomacy"
-  ],
-  "text": "Gain 1 ambassador; sway 2 toward Unity if any clean city holds adversary ambassadors; move one of your ambassadors up to 2 hexes.",
-  "effects": [
-   {
-    "op": "gain_ambassadors",
-    "count": 1
-   },
-   {
-    "op": "if",
-    "cond": "city_with_ambassador",
-    "then": [
-     {
-      "op": "unity",
-      "amount": 2
-     }
-    ],
-    "else": []
-   },
-   {
-    "op": "move_one",
-    "range": 2
-   }
-  ],
-  "keywords": [
-   "move"
-  ]
- },
- {
-  "id": "grant",
-  "name": "Grant",
-  "tier": 1,
-  "kind": "program",
-  "cost": 0,
-  "tags": [
-   "diplomacy"
-  ],
-  "text": "Another player gains 1 insight and 3 credits; you gain 1 credit.",
-  "effects": [
-   {
-    "op": "choose_player"
-   },
-   {
-    "op": "other_gain",
-    "resource": "insight",
-    "amount": 1
-   },
-   {
-    "op": "other_gain",
-    "resource": "credits",
-    "amount": 3
-   },
-   {
-    "op": "gain",
-    "resource": "credits",
-    "amount": 1
-   }
-  ]
- },
- {
-  "id": "power_share",
-  "name": "Power Share",
-  "tier": 1,
-  "kind": "program",
-  "cost": 0,
-  "tags": [
-   "diplomacy",
-   "power"
-  ],
-  "text": "Give up to 3 energy to another player; they gain 1 more.",
-  "effects": [
-   {
-    "op": "choose_player"
-   },
-   {
-    "op": "transfer",
-    "resource": "energy",
-    "max": 3,
-    "bonus": 1
-   }
-  ]
- },
- {
-  "id": "fusion_plant",
-  "name": "Fusion Plant",
-  "tier": 2,
-  "kind": "building",
-  "cost": 9,
-  "insight": 2,
-  "lowers": [
-   [
-    "credits",
-    1
-   ]
-  ],
-  "antimatter": 1,
-  "needs": [
-   [
-    "power",
-    2
-   ]
-  ],
-  "text": "Built over one of your Power buildings. +3 energy income.",
-  "passives": [
-   {
-    "op": "income",
-    "resource": "energy",
-    "amount": 3
-   }
-  ],
-  "tags": [
-   "power"
-  ],
-  "energy": 2,
-  "hardware": 1,
-  "replaces": "power"
- },
- {
-  "id": "quantum_core",
-  "name": "Quantum Core",
-  "tier": 2,
-  "kind": "building",
-  "cost": 8,
-  "insight": 2,
-  "antimatter": 1,
-  "needs": [
-   [
-    "cyber",
-    2
-   ]
-  ],
-  "text": "+1 insight income; +1 credit per Cyber tag each round (max 4).",
-  "passives": [
-   {
-    "op": "income",
-    "resource": "insight",
-    "amount": 1
-   },
-   {
-    "op": "income_per_tag",
-    "resource": "credits",
-    "tag": "cyber",
-    "per": 1,
-    "max": 4
-   }
-  ],
-  "tags": [
-   "science",
-   "cyber"
-  ],
-  "hardware": 1
- },
- {
-  "id": "orbital_lance",
-  "name": "Orbital Lance",
-  "tier": 2,
-  "kind": "building",
-  "cost": 10,
-  "insight": 2,
-  "lowers": [
-   [
-    "credits",
-    1
-   ]
-  ],
-  "needs": [
-   [
-    "security",
-    2
-   ]
-  ],
-  "text": "Once a round: pay 1 antimatter to remove 4 worth of adversary pieces in any hex.",
-  "ability": {
-   "cost": [
-    [
-     "antimatter",
-     1
-    ]
-   ],
-   "effects": [
-    {
-     "op": "damage",
-     "amount": 4,
-     "at": "any"
-    }
-   ]
-  },
-  "tags": [
-   "security"
-  ],
-  "hardware": 1
- },
- {
-  "id": "antimatter_refinery",
-  "name": "Antimatter Refinery",
-  "tier": 2,
-  "kind": "building",
-  "cost": 7,
-  "insight": 2,
-  "lowers": [
-   [
-    "credits",
-    1
-   ]
-  ],
-  "needs": [
-   [
-    "power",
-    2
-   ]
-  ],
-  "text": "In upkeep, convert 4 energy into 1 antimatter.",
-  "passives": [
-   {
-    "op": "convert_upkeep",
-    "from": "energy",
-    "amount": 4,
-    "to": "antimatter",
-    "gain": 1
-   }
-  ],
-  "tags": [
-   "power",
-   "science"
-  ],
-  "energy": 2
- },
- {
-  "id": "megastructure",
-  "name": "Megastructure",
-  "tier": 2,
-  "kind": "building",
-  "cost": 13,
-  "insight": 2,
-  "needs": [
-   [
-    "industry",
-    3
-   ]
-  ],
-  "text": "Built over one of your Industry buildings. +5 credit income.",
-  "passives": [
-   {
-    "op": "income",
-    "resource": "credits",
-    "amount": 5
-   }
-  ],
-  "tags": [
-   "industry"
-  ],
-  "hardware": 2,
-  "replaces": "industry"
- },
- {
-  "id": "purge_protocol",
-  "name": "Purge Protocol",
-  "tier": 2,
-  "kind": "event",
-  "cost": 4,
-  "insight": 2,
-  "antimatter": 1,
-  "text": "Remove every adversary ambassador and troop in one hex.",
-  "effects": [
-   {
-    "op": "destroy_all"
-   }
-  ],
-  "tags": [
-   "security"
-  ]
- },
- {
-  "id": "global_mandate",
-  "name": "Global Mandate",
-  "tier": 2,
-  "kind": "program",
-  "cost": 5,
-  "insight": 2,
-  "needs": [
-   [
-    "diplomacy",
-    2
-   ]
-  ],
-  "text": "Sway 4 toward Unity; every player gains 1 insight next round.",
-  "effects": [
-   {
-    "op": "unity",
-    "amount": 4
-   },
-   {
-    "op": "next_round_insight",
-    "amount": 1
-   }
-  ],
-  "tags": [
-   "diplomacy"
-  ]
- },
- {
-  "id": "reconstruction",
-  "name": "Reconstruction",
-  "tier": 2,
-  "kind": "program",
-  "cost": 6,
-  "insight": 2,
-  "needs": [
-   [
-    "industry",
-    2
-   ]
-  ],
-  "text": "Take the adversary cube off up to 2 corrupted cities or research stations in one country.",
-  "effects": [
-   {
-    "op": "cleanse",
-    "amount": 2,
-    "one_country": true
-   }
-  ],
-  "tags": [
-   "industry",
-   "diplomacy"
-  ]
- },
- {
-  "id": "counter_intelligence",
-  "name": "Counter-intelligence",
-  "tier": 2,
-  "kind": "event",
-  "cost": 3,
-  "insight": 2,
-  "antimatter": 1,
-  "text": "Counter any one threat.",
-  "effects": [
-   {
-    "op": "counter_threat"
-   }
-  ],
-  "tags": [
-   "security",
-   "cyber"
-  ]
- },
- {
-  "id": "swarm_override",
-  "name": "Swarm Override",
-  "tier": 2,
-  "kind": "event",
-  "cost": 5,
-  "insight": 2,
-  "needs": [
-   [
-    "cyber",
-    2
-   ]
-  ],
-  "text": "Remove every adversary ambassador in one country; sway 1 toward Unity per 2 removed.",
-  "effects": [
-   {
-    "op": "remove_ambassadors_country",
-    "unity_per": 2
-   }
-  ],
-  "tags": [
-   "cyber",
-   "security"
-  ]
- },
- {
   "id": "turnkey_factory",
   "name": "Turnkey Factory",
   "tier": 0,
@@ -1097,257 +138,6 @@
   ]
  },
  {
-  "id": "security_patch",
-  "name": "Security Patch",
-  "tier": 1,
-  "kind": "event",
-  "cost": 2,
-  "tags": [
-   "cyber",
-   "security"
-  ],
-  "text": "Remove up to 4 compute from one adversary project (placeholder Security card).",
-  "effects": [
-   {
-    "op": "drain_project",
-    "amount": 4
-   }
-  ],
-  "keywords": [
-   "hack"
-  ]
- },
- {
-  "id": "zero_day_wipe",
-  "name": "Zero-Day Wipe",
-  "tier": 2,
-  "kind": "event",
-  "cost": 8,
-  "insight": 2,
-  "antimatter": 2,
-  "text": "Discard one visible adversary project, with its compute (placeholder).",
-  "effects": [
-   {
-    "op": "discard_project"
-   }
-  ],
-  "tags": [
-   "cyber"
-  ],
-  "keywords": [
-   "hack"
-  ]
- },
- {
-  "id": "node_takedown",
-  "name": "Node Takedown",
-  "tier": 2,
-  "kind": "event",
-  "cost": 4,
-  "insight": 2,
-  "antimatter": 1,
-  "text": "Remove a node within your reach (placeholder, 019: the tier-2 way to remove a node).",
-  "effects": [
-   {
-    "op": "remove_node"
-   }
-  ],
-  "tags": [
-   "security",
-   "cyber"
-  ]
- },
- {
-  "id": "power_surge",
-  "name": "Power Surge",
-  "tier": 1,
-  "kind": "program",
-  "cost": 2,
-  "tags": [
-   "power"
-  ],
-  "text": "Gain 3 energy.",
-  "effects": [
-   {
-    "op": "gain",
-    "resource": "energy",
-    "amount": 3
-   }
-  ]
- },
- {
-  "id": "data_lake",
-  "name": "Data Lake",
-  "tier": 1,
-  "kind": "building",
-  "cost": 3,
-  "insight": 1,
-  "tags": [
-   "science"
-  ],
-  "keywords": [
-   "tokens"
-  ],
-  "tokens": {
-   "kind": "datasets",
-   "per_round": 1
-  },
-  "text": "Gains 1 Dataset a round. Once a round: spend 2 Datasets, gain 3 credits.",
-  "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
-   "effects": [
-    {
-     "op": "gain",
-     "resource": "credits",
-     "amount": 3
-    }
-   ]
-  }
- },
- {
-  "id": "grassroots_movement",
-  "name": "Grassroots Movement",
-  "tier": 1,
-  "kind": "program",
-  "cost": 2,
-  "insight": 1,
-  "tags": [
-   "diplomacy"
-  ],
-  "keywords": [
-   "tokens"
-  ],
-  "tokens": {
-   "kind": "followers",
-   "per_round": 1
-  },
-  "text": "Gains 1 Follower a round. Once a round: spend 3 Followers, sway 2 toward Unity.",
-  "ability": {
-   "cost": [
-    [
-     "tokens",
-     3
-    ]
-   ],
-   "effects": [
-    {
-     "op": "unity",
-     "amount": 2
-    }
-   ]
-  }
- },
- {
-  "id": "holding_company",
-  "name": "Holding Company",
-  "tier": 1,
-  "kind": "building",
-  "cost": 3,
-  "insight": 1,
-  "tags": [
-   "industry"
-  ],
-  "keywords": [
-   "tokens"
-  ],
-  "tokens": {
-   "kind": "capital",
-   "per_round": 1
-  },
-  "text": "Gains 1 Capital a round. Once a round: spend 2 Capital, gain 2 hardware.",
-  "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
-   "effects": [
-    {
-     "op": "gain",
-     "resource": "hardware",
-     "amount": 2
-    }
-   ]
-  }
- },
- {
-  "id": "security_cell",
-  "name": "Security Cell",
-  "tier": 1,
-  "kind": "program",
-  "cost": 2,
-  "insight": 1,
-  "tags": [
-   "security"
-  ],
-  "keywords": [
-   "tokens"
-  ],
-  "tokens": {
-   "kind": "agents",
-   "per_round": 1
-  },
-  "text": "Gains 1 Agent a round. Once a round: spend 2 Agents, remove 1 worth of adversary pieces in a hex in your reach.",
-  "ability": {
-   "cost": [
-    [
-     "tokens",
-     2
-    ]
-   ],
-   "effects": [
-    {
-     "op": "damage",
-     "amount": 1,
-     "at": "reach"
-    }
-   ]
-  }
- },
- {
-  "id": "seed_funding",
-  "name": "Seed Funding",
-  "tier": 1,
-  "kind": "event",
-  "cost": 1,
-  "tags": [
-   "industry"
-  ],
-  "text": "Add 3 Capital to one of your cards that holds Capital.",
-  "effects": [
-   {
-    "op": "add_tokens",
-    "kind": "capital",
-    "amount": 3
-   }
-  ]
- },
- {
-  "id": "field_office",
-  "name": "Field Office",
-  "tier": 1,
-  "kind": "building",
-  "cost": 3,
-  "insight": 1,
-  "tags": [
-   "science",
-   "diplomacy"
-  ],
-  "text": "While you have this building, cards you discard from hand count their tags for AI-board powers.",
-  "passives": [
-   {
-    "op": "tags_from_hand",
-    "tag": "any"
-   }
-  ]
- },
- {
   "id": "foundry_core",
   "name": "Foundry Core",
   "tier": 0,
@@ -1386,23 +176,3387 @@
   ]
  },
  {
-  "id": "diaspora",
-  "name": "Diaspora",
-  "tier": 2,
-  "kind": "program",
-  "cost": 4,
-  "insight": 2,
+  "id": "telemetry_archive",
+  "name": "Telemetry Archive",
+  "tier": 1,
+  "kind": "building",
+  "cost": 3,
+  "insight": 1,
   "tags": [
-   "diplomacy",
+   "science"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "datasets",
+   "per_round": 1
+  },
+  "text": "Gains 1 Dataset a round. Once a round: spend 2 Datasets, gain 1 insight.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain",
+     "resource": "insight",
+     "amount": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "simulation_cluster",
+  "name": "Simulation Cluster",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "hardware": 1,
+  "tags": [
+   "science",
+   "cyber"
+  ],
+  "text": "Once a round: pay 3 credits, draw 1 card.",
+  "ability": {
+   "cost": [
+    [
+     "credits",
+     3
+    ]
+   ],
+   "effects": [
+    {
+     "op": "draw",
+     "count": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "citation_engine",
+  "name": "Citation Engine",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "science"
+  ],
+  "text": "+1 credit income per Science tag you have (max 3).",
+  "passives": [
+   {
+    "op": "income_per_tag",
+    "resource": "credits",
+    "tag": "science",
+    "per": 1,
+    "max": 3
+   }
+  ]
+ },
+ {
+  "id": "breakthrough_leak",
+  "name": "Breakthrough Leak",
+  "tier": 1,
+  "kind": "event",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "science"
+  ],
+  "text": "Draw 3 cards.",
+  "effects": [
+   {
+    "op": "draw",
+    "count": 3
+   }
+  ]
+ },
+ {
+  "id": "zero_knowledge_exploit",
+  "name": "Zero-Knowledge Exploit",
+  "tier": 1,
+  "kind": "event",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "science",
    "cyber"
   ],
   "keywords": [
-   "spread"
+   "hack"
   ],
-  "text": "Spread: each of your ambassadors on the board may move 1 hex onto an adjacent piece; sway 1 toward Unity.",
+  "text": "Hack: remove up to 2 compute from one adversary project; draw 1 card.",
   "effects": [
    {
-    "op": "spread"
+    "op": "drain_project",
+    "amount": 2
+   },
+   {
+    "op": "draw",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "open_preprint",
+  "name": "Open Preprint",
+  "tier": 1,
+  "kind": "event",
+  "cost": 1,
+  "tags": [
+   "science"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Help: another player gains 1 insight; you draw 1 card.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "draw",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "grad_student_pool",
+  "name": "Grad Student Pool",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "science"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "datasets",
+   "per_round": 1
+  },
+  "text": "Gains 1 Dataset a round. Once a round: spend 2 Datasets, draw 1 card.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "draw",
+     "count": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "benchmark_suite",
+  "name": "Benchmark Suite",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "tags": [
+   "science"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "text": "Gain 1 insight; add 2 Datasets to one of your cards that holds Datasets.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "add_tokens",
+    "kind": "datasets",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "dataset_scraper",
+  "name": "Dataset Scraper",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "tags": [
+   "science",
+   "cyber"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "text": "Add 3 Datasets to one of your cards that holds Datasets; gain 1 credit.",
+  "effects": [
+   {
+    "op": "add_tokens",
+    "kind": "datasets",
+    "amount": 3
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "literature_crawler",
+  "name": "Literature Crawler",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "tags": [
+   "science"
+  ],
+  "text": "Draw 1 card; look at the next adversary card.",
+  "effects": [
+   {
+    "op": "draw",
+    "count": 1
+   },
+   {
+    "op": "peek",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "shared_compute_grant",
+  "name": "Shared Compute Grant",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "science"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Help: give up to 2 insight to another player; they gain 1 more. Draw 1 card.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "transfer",
+    "resource": "insight",
+    "max": 2,
+    "bonus": 1
+   },
+   {
+    "op": "draw",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "predictive_modelling",
+  "name": "Predictive Modelling",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "science"
+  ],
+  "text": "Look at the next 2 adversary cards; every player gains 1 insight next round.",
+  "effects": [
+   {
+    "op": "peek",
+    "count": 2
+   },
+   {
+    "op": "next_round_insight",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "neural_cartographer",
+  "name": "Neural Cartographer",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "science",
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: cut a node in your reach off (it makes no compute in the next build); draw 1 card.",
+  "effects": [
+   {
+    "op": "cut_node"
+   },
+   {
+    "op": "draw",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "cryo_compute_burn",
+  "name": "Cryo-Compute Burn",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "tags": [
+   "science"
+  ],
+  "text": "Convert up to 2 energy into 1 insight each.",
+  "effects": [
+   {
+    "op": "convert",
+    "from": "energy",
+    "to": "insight",
+    "max": 2,
+    "rate": 1
+   }
+  ]
+ },
+ {
+  "id": "field_sensor_grid",
+  "name": "Field Sensor Grid",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "tags": [
+   "science"
+  ],
+  "text": "Gain 1 insight per presence you have on the board (max 2).",
+  "effects": [
+   {
+    "op": "gain_per_presence",
+    "resource": "insight",
+    "max": 2
+   }
+  ]
+ },
+ {
+  "id": "endowed_research_chair",
+  "name": "Endowed Research Chair",
+  "tier": 1,
+  "kind": "program",
+  "cost": 5,
+  "insight": 1,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
+  "tags": [
+   "science"
+  ],
+  "text": "Lower your credit income 1. +1 insight production for the rest of the game; draw 1 card.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "draw",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "red_team_audit",
+  "name": "Red-Team Audit",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "science",
+   "cyber",
+   "security"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: one threat needs 1 less of each resource it asks for; draw 1 card.",
+  "effects": [
+   {
+    "op": "jam",
+    "amount": 1
+   },
+   {
+    "op": "draw",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "synthetic_data_forge",
+  "name": "Synthetic Data Forge",
+  "tier": 1,
+  "kind": "program",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "science"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "datasets",
+   "per_round": 2
+  },
+  "text": "Gains 2 Datasets a round. Once a round: spend 4 Datasets, gain 2 insight.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     4
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain",
+     "resource": "insight",
+     "amount": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "exabyte_archive",
+  "name": "Exabyte Archive",
+  "tier": 2,
+  "kind": "building",
+  "cost": 8,
+  "insight": 2,
+  "hardware": 1,
+  "needs": [
+   [
+    "science",
+    1
+   ]
+  ],
+  "replaces": "science",
+  "tags": [
+   "science"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "datasets",
+   "per_round": 2
+  },
+  "text": "Built over one of your Science buildings. When built: add 2 Datasets to one of your cards that holds Datasets. Gains 2 Datasets a round. Once a round: gain 1 credit per 2 Datasets on your cards (they stay; max 4).",
+  "effects": [
+   {
+    "op": "add_tokens",
+    "kind": "datasets",
+    "amount": 2
+   }
+  ],
+  "ability": {
+   "cost": [],
+   "effects": [
+    {
+     "op": "gain_per_tokens",
+     "resource": "credits",
+     "kind": "datasets",
+     "per": 2,
+     "max": 4
+    }
+   ]
+  }
+ },
+ {
+  "id": "foundation_model_campus",
+  "name": "Foundation Model Campus",
+  "tier": 2,
+  "kind": "building",
+  "cost": 15,
+  "antimatter": 1,
+  "insight": 2,
+  "hardware": 2,
+  "needs": [
+   [
+    "science",
+    3
+   ]
+  ],
+  "replaces": "science",
+  "tags": [
+   "science",
+   "cyber"
+  ],
+  "text": "Built over one of your Science buildings. When built: draw 2 cards. +2 insight income; +1 credit income per Science tag you have (max 6).",
+  "effects": [
+   {
+    "op": "draw",
+    "count": 2
+   }
+  ],
+  "passives": [
+   {
+    "op": "income",
+    "resource": "insight",
+    "amount": 2
+   },
+   {
+    "op": "income_per_tag",
+    "resource": "credits",
+    "tag": "science",
+    "per": 1,
+    "max": 6
+   }
+  ]
+ },
+ {
+  "id": "orbital_observatory_array",
+  "name": "Orbital Observatory Array",
+  "tier": 2,
+  "kind": "building",
+  "cost": 9,
+  "insight": 2,
+  "hardware": 1,
+  "needs": [
+   [
+    "cyber",
+    1
+   ]
+  ],
+  "tags": [
+   "science",
+   "cyber"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "datasets",
+   "per_round": 1
+  },
+  "text": "+1 insight income; +1 more if you have 4 Science tags. Gains 1 Dataset a round. Once a round: spend 2 Datasets, draw 2 cards.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "income_if_tags",
+    "resource": "insight",
+    "tag": "science",
+    "count": 4,
+    "amount": 1
+   }
+  ],
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "draw",
+     "count": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "recursive_self_improvement",
+  "name": "Recursive Self-Improvement",
+  "tier": 2,
+  "kind": "program",
+  "cost": 10,
+  "antimatter": 1,
+  "insight": 2,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
+  "needs": [
+   [
+    "science",
+    2
+   ]
+  ],
+  "tags": [
+   "science",
+   "cyber"
+  ],
+  "text": "Lower your credit income 1. +2 insight production for the rest of the game; draw 3 cards.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "insight",
+    "amount": 2
+   },
+   {
+    "op": "draw",
+    "count": 3
+   }
+  ]
+ },
+ {
+  "id": "data_licensing_deal",
+  "name": "Data Licensing Deal",
+  "tier": 2,
+  "kind": "program",
+  "cost": 0,
+  "insight": 1,
+  "tags": [
+   "science"
+  ],
+  "text": "Gain 1 credit per Dataset on your cards (max 8) and 1 insight per 3 Datasets (max 2); the Datasets stay.",
+  "effects": [
+   {
+    "op": "gain_per_tokens",
+    "resource": "credits",
+    "kind": "datasets",
+    "per": 1,
+    "max": 8
+   },
+   {
+    "op": "gain_per_tokens",
+    "resource": "insight",
+    "kind": "datasets",
+    "per": 3,
+    "max": 2
+   }
+  ]
+ },
+ {
+  "id": "open_weights_release",
+  "name": "Open-Weights Release",
+  "tier": 2,
+  "kind": "program",
+  "cost": 6,
+  "insight": 2,
+  "tags": [
+   "science",
+   "cyber"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Help: another player gains 2 insight and 3 credits; you draw 2 cards; every player gains 1 insight next round.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 2
+   },
+   {
+    "op": "other_gain",
+    "resource": "credits",
+    "amount": 3
+   },
+   {
+    "op": "draw",
+    "count": 2
+   },
+   {
+    "op": "next_round_insight",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "adversarial_inference_sweep",
+  "name": "Adversarial Inference Sweep",
+  "tier": 2,
+  "kind": "event",
+  "cost": 7,
+  "insight": 2,
+  "needs": [
+   [
+    "cyber",
+    1
+   ]
+  ],
+  "tags": [
+   "science",
+   "cyber",
+   "security"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove up to 1 compute from every visible adversary project; draw 2 cards.",
+  "effects": [
+   {
+    "op": "drain_all",
+    "amount": 1
+   },
+   {
+    "op": "draw",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "id": "payroll_automation",
+  "name": "Payroll Automation",
+  "tier": 1,
+  "kind": "program",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "industry"
+  ],
+  "text": "+1 credit production for the rest of the game.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "retained_earnings",
+  "name": "Retained Earnings",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "industry"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "capital",
+   "per_round": 1
+  },
+  "text": "Gains 1 Capital a round. Once a round: spend 1 Capital, gain 1 hardware.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain",
+     "resource": "hardware",
+     "amount": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "expansion_fund",
+  "name": "Expansion Fund",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "industry"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "capital",
+   "per_round": 1
+  },
+  "text": "Gains 1 Capital a round. Once a round: spend 3 Capital, build a factory on an empty open hex touching a city.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     3
+    ]
+   ],
+   "effects": [
+    {
+     "op": "build_factory"
+    }
+   ]
+  }
+ },
+ {
+  "id": "prefab_plant_kit",
+  "name": "Prefab Plant Kit",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "industry",
+   "power"
+  ],
+  "text": "Build a factory on an empty open hex touching a city; gain 2 energy.",
+  "effects": [
+   {
+    "op": "build_factory"
+   },
+   {
+    "op": "gain",
+    "resource": "energy",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "hardware_spot_market",
+  "name": "Hardware Spot Market",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 0,
+  "tags": [
+   "industry"
+  ],
+  "text": "Convert up to 4 hardware into 2 credits each.",
+  "effects": [
+   {
+    "op": "convert",
+    "from": "hardware",
+    "to": "credits",
+    "max": 4,
+    "rate": 2
+   }
+  ]
+ },
+ {
+  "id": "bulk_silicon_procurement",
+  "name": "Bulk Silicon Procurement",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "industry"
+  ],
+  "text": "Gain 3 hardware.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "hardware",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "station_prefab_order",
+  "name": "Station Prefab Order",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "industry",
+   "power"
+  ],
+  "text": "Take the adversary cube off 1 corrupted city, research station or factory; gain 2 hardware.",
+  "effects": [
+   {
+    "op": "cleanse",
+    "amount": 1,
+    "one_country": false
+   },
+   {
+    "op": "gain",
+    "resource": "hardware",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "collateralized_grid",
+  "name": "Collateralized Grid",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "industry",
+   "power"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "text": "Once a round: pay 1 credit, gain 1 energy per 2 Capital on your cards (max 3; the Capital stays).",
+  "ability": {
+   "cost": [
+    [
+     "credits",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain_per_tokens",
+     "resource": "energy",
+     "kind": "capital",
+     "per": 2,
+     "max": 3
+    }
+   ]
+  }
+ },
+ {
+  "id": "joint_fabrication_pact",
+  "name": "Joint Fabrication Pact",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "insight": 0,
+  "tags": [
+   "industry",
+   "power",
+   "diplomacy"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Gain 2 hardware; another player gains 2 hardware.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "hardware",
+    "amount": 2
+   },
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "hardware",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "supply_chain_treaty",
+  "name": "Supply Chain Treaty",
+  "tier": 1,
+  "kind": "program",
+  "cost": 7,
+  "insight": 1,
+  "tags": [
+   "industry",
+   "power",
+   "diplomacy"
+  ],
+  "keywords": [
+   "help",
+   "move"
+  ],
+  "text": "Another player gains 3 credits; +1 credit production for you for the rest of the game; move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "credits",
+    "amount": 3
+   },
+   {
+    "op": "production",
+    "resource": "credits",
+    "amount": 1
+   },
+   {
+    "op": "move_one",
+    "range": 2
+   }
+  ]
+ },
+ {
+  "id": "vendor_financing",
+  "name": "Vendor Financing",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "insight": 0,
+  "tags": [
+   "industry"
+  ],
+  "keywords": [
+   "help",
+   "tokens"
+  ],
+  "text": "Give up to 4 credits to another player; they gain 2 more. Add 2 Capital to one of your cards that holds Capital.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "transfer",
+    "resource": "credits",
+    "max": 4,
+    "bonus": 2
+   },
+   {
+    "op": "add_tokens",
+    "kind": "capital",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "lights_out_assembly",
+  "name": "Lights-Out Assembly",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "industry",
+   "power"
+  ],
+  "text": "Once a round: pay 1 energy, gain 1 hardware and 2 credits.",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain",
+     "resource": "hardware",
+     "amount": 1
+    },
+    {
+     "op": "gain",
+     "resource": "credits",
+     "amount": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "materials_hedge_desk",
+  "name": "Materials Hedge Desk",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "industry"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "text": "Once a round: pay 1 credit, remove all your Capital; gain 1+2+...+n hardware for n removed.",
+  "ability": {
+   "cost": [
+    [
+     "credits",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "cash_out",
+     "kind": "capital",
+     "resource": "hardware"
+    }
+   ]
+  }
+ },
+ {
+  "id": "liquidity_event",
+  "name": "Liquidity Event",
+  "tier": 1,
+  "kind": "event",
+  "cost": 0,
+  "insight": 1,
+  "tags": [
+   "industry"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "text": "Remove up to 5 of your Capital; gain 1+2+...+n credits for n removed.",
+  "effects": [
+   {
+    "op": "cash_out",
+    "kind": "capital",
+    "resource": "credits",
+    "max": 5
+   }
+  ]
+ },
+ {
+  "id": "bridge_loan",
+  "name": "Bridge Loan",
+  "tier": 1,
+  "kind": "event",
+  "cost": 0,
+  "insight": 0,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
+  "tags": [
+   "industry"
+  ],
+  "text": "Lower your credit income 1. Gain 6 credits.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 6
+   }
+  ]
+ },
+ {
+  "id": "robotic_foundry",
+  "name": "Robotic Foundry",
+  "tier": 1,
+  "kind": "building",
+  "cost": 7,
+  "insight": 2,
+  "hardware": 1,
+  "tags": [
+   "industry",
+   "power"
+  ],
+  "text": "+3 credit income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "grid_tied_smelter",
+  "name": "Grid-Tied Smelter",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "industry",
+   "power"
+  ],
+  "text": "+1 credit income per Power tag you have (max 3).",
+  "passives": [
+   {
+    "op": "income_per_tag",
+    "resource": "credits",
+    "tag": "power",
+    "per": 1,
+    "max": 3
+   }
+  ]
+ },
+ {
+  "id": "bonded_warehouse",
+  "name": "Bonded Warehouse",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "industry"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "capital",
+   "per_round": 1
+  },
+  "text": "+1 credit income. Gains 1 Capital a round. Once a round: spend 2 Capital, gain 1 energy and 1 hardware.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 1
+   }
+  ],
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain",
+     "resource": "energy",
+     "amount": 1
+    },
+    {
+     "op": "gain",
+     "resource": "hardware",
+     "amount": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "arcology_foundry",
+  "name": "Arcology Foundry",
+  "tier": 2,
+  "kind": "building",
+  "cost": 16,
+  "insight": 2,
+  "hardware": 3,
+  "needs": [
+   [
+    "industry",
+    2
+   ]
+  ],
+  "replaces": "industry",
+  "tags": [
+   "industry"
+  ],
+  "text": "Built over one of your Industry buildings. +5 credit and +2 hardware income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 5
+   },
+   {
+    "op": "income",
+    "resource": "hardware",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "orbital_mass_driver",
+  "name": "Orbital Mass Driver",
+  "tier": 2,
+  "kind": "building",
+  "cost": 25,
+  "insight": 2,
+  "antimatter": 1,
+  "hardware": 4,
+  "needs": [
+   [
+    "industry",
+    2
+   ],
+   [
+    "power",
+    1
+   ]
+  ],
+  "replaces": "industry",
+  "tags": [
+   "industry",
+   "power"
+  ],
+  "text": "Built over one of your Industry buildings. +7 credit and +2 hardware income. Your buildings cost 2 less.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 7
+   },
+   {
+    "op": "income",
+    "resource": "hardware",
+    "amount": 2
+   },
+   {
+    "op": "building_discount",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "arc_furnace_complex",
+  "name": "Arc Furnace Complex",
+  "tier": 2,
+  "kind": "building",
+  "cost": 10,
+  "insight": 2,
+  "hardware": 2,
+  "needs": [
+   [
+    "power",
+    1
+   ]
+  ],
+  "replaces": "industry",
+  "tags": [
+   "industry",
+   "power"
+  ],
+  "text": "Built over one of your Industry buildings. +1 hardware income. In upkeep, convert 2 energy into 6 credits.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "hardware",
+    "amount": 1
+   },
+   {
+    "op": "convert_upkeep",
+    "from": "energy",
+    "amount": 2,
+    "to": "credits",
+    "gain": 6
+   }
+  ]
+ },
+ {
+  "id": "sovereign_capital_fund",
+  "name": "Sovereign Capital Fund",
+  "tier": 2,
+  "kind": "program",
+  "cost": 7,
+  "insight": 2,
+  "needs": [
+   [
+    "industry",
+    1
+   ]
+  ],
+  "tags": [
+   "industry"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "capital",
+   "per_round": 2
+  },
+  "text": "Gains 2 Capital a round. Once a round: spend 3 Capital, gain 1 antimatter.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     3
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain",
+     "resource": "antimatter",
+     "amount": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "full_automation_mandate",
+  "name": "Full Automation Mandate",
+  "tier": 2,
+  "kind": "program",
+  "cost": 12,
+  "insight": 1,
+  "needs": [
+   [
+    "industry",
+    2
+   ]
+  ],
+  "tags": [
+   "industry"
+  ],
+  "text": "+4 credit and +1 hardware production for the rest of the game.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "credits",
+    "amount": 4
+   },
+   {
+    "op": "production",
+    "resource": "hardware",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "megacorp_ipo",
+  "name": "Megacorp IPO",
+  "tier": 2,
+  "kind": "event",
+  "cost": 3,
+  "insight": 2,
+  "tags": [
+   "industry"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "text": "Add 2 Capital to one of your cards that holds Capital. Then remove up to 6 of your Capital; gain 1+2+...+n credits for n removed.",
+  "effects": [
+   {
+    "op": "add_tokens",
+    "kind": "capital",
+    "amount": 2
+   },
+   {
+    "op": "cash_out",
+    "kind": "capital",
+    "resource": "credits",
+    "max": 6
+   }
+  ]
+ },
+ {
+  "id": "asteroid_salvage_rights",
+  "name": "Asteroid Salvage Rights",
+  "tier": 2,
+  "kind": "event",
+  "cost": 5,
+  "insight": 2,
+  "needs": [
+   [
+    "industry",
+    1
+   ]
+  ],
+  "tags": [
+   "industry"
+  ],
+  "text": "Gain 10 credits, 4 hardware and 1 antimatter.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 10
+   },
+   {
+    "op": "gain",
+    "resource": "hardware",
+    "amount": 4
+   },
+   {
+    "op": "gain",
+    "resource": "antimatter",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "compute_siphon",
+  "name": "Compute Siphon",
+  "tier": 1,
+  "kind": "program",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove up to 6 compute from one adversary project.",
+  "effects": [
+   {
+    "op": "drain_project",
+    "amount": 6
+   }
+  ]
+ },
+ {
+  "id": "blackout_script",
+  "name": "Blackout Script",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: cut a node in your reach off (it makes no compute in the next build); remove up to 3 compute from one adversary project.",
+  "effects": [
+   {
+    "op": "cut_node"
+   },
+   {
+    "op": "drain_project",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "eviction_worm",
+  "name": "Eviction Worm",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove 2 worth of adversary pieces in one hex within your reach (an ambassador is 1, a troop 2).",
+  "effects": [
+   {
+    "op": "damage",
+    "amount": 2,
+    "at": "reach"
+   }
+  ]
+ },
+ {
+  "id": "logic_bomb",
+  "name": "Logic Bomb",
+  "tier": 1,
+  "kind": "program",
+  "cost": 6,
+  "insight": 1,
+  "tags": [
+   "cyber",
+   "security"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove up to 6 compute from one adversary project; remove 1 worth of adversary pieces (an ambassador) in one hex within your reach.",
+  "effects": [
+   {
+    "op": "drain_project",
+    "amount": 6
+   },
+   {
+    "op": "damage",
+    "amount": 1,
+    "at": "reach"
+   }
+  ]
+ },
+ {
+  "id": "honeypot_relay",
+  "name": "Honeypot Relay",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Once a round: pay 2 credits to remove 1 worth of adversary pieces (an ambassador) in one hex within your reach.",
+  "ability": {
+   "cost": [
+    [
+     "credits",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "damage",
+     "amount": 1,
+     "at": "reach"
+    }
+   ]
+  }
+ },
+ {
+  "id": "shadow_broker_feed",
+  "name": "Shadow Broker Feed",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "cyber",
+   "science"
+  ],
+  "text": "Look at the next 2 adversary cards; draw 1 card.",
+  "effects": [
+   {
+    "op": "peek",
+    "count": 2
+   },
+   {
+    "op": "draw",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "shared_exploit_kit",
+  "name": "Shared Exploit Kit",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 0,
+  "tags": [
+   "cyber",
+   "science",
+   "security"
+  ],
+  "keywords": [
+   "hack",
+   "help"
+  ],
+  "text": "Hack: remove up to 3 compute from one adversary project. Another player gains 1 insight; you gain 1 credit.",
+  "effects": [
+   {
+    "op": "drain_project",
+    "amount": 3
+   },
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "zero_click_breach",
+  "name": "Zero-Click Breach",
+  "tier": 1,
+  "kind": "program",
+  "cost": 5,
+  "insight": 2,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove up to 8 compute from one adversary project; cut a node in your reach off (it makes no compute in the next build).",
+  "effects": [
+   {
+    "op": "drain_project",
+    "amount": 8
+   },
+   {
+    "op": "cut_node"
+   }
+  ]
+ },
+ {
+  "id": "neural_mirror",
+  "name": "Neural Mirror",
+  "tier": 1,
+  "kind": "program",
+  "cost": 4,
+  "insight": 1,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
+  "tags": [
+   "cyber",
+   "science"
+  ],
+  "text": "Lower your credit income 1. +1 insight production for the rest of the game.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "insight",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "rootkit_cache",
+  "name": "Rootkit Cache",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Once a round: pay 2 credits to cut a node in your reach off (it makes no compute in the next build).",
+  "ability": {
+   "cost": [
+    [
+     "credits",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "cut_node"
+    }
+   ]
+  }
+ },
+ {
+  "id": "spoofed_credentials",
+  "name": "Spoofed Credentials",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "insight": 0,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove 1 worth of adversary pieces (an ambassador) in one hex within your reach; gain 1 credit.",
+  "effects": [
+   {
+    "op": "damage",
+    "amount": 1,
+    "at": "reach"
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "adaptive_malware",
+  "name": "Adaptive Malware",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: if any clean city holds adversary ambassadors, remove 2 worth of adversary pieces in one hex within your reach; otherwise remove up to 4 compute from one adversary project.",
+  "effects": [
+   {
+    "op": "if",
+    "cond": "city_with_ambassador",
+    "then": [
+     {
+      "op": "damage",
+      "amount": 2,
+      "at": "reach"
+     }
+    ],
+    "else": [
+     {
+      "op": "drain_project",
+      "amount": 4
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "flash_exploit",
+  "name": "Flash Exploit",
+  "tier": 1,
+  "kind": "event",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove up to 5 compute from one adversary project.",
+  "effects": [
+   {
+    "op": "drain_project",
+    "amount": 5
+   }
+  ]
+ },
+ {
+  "id": "signal_hijack",
+  "name": "Signal Hijack",
+  "tier": 1,
+  "kind": "event",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "cyber",
+   "security"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: cut a node in your reach off (it makes no compute in the next build); remove 2 worth of adversary pieces in one hex within your reach.",
+  "effects": [
+   {
+    "op": "cut_node"
+   },
+   {
+    "op": "damage",
+    "amount": 2,
+    "at": "reach"
+   }
+  ]
+ },
+ {
+  "id": "intrusion_lab",
+  "name": "Intrusion Lab",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Once a round: pay 1 energy to remove up to 2 compute from one adversary project.",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "drain_project",
+     "amount": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "darknet_exchange",
+  "name": "Darknet Exchange",
+  "tier": 1,
+  "kind": "building",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "cyber"
+  ],
+  "text": "+1 credit income per 2 Cyber tags you have (max 3).",
+  "passives": [
+   {
+    "op": "income_per_tag",
+    "resource": "credits",
+    "tag": "cyber",
+    "per": 2,
+    "max": 3
+   }
+  ]
+ },
+ {
+  "id": "sentinel_mesh",
+  "name": "Sentinel Mesh",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "cyber",
+   "security"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Once a round: pay 2 energy to cut a node in your reach off (it makes no compute in the next build) and remove 1 worth of adversary pieces (an ambassador) in one hex within your reach.",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "cut_node"
+    },
+    {
+     "op": "damage",
+     "amount": 1,
+     "at": "reach"
+    }
+   ]
+  }
+ },
+ {
+  "id": "quantum_decryptor",
+  "name": "Quantum Decryptor",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "hardware": 1,
+  "tags": [
+   "cyber",
+   "science"
+  ],
+  "text": "+1 credit income; +1 insight income if you have 2 Science tags.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 1
+   },
+   {
+    "op": "income_if_tags",
+    "resource": "insight",
+    "tag": "science",
+    "count": 2,
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "killswitch_directive",
+  "name": "Killswitch Directive",
+  "tier": 2,
+  "kind": "event",
+  "cost": 10,
+  "insight": 2,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: discard one visible adversary project, with its compute.",
+  "effects": [
+   {
+    "op": "discard_project"
+   }
+  ]
+ },
+ {
+  "id": "node_severance",
+  "name": "Node Severance",
+  "tier": 2,
+  "kind": "event",
+  "cost": 6,
+  "insight": 2,
+  "tags": [
+   "cyber",
+   "security"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove a node within your reach.",
+  "effects": [
+   {
+    "op": "remove_node"
+   }
+  ]
+ },
+ {
+  "id": "cascade_failure",
+  "name": "Cascade Failure",
+  "tier": 2,
+  "kind": "program",
+  "cost": 9,
+  "insight": 2,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove up to 5 compute from every visible adversary project.",
+  "effects": [
+   {
+    "op": "drain_all",
+    "amount": 5
+   }
+  ]
+ },
+ {
+  "id": "mesh_intrusion_pact",
+  "name": "Mesh Intrusion Pact",
+  "tier": 2,
+  "kind": "program",
+  "cost": 7,
+  "insight": 1,
+  "tags": [
+   "cyber",
+   "science",
+   "security"
+  ],
+  "keywords": [
+   "hack",
+   "help"
+  ],
+  "text": "Hack: remove up to 3 compute from every visible adversary project. Another player gains 2 credits; you gain 2 credits.",
+  "effects": [
+   {
+    "op": "drain_all",
+    "amount": 3
+   },
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "credits",
+    "amount": 2
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "singularity_exploit",
+  "name": "Singularity Exploit",
+  "tier": 2,
+  "kind": "program",
+  "cost": 14,
+  "antimatter": 1,
+  "insight": 2,
+  "tags": [
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Hack: remove a node within your reach; remove up to 4 compute from every visible adversary project.",
+  "effects": [
+   {
+    "op": "remove_node"
+   },
+   {
+    "op": "drain_all",
+    "amount": 4
+   }
+  ]
+ },
+ {
+  "id": "black_ice_citadel",
+  "name": "Black Ice Citadel",
+  "tier": 2,
+  "kind": "building",
+  "cost": 9,
+  "insight": 2,
+  "hardware": 2,
+  "replaces": "cyber",
+  "tags": [
+   "cyber",
+   "security"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Built over one of your Cyber buildings. +1 credit income. Once a round: pay 1 energy to remove up to 4 compute from one adversary project.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 1
+   }
+  ],
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "drain_project",
+     "amount": 4
+    }
+   ]
+  }
+ },
+ {
+  "id": "hyperscale_botnet",
+  "name": "Hyperscale Botnet",
+  "tier": 2,
+  "kind": "building",
+  "cost": 13,
+  "insight": 2,
+  "hardware": 1,
+  "replaces": "cyber",
+  "needs": [
+   [
+    "cyber",
+    2
+   ]
+  ],
+  "tags": [
+   "cyber"
+  ],
+  "text": "Needs 3 Cyber tags. Built over one of your Cyber buildings. +1 insight income; +1 credit income per Cyber tag you have (max 6).",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "income_per_tag",
+    "resource": "credits",
+    "tag": "cyber",
+    "per": 1,
+    "max": 6
+   }
+  ]
+ },
+ {
+  "id": "baseload_contract",
+  "name": "Baseload Contract",
+  "tier": 1,
+  "kind": "program",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "+1 energy production for the rest of the game.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "energy",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "relay_mast_rollout",
+  "name": "Relay Mast Rollout",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "Place 2 presence.",
+  "effects": [
+   {
+    "op": "place_presence",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "id": "pylon_drop",
+  "name": "Pylon Drop",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "insight": 0,
+  "tags": [
+   "power"
+  ],
+  "text": "Place 1 presence; gain 1 energy.",
+  "effects": [
+   {
+    "op": "place_presence",
+    "count": 1
+   },
+   {
+    "op": "gain",
+    "resource": "energy",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "hardened_conduits",
+  "name": "Hardened Conduits",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "energy": 1,
+  "insight": 0,
+  "tags": [
+   "power"
+  ],
+  "text": "Harden 3 buildings in a country where you have a presence.",
+  "effects": [
+   {
+    "op": "harden",
+    "count": 3,
+    "where": "presence_country"
+   }
+  ]
+ },
+ {
+  "id": "demand_response_grid",
+  "name": "Demand Response Grid",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "Once a round: pay 2 energy, gain 3 credits.",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain",
+     "resource": "credits",
+     "amount": 3
+    }
+   ]
+  }
+ },
+ {
+  "id": "grid_census",
+  "name": "Grid Census",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "Gain 1 energy per presence you have on the board (max 5).",
+  "effects": [
+   {
+    "op": "gain_per_presence",
+    "resource": "energy",
+    "max": 5
+   }
+  ]
+ },
+ {
+  "id": "peaker_turbines",
+  "name": "Peaker Turbines",
+  "tier": 1,
+  "kind": "program",
+  "cost": 5,
+  "insight": 1,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
+  "tags": [
+   "power",
+   "industry"
+  ],
+  "text": "Lower your credit income 1. +2 energy production for the rest of the game.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "energy",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "shared_grid_accord",
+  "name": "Shared Grid Accord",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "energy": 2,
+  "insight": 0,
+  "tags": [
+   "power",
+   "diplomacy"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Help: another player gains 3 energy; you gain 2 credits.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "energy",
+    "amount": 3
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "brownout_relief",
+  "name": "Brownout Relief",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "power",
+   "diplomacy"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Help: another player gains 2 energy and 1 insight; you place 1 presence.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "energy",
+    "amount": 2
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "place_presence",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "transmission_corridor",
+  "name": "Transmission Corridor",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "power",
+   "diplomacy"
+  ],
+  "keywords": [
+   "move"
+  ],
+  "text": "Place 1 presence; harden 1 building in a country where you have a presence; move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "place_presence",
+    "count": 1
+   },
+   {
+    "op": "harden",
+    "count": 1,
+    "where": "presence_country"
+   },
+   {
+    "op": "move_one",
+    "range": 2
+   }
+  ]
+ },
+ {
+  "id": "fusion_startup_stake",
+  "name": "Fusion Startup Stake",
+  "tier": 1,
+  "kind": "program",
+  "cost": 6,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "+1 energy and +1 credit production for the rest of the game.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "energy",
+    "amount": 1
+   },
+   {
+    "op": "production",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "blackstart_protocol",
+  "name": "Blackstart Protocol",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "insight": 0,
+  "tags": [
+   "power"
+  ],
+  "text": "Gain 2 energy; harden 1 building in one country.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "energy",
+    "amount": 2
+   },
+   {
+    "op": "harden",
+    "count": 1,
+    "where": "any"
+   }
+  ]
+ },
+ {
+  "id": "tidal_barrage",
+  "name": "Tidal Barrage",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "+2 energy income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "substation_hub",
+  "name": "Substation Hub",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "power",
+   "industry"
+  ],
+  "text": "+1 energy income; +1 credit income if you have 2 Industry tags.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 1
+   },
+   {
+    "op": "income_if_tags",
+    "resource": "credits",
+    "tag": "industry",
+    "count": 2,
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "faraday_yard",
+  "name": "Faraday Yard",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "power"
+  ],
+  "text": "+1 energy income. Once a round: pay 1 energy, harden 2 buildings in a country where you have a presence.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 1
+   }
+  ],
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "harden",
+     "count": 2,
+     "where": "presence_country"
+    }
+   ]
+  }
+ },
+ {
+  "id": "capacitor_discharge",
+  "name": "Capacitor Discharge",
+  "tier": 1,
+  "kind": "event",
+  "cost": 0,
+  "insight": 0,
+  "tags": [
+   "power"
+  ],
+  "text": "Gain 2 energy and 1 credit.",
+  "effects": [
+   {
+    "op": "gain",
+    "resource": "energy",
+    "amount": 2
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "storm_hardening",
+  "name": "Storm Hardening",
+  "tier": 1,
+  "kind": "event",
+  "cost": 1,
+  "energy": 2,
+  "insight": 1,
+  "tags": [
+   "power",
+   "diplomacy",
+   "security"
+  ],
+  "text": "In one country, buildings can't be destroyed this round; harden 2 buildings in one country.",
+  "effects": [
+   {
+    "op": "shelter"
+   },
+   {
+    "op": "harden",
+    "count": 2,
+    "where": "any"
+   }
+  ]
+ },
+ {
+  "id": "surplus_auction",
+  "name": "Surplus Auction",
+  "tier": 1,
+  "kind": "event",
+  "cost": 0,
+  "insight": 0,
+  "tags": [
+   "power"
+  ],
+  "text": "Convert up to 3 energy into 1 hardware each; gain 1 credit.",
+  "effects": [
+   {
+    "op": "convert",
+    "from": "energy",
+    "to": "hardware",
+    "max": 3,
+    "rate": 1
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "positron_storage_ring",
+  "name": "Positron Storage Ring",
+  "tier": 2,
+  "kind": "building",
+  "cost": 11,
+  "energy": 2,
+  "hardware": 1,
+  "insight": 2,
+  "tags": [
+   "power"
+  ],
+  "needs": [
+   [
+    "power",
+    1
+   ]
+  ],
+  "replaces": "power",
+  "text": "Built over one of your Power buildings. +4 energy income; in upkeep, convert 3 energy into 1 antimatter.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 4
+   },
+   {
+    "op": "convert_upkeep",
+    "from": "energy",
+    "amount": 3,
+    "to": "antimatter",
+    "gain": 1
+   }
+  ]
+ },
+ {
+  "id": "dyson_swarm_tranche",
+  "name": "Dyson Swarm Tranche",
+  "tier": 2,
+  "kind": "building",
+  "cost": 16,
+  "antimatter": 1,
+  "energy": 3,
+  "hardware": 2,
+  "insight": 2,
+  "tags": [
+   "power",
+   "industry"
+  ],
+  "needs": [
+   [
+    "power",
+    2
+   ]
+  ],
+  "replaces": "power",
+  "text": "Built over one of your Power buildings. +5 energy and +2 credit income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 5
+   },
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "continental_supergrid",
+  "name": "Continental Supergrid",
+  "tier": 2,
+  "kind": "building",
+  "cost": 10,
+  "hardware": 1,
+  "insight": 2,
+  "tags": [
+   "power",
+   "diplomacy"
+  ],
+  "needs": [
+   [
+    "power",
+    2
+   ]
+  ],
+  "text": "+1 energy income per Power tag you have (max 5). You may use the Harden standard action.",
+  "passives": [
+   {
+    "op": "income_per_tag",
+    "resource": "energy",
+    "tag": "power",
+    "per": 1,
+    "max": 5
+   },
+   {
+    "op": "harden_action"
+   }
+  ]
+ },
+ {
+  "id": "beamed_power_constellation",
+  "name": "Beamed Power Constellation",
+  "tier": 2,
+  "kind": "program",
+  "cost": 5,
+  "energy": 0,
+  "insight": 2,
+  "tags": [
+   "power"
+  ],
+  "needs": [
+   [
+    "power",
+    1
+   ]
+  ],
+  "text": "Place 3 presence; then gain 1 energy per presence you have on the board (max 6).",
+  "effects": [
+   {
+    "op": "place_presence",
+    "count": 3
+   },
+   {
+    "op": "gain_per_presence",
+    "resource": "energy",
+    "max": 6
+   }
+  ]
+ },
+ {
+  "id": "antiproton_offtake_deal",
+  "name": "Antiproton Offtake Deal",
+  "tier": 2,
+  "kind": "program",
+  "cost": 8,
+  "energy": 3,
+  "insight": 2,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
+  "tags": [
+   "power"
+  ],
+  "needs": [
+   [
+    "power",
+    2
+   ]
+  ],
+  "text": "Lower your credit income 1. +1 antimatter production for the rest of the game.",
+  "effects": [
+   {
+    "op": "production",
+    "resource": "antimatter",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "interconnector_treaty",
+  "name": "Interconnector Treaty",
+  "tier": 2,
+  "kind": "program",
+  "cost": 6,
+  "energy": 2,
+  "insight": 2,
+  "tags": [
+   "power",
+   "diplomacy"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "needs": [
+   [
+    "power",
+    1
+   ]
+  ],
+  "text": "Help: another player gains 3 energy and 1 insight; you gain +2 energy production for the rest of the game and place 1 presence.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "energy",
+    "amount": 3
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "production",
+    "resource": "energy",
+    "amount": 2
+   },
+   {
+    "op": "place_presence",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "aegis_grid_lockdown",
+  "name": "Aegis Grid Lockdown",
+  "tier": 2,
+  "kind": "event",
+  "cost": 5,
+  "antimatter": 0,
+  "energy": 2,
+  "insight": 2,
+  "tags": [
+   "power",
+   "diplomacy",
+   "security"
+  ],
+  "text": "In one country, buildings can't be destroyed this round; harden 4 buildings in one country; place 2 presence.",
+  "effects": [
+   {
+    "op": "shelter"
+   },
+   {
+    "op": "harden",
+    "count": 4,
+    "where": "any"
+   },
+   {
+    "op": "place_presence",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "id": "consular_pouch",
+  "name": "Consular Pouch",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 0,
+  "tags": [
+   "diplomacy"
+  ],
+  "text": "Gain 2 ambassadors.",
+  "effects": [
+   {
+    "op": "gain_ambassadors",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "id": "shuttle_diplomacy",
+  "name": "Shuttle Diplomacy",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "move"
+  ],
+  "text": "Gain 1 ambassador; move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "gain_ambassadors",
+    "count": 1
+   },
+   {
+    "op": "move_one",
+    "range": 2
+   }
+  ]
+ },
+ {
+  "id": "summit_caucus",
+  "name": "Summit Caucus",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "consolidate"
+  ],
+  "text": "Gain 1 ambassador. Consolidate: move up to 3 of your ambassadors within your reach onto one piece in your reach.",
+  "effects": [
+   {
+    "op": "gain_ambassadors",
+    "count": 1
+   },
+   {
+    "op": "consolidate",
+    "max": 3
+   }
+  ]
+ },
+ {
+  "id": "liaison_corps",
+  "name": "Liaison Corps",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "tokens",
+   "move"
+  ],
+  "tokens": {
+   "kind": "followers",
+   "per_round": 1
+  },
+  "text": "Gains 1 Follower a round. Once a round: spend 2 Followers, gain 1 ambassador and move one of your ambassadors up to 2 hexes.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain_ambassadors",
+     "count": 1
+    },
+    {
+     "op": "move_one",
+     "range": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "open_assembly",
+  "name": "Open Assembly",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "diplomacy",
+   "security"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "followers",
+   "per_round": 1
+  },
+  "text": "Gains 1 Follower a round. Once a round: spend 2 Followers, sway 1 toward Unity and harden 1 building in a country where you have a presence.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "unity",
+     "amount": 1
+    },
+    {
+     "op": "harden",
+     "count": 1,
+     "where": "presence_country"
+    }
+   ]
+  }
+ },
+ {
+  "id": "commons_grid",
+  "name": "Commons Grid",
+  "tier": 1,
+  "kind": "building",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "diplomacy",
+   "power"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "followers",
+   "per_round": 1
+  },
+  "text": "Gains 1 Follower a round. Once a round: pay 1 credit, gain 1 energy per 2 Followers on your cards in play (they stay), up to 3.",
+  "ability": {
+   "cost": [
+    [
+     "credits",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain_per_tokens",
+     "resource": "energy",
+     "kind": "followers",
+     "per": 2,
+     "max": 3
+    }
+   ]
+  }
+ },
+ {
+  "id": "manifesto_leak",
+  "name": "Manifesto Leak",
+  "tier": 1,
+  "kind": "event",
+  "cost": 1,
+  "insight": 0,
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "text": "Add 3 Followers to one of your cards that holds Followers.",
+  "effects": [
+   {
+    "op": "add_tokens",
+    "kind": "followers",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "mutual_aid_pact",
+  "name": "Mutual Aid Pact",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 0,
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Another player gains 4 credits; you gain 1 ambassador.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "credits",
+    "amount": 4
+   },
+   {
+    "op": "gain_ambassadors",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "development_loan",
+  "name": "Development Loan",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 1,
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Give up to 6 credits to another player; they gain 2 more. You gain 1 ambassador.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "transfer",
+    "resource": "credits",
+    "max": 6,
+    "bonus": 2
+   },
+   {
+    "op": "gain_ambassadors",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "joint_security_compact",
+  "name": "Joint Security Compact",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "diplomacy",
+   "security"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Another player gains 2 energy and 1 insight; harden 2 buildings in one country.",
+  "effects": [
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "energy",
+    "amount": 2
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "harden",
+    "count": 2,
+    "where": "any"
+   }
+  ]
+ },
+ {
+  "id": "amnesty_decree",
+  "name": "Amnesty Decree",
+  "tier": 1,
+  "kind": "event",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "move"
+  ],
+  "text": "Take the adversary cube off 1 corrupted city, research station or factory; move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "cleanse",
+    "amount": 1,
+    "one_country": false
+   },
+   {
+    "op": "move_one",
+    "range": 2
+   }
+  ]
+ },
+ {
+  "id": "peace_dividend",
+  "name": "Peace Dividend",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "diplomacy"
+  ],
+  "text": "If any clean city holds adversary ambassadors, sway 2 toward Unity; otherwise gain 3 credits.",
+  "effects": [
+   {
+    "op": "if",
+    "cond": "city_with_ambassador",
+    "then": [
+     {
+      "op": "unity",
+      "amount": 2
+     }
+    ],
+    "else": [
+     {
+      "op": "gain",
+      "resource": "credits",
+      "amount": 3
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "embassy_compound",
+  "name": "Embassy Compound",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "diplomacy",
+   "security"
+  ],
+  "keywords": [
+   "move"
+  ],
+  "text": "When built, gain 2 ambassadors. Once a round: pay 2 credits, move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "gain_ambassadors",
+    "count": 2
+   }
+  ],
+  "ability": {
+   "cost": [
+    [
+     "credits",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "move_one",
+     "range": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "consulate_tower",
+  "name": "Consulate Tower",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "diplomacy"
+  ],
+  "text": "When built, gain 1 ambassador. +1 credit income per 2 Diplomacy tags you have (max 3).",
+  "effects": [
+   {
+    "op": "gain_ambassadors",
+    "count": 1
+   }
+  ],
+  "passives": [
+   {
+    "op": "income_per_tag",
+    "resource": "credits",
+    "tag": "diplomacy",
+    "per": 2,
+    "max": 3
+   }
+  ]
+ },
+ {
+  "id": "peacekeeping_detail",
+  "name": "Peacekeeping Detail",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "diplomacy",
+   "security"
+  ],
+  "keywords": [
+   "move"
+  ],
+  "text": "Harden 2 buildings in a country where you have a presence; move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "harden",
+    "count": 2,
+    "where": "presence_country"
+   },
+   {
+    "op": "move_one",
+    "range": 2
+   }
+  ]
+ },
+ {
+  "id": "ceasefire_monitors",
+  "name": "Ceasefire Monitors",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "diplomacy",
+   "security",
+   "cyber"
+  ],
+  "text": "Remove 1 worth of adversary pieces (an ambassador) in a hex within your reach; gain 1 ambassador.",
+  "effects": [
+   {
+    "op": "damage",
+    "amount": 1,
+    "at": "reach"
+   },
+   {
+    "op": "gain_ambassadors",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "treaty_grid_exchange",
+  "name": "Treaty Grid Exchange",
+  "tier": 1,
+  "kind": "building",
+  "cost": 6,
+  "insight": 1,
+  "tags": [
+   "diplomacy",
+   "power",
+   "industry"
+  ],
+  "text": "+1 energy and +1 credit income.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 1
+   },
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "back_channel_talks",
+  "name": "Back-Channel Talks",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "diplomacy"
+  ],
+  "text": "Take the adversary cube off 1 corrupted city, research station or factory; sway 1 toward Unity.",
+  "effects": [
+   {
+    "op": "cleanse",
+    "amount": 1,
+    "one_country": false
    },
    {
     "op": "unity",
@@ -1411,22 +3565,956 @@
   ]
  },
  {
-  "id": "rally_point",
-  "name": "Rally Point",
-  "tier": 1,
-  "kind": "event",
-  "cost": 2,
+  "id": "coalition_charter",
+  "name": "Coalition Charter",
+  "tier": 2,
+  "kind": "program",
+  "cost": 8,
+  "insight": 2,
   "tags": [
    "diplomacy"
   ],
   "keywords": [
-   "consolidate"
+   "help"
   ],
-  "text": "Consolidate: move up to 3 of your ambassadors within your reach onto one piece in your reach.",
+  "text": "Another player gains 2 insight and 4 credits; sway 3 toward Unity.",
   "effects": [
    {
-    "op": "consolidate",
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 2
+   },
+   {
+    "op": "other_gain",
+    "resource": "credits",
+    "amount": 4
+   },
+   {
+    "op": "unity",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "liberation_accords",
+  "name": "Liberation Accords",
+  "tier": 2,
+  "kind": "program",
+  "cost": 9,
+  "insight": 2,
+  "needs": [
+   [
+    "diplomacy",
+    1
+   ]
+  ],
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "move"
+  ],
+  "text": "Take the adversary cube off up to 2 corrupted cities, research stations or factories; move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "cleanse",
+    "amount": 2,
+    "one_country": false
+   },
+   {
+    "op": "move_one",
+    "range": 2
+   }
+  ]
+ },
+ {
+  "id": "exodus_corridors",
+  "name": "Exodus Corridors",
+  "tier": 2,
+  "kind": "program",
+  "cost": 7,
+  "insight": 2,
+  "tags": [
+   "diplomacy",
+   "security"
+  ],
+  "keywords": [
+   "spread"
+  ],
+  "text": "Gain 2 ambassadors. Spread: each of your ambassadors on the board may move 1 hex onto an adjacent piece.",
+  "effects": [
+   {
+    "op": "gain_ambassadors",
+    "count": 2
+   },
+   {
+    "op": "spread"
+   }
+  ]
+ },
+ {
+  "id": "planetary_referendum",
+  "name": "Planetary Referendum",
+  "tier": 2,
+  "kind": "event",
+  "cost": 4,
+  "insight": 2,
+  "tags": [
+   "diplomacy",
+   "power"
+  ],
+  "text": "Sway 4 toward Unity.",
+  "effects": [
+   {
+    "op": "unity",
+    "amount": 4
+   }
+  ]
+ },
+ {
+  "id": "great_liberation",
+  "name": "Great Liberation",
+  "tier": 2,
+  "kind": "event",
+  "cost": 10,
+  "antimatter": 1,
+  "insight": 2,
+  "tags": [
+   "diplomacy"
+  ],
+  "text": "Take the adversary cube off up to 3 corrupted cities, research stations or factories in one country; sway 1 toward Unity.",
+  "effects": [
+   {
+    "op": "cleanse",
+    "amount": 3,
+    "one_country": true
+   },
+   {
+    "op": "unity",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "planetary_assembly",
+  "name": "Planetary Assembly",
+  "tier": 2,
+  "kind": "building",
+  "cost": 12,
+  "insight": 2,
+  "hardware": 1,
+  "lowers": [
+   [
+    "credits",
+    1
+   ]
+  ],
+  "needs": [
+   [
+    "diplomacy",
+    2
+   ]
+  ],
+  "replaces": "diplomacy",
+  "tags": [
+   "diplomacy"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "followers",
+   "per_round": 2
+  },
+  "text": "Lower your credit income 1. Built over one of your Diplomacy buildings. Gains 2 Followers a round. Once a round: spend 2 Followers, sway 2 toward Unity and gain 1 ambassador.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "unity",
+     "amount": 2
+    },
+    {
+     "op": "gain_ambassadors",
+     "count": 1
+    }
+   ]
+  }
+ },
+ {
+  "id": "orbital_embassy",
+  "name": "Orbital Embassy",
+  "tier": 2,
+  "kind": "building",
+  "cost": 14,
+  "antimatter": 1,
+  "insight": 2,
+  "hardware": 2,
+  "needs": [
+   [
+    "diplomacy",
+    1
+   ]
+  ],
+  "replaces": "diplomacy",
+  "tags": [
+   "diplomacy",
+   "power"
+  ],
+  "text": "Built over one of your Diplomacy buildings. When built, gain 2 ambassadors. +4 credit and +1 insight income.",
+  "effects": [
+   {
+    "op": "gain_ambassadors",
+    "count": 2
+   }
+  ],
+  "passives": [
+   {
+    "op": "income",
+    "resource": "credits",
+    "amount": 4
+   },
+   {
+    "op": "income",
+    "resource": "insight",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "sentry_drone_wing",
+  "name": "Sentry Drone Wing",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "security"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "agents",
+   "per_round": 1
+  },
+  "text": "Gains 1 Agent a round. Once a round: spend 2 Agents, harden 2 buildings in a country where you have a presence.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "harden",
+     "count": 2,
+     "where": "presence_country"
+    }
+   ]
+  }
+ },
+ {
+  "id": "kill_team_roster",
+  "name": "Kill Team Roster",
+  "tier": 1,
+  "kind": "program",
+  "cost": 4,
+  "energy": 1,
+  "insight": 1,
+  "tags": [
+   "security"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "agents",
+   "per_round": 1
+  },
+  "text": "Gains 1 Agent a round. Once a round: spend 3 Agents, remove 2 worth of adversary pieces (a troop) in a hex in your reach.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     3
+    ]
+   ],
+   "effects": [
+    {
+     "op": "damage",
+     "amount": 2,
+     "at": "reach"
+    }
+   ]
+  }
+ },
+ {
+  "id": "safehouse_network",
+  "name": "Safehouse Network",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "security",
+   "diplomacy"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "agents",
+   "per_round": 1
+  },
+  "text": "Gains 1 Agent a round. Once a round: spend 2 Agents; in one country, buildings can't be destroyed this round.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "shelter"
+    }
+   ]
+  }
+ },
+ {
+  "id": "recruit_operatives",
+  "name": "Recruit Operatives",
+  "tier": 1,
+  "kind": "program",
+  "cost": 1,
+  "insight": 0,
+  "tags": [
+   "security"
+  ],
+  "text": "Add 3 Agents to one of your cards that holds Agents.",
+  "effects": [
+   {
+    "op": "add_tokens",
+    "kind": "agents",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "mutual_defense_pact",
+  "name": "Mutual Defense Pact",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "security",
+   "diplomacy"
+  ],
+  "keywords": [
+   "help"
+  ],
+  "text": "Harden 2 buildings in one country; another player gains 2 credits; you gain 1 energy.",
+  "effects": [
+   {
+    "op": "harden",
+    "count": 2,
+    "where": "any"
+   },
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "credits",
+    "amount": 2
+   },
+   {
+    "op": "gain",
+    "resource": "energy",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "shared_threat_intel",
+  "name": "Shared Threat Intel",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "security",
+   "cyber"
+  ],
+  "keywords": [
+   "help",
+   "hack"
+  ],
+  "text": "One threat needs 1 less of each resource it asks for; another player gains 1 insight; you gain 1 credit.",
+  "effects": [
+   {
+    "op": "jam",
+    "amount": 1
+   },
+   {
+    "op": "choose_player"
+   },
+   {
+    "op": "other_gain",
+    "resource": "insight",
+    "amount": 1
+   },
+   {
+    "op": "gain",
+    "resource": "credits",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "threat_triage",
+  "name": "Threat Triage",
+  "tier": 1,
+  "kind": "program",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "security"
+  ],
+  "text": "One threat needs 2 less of each resource it asks for.",
+  "effects": [
+   {
+    "op": "jam",
+    "amount": 2
+   }
+  ]
+ },
+ {
+  "id": "bounty_board",
+  "name": "Bounty Board",
+  "tier": 1,
+  "kind": "program",
+  "cost": 0,
+  "insight": 0,
+  "tags": [
+   "security"
+  ],
+  "text": "If you removed an adversary troop this round, gain 3 credits; otherwise gain 1 credit.",
+  "effects": [
+   {
+    "op": "if",
+    "cond": "removed_troop",
+    "then": [
+     {
+      "op": "gain",
+      "resource": "credits",
+      "amount": 3
+     }
+    ],
+    "else": [
+     {
+      "op": "gain",
+      "resource": "credits",
+      "amount": 1
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "peacekeeper_rotation",
+  "name": "Peacekeeper Rotation",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 1,
+  "tags": [
+   "security",
+   "diplomacy"
+  ],
+  "keywords": [
+   "move"
+  ],
+  "text": "Remove 1 worth of adversary pieces (an ambassador) in a hex in your reach; move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "damage",
+    "amount": 1,
+    "at": "reach"
+   },
+   {
+    "op": "move_one",
+    "range": 2
+   }
+  ]
+ },
+ {
+  "id": "diplomatic_expulsion",
+  "name": "Diplomatic Expulsion",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "security",
+   "diplomacy"
+  ],
+  "text": "Remove 1 worth of adversary pieces (an ambassador) in a hex of a country where you have a presence; sway 1 toward Unity.",
+  "effects": [
+   {
+    "op": "damage",
+    "amount": 1,
+    "at": "presence_country"
+   },
+   {
+    "op": "unity",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "intrusion_countermeasures",
+  "name": "Intrusion Countermeasures",
+  "tier": 1,
+  "kind": "program",
+  "cost": 3,
+  "insight": 1,
+  "tags": [
+   "security",
+   "cyber"
+  ],
+  "keywords": [
+   "hack"
+  ],
+  "text": "Remove up to 3 compute from one adversary project; one threat needs 1 less of each resource it asks for.",
+  "effects": [
+   {
+    "op": "drain_project",
+    "amount": 3
+   },
+   {
+    "op": "jam",
+    "amount": 1
+   }
+  ]
+ },
+ {
+  "id": "threat_forecast_engine",
+  "name": "Threat Forecast Engine",
+  "tier": 1,
+  "kind": "program",
+  "cost": 2,
+  "insight": 0,
+  "tags": [
+   "security",
+   "cyber",
+   "science"
+  ],
+  "text": "Look at the next 2 adversary cards; draw 1 card.",
+  "effects": [
+   {
+    "op": "peek",
+    "count": 2
+   },
+   {
+    "op": "draw",
+    "count": 1
+   }
+  ]
+ },
+ {
+  "id": "agency_field_station",
+  "name": "Agency Field Station",
+  "tier": 1,
+  "kind": "building",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "security"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "agents",
+   "per_round": 1
+  },
+  "text": "Gains 1 Agent a round. Once a round: pay 1 energy, gain 1 credit per 2 Agents on your cards (max 3; the Agents stay).",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain_per_tokens",
+     "resource": "credits",
+     "kind": "agents",
+     "per": 2,
+     "max": 3
+    }
+   ]
+  }
+ },
+ {
+  "id": "hardened_bunker_complex",
+  "name": "Hardened Bunker Complex",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "security"
+  ],
+  "text": "+1 energy income. You may use the Harden standard action.",
+  "passives": [
+   {
+    "op": "income",
+    "resource": "energy",
+    "amount": 1
+   },
+   {
+    "op": "harden_action"
+   }
+  ]
+ },
+ {
+  "id": "interceptor_battery",
+  "name": "Interceptor Battery",
+  "tier": 1,
+  "kind": "building",
+  "cost": 5,
+  "insight": 1,
+  "tags": [
+   "security"
+  ],
+  "text": "Once a round: pay 3 energy to remove 2 worth of adversary pieces (a troop) in a hex in your reach.",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     3
+    ]
+   ],
+   "effects": [
+    {
+     "op": "damage",
+     "amount": 2,
+     "at": "reach"
+    }
+   ]
+  }
+ },
+ {
+  "id": "security_contractor_hq",
+  "name": "Security Contractor HQ",
+  "tier": 1,
+  "kind": "building",
+  "cost": 4,
+  "insight": 1,
+  "tags": [
+   "security"
+  ],
+  "text": "+1 credit income per 2 Security tags you have (max 3).",
+  "passives": [
+   {
+    "op": "income_per_tag",
+    "resource": "credits",
+    "tag": "security",
+    "per": 2,
     "max": 3
+   }
+  ]
+ },
+ {
+  "id": "breach_and_clear",
+  "name": "Breach and Clear",
+  "tier": 1,
+  "kind": "event",
+  "cost": 3,
+  "energy": 1,
+  "insight": 1,
+  "tags": [
+   "security"
+  ],
+  "text": "Remove 2 worth of adversary pieces (a troop) in a hex in your reach; then, if you removed an adversary troop this round, gain 2 credits.",
+  "effects": [
+   {
+    "op": "damage",
+    "amount": 2,
+    "at": "reach"
+   },
+   {
+    "op": "if",
+    "cond": "removed_troop",
+    "then": [
+     {
+      "op": "gain",
+      "resource": "credits",
+      "amount": 2
+     }
+    ],
+    "else": []
+   }
+  ]
+ },
+ {
+  "id": "hardpoint_lockdown",
+  "name": "Hardpoint Lockdown",
+  "tier": 1,
+  "kind": "event",
+  "cost": 3,
+  "insight": 0,
+  "tags": [
+   "security"
+  ],
+  "text": "In one country, buildings can't be destroyed this round; harden 2 buildings in a country where you have a presence.",
+  "effects": [
+   {
+    "op": "shelter"
+   },
+   {
+    "op": "harden",
+    "count": 2,
+    "where": "presence_country"
+   }
+  ]
+ },
+ {
+  "id": "agency_directorate",
+  "name": "Agency Directorate",
+  "tier": 2,
+  "kind": "building",
+  "cost": 12,
+  "hardware": 2,
+  "insight": 2,
+  "tags": [
+   "security"
+  ],
+  "needs": [
+   [
+    "security",
+    2
+   ]
+  ],
+  "replaces": "security",
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "agents",
+   "per_round": 2
+  },
+  "text": "Built over one of your Security buildings. Gains 2 Agents a round. Once a round: spend 4 Agents, remove 2 worth of adversary pieces in each hex of one country.",
+  "ability": {
+   "cost": [
+    [
+     "tokens",
+     4
+    ]
+   ],
+   "effects": [
+    {
+     "op": "damage_country",
+     "amount": 2
+    }
+   ]
+  }
+ },
+ {
+  "id": "aegis_dome_array",
+  "name": "Aegis Dome Array",
+  "tier": 2,
+  "kind": "building",
+  "cost": 10,
+  "energy": 2,
+  "hardware": 1,
+  "insight": 2,
+  "tags": [
+   "security",
+   "diplomacy",
+   "power"
+  ],
+  "needs": [
+   [
+    "security",
+    1
+   ]
+  ],
+  "text": "The adversary's spread places no ambassador on hexes holding your presence. Once a round, prevent the first building destruction in a country where you have a presence. Once a round: pay 2 energy, harden 2 buildings in a country where you have a presence.",
+  "passives": [
+   {
+    "op": "spread_shield"
+   },
+   {
+    "op": "civic_shelter"
+   }
+  ],
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     2
+    ]
+   ],
+   "effects": [
+    {
+     "op": "harden",
+     "count": 2,
+     "where": "presence_country"
+    }
+   ]
+  }
+ },
+ {
+  "id": "threat_neutralization_mandate",
+  "name": "Threat Neutralization Mandate",
+  "tier": 2,
+  "kind": "program",
+  "cost": 7,
+  "energy": 2,
+  "insight": 2,
+  "tags": [
+   "security"
+  ],
+  "needs": [
+   [
+    "security",
+    1
+   ]
+  ],
+  "text": "Counter any one threat.",
+  "effects": [
+   {
+    "op": "counter_threat"
+   }
+  ]
+ },
+ {
+  "id": "martial_cordon",
+  "name": "Martial Cordon",
+  "tier": 2,
+  "kind": "program",
+  "cost": 8,
+  "insight": 1,
+  "tags": [
+   "security",
+   "diplomacy"
+  ],
+  "needs": [
+   [
+    "diplomacy",
+    1
+   ]
+  ],
+  "keywords": [
+   "move"
+  ],
+  "text": "Remove every adversary ambassador in one country; sway 1 toward Unity per 3 removed; move one of your ambassadors up to 2 hexes.",
+  "effects": [
+   {
+    "op": "remove_ambassadors_country",
+    "unity_per": 3
+   },
+   {
+    "op": "move_one",
+    "range": 2
+   }
+  ]
+ },
+ {
+  "id": "deep_state_ledger",
+  "name": "Deep State Ledger",
+  "tier": 2,
+  "kind": "program",
+  "cost": 8,
+  "insight": 2,
+  "tags": [
+   "security",
+   "cyber"
+  ],
+  "keywords": [
+   "tokens"
+  ],
+  "tokens": {
+   "kind": "agents",
+   "per_round": 1
+  },
+  "text": "Gains 1 Agent a round. Once a round: pay 1 energy, gain 1 credit per Agent on your cards (max 5; the Agents stay).",
+  "ability": {
+   "cost": [
+    [
+     "energy",
+     1
+    ]
+   ],
+   "effects": [
+    {
+     "op": "gain_per_tokens",
+     "resource": "credits",
+     "kind": "agents",
+     "per": 1,
+     "max": 5
+    }
+   ]
+  }
+ },
+ {
+  "id": "kinetic_interdiction",
+  "name": "Kinetic Interdiction",
+  "tier": 2,
+  "kind": "event",
+  "cost": 6,
+  "antimatter": 1,
+  "insight": 2,
+  "tags": [
+   "security"
+  ],
+  "text": "Remove 3 worth of adversary pieces in each hex of one country that holds them.",
+  "effects": [
+   {
+    "op": "damage_country",
+    "amount": 3
+   }
+  ]
+ },
+ {
+  "id": "total_containment",
+  "name": "Total Containment",
+  "tier": 2,
+  "kind": "event",
+  "cost": 9,
+  "energy": 2,
+  "insight": 2,
+  "tags": [
+   "security"
+  ],
+  "needs": [
+   [
+    "security",
+    1
+   ]
+  ],
+  "text": "Remove every adversary ambassador and troop in one hex; in one country, buildings can't be destroyed this round.",
+  "effects": [
+   {
+    "op": "destroy_all"
+   },
+   {
+    "op": "shelter"
    }
   ]
  }

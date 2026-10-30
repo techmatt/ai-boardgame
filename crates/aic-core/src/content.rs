@@ -484,6 +484,32 @@ pub enum Effect {
     Consolidate {
         max: i64,
     },
+    /// Draw `count` tier-1 cards into your hand, no keep paid (023: Science's
+    /// card draw).
+    Draw {
+        count: i64,
+    },
+    /// Remove up to `amount` compute from every visible adversary project (023).
+    DrainAll {
+        amount: i64,
+    },
+    /// "Count as power" (023): 1 of `resource` per `per` tokens of `kind` on
+    /// your cards in play (the tokens stay), up to `max`.
+    GainPerTokens {
+        resource: String,
+        kind: String,
+        per: i64,
+        max: i64,
+    },
+    /// Cash out (023): remove all your `kind` tokens; gain 1 + 2 + ... + n of
+    /// `resource` for the n removed (a growing rate); with `max` > 0, at most
+    /// `max` tokens, taken card by card.
+    CashOut {
+        kind: String,
+        resource: String,
+        #[serde(default)]
+        max: i64,
+    },
     If {
         cond: Cond,
         then: Vec<Effect>,
@@ -1293,6 +1319,21 @@ fn check_effects(effects: &[Effect], what: &str) -> Result<(), String> {
             }
             Effect::Production { resource: r, .. } => resource(r, what)?,
             Effect::AddTokens { kind, .. } => {
+                if !TOKEN_KINDS.contains(&kind.as_str()) {
+                    return Err(format!("{what}: unknown token type {kind:?}"));
+                }
+            }
+            Effect::GainPerTokens { resource: r, kind, per, .. } => {
+                seat_resource(r, what)?;
+                if !TOKEN_KINDS.contains(&kind.as_str()) {
+                    return Err(format!("{what}: unknown token type {kind:?}"));
+                }
+                if *per < 1 {
+                    return Err(format!("{what}: gain_per_tokens needs per >= 1"));
+                }
+            }
+            Effect::CashOut { kind, resource: r, .. } => {
+                seat_resource(r, what)?;
                 if !TOKEN_KINDS.contains(&kind.as_str()) {
                     return Err(format!("{what}: unknown token type {kind:?}"));
                 }

@@ -348,11 +348,18 @@ mod tests {
                         // Or a new project row is dealt (from the hidden
                         // project deck; 020's r11 games met one).
                         let row = |s: &GameState| s.pile(aic_core::modules::adversary::PROJECT_DECK).len();
+                        // Or threats are dealt (from the hidden threat decks;
+                        // 023's card set reaches a deal right after a choice).
+                        let threats = |s: &GameState| {
+                            (s.pile("threats.deck.1").len(), s.pile("threats.deck.2").len())
+                        };
                         if x.round == g.round
                             && tips(&x) == tips(&g)
                             && tips(&y) == tips(&g)
                             && row(&x) == row(&g)
                             && row(&y) == row(&g)
+                            && threats(&x) == threats(&g)
+                            && threats(&y) == threats(&g)
                         {
                             assert_eq!(
                                 (&x.hexes, &x.vars, &x.seats),

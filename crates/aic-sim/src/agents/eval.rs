@@ -125,6 +125,12 @@ pub struct Weights {
     pub hand_cost: f64,
     /// A drafted card not yet kept, as a share of its hand value.
     pub drafted: f64,
+    /// 023: a card dealt into the draft packet counts as drafted, less its
+    /// keep price (insight, at `INSIGHT_COST` credits) times this; so the
+    /// tier pick is a choice (before 023 a tier pick scored nothing, and
+    /// tier 2 was drafted only once the tier-1 deck ran dry).
+    #[serde(default)]
+    pub packet_keep: f64,
     /// A building in play: `built + built_cost * cost`.
     pub built: f64,
     pub built_cost: f64,
@@ -174,6 +180,16 @@ const RENAMED: [(&str, &str); 1] = [("opp_rate", "unity_rate_start")];
 const ANTIMATTER_COST: i64 = 3;
 /// ...and each insight this many.
 const INSIGHT_COST: i64 = 2;
+
+/// A drafted card's keep price in credits (its tier's insight at
+/// `INSIGHT_COST`), for valuing the draft packet (023).
+fn keep_insight(world: &aic_core::module::World, tier: u8) -> f64 {
+    let key = if tier == 2 { "cards.keep_tier2" } else { "cards.keep_tier1" };
+    match world.params.get(key) {
+        Some(aic_core::config::ParamValue::Int(v)) => (INSIGHT_COST * v) as f64,
+        _ => 0.0,
+    }
+}
 /// Flat mode: a point of track income is worth this many of the resource's
 /// own points for antimatter and insight (1 for the rest), times `income`.
 const ANTIMATTER_INCOME_UNIT: f64 = 3.0;
@@ -231,6 +247,7 @@ impl Default for Weights {
             hand: 3.0,
             hand_cost: 0.4,
             drafted: 0.3,
+            packet_keep: 1.0,
             built: 4.0,
             built_cost: 0.5,
             threat: 6.0,
@@ -667,6 +684,11 @@ impl Eval {
                         .iter()
                         .map(|id| w.drafted * (w.hand + w.hand_cost * self.cost(id))),
                 )
+                .chain(g.pile(&cards::packet(s)).iter().map(|id| {
+                    let keep = keep_insight(&world, cards::def(&world, id).tier);
+                    let v = w.hand + w.hand_cost * (self.cost(id) - w.packet_keep * keep);
+                    w.drafted * v.max(0.0)
+                }))
                 .collect();
             *v += Self::capped(&mut cards, w.hand_cap);
             for id in g.pile(&cards::built(s)) {
@@ -784,6 +806,14 @@ impl Eval {
                     v += w.ability * left;
                 }
             }
+            // 023: a program in play with a once-a-round ability earns like a
+            // building's (021 allowed them; before 023 they scored nothing once
+            // played, so agents kept them and never played them).
+            for id in g.pile(&cards::played(s)) {
+                if cards::def(&world, id).ability.is_some() {
+                    v += w.ability * left;
+                }
+            }
             // A card in hand is worth its value times the chance of paying
             // for it before the game ends, from what the seat has and earns.
             // Insight is spent one card at a time: each card waits for the
@@ -833,6 +863,10 @@ impl Eval {
             let mut cards: Vec<f64> = g.pile(&cards::hand(s)).iter().map(|id| play(id)).collect();
             for id in g.pile(&cards::drafted(s)) {
                 cards.push(w.drafted * play(id));
+            }
+            for id in g.pile(&cards::packet(s)) {
+                let keep = keep_insight(&world, cards::def(&world, id).tier);
+                cards.push(w.drafted * (play(id) - w.hand_cost * w.packet_keep * keep).max(0.0));
             }
             v += Self::capped(&mut cards, w.hand_cap);
         }

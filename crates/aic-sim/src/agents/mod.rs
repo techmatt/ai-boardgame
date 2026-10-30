@@ -119,6 +119,9 @@ pub const LADDER: &[(&str, &[Param])] = &[
             ("no_powers", 0.0, "dominance check: never use an AI-board power"),
             ("no_counters", 0.0, "dominance check: never counter a threat"),
             ("no_presence", 0.0, "dominance check: place no presence beyond setup"),
+            ("only_tag", 0.0, "dominance check (023): keep and play only this tag (1-6: science, industry, cyber, power, diplomacy, security)"),
+            ("never_tag", 0.0, "dominance check (023): never keep or play this tag (1-6 as only_tag)"),
+            ("events_only", 0.0, "dominance check (023): keep and play only events"),
         ],
     ),
     (
@@ -191,6 +194,9 @@ pub const LADDER: &[(&str, &[Param])] = &[
             ("no_powers", 0.0, "dominance check: never use an AI-board power"),
             ("no_counters", 0.0, "dominance check: never counter a threat"),
             ("no_presence", 0.0, "dominance check: place no presence beyond setup"),
+            ("only_tag", 0.0, "dominance check (023): keep and play only this tag (1-6: science, industry, cyber, power, diplomacy, security)"),
+            ("never_tag", 0.0, "dominance check (023): never keep or play this tag (1-6 as only_tag)"),
+            ("events_only", 0.0, "dominance check (023): keep and play only events"),
         ],
     ),
 ];
@@ -310,6 +316,10 @@ impl AgentSpec {
     /// The forced behaviours (022): keeping by plan and the dominance checks.
     pub fn forced(&self) -> policy::Forced {
         let on = |k: &str| self.params.get(k).is_some_and(|v| *v > 0.0);
+        let tag = |k: &str| {
+            let i = self.params.get(k).map_or(0, |v| *v as usize);
+            aic_core::content::TAGS.get(i.wrapping_sub(1)).map(|t| t.to_string())
+        };
         policy::Forced {
             keep_all: on("keep_all"),
             keep_k: self.params.get("keep_k").map_or(0, |v| *v as usize),
@@ -318,6 +328,9 @@ impl AgentSpec {
             no_powers: on("no_powers"),
             no_counters: on("no_counters"),
             no_presence: on("no_presence"),
+            only_tag: tag("only_tag"),
+            never_tag: tag("never_tag"),
+            events_only: on("events_only"),
             plan_keep: on("plan_keep"),
             plan_rounds: self.params.get("plan_rounds").map_or(3, |v| *v as usize),
         }
@@ -459,7 +472,15 @@ mod tests {
     /// past two keeps).
     #[test]
     fn dominance_checks_replay_and_repeat() {
-        for spec in ["engine:keep_all=1", "engine:keep_k=2", "engine:tier2_rush=1", "greedy:no_presence=1"] {
+        for spec in [
+            "engine:keep_all=1",
+            "engine:keep_k=2",
+            "engine:tier2_rush=1",
+            "greedy:no_presence=1",
+            "engine:only_tag=3",
+            "engine:never_tag=6",
+            "engine:events_only=1",
+        ] {
             assert_eq!(AgentSpec::parse(spec).unwrap().label(), spec);
             replay_and_repeat(spec, 60, false);
         }

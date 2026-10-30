@@ -14,7 +14,8 @@ The standing contract for every executor working in this repo.
   rules live in the core.
 - Design is still being gathered. The core implements the rules in
   [docs/rules.md](docs/rules.md) (revision `RULES_REVISION` in `aic-core/src/lib.rs`):
-  the board, the adversary, threats, Alignment and cards. The card, AI-board and
+  the board, the adversary, threats, Alignment and cards. The player cards are 023's
+  candidate set ([docs/cards.md](docs/cards.md)); the AI-board, threat, adversary and
   megaproject content are placeholders pending redesign. Don't describe or document code as if it does more than it does.
 
 ## Engine rules

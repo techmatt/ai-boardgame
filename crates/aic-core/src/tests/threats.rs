@@ -90,28 +90,30 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
 #[test]
 fn jamming_a_threat_down_to_what_is_paid_counters_it() {
     let (rules, mut g) = threat_lab();
-    // Requisition needs 1 insight; Jam Signals takes it to 0: countered at once.
+    // Requisition needs 1 insight; Threat Triage (023; was Jam Signals) takes it to 0:
+    // countered at once.
     deal(&mut g, "requisition", 0);
     g.piles
         .get_mut("cards.deck.1")
         .unwrap()
-        .retain(|c| c != "jam_signals");
+        .retain(|c| c != "threat_triage");
     g.piles
-        .insert("cards.hand.0".into(), vec!["jam_signals".into()]);
+        .insert("cards.hand.0".into(), vec!["threat_triage".into()]);
     set_res(&mut g, 0, "credits", 10);
+    set_res(&mut g, 0, "insight", 1);
     act(
         &rules,
         &mut g,
         Action::Play {
             seat: 0,
-            card: "jam_signals".into(),
+            card: "threat_triage".into(),
         },
     );
     assert!(g.pile("threats.on.0").is_empty());
     assert!(g
         .pile("threats.discard.1")
         .contains(&"requisition".to_string()));
-    assert_eq!(g.resource(0, "credits"), 8);
+    assert_eq!(g.resource(0, "credits"), 6);
 }
 
 #[test]

@@ -1,0 +1,28 @@
+{
+  "name": "tune-023",
+  "note": "023 tuning probe (r14): the engine at d0 and d2, 2 and 3 countries, the baseline against candidate config and agent changes.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    2
+  ],
+  "agents": [
+    "engine"
+  ],
+  "games": 16,
+  "records": 0
+}

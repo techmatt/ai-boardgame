@@ -312,8 +312,12 @@ Content is data in `content/`, composed from code primitives:
   effects), an `ability` (once a round; buildings and programs; its cost may name
   `"tokens"`, spent from the card), `upkeep`, `replaces` (a tag: built over one of your
   buildings whose top card carries it), `tokens` (`{kind, per_round}`, a type from
-  `content::TOKEN_KINDS`), `keywords` (printed words, read by nothing yet), `slotless`
-  and `unique`. List the id in the `cards` module's config `cards`.
+  `content::TOKEN_KINDS`), `keywords` (printed words, read by nothing yet; `help` marks
+  a help card), `slotless` and `unique`. List the id in the `cards` module's config
+  `cards`, then run `python scripts/cards/cards_doc.py` to regenerate `docs/cards.md`
+  (023). Effects added in 023: `draw`, `drain_all`, `gain_per_tokens` (a card's
+  strength counting its tokens) and `cash_out` (tokens out at 1 + 2 + ... + n, `max`
+  optional).
 - **Threats** (`threats.json`): `counter` costs and `effects` ([`ThreatOp`], with
   `Spot`s naming the pieces they hit).
 - **Adversary cards** (`adversary.json`): stage, text, `twists` ([`Twist`]), escalation.

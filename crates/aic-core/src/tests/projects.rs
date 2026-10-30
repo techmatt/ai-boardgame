@@ -148,7 +148,7 @@ fn security_cards_drain_or_discard_a_project() {
     g.vars.insert(adversary::project_key("false_flag"), 6);
     g.piles.insert(
         "cards.hand.0".into(),
-        vec!["security_patch".into(), "zero_day_wipe".into()],
+        vec!["flash_exploit".into(), "killswitch_directive".into()],
     );
     set_res(&mut g, 0, "credits", 30);
     set_res(&mut g, 0, "insight", 5);
@@ -158,23 +158,23 @@ fn security_cards_drain_or_discard_a_project() {
         &mut g,
         Action::Play {
             seat: 0,
-            card: "security_patch".into(),
+            card: "flash_exploit".into(),
         },
     );
-    // The only project holding compute: 6 - 4.
-    assert_eq!(g.var(&adversary::project_key("false_flag")), 2);
+    // The only project holding compute: 6 - 5 (023: Flash Exploit; was Security Patch's 4).
+    assert_eq!(g.var(&adversary::project_key("false_flag")), 1);
     g.vars.insert("ai.tier2.0".into(), 1);
     g.vars.insert(crate::modules::board::track_key(0), 3);
     if rules.legal_actions(&g).contains(&Action::Play {
         seat: 0,
-        card: "zero_day_wipe".into(),
+        card: "killswitch_directive".into(),
     }) {
         act(
             &rules,
             &mut g,
             Action::Play {
                 seat: 0,
-                card: "zero_day_wipe".into(),
+                card: "killswitch_directive".into(),
             },
         );
         assert_eq!(g.pile(PROJECTS).len(), 1);
@@ -264,7 +264,7 @@ fn freeing_a_city_and_removing_a_node_sway_unity() {
     answer_hex(&rules, &mut g, city);
     answer_all(&rules, &mut g);
     assert_eq!(g.tokens(city, ADV_CUBE), 0);
-    assert_eq!(g.var("alignment.unity"), 3);
+    assert_eq!(g.var("alignment.unity"), 5);
     // No standard action removes a node (019); the Decommission Unity card does.
     put(&mut g, city, NODE, 1);
     assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "node"), None).is_err());
@@ -277,9 +277,9 @@ fn freeing_a_city_and_removing_a_node_sway_unity() {
     })
     .unwrap();
     assert_eq!(g.tokens(city, NODE), 0);
-    // 019: freeing a city sways 3, removing a node 2 (the bucket tips only
-    // once an action or phase finishes, so it holds both here).
-    assert_eq!(g.var("alignment.unity"), 5);
+    // Freeing a city sways 5 (023; 019: 3), removing a node 2 (the bucket tips
+    // only once an action or phase finishes, so it holds both here).
+    assert_eq!(g.var("alignment.unity"), 7);
 }
 
 #[test]
@@ -292,7 +292,7 @@ fn node_takedown_removes_a_node_in_reach() {
         .unwrap();
     let near = m.hexes[p].neighbours[0];
     put(&mut g, far, NODE, 1);
-    g.piles.insert("cards.hand.0".into(), vec!["node_takedown".into()]);
+    g.piles.insert("cards.hand.0".into(), vec!["node_severance".into()]);
     set_res(&mut g, 0, "credits", 30);
     set_res(&mut g, 0, "insight", 5);
     set_res(&mut g, 0, "antimatter", 2);
@@ -300,7 +300,7 @@ fn node_takedown_removes_a_node_in_reach() {
     g.vars.insert(crate::modules::board::track_key(0), 3);
     let play = Action::Play {
         seat: 0,
-        card: "node_takedown".into(),
+        card: "node_severance".into(),
     };
     // Only a node within reach.
     assert!(!rules.legal_actions(&g).contains(&play));
@@ -345,4 +345,78 @@ fn a_player_ambassador_on_a_base_sways_unity_in_production() {
     run(&rules, &mut g);
     assert_eq!(g.var("alignment.unity"), 2);
     assert_eq!(g.tokens(base, &ambassador(0)), 0);
+}
+
+/// 023's primitives: draw, drain every project, count tokens as power, cash
+/// tokens out at a growing rate (with a cap); and an `if` is only offered
+/// when the branch that would fire has a target.
+#[test]
+fn the_023_primitives_draw_drain_all_count_and_cash_out() {
+    use crate::content::{Cond, Effect};
+    use crate::modules::{cards, effects};
+    let (rules, mut g) = lab_actions();
+    let run = |g: &mut GameState, e: Effect| {
+        with_cx(&rules, |cx| effects::run(g, cx, 0, &[e], &mut effects::Ctx::default())).unwrap()
+    };
+    let hand = g.pile("cards.hand.0").len();
+    let deck = g.pile("cards.deck.1").len();
+    run(&mut g, Effect::Draw { count: 2 });
+    assert_eq!(g.pile("cards.hand.0").len(), hand + 2);
+    assert_eq!(g.pile("cards.deck.1").len(), deck - 2);
+
+    row(&mut g, &["false_flag", "disinformation"]);
+    g.vars.insert(adversary::project_key("false_flag"), 6);
+    g.vars.insert(adversary::project_key("disinformation"), 3);
+    run(&mut g, Effect::DrainAll { amount: 4 });
+    assert_eq!(g.var(&adversary::project_key("false_flag")), 2);
+    assert_eq!(g.var(&adversary::project_key("disinformation")), 0);
+
+    // Retained Earnings holds Capital.
+    g.piles.insert("cards.played.0".into(), vec!["retained_earnings".into()]);
+    g.vars.insert(cards::tokens_key(0, "retained_earnings"), 5);
+    let credits = g.resource(0, "credits");
+    run(
+        &mut g,
+        Effect::GainPerTokens {
+            resource: "credits".into(),
+            kind: "capital".into(),
+            per: 2,
+            max: 9,
+        },
+    );
+    assert_eq!(g.resource(0, "credits"), credits + 2, "5 Capital count as 2; they stay");
+    assert_eq!(g.var(&cards::tokens_key(0, "retained_earnings")), 5);
+    run(
+        &mut g,
+        Effect::CashOut {
+            kind: "capital".into(),
+            resource: "credits".into(),
+            max: 3,
+        },
+    );
+    assert_eq!(g.resource(0, "credits"), credits + 2 + 6, "3 cashed out: 1 + 2 + 3");
+    assert_eq!(g.var(&cards::tokens_key(0, "retained_earnings")), 2);
+    run(
+        &mut g,
+        Effect::CashOut {
+            kind: "capital".into(),
+            resource: "credits".into(),
+            max: 0,
+        },
+    );
+    assert_eq!(g.resource(0, "credits"), credits + 2 + 6 + 3);
+    assert_eq!(g.var(&cards::tokens_key(0, "retained_earnings")), 0);
+
+    // Both branches drain a project: with no compute left, nothing to target.
+    let w = rules.world();
+    let drain = vec![Effect::DrainProject { amount: 1 }];
+    let gate = [Effect::If {
+        cond: Cond::CityWithAmbassador,
+        then: drain.clone(),
+        otherwise: drain,
+    }];
+    g.vars.insert(adversary::project_key("false_flag"), 0);
+    assert!(!effects::feasible(&w, &g, 0, &gate));
+    g.vars.insert(adversary::project_key("false_flag"), 1);
+    assert!(effects::feasible(&w, &g, 0, &gate));
 }

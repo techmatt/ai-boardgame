@@ -669,22 +669,38 @@ pub fn sacrifice_for(g: &mut GameState, cx: &mut Cx, seat: usize, cost: &[(Strin
     Ok(given)
 }
 
+/// Seat `s` draws up to `n` tier-1 cards into its hand, no keep paid (023's
+/// `draw`); the deck reshuffles its discards when it runs out.
+pub fn draw(g: &mut GameState, cx: &mut Cx, seat: usize, n: i64) -> Res {
+    for _ in 0..n.max(0) {
+        let Some(id) = top_of(g, cx, 1) else {
+            break;
+        };
+        cx.move_card(g, &id, &deck(1), &hand(seat), false)?;
+        cx.tally(g, "cards.drawn", 1);
+    }
+    Ok(())
+}
+
+/// The top card of a tier's deck, reshuffling its discards if it is empty.
+fn top_of(g: &mut GameState, cx: &mut Cx, tier: u8) -> Option<String> {
+    if g.pile(&deck(tier)).is_empty() {
+        let mut cards = g.pile(&discard_pile(tier)).to_vec();
+        if cards.is_empty() {
+            return None;
+        }
+        shuffle(&mut cards, cx.rng(g, "cards"));
+        cx.set_pile(g, &discard_pile(tier), Vec::new());
+        cx.set_pile(g, &deck(tier), cards);
+        cx.note(None, || format!("Tier-{tier} discards reshuffled into the deck"));
+    }
+    g.pile(&deck(tier)).first().cloned()
+}
+
 impl Cards {
     /// The top card of a tier's deck, reshuffling its discards if it is empty.
     fn top(&self, g: &mut GameState, cx: &mut Cx, tier: u8) -> Option<String> {
-        if g.pile(&deck(tier)).is_empty() {
-            let mut cards = g.pile(&discard_pile(tier)).to_vec();
-            if cards.is_empty() {
-                return None;
-            }
-            shuffle(&mut cards, cx.rng(g, "cards"));
-            cx.set_pile(g, &discard_pile(tier), Vec::new());
-            cx.set_pile(g, &deck(tier), cards);
-            cx.note(None, || {
-                format!("Tier-{tier} discards reshuffled into the deck")
-            });
-        }
-        g.pile(&deck(tier)).first().cloned()
+        top_of(g, cx, tier)
     }
 
     fn all_picked(&self, g: &GameState) -> bool {

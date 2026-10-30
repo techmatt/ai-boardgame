@@ -5,14 +5,14 @@ use crate::modules::threats;
 #[test]
 fn the_ais_spend_their_resource_as_credits_on_cards() {
     let (rules, mut g) = lab_actions();
-    for c in ["fab_line", "recon_sweep", "evacuate"] {
+    for c in ["darknet_exchange", "literature_crawler"] {
         g.piles.get_mut("cards.deck.1").unwrap().retain(|x| x != c);
     }
     // The Builder (seat 0): energy on buildings, 1 credit each, after
     // Economies of scale takes 1 off.
     g.piles.insert(
         "cards.hand.0".into(),
-        vec!["fab_line".into(), "recon_sweep".into()],
+        vec!["darknet_exchange".into(), "literature_crawler".into()],
     );
     set_res(&mut g, 0, "credits", 3);
     set_res(&mut g, 0, "energy", 10);
@@ -29,8 +29,8 @@ fn the_ais_spend_their_resource_as_credits_on_cards() {
     };
     // Not on a program: with no credits only the building is playable.
     set_res(&mut g, 0, "credits", 0);
-    assert_eq!(plays(&g, 0), ["fab_line"]);
-    // 021: Fab Line costs 4, 3 after Economies of scale; with 1 credit at
+    assert_eq!(plays(&g, 0), ["darknet_exchange"]);
+    // 021: Darknet Exchange (023; was Fab Line) costs 4, 3 after Economies of scale; with 1 credit at
     // least 2 energy go in.
     set_res(&mut g, 0, "credits", 1);
     let energy = g.resource(0, "energy");
@@ -39,7 +39,7 @@ fn the_ais_spend_their_resource_as_credits_on_cards() {
             &mut g,
             &Action::Play {
                 seat: 0,
-                card: "fab_line".into(),
+                card: "darknet_exchange".into(),
             },
             None,
         )
@@ -51,7 +51,7 @@ fn the_ais_spend_their_resource_as_credits_on_cards() {
     // 021: a new slot, or over the Builder's starting Foundry Core.
     answer_with(&rules, &mut g, "a new slot");
     assert_eq!((g.resource(0, "energy"), g.resource(0, "credits")), (energy - 3, 1));
-    assert!(g.pile("cards.built.0").contains(&"fab_line".to_string()));
+    assert!(g.pile("cards.built.0").contains(&"darknet_exchange".to_string()));
 }
 
 #[test]
@@ -145,33 +145,33 @@ fn off_variants_remove_threats_alignment_and_the_draft() {
 fn playing_a_card_pays_its_insight_and_lowers_its_income() {
     // 022: insight to play, shared with keeps; `lowers` cuts an income for good.
     let (rules, mut g) = lab_actions();
-    for c in ["fab_line", "fusion_plant"] {
+    for c in ["darknet_exchange", "recursive_self_improvement"] {
         g.piles.get_mut("cards.deck.1").unwrap().retain(|x| x != c);
         g.piles.get_mut("cards.deck.2").unwrap().retain(|x| x != c);
     }
-    g.piles.insert("cards.hand.1".into(), vec!["fab_line".into()]);
+    g.piles.insert("cards.hand.1".into(), vec!["darknet_exchange".into()]);
     set_res(&mut g, 1, "credits", 20);
     let playable = |g: &GameState| {
         rules
             .legal_actions(g)
             .iter()
-            .any(|a| matches!(a, Action::Play { seat: 1, card } if card == "fab_line"))
+            .any(|a| matches!(a, Action::Play { seat: 1, card } if card == "darknet_exchange"))
     };
     set_res(&mut g, 1, "insight", 0);
-    assert!(!playable(&g), "Fab Line costs 1 insight");
+    assert!(!playable(&g), "Darknet Exchange costs 1 insight");
     set_res(&mut g, 1, "insight", 2);
     assert!(playable(&g));
     rules
-        .apply_mut(&mut g, &Action::Play { seat: 1, card: "fab_line".into() }, None)
+        .apply_mut(&mut g, &Action::Play { seat: 1, card: "darknet_exchange".into() }, None)
         .unwrap();
     assert_eq!(g.resource(1, "insight"), 1);
-    // Fusion Plant lowers credit income by 1, through the production key.
+    // Recursive Self-Improvement lowers credit income by 1, through the production key.
     let w = rules.world();
-    let d = crate::modules::cards::def(&w, "fusion_plant");
+    let d = crate::modules::cards::def(&w, "recursive_self_improvement");
     assert_eq!(d.lowers, vec![("credits".to_string(), 1)]);
     assert_eq!(d.insight, 2);
     let before = crate::modules::economy::income(&w, &g, 1)[0];
-    let mut c = crate::modules::cards::def(&w, "fusion_plant").clone();
+    let mut c = crate::modules::cards::def(&w, "recursive_self_improvement").clone();
     c.lowers = vec![("credits".into(), before + 1)];
     assert!(!crate::modules::cards::lowers_ok(&w, &g, 1, &c), "can't lower an income below 0");
     c.lowers = vec![("credits".into(), 1)];

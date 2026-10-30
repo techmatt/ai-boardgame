@@ -1318,12 +1318,12 @@ fn selling_a_card_discards_it_for_a_credit() {
     let (rules, mut g) = lab_actions();
     for p in ["cards.deck.1", "cards.discard.1"] {
         if let Some(pile) = g.piles.get_mut(p) {
-            pile.retain(|c| c != "fab_line");
+            pile.retain(|c| c != "darknet_exchange");
         }
     }
     g.piles.insert(
         "cards.hand.0".into(),
-        vec!["turnkey_factory".into(), "fab_line".into()],
+        vec!["turnkey_factory".into(), "darknet_exchange".into()],
     );
     let sells: Vec<Action> = rules
         .legal_actions(&g)
@@ -1337,7 +1337,7 @@ fn selling_a_card_discards_it_for_a_credit() {
         &mut g,
         Action::Sell {
             seat: 0,
-            card: "fab_line".into(),
+            card: "darknet_exchange".into(),
         },
     );
     act(
@@ -1351,7 +1351,7 @@ fn selling_a_card_discards_it_for_a_credit() {
     assert_eq!(g.resource(0, "credits"), credits + 2);
     assert!(g.pile("cards.hand.0").is_empty());
     // A tier-1 card to its discard pile; an AI's unique card back to the box.
-    assert_eq!(g.pile("cards.discard.1")[0], "fab_line");
+    assert_eq!(g.pile("cards.discard.1")[0], "darknet_exchange");
     assert!(g
         .piles
         .values()
@@ -1361,7 +1361,7 @@ fn selling_a_card_discards_it_for_a_credit() {
             &mut g,
             &Action::Sell {
                 seat: 0,
-                card: "fab_line".into()
+                card: "darknet_exchange".into()
             },
             None
         )
