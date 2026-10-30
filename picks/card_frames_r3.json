@@ -1,0 +1,124 @@
+{
+ "name": "card_frames_r3",
+ "title": "Card frames, round 3: one master frame, six variants",
+ "intro": "Every frame is steel-event-3 with its enamel recoloured in code, tier 2 gilded, buildings split: borders and bevels are the same pixels. Each card is a real card from content; only the faces (icons and box-worded rules text) are written for this round. Art windows are empty on purpose. These images show the full bleed: the outer steel or gold band sits inside the 3 mm the guillotine cuts away, so the splay, which is trimmed, is what a cut card looks like. Use the notes for what to change.",
+ "rows": [
+  {
+   "id": "program-t1",
+   "label": "Program, tier 1: Mutual Defense Pact",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r3/program-t1.jpg",
+     "label": "composed"
+    },
+    {
+     "key": "frame",
+     "image": "../art-originals/picks/card_frames_r3/program-t1-frame.jpg",
+     "label": "bare frame"
+    }
+   ]
+  },
+  {
+   "id": "program-t2",
+   "label": "Program, tier 2: Antiproton Offtake Deal",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r3/program-t2.jpg",
+     "label": "composed"
+    },
+    {
+     "key": "frame",
+     "image": "../art-originals/picks/card_frames_r3/program-t2-frame.jpg",
+     "label": "bare frame"
+    }
+   ]
+  },
+  {
+   "id": "building-t1",
+   "label": "Building, tier 1: Embassy Compound",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r3/building-t1.jpg",
+     "label": "composed"
+    },
+    {
+     "key": "frame",
+     "image": "../art-originals/picks/card_frames_r3/building-t1-frame.jpg",
+     "label": "bare frame"
+    }
+   ]
+  },
+  {
+   "id": "building-t2",
+   "label": "Building, tier 2: Orbital Embassy",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r3/building-t2.jpg",
+     "label": "composed"
+    },
+    {
+     "key": "frame",
+     "image": "../art-originals/picks/card_frames_r3/building-t2-frame.jpg",
+     "label": "bare frame"
+    }
+   ]
+  },
+  {
+   "id": "event-t1",
+   "label": "Event, tier 1: Hardpoint Lockdown",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r3/event-t1.jpg",
+     "label": "composed"
+    },
+    {
+     "key": "frame",
+     "image": "../art-originals/picks/card_frames_r3/event-t1-frame.jpg",
+     "label": "bare frame"
+    }
+   ]
+  },
+  {
+   "id": "event-t2",
+   "label": "Event, tier 2: Adversarial Inference Sweep",
+   "options": [
+    {
+     "key": "composed",
+     "image": "../art-originals/picks/card_frames_r3/event-t2.jpg",
+     "label": "composed"
+    },
+    {
+     "key": "frame",
+     "image": "../art-originals/picks/card_frames_r3/event-t2-frame.jpg",
+     "label": "bare frame"
+    }
+   ]
+  },
+  {
+   "id": "splay",
+   "label": "Splay: Exabyte Archive built over Telemetry Archive",
+   "options": [
+    {
+     "key": "splay",
+     "image": "../art-originals/picks/card_frames_r3/splay.jpg"
+    }
+   ]
+  },
+  {
+   "id": "icons",
+   "label": "The icon set",
+   "note": "Tag, resource, token and piece glyphs are vector over the one painted container sheet.",
+   "options": [
+    {
+     "key": "icons",
+     "image": "../art-originals/picks/card_frames_r3/icons.jpg"
+    }
+   ]
+  }
+ ]
+}

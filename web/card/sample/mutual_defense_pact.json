@@ -1,0 +1,22 @@
+{
+ "_note": "The face of Mutual Defense Pact: icon lines and rules text. source_text is content's wording when this face was written; face.js stops if content has moved on.",
+ "source_text": "Harden 2 in one country. Another player gains 2 credits. Gain 1 energy.",
+ "effect": [
+  [
+   "2",
+   "harden"
+  ],
+  [
+   {
+    "other": [
+     "2",
+     "credits"
+    ]
+   }
+  ],
+  [
+   "energy"
+  ]
+ ],
+ "text": "Harden 2 in one country. Another player gains 2 credits. Gain 1 energy."
+}

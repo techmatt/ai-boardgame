@@ -4,40 +4,79 @@
 @font-face { font-family: 'Source Serif 4'; font-weight: 400; src: url('fonts/source-serif-4-latin-400-normal.woff2') format('woff2'); }
 @font-face { font-family: 'Source Serif 4'; font-weight: 600; src: url('fonts/source-serif-4-latin-600-normal.woff2') format('woff2'); }
 
-.card { position: relative; width: 69mm; height: 94mm; overflow: hidden; background: #333; color: #15181c; }
+.card { position: relative; width: 69mm; height: 94mm; overflow: hidden; background: #333; color: #15181c; --rim-a: #eef1f4; --rim-b: #8d939b; --rim-c: #fbfcfd; }
+.card.tier-2 { --rim-a: #f3d27a; --rim-b: #8f6a1f; --rim-c: #fff1c2; }
 .card .frame { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .card .content { position: absolute; inset: 0; }
 .card .content > div { position: absolute; display: flex; align-items: center; justify-content: center; }
+.card svg.glyph { display: block; width: 100%; height: 100%; }
 
-.card .cost, .card .insight {
-  font-family: 'Saira Condensed', sans-serif; font-weight: 700; line-height: 1;
-  color: #101215; paint-order: stroke fill; -webkit-text-stroke: 0.5mm #f4f1e8;
-}
+/* The cost group: the octagon is the frame's; its figure steps aside for the hexagon. */
+.card .cost, .card .insight { font-family: 'Saira Condensed', sans-serif; font-weight: 700; line-height: 1; color: #101215; }
 .card .cost { font-size: 19pt; }
 .card .cost span { display: block; line-height: 0.72; }
+.card .cost.beside { justify-content: flex-start; font-size: 17pt; padding-left: 1.1mm; box-sizing: border-box; }
+.card .hexagon { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.card .hexagon polygon { stroke-linejoin: miter; }
+.card .hexagon .halo { fill: none; stroke: var(--strip); stroke-width: 15; }
+.card .hexagon .edge { fill: none; stroke: #23262a; stroke-width: 11; }
+.card .hexagon .rim { fill: none; stroke-width: 8.500; }
+.card .hexagon .face { fill: var(--plate, #efeadc); stroke: #23262a; stroke-width: 1; transform-origin: 50px 43.300px; transform: scale(.890); }
+.card .insight-fig { position: relative; display: flex; align-items: center; gap: 0.15mm; font-size: 12pt; }
+.card .insight-fig b { font-weight: 700; line-height: 0.72; }
+.card .insight-fig svg.eye { width: 2.400mm; height: 2.400mm; color: #5b2f96; }
 
-/* Drawn, not painted: these change card by card. */
-.card .plate {
-  box-sizing: border-box; background: var(--plate, #efeadc);
-  border: 0.3mm solid #23262a;
-  box-shadow: 0 0 0 0.2mm #e9edf0, 0 0.35mm 0.7mm 0.2mm rgb(0 0 0 / 45%), inset 0 0.25mm 0.3mm rgb(255 255 255 / 70%), inset 0 -0.2mm 0.4mm rgb(0 0 0 / 18%);
+/* Requirement plates: at least, at most, replaces. */
+.card .requirements { gap: 0.6mm; }
+.card .requirement {
+  box-sizing: border-box; height: 100%; display: flex; align-items: center; gap: 0.3mm; padding: 0 0.8mm; border-radius: 1mm;
+  border: 0.3mm solid #23262a; box-shadow: 0 0 0 0.2mm #e9edf0, 0 0.3mm 0.6mm 0.2mm rgb(0 0 0 / 45%), inset 0 0.25mm 0.3mm rgb(255 255 255 / 70%);
 }
-.card .insight { font-size: 12pt; gap: 0.5mm; padding-right: 1.4mm; border-radius: 0 2.8mm 2.8mm 0; }
-.card .content > .insight { justify-content: flex-end; }
-.card .insight .ico { width: 3.4mm; height: 3.4mm; }
-.card .requirement { gap: 0.4mm; padding: 0 0.9mm; border-radius: 1mm; }
-.card .requirement .medallion { width: 3.8mm; height: 3.8mm; display: block; }
-.card .tag { border-radius: 50%; box-shadow: 0 0 0 0.2mm #e9edf0, 0 0 0 0.35mm #23262a, 0 0.3mm 0.6mm 0.35mm rgb(0 0 0 / 40%); }
+.card .requirement.at-least { background: #f2c92e; }
+.card .requirement.at-most { background: #d43a2f; }
+.card .requirement.replaces { background: var(--plate, #efeadc); }
+.card .requirement .fx-num { font-size: 12pt; }
+.card .requirement .medallion { width: 4.400mm; height: 4.400mm; }
+.card .requirement svg.stack { width: 4mm; height: 4mm; }
+.card .tag { box-shadow: 0 0.3mm 0.6mm 0.2mm rgb(0 0 0 / 40%); border-radius: 50%; }
+.card .tag .medallion { width: 100%; height: 100%; }
 
 .card .name { font-family: 'Saira Condensed', sans-serif; font-weight: 600; font-size: 15pt; letter-spacing: 0.02em; line-height: 1; padding-bottom: 0.7mm; box-sizing: border-box; }
-.card .tag .medallion { width: 100%; height: 100%; display: block; }
+.card .name.long { font-size: 12.500pt; }
 
-.card .effect { flex-direction: column; gap: 1.1mm; padding: 0 1.1mm; box-sizing: border-box; }
-.card .fx-icons { display: flex; justify-content: center; gap: 5mm; }
-.card .fx-line { display: flex; align-items: center; gap: 0.9mm; }
+/* The icons. A tile or disc is the painted blank with its face multiplied to the colour. */
+.card .ico { position: relative; display: inline-block; flex: none; width: 5.600mm; height: 5.600mm; background: center / 100% 100% no-repeat; }
+.card .ico.tile { background-image: url('containers/tile.png'); color: #fff; }
+.card .ico.disc { background-image: url('containers/disc.png'); color: #fff; }
+/* A disc's rim takes the colour too: only a tag has a bare metal ring. */
+.card .ico.tile::before, .card .ico.disc::before { content: ''; position: absolute; background: var(--c); mix-blend-mode: multiply; }
+.card .ico.tile::before { inset: 8%; border-radius: 8%; }
+.card .ico.disc::before { inset: 0; border-radius: 50%; }
+.card .ico svg.glyph { position: absolute; inset: 16%; width: 68%; height: 68%; filter: drop-shadow(0 0.1mm 0.1mm rgb(0 0 0 / 55%)); }
+.card .ico.piece { color: #1c2026; }
+.card .ico.piece svg.glyph { inset: 0; width: 100%; height: 100%; filter: none; }
+.card .medallion { display: block; position: relative; background: url('containers/ring.png') center / 100% 100% no-repeat; color: var(--c); }
+.card .medallion svg.glyph { position: absolute; inset: 20%; width: 60%; height: 60%; }
+
+.card .effect { flex-direction: column; gap: 1mm; padding: 0 1.1mm; box-sizing: border-box; }
+.card .fx-icons { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 3.500mm; row-gap: 0.6mm; }
+.card .fx-line { display: flex; align-items: center; gap: 0.7mm; }
 .card .fx-num { font-family: 'Saira Condensed', sans-serif; font-weight: 700; font-size: 13pt; line-height: 1; }
-.card .fx-line .ico { width: 6mm; height: 6mm; }
-.card .fx-line .anycard { height: 8mm; width: 5.4mm; }
-.card .fx-line .arrow { width: 4.2mm; height: 4.2mm; }
-.card .income { display: flex; align-items: center; gap: 0.9mm; padding: 0.5mm 1.8mm; border-radius: 1mm; background: #a9764a; box-shadow: inset 0 0 0 0.3mm #5e3c20; }
-.card .rules { margin: 0; max-width: 55mm; font-family: 'Source Serif 4', Georgia, serif; font-size: 7.5pt; line-height: 1.22; text-align: center; }
+.card .fx-per { font-family: 'Saira Condensed', sans-serif; font-weight: 700; font-size: 15pt; line-height: 1; }
+.card .fx-word { font-family: 'Saira Condensed', sans-serif; font-weight: 700; font-size: 9.500pt; line-height: 1; letter-spacing: 0.04em; }
+.card .fx-line .ico[aria-label='move'] { margin-right: 0.8mm; }
+.card .lasting .fx-line + .fx-line { border-left: 0.3mm solid #b5ad98; padding-left: 3.500mm; }
+.card .fx-line svg.arrow { width: 4.200mm; height: 4.200mm; color: #15181c; flex: none; }
+
+/* Boxes. Brown: income. Dark: the adversary's pieces. Dashed: another card or player. */
+.card .income, .card .adversary { display: flex; align-items: center; gap: 0.7mm; padding: 0.1mm 1.200mm; box-sizing: border-box; border-style: solid; border-width: 0.8mm; border-image-width: 0.8mm; border-image-repeat: stretch; }
+.card .income { border-image-source: url('containers/income.png'); border-image-slice: 15% 5% fill; color: #fff6e2; }
+.card .adversary { border-image-source: url('containers/adversary.png'); border-image-slice: 15% 5% fill; color: #f2f4f6; }
+.card .adversary .ico.piece, .card .income .ico.piece { color: currentColor; }
+.card .other { display: flex; align-items: center; gap: 0.7mm; padding: 0.5mm 1.200mm; border: 0.4mm dashed #23262a; border-radius: 1.200mm; }
+
+.card .rules { margin: 0; max-width: 56mm; font-family: 'Source Serif 4', Georgia, serif; font-size: 7.500pt; line-height: 1.220; text-align: center; }
+
+/* A slot of buildings: the newer card over the older, the older's strip and name showing. */
+.splay { position: relative; }
+.splay .slot-card { position: absolute; left: 0; overflow: hidden; border-radius: 3mm; box-shadow: 0 0 1mm rgb(0 0 0 / 60%); }

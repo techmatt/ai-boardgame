@@ -1,5 +1,5 @@
 {
-  "_note": "Card geometry in mm from the bleed's top-left corner. The one source for guides, frame prompts and the card renderer. Candidate layout: close guides, not exact. Painted: frame, strip, cost octagon, banner, art, top, effect. Drawn by the renderer, never painted: insight, requirement, tags.",
+  "_note": "Card geometry in mm from the bleed's top-left corner. The one source for guides, frame prompts and the card renderer. Candidate layout: close guides, not exact. Fixed in the frame: border, strip, cost octagon, banner, art, top, effect. Drawn by the renderer, never in the frame: the insight hexagon, requirement plates, tags.",
   "bleed_mm": [69, 94],
   "trim_mm": [63, 88],
   "safe": { "x0": 6, "y0": 6, "x1": 63, "y1": 88 },
@@ -7,20 +7,20 @@
   "common": {
     "frame": [3.9, 3.9, 65.1, 90.3],
     "strip": [4.9, 4.9, 64.1, 16.0],
-    "cost": [6.0, 5.6, 15.4, 15.1],
-    "insight": [12.0, 7.5, 25.8, 13.1],
-    "requirement": [26.3, 7.5, 40.1, 13.1],
-    "tags": [40.6, 7.0, 63.0, 13.8],
-    "banner": [4.9, 16.0, 64.1, 24.3]
+    "cost": [5.42, 5.5, 14.05, 13.8],
+    "insight": [11.7, 8.0, 20.4, 15.65],
+    "requirement": [19.65, 7.6, 40.1, 12.8],
+    "tags": [40.6, 6.8, 63.0, 13.6],
+    "banner": [4.7, 16.1, 64.4, 22.8]
   },
   "kinds": {
-    "program": { "art": [4.9, 24.3, 64.1, 62.4], "effect": [4.9, 62.4, 64.1, 87.8] },
-    "event": { "art": [4.9, 24.3, 64.1, 62.4], "effect": [4.9, 62.4, 64.1, 87.8] },
+    "program": { "art": [4.7, 24.8, 64.4, 60.8], "effect": [4.7, 62.8, 64.4, 87.3] },
+    "event": { "art": [4.7, 24.8, 64.4, 60.8], "effect": [4.7, 62.8, 64.4, 87.3] },
     "building": {
-      "top": [4.9, 24.3, 64.1, 41.8],
-      "art": [4.9, 41.8, 64.1, 72.5],
-      "effect": [4.9, 72.5, 64.1, 87.8]
+      "top": [4.7, 24.8, 64.4, 40.3],
+      "art": [4.7, 42.4, 64.4, 69.9],
+      "effect": [4.7, 72.0, 64.4, 87.3]
     }
   },
-  "kind_colour": { "program": "#0e7a3e", "building": "#f27a12", "event": "#0c1a52" }
+  "kind_colour": { "program": "#0a6a38", "building": "#e0680a", "event": "#071660" }
 }

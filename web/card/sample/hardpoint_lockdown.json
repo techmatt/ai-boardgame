@@ -1,0 +1,15 @@
+{
+ "_note": "The face of Hardpoint Lockdown: icon lines and rules text. source_text is content's wording when this face was written; face.js stops if content has moved on.",
+ "source_text": "Shelter one country. Harden 2 in a country with your presence.",
+ "effect": [
+  [
+   "shelter"
+  ],
+  [
+   "2",
+   "harden",
+   "*"
+  ]
+ ],
+ "text": "Shelter one country. Harden 2* in a country with your presence."
+}

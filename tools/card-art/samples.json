@@ -1,0 +1,12 @@
+{
+  "_note": "Which real card shows each variant, and the splay's older and newer building. Faces are in web/card/sample/<id>.json; everything else comes from content/cards.json.",
+  "variants": {
+    "program-t1": "mutual_defense_pact",
+    "program-t2": "antiproton_offtake_deal",
+    "building-t1": "embassy_compound",
+    "building-t2": "orbital_embassy",
+    "event-t1": "hardpoint_lockdown",
+    "event-t2": "adversarial_inference_sweep"
+  },
+  "splay": ["telemetry_archive", "exabyte_archive"]
+}

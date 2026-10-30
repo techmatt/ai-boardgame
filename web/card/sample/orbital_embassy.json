@@ -1,15 +1,23 @@
 {
-  "_note": "The building sample: Orbital Embassy from content/cards.json, a copy for layout only. Lasting effects in the top box, the one-time part below. Its 2 chips and 1 antimatter are left off: the layout has no place for them yet.",
-  "id": "orbital_embassy",
-  "name": "Orbital Embassy",
-  "kind": "building",
-  "tier": 2,
-  "cost": 14,
-  "insight": 2,
-  "needs": [["diplomacy", 1]],
-  "tags": ["diplomacy", "power"],
-  "top": [[{ "income": [{ "text": "+4" }, { "icon": "credit" }, { "text": "+1" }, { "icon": "insight" }] }]],
-  "top_text": "+4 credit income. +1 insight income.",
-  "effect": [[{ "text": "+2" }, { "icon": "ambassador" }]],
-  "text": "When built: gain 2 ambassadors."
+ "_note": "The face of Orbital Embassy: icon lines and rules text. source_text is content's wording when this face was written; face.js stops if content has moved on.",
+ "source_text": "When built: gain 2 ambassadors. +4 credit income. +1 insight income.",
+ "top": [
+  [
+   {
+    "income": [
+     "4",
+     "credits",
+     "insight"
+    ]
+   }
+  ]
+ ],
+ "top_text": "Each round, 4 credits and 1 insight.",
+ "effect": [
+  [
+   "2",
+   "ambassador"
+  ]
+ ],
+ "text": "Gain 2 ambassadors."
 }

@@ -1,7 +1,7 @@
-// `node fit.mjs`: measure where each painted frame really put its zones, into
-// art/frames/r2/fit.json (mm boxes the renderer uses instead of the guide's). The image
-// tool lands within a millimetre or two, and not uniformly, so one offset cannot fix a
-// frame. Each zone is light inside a darker rim: flood from the guide's centre over the
+// `node fit.mjs`: measure where each frame really put its zones, into
+// art/frames/r3/fit.json (mm boxes the renderer uses instead of the guide's). The master
+// was painted, so its zones sit a little off the guide; every variant derives from it, so
+// all of them should measure alike, and this prints where one doesn't. Each zone is light inside a darker rim: flood from the guide's centre over the
 // lightly blurred image (texture would stop it), take the bounding box. When no
 // threshold gives a box of about the right size, the guide's stays. Also records the
 // octagon's inside colour, so the plates the renderer draws match it.
@@ -60,18 +60,23 @@ const hex = (data, W, [x, y]) => {
   return `#${[0, 1, 2].map((k) => data[i + k].toString(16).padStart(2, '0')).join('')}`;
 };
 
-const dir = path.join(ART, 'frames', 'r2');
+const dir = path.join(ART, 'frames', 'r3');
 const out = {};
 for (const f of (await readdir(dir)).filter((n) => n.endsWith('.jpg')).sort()) {
   const id = f.slice(0, -4);
   const { data, info } = await sharp(path.join(dir, f)).blur(1.2).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const { cost, banner } = l.common;
-  const { top, effect } = l.kinds[id.split('-')[1]];
+  const { top, effect } = l.kinds[id === 'master' ? 'event' : id.split('-')[0]];
   const zones = { cost, banner, ...(top ? { top } : {}), effect };
   const m = Object.fromEntries(Object.entries(zones).map(([k, z]) => [k, measure(data, info.width, info.height, z)]));
   const missed = Object.entries(m).filter(([, v]) => !v.ok).map(([k]) => k);
   const [x0, y0, x1, y1] = m.cost.box;
   out[id] = { ...Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.box])), plate: hex(data, info.width, [(x0 + x1) / 2, (y0 + y1) / 2]) };
   console.log(`fit: ${id}: ${missed.length ? `guide kept for ${missed.join(', ')}` : 'all measured'}`);
+}
+const base = out.master;
+for (const [id, zones] of Object.entries(out)) {
+  const off = ['cost', 'banner', 'effect'].filter((k) => zones[k].some((v, i) => Math.abs(v - base[k][i]) > 0.05) && !(id.startsWith('building') && k === 'effect'));
+  if (off.length) console.log(`fit: ${id} differs from the master: ${off.map((k) => `${k} ${zones[k]} vs ${base[k]}`).join('; ')}`);
 }
 await writeFile(path.join(dir, 'fit.json'), `${JSON.stringify(out, null, 1)}\n`);

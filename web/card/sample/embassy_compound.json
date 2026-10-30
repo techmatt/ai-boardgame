@@ -1,0 +1,22 @@
+{
+ "_note": "The face of Embassy Compound: icon lines and rules text. source_text is content's wording when this face was written; face.js stops if content has moved on.",
+ "source_text": "When built: gain 2 ambassadors. Once a round: pay 2 credits, move an ambassador up to 2 hexes.",
+ "top": [
+  [
+   "2",
+   "credits",
+   "→",
+   "move",
+   "2",
+   "hex"
+  ]
+ ],
+ "top_text": "Action: pay 2 credits, move an ambassador up to 2 hexes.",
+ "effect": [
+  [
+   "2",
+   "ambassador"
+  ]
+ ],
+ "text": "Gain 2 ambassadors."
+}

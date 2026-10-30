@@ -1,0 +1,28 @@
+{
+  "_note": "Everything derive.mjs needs, in pixels of the 815×1110 master. inside: columns the building split may touch (the outer border and most of the enamel stay the master's). split: [dst0, dst1, src0, src1], top to bottom: the frame as it stands, then the top box (the effect panel's ivory), the divider (the bottom bevel of a pale panel, then the top bevel of the art window: all master rows), the art window, the master's own art/effect divider, the effect panel. plates: what stays untouched by the gold, per layout. ramps: value to colour, per kind; none means the master's own. gold: value to colour.",
+  "inside": [38, 777],
+  "feather": 8,
+  "split": [
+    [0, 293, 0, 293],
+    [293, 476, 742, 1031],
+    [476, 486, 1031, 1041],
+    [486, 501, 278, 293],
+    [501, 826, 293, 718],
+    [826, 850, 718, 742],
+    [850, 1031, 742, 1031],
+    [1031, 1110, 1031, 1110]
+  ],
+  "octagon": { "centre": [115, 112], "radius": 53, "diamond": 1.47 },
+  "plates": {
+    "common": [[54, 190, 762, 270]],
+    "program": [[56, 293, 760, 718], [56, 742, 760, 1031]],
+    "event": [[56, 293, 760, 718], [56, 742, 760, 1031]],
+    "building": [[56, 293, 760, 476], [56, 501, 760, 826], [56, 850, 760, 1031]]
+  },
+  "enamel": { "box": [28, 28, 787, 1082], "hue": [178, 192, 262, 280], "saturation": [0.1, 0.3] },
+  "ramps": {
+    "program": [[0, [1, 12, 7]], [0.3, [4, 62, 34]], [0.52, [8, 104, 54]], [0.78, [40, 176, 96]], [1, [214, 255, 226]]],
+    "building": [[0, [58, 22, 2]], [0.3, [176, 74, 6]], [0.52, [232, 110, 10]], [0.78, [255, 160, 40]], [1, [255, 240, 208]]]
+  },
+  "gold": [[0, [34, 20, 4]], [0.35, [116, 74, 16]], [0.62, [196, 142, 40]], [0.85, [240, 200, 96]], [1, [255, 246, 208]]]
+}

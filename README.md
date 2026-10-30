@@ -138,58 +138,83 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
 
 ## Card art
 
-The card renderer is `web/card/` (`card.js`, `card.css`, `icons.js`, `layout.json`,
-bundled `fonts/`): `renderCard(card, layout, frameUrl)` turns card content into HTML, in
-mm, so one template serves print and, later, the web client. **Cards are composed live,
-never pre-baked:** composed cards and print sheets go to `out/cards/` (git-ignored).
-Committed: frame templates (`art/frames/`), guides (`art/guides/`), fonts. Changing a
-card's text or numbers changes no asset. Picker previews are never committed: they go to
-the shared `art-originals/picks/<picker>/`. Card art prompts live in `art/prompts.json`,
-keyed by card id with the shared style block, apart from content, so changing a card's
-mechanics changes neither its art nor its prompt. So far it holds the sample only. Icons
-are placeholders.
+The card renderer is `web/card/` (`card.js`, `card.css`, `icons.js`, `face.js`,
+`layout.json`, `containers/`, bundled `fonts/`): `renderCard(card, layout, frameUrl, fit)`
+turns card content into HTML, in mm, so one template serves print and, later, the web
+client. **Cards are composed live, never pre-baked:** composed cards and print sheets go
+to `out/cards/` (git-ignored). Committed: frame templates (`art/frames/`), guides
+(`art/guides/`), sliced containers, fonts. Changing a card's text or numbers changes no
+asset. Picker previews are never committed: they go to the shared
+`art-originals/picks/<picker>/`. Card art prompts live in `art/prompts.json`, keyed by
+card id with the shared style block, apart from content, so changing a card's mechanics
+changes neither its art nor its prompt. So far it holds the sample cards only.
 
-The frame paints the fixed structure only: frame, strip, cost octagon, name banner, art
-window and effect panel (on buildings, also the top box for lasting effects). The
-renderer draws what varies: the insight plate (omitted at 0), the requirement plate
-(as wide as the card needs) and 0–3 tag sockets, so no socket ever shows empty. The
-insight plate tucks under the octagon by drawing the frame a second time, clipped to the
-octagon, over it. `web/card/sample/` holds one sample per kind, for layout only.
+**One master.** Every frame derives from `art/frames/r3/master.jpg` (`steel-event-3`, a
+copy of round 2's), so borders, bevels and plates match. `npm run derive` makes the six
+variants in `art/frames/r3/`, numbers in `tools/card-art/derive.json`: buildings restack
+the frame's inside from master rows, adding a divider above the art; tier 2 tints the
+steel gold; the enamel, found by hue, goes through the kind's colour ramp (event keeps the
+master's). The frame holds the fixed structure; the renderer draws what varies: the
+insight hexagon, requirement plates and 0–3 tags.
+
+**Where it sits is what it is** (locked by Matt, 2026-10-29). Top strip: cost octagon,
+insight hexagon, requirements, tags, nothing else. Above the art (buildings): what lasts,
+income, *Effect:*, *Action:*. Below the art: what happens once, extra costs first, as
+minus-icons. No box: gain now. Brown box: income. Dark frame: the adversary's pieces or
+projects. Dashed outline: another card or player. A square tile is a resource, a disc a
+token on a card, a bare silhouette a board piece, a ringed circle a tag. The cost group
+follows Race for the Galaxy: a hexagon at about 70% of the octagon, in front of its lower
+right, with a halo in the strip colour; at 0 insight it is omitted.
+
+**Icons.** Containers are one painted sheet in the master's steel (`npm run containers --
+--draw`, 65 s; without the flag it reslices the kept sheet into `web/card/containers/`).
+Glyphs are vector, in `icons.js`. Tiles and discs are one blank each: `card.css` multiplies
+the face to the resource's colour.
+
+**Faces.** `web/card/sample/<id>.json` holds a sample card's icon lines and its rules
+text, worded for the boxes. Everything else, extra costs included, comes from
+`content/cards.json` at render time, and `face.js` stops if content's text has moved on
+from the face's `source_text`. `tools/card-art/samples.json` says which card shows each
+variant and which two show the splay. No face exists yet for the other cards.
 
 Run from `tools/card-art/` (Node 24, system Chrome through `playwright-core`, one
 browser; `npm ci` first):
 
+- `npm run derive`: the six frames from the master, about 5 s.
+- `npm run fit`: measures each frame's zones into `art/frames/r3/fit.json`, which the
+  renderer uses instead of the guide, and prints any that differ from the master. Some
+  octagons measure one pixel (0.08 mm) off it: flood-fill noise, the geometry is the same.
+- `npm run render -- [variants] [--pdf]`: composes each variant's real card at 300 dpi
+  (815×1110). With no variants named, also the splay, the icon sheet and a strip check of
+  every card in content (about 1.5 min: background it). Fails if a font fell back,
+  anything printed leaves the safe zone (x 6–63, y 6–88 mm), a panel overflows or a
+  requirement plate reaches the tags.
+- `node sheet.mjs <out.png> <images…>`: a one-row inspection sheet.
+- `npm run picker`: writes `picks/card_frames_r3.json` from `out/cards/`, with its images
+  in `art-originals/picks/card_frames_r3/`. Stops if that folder isn't reachable.
 - `npm run guides`: six labelled guides plus unlabelled `-blocks` twins, from
   `layout.json`. The twins are what the image tool sees: labels invite text.
-- `npm run gen -- steel-program-1 bioreactor-event-2 … --pool=3`: draws tier-1 frames
-  (`<direction>-<kind>-<seed>`) with Codex CLI's `$imagegen` on
-  Matt's ChatGPT Plus login, the wordwarriors route: `codex exec --json -s read-only`, the
-  prompt on stdin, the guide on `-i`, the PNG collected from
-  `~/.codex/generated_images/<thread>/`. No API key. Prompts are in `prompts.json`. The tool
-  has no seed parameter, so a "seed" is an independent draw. Redrawing an id keeps the old
-  original as `<id>.try<n>.png`. It stops at the first usage-limit message.
-- `npm run fit`: measures each frame's real zones into `art/frames/r2/fit.json`, which the
-  renderer uses instead of the guide, and the octagon's inside colour for the drawn plates.
-  Run it after any draw: the tool lands zones up to about 3.5 mm off the guide, and not
-  uniformly, so no single offset fixes a frame.
-- `npm run render -- [ids] [--pdf]`: composes each kind's sample at 300 dpi (815×1110).
-  Fails if a font fell back, anything printed leaves the safe zone (x 6–63, y 6–88 mm) or
-  the requirement plate reaches the tags.
-- `node sheet.mjs <out.png> <images…>`: a one-row inspection sheet.
-- `npm run picker`: writes `picks/card_frames_r2.json` from `out/cards/`, with its images
-  in `art-originals/picks/card_frames_r2/`. Stops if that folder isn't reachable.
+- `npm run gen -- steel-program-1 … --pool=3`: round 2's frame draws, kept for a new
+  direction: Codex CLI's `$imagegen` on Matt's ChatGPT Plus login, the wordwarriors route
+  (`codex exec --json -s read-only`, the prompt on stdin, the guide on `-i`, the PNG
+  collected from `~/.codex/generated_images/<thread>/`). No API key. Prompts are in
+  `prompts.json`. It stops at the first usage-limit message. Its frames go to
+  `art/frames/r2/`, which `fit` and `render` no longer read.
 
 - **Numbers (2026-10-30, 026):** asking for 69:94 with a same-shape guide returns
   1075×1464, the right shape already, so the crop takes at most a pixel. 44–71 s an image,
   about 0.35% of the 5-hour Plus window each; three at once ran fine. Round 2 (029):
-  23 draws, 48–73 s each, about 7% of the window.
+  23 draws, 48–73 s each, about 7% of the window. Independent draws drift by up to 3.5 mm:
+  hence the one master.
 - **Originals:** `art-originals/` is a git-ignored junction to
   `C:\Code\gdrive-sync\aicomplete\art-originals` (`mklink /J art-originals <that path>`).
   The scripts other than the picker, which needs the junction, fall back to that path;
-  `AIC_ART_ORIGINALS` overrides it. Each round has its folder (`card-frames-r2/`):
-  full-size originals, `frames/` (815×1110 PNG) and `log.jsonl`.
-- **The octagon's top (y 5.6) crosses the safe zone;** its figure is inside.
-- **`art/frames/r1/` is the old layout** (all sockets painted): the renderer no longer fits it.
+  `AIC_ART_ORIGINALS` overrides it. Each round has its folder (`card-frames-r3/` holds the
+  container sheet): full-size originals, `frames/` (815×1110 PNG) and `log.jsonl`.
+- **The octagon's top (y 5.5) crosses the safe zone;** its figure is inside.
+- **The master's outer steel band lies in the bleed** (under 3 mm), so a trimmed card loses
+  it: the enamel runs to the cut, and tier 2 shows gold only on its bevels. Composed
+  singles show the full bleed; the splay is trimmed.
 
 ## Toolchain
 

@@ -1,0 +1,20 @@
+{
+ "_note": "The face of Telemetry Archive: icon lines and rules text. source_text is content's wording when this face was written; face.js stops if content has moved on.",
+ "source_text": "Gains 1 Dataset a round. Once a round: spend 2 Datasets, gain 1 insight.",
+ "top": [
+  [
+   {
+    "income": [
+     "datasets"
+    ]
+   }
+  ],
+  [
+   "2",
+   "datasets",
+   "→",
+   "insight"
+  ]
+ ],
+ "top_text": "Each round, 1 Dataset on this card. Action: pay 2 Datasets, gain 1 insight."
+}

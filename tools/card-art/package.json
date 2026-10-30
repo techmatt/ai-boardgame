@@ -7,6 +7,8 @@
   "scripts": {
     "guides": "node guides.mjs",
     "gen": "node generate.mjs",
+    "derive": "node derive.mjs",
+    "containers": "node containers.mjs",
     "fit": "node fit.mjs",
     "render": "node render.mjs",
     "picker": "node picker.mjs"
