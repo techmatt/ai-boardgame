@@ -16,6 +16,7 @@ mod board;
 mod cards;
 mod config;
 mod determinism;
+mod freeing;
 mod invariants;
 mod map;
 mod plan;
@@ -52,6 +53,7 @@ fn lab_config(round: &[&str]) -> Config {
         "alignment.undecided_per_player=50",
         "alignment.clear_win_stage=3",
         "alignment.unity_win=0",
+        "alignment.purge_round=0",
         // 021: no credits, so no neutral city's energy is bought unasked.
         "ai.start_credits=0",
     ]);
@@ -273,7 +275,7 @@ fn variant_matrix() -> Vec<Config> {
 
 // ---------- the golden game ----------
 
-const GOLDEN_FINGERPRINT: &str = "431d28d3b5b6a147";
+const GOLDEN_FINGERPRINT: &str = "0011fb28bdb81e65";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).
@@ -295,6 +297,6 @@ fn golden_game() {
     assert!(g.is_over());
     assert_eq!(
         (RULES_REVISION, g.fingerprint().as_str()),
-        (14, GOLDEN_FINGERPRINT)
+        (15, GOLDEN_FINGERPRINT)
     );
 }

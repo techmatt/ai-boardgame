@@ -20,7 +20,7 @@ use crate::view::{CardView, ViewOut};
 use super::common::*;
 use super::{adversary, ai, cards, threats};
 
-const PARAMS: [ParamSpec; 14] = [
+const PARAMS: [ParamSpec; 15] = [
     ParamSpec::int("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
     ParamSpec::int("tip_per_player", 1, 50, "a bucket tips when it holds this many Sway per player"),
     ParamSpec::int("momentum_every", 0, 10, "Momentum: a side's bucket holds 1 fewer Sway per this many of its tips, down to 1 per player (0: off)"),
@@ -35,6 +35,7 @@ const PARAMS: [ParamSpec; 14] = [
     ParamSpec::int("discord_tier2", 1, 50, "Discord tip count from which a Discord tip draws the stronger tier"),
     ParamSpec::int("unity_win", 0, 50, "Unity tips that win outright (0: never)"),
     ParamSpec::int("clear_win_stage", 1, 3, "the bar-0 win counts only once this round's adversary card is of this stage (1: any time)"),
+    ParamSpec::int("purge_round", 0, 20, "the purge counts only from this printed round on, at every Unity level (0: any time)"),
 ];
 
 const PHASES: &[PhaseSpec] = &[
@@ -254,6 +255,9 @@ pub fn for_node_removed(g: &mut GameState, cx: &mut Cx) {
 /// level-0 bar (no adversary pieces) counts only once a card of stage
 /// `clear_win_stage` has been revealed (the stages are stacked and public).
 fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
+    if (g.round as i64) < w.int("alignment.purge_round") {
+        return false;
+    }
     if level == 0 && g.var(adversary::STAGE) < w.int("alignment.clear_win_stage") {
         return false;
     }
@@ -309,6 +313,14 @@ pub fn resolve(g: &mut GameState, cx: &mut Cx, op: &AlignOp) -> Res {
                 .collect();
             for (h, n) in nodes {
                 adversary::place(g, cx, h, n * amount);
+            }
+        }
+        AlignOp::CorruptCities => {
+            for c in 0..w.map.countries.len() {
+                let city = |h: usize| is_city(&w, h) && !corrupted(g, h);
+                if let Some(h) = adversary::most_infiltrated_city(&w, g, c, city) {
+                    adversary::corrupt_city(g, cx, h);
+                }
             }
         }
         AlignOp::RemoveNodes { count } => {
@@ -684,6 +696,10 @@ impl Module for Alignment {
         let stage = w.int("alignment.clear_win_stage");
         if level == 0 && g.var(adversary::STAGE) < stage {
             text += &format!(" (from adversary stage {stage})");
+        }
+        let first = w.int("alignment.purge_round");
+        if (g.round as i64) < first {
+            text += &format!(" (counts from round {first})");
         }
         out.global(
             "bar",

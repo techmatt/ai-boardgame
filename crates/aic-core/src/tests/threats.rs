@@ -26,7 +26,7 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
     deal(&mut g, "sabotage", 0);
     deal(&mut g, "blackout", 1);
     for s in 0..2 {
-        set_res(&mut g, s, "energy", 5);
+        set_res(&mut g, s, "credits", 6);
     }
     let legal = rules.legal_actions(&g);
     // Only players with a presence in the threat's country may pay.
@@ -43,33 +43,33 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
         resource: resource.into(),
         amount,
     };
-    // Blackout: 2 energy (021: was compute). Pay 1, withdraw, then pay in full.
+    // Blackout: 4 credits (024). Pay 1, withdraw, then pay in full.
     rules
-        .apply_mut(&mut g, &pay(1, "blackout", "energy", 1), None)
+        .apply_mut(&mut g, &pay(1, "blackout", "credits", 1), None)
         .unwrap();
-    assert_eq!(g.resource(1, "energy"), 4);
+    assert_eq!(g.resource(1, "credits"), 5);
     let withdraw = Action::Withdraw {
         seat: 1,
         threat: "blackout".into(),
-        resource: "energy".into(),
+        resource: "credits".into(),
     };
     rules.apply_mut(&mut g, &withdraw, None).unwrap();
-    assert_eq!(g.resource(1, "energy"), 5);
+    assert_eq!(g.resource(1, "credits"), 6);
     assert!(rules
-        .apply_mut(&mut g, &pay(1, "blackout", "energy", 3), None)
+        .apply_mut(&mut g, &pay(1, "blackout", "credits", 5), None)
         .is_err());
     assert!(rules
-        .apply_mut(&mut g, &pay(0, "blackout", "energy", 1), None)
+        .apply_mut(&mut g, &pay(0, "blackout", "credits", 1), None)
         .is_err());
     rules
-        .apply_mut(&mut g, &pay(1, "blackout", "energy", 2), None)
+        .apply_mut(&mut g, &pay(1, "blackout", "credits", 4), None)
         .unwrap();
     assert!(g.pile("threats.on.1").is_empty());
     assert_eq!(g.pile("threats.discard.1")[0], "blackout");
-    assert_eq!(g.resource(1, "energy"), 3);
-    // Sabotage: 2 energy + 1 credit. Pay only the energy; it comes back.
+    assert_eq!(g.resource(1, "credits"), 2);
+    // Sabotage: 5 credits. Pay only part; it comes back.
     rules
-        .apply_mut(&mut g, &pay(0, "sabotage", "energy", 2), None)
+        .apply_mut(&mut g, &pay(0, "sabotage", "credits", 2), None)
         .unwrap();
     assert_eq!(g.pile("threats.on.0"), ["sabotage"]);
     let discord = g.var("alignment.discord");
@@ -79,7 +79,7 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
             .unwrap();
     }
     assert!(g.pending.is_none());
-    assert_eq!(g.resource(0, "energy"), 5);
+    assert_eq!(g.resource(0, "credits"), 6);
     assert!(g
         .pile("threats.discard.1")
         .contains(&"sabotage".to_string()));
@@ -90,16 +90,28 @@ fn threats_are_countered_only_when_fully_paid_and_partial_payments_come_back() {
 #[test]
 fn jamming_a_threat_down_to_what_is_paid_counters_it() {
     let (rules, mut g) = threat_lab();
-    // Requisition needs 1 insight; Threat Triage (023; was Jam Signals) takes it to 0:
-    // countered at once.
+    // Requisition needs 4 credits (024); with 2 paid, Threat Triage (023; was
+    // Jam Signals) takes it to 2: countered at once.
     deal(&mut g, "requisition", 0);
+    set_res(&mut g, 0, "credits", 12);
+    rules
+        .apply_mut(
+            &mut g,
+            &Action::Pay {
+                seat: 0,
+                threat: "requisition".into(),
+                resource: "credits".into(),
+                amount: 2,
+            },
+            None,
+        )
+        .unwrap();
     g.piles
         .get_mut("cards.deck.1")
         .unwrap()
         .retain(|c| c != "threat_triage");
     g.piles
         .insert("cards.hand.0".into(), vec!["threat_triage".into()]);
-    set_res(&mut g, 0, "credits", 10);
     set_res(&mut g, 0, "insight", 1);
     act(
         &rules,
@@ -137,9 +149,9 @@ fn difficulty_1_raises_the_counters_and_deals_more_threats() {
     let (r0, r1) = (at(0), at(1));
     let (g0, mut g1) = (r0.new_game(1), r1.new_game(1));
     let req = |r: &Rules, g: &GameState| threats::requirement(&r.world(), g, "orbital_strike");
-    let pair = |e, c| vec![("energy".to_string(), e), ("credits".to_string(), c)];
-    assert_eq!(req(&r0, &g0), pair(2, 2));
-    assert_eq!(req(&r1, &g1), pair(4, 3));
+    let credits = |c| vec![("credits".to_string(), c)];
+    assert_eq!(req(&r0, &g0), credits(6));
+    assert_eq!(req(&r1, &g1), credits(8));
     let on = |g: &GameState, c: usize| {
         threats::active(g)
             .iter()

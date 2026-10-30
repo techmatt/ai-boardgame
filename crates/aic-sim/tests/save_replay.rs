@@ -21,10 +21,11 @@ fn round_counters_average_over_the_games_that_reached_them() {
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let counters = &v["results"][0]["counters"];
-    // No new corruption or project can come before round 2.
+    // Averages of round numbers, so never below round 1 (024: at 1 country a
+    // node's 3 compute and a threat's 3 can resolve a project in round 1).
     for k in ["adversary.first_corruption_round", "adversary.first_project_round"] {
         if let Some(x) = counters[k].as_f64() {
-            assert!(x >= 2.0, "{k} {x}");
+            assert!(x >= 1.0, "{k} {x}");
         }
     }
 }

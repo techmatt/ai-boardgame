@@ -42,7 +42,7 @@ fn opposing_ambassadors_on_one_piece_cancel_without_unity() {
 }
 
 #[test]
-fn a_player_ambassador_takes_a_neutral_station_and_two_free_a_corrupted_city() {
+fn a_player_ambassador_takes_a_neutral_station_and_waits_on_a_corrupted_one() {
     let (rules, mut g) = lab(&[]);
     let m = &rules.map;
     let neutral = m.numbered(0, piece(0).stations[0]);
@@ -71,24 +71,6 @@ fn a_player_ambassador_takes_a_neutral_station_and_two_free_a_corrupted_city() {
         (0, 1)
     );
 
-    let city = m.numbered(0, piece(0).corrupted[0]);
-    put(&mut g, city, ADV_CUBE, 1);
-    assert_eq!(rules.world().int("board.free_city_at"), 2);
-    for (k, seat) in [0, 1].into_iter().enumerate() {
-        with_cx(&rules, |cx| board::place_ambassador(&mut g, cx, seat, city));
-        let freed = k == 1;
-        assert_eq!(
-            g.tokens(city, ADV_CUBE),
-            !freed as i64,
-            "after {} ambassadors",
-            k + 1
-        );
-    }
-    assert_eq!(
-        g.tokens(city, &ambassador(0)) + g.tokens(city, &ambassador(1)),
-        0
-    );
-    assert_eq!(g.stats.counters["board.cities_freed"], 1);
 }
 
 #[test]

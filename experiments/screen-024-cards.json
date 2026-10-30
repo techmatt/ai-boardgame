@@ -1,0 +1,33 @@
+{
+  "name": "screen-024-cards",
+  "note": "024 quick screen (r15): the scarier adversary. 2 and 3 countries, d0 to d4, random, greedy and engine: win rates, pick and play rates per card, tags used by winning engines, hand size, insight on keeps versus plays.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "agents": [
+    "random",
+    "greedy",
+    "engine"
+  ],
+  "games": 16,
+  "records": 2
+}

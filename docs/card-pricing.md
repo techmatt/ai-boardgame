@@ -5,6 +5,29 @@ generated from `content/cards.json`. The screen that checked these prices, and t
 patches it led to, are in
 [experiments/results/screen-023-cards/cards.md](../experiments/results/screen-023-cards/cards.md).
 
+## 024's changes
+
+- **Freeing is no longer a card's effect.** A corrupted city frees when one player holds
+  `free_city_at` of their ambassadors on it and no adversary ambassador is on or next to it
+  (rules.md §2). Cards help meet that: Amnesty Decree (4 cr, clear 2 around a city, a move)
+  and Liberation Accords (9 cr, clear them all, 2 ambassadors). Back-Channel Talks and
+  Station Prefab Order now take cubes off stations and factories only. **Great Liberation
+  is the one card that frees a city outright** (14 cr, 1 antimatter, tier 2; up to 2 sites
+  in a country; was 10 cr, up to 3).
+- **The credit budget.** A round's income is about 12 a seat. A threat counter is a third to
+  a half of that (4-6 in tier 1, 6-8 in tier 2), so a seat countering its country's threat
+  has about half its income left for cards. The standard projects (rules.md §6) set a
+  ceiling on what a credit buys: 3 credits for 1 energy or a presence or a hardening token,
+  5 for 3 compute drained, 6 for an ambassador. A card should beat those rates by half or
+  more, or it's a bad buy.
+- **Card text.** At most 100 characters of effect text (a test checks it): what the cost
+  line prints is not repeated, and keywords (rules.md §8) carry the long phrases. 024's
+  audit against the JSON corrected Hyperscale Botnet (said 3 Cyber, needs 2), the factory
+  cards (a free industrial zone in reach, not "an open hex touching a city") and the give
+  cards' bonus (only if you gave any).
+
+Prices below are 023's reasoning; where 024 changed a card, the list above wins.
+
 ## The yardsticks
 
 - **The budget.** A board makes 4 insight a round (+1 on the presence track's spaces,

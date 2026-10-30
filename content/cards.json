@@ -6,7 +6,7 @@
   "kind": "building",
   "cost": 3,
   "insight": 1,
-  "text": "Build a factory on an empty open hex touching a city; +1 credit income.",
+  "text": "When built: build a factory in reach. +1 credit income.",
   "effects": [
    {
     "op": "build_factory"
@@ -30,7 +30,7 @@
   "tier": 0,
   "kind": "program",
   "cost": 0,
-  "text": "Gain 5 credits; another player gains 2.",
+  "text": "Gain 5 credits. Another player gains 2.",
   "effects": [
    {
     "op": "gain",
@@ -58,7 +58,7 @@
   "kind": "building",
   "cost": 4,
   "insight": 1,
-  "text": "+1 building slot (takes no slot itself).",
+  "text": "+1 building slot. Takes no slot itself.",
   "passives": [
    {
     "op": "slots",
@@ -78,7 +78,7 @@
   "kind": "building",
   "cost": 3,
   "insight": 1,
-  "text": "Once a round, pay 1 energy to harden 2 buildings in a country where you have a presence.",
+  "text": "Once a round: pay 1 energy, harden 2 in a country with your presence.",
   "ability": {
    "cost": [
     [
@@ -106,7 +106,7 @@
   "kind": "event",
   "cost": 1,
   "insight": 1,
-  "text": "Remove 3 worth of adversary pieces in a hex within your reach.",
+  "text": "Remove 3 worth in a hex in reach.",
   "effects": [
    {
     "op": "damage",
@@ -125,7 +125,7 @@
   "tier": 0,
   "kind": "event",
   "cost": 0,
-  "text": "In one country, buildings can't be destroyed this round.",
+  "text": "Shelter one country.",
   "effects": [
    {
     "op": "shelter"
@@ -147,7 +147,7 @@
    "industry"
   ],
   "unique": "builder",
-  "text": "The Builder's starting building: +1 credit income.",
+  "text": "+1 credit income.",
   "passives": [
    {
     "op": "income",
@@ -166,7 +166,7 @@
    "security"
   ],
   "unique": "protector",
-  "text": "The Protector's starting building: +1 energy income.",
+  "text": "+1 energy income.",
   "passives": [
    {
     "op": "income",
@@ -221,7 +221,7 @@
    "science",
    "cyber"
   ],
-  "text": "Once a round: pay 3 credits, draw 1 card.",
+  "text": "Once a round: pay 3 credits, draw 1.",
   "ability": {
    "cost": [
     [
@@ -268,7 +268,7 @@
   "tags": [
    "science"
   ],
-  "text": "Draw 3 cards.",
+  "text": "Draw 3.",
   "effects": [
    {
     "op": "draw",
@@ -290,7 +290,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove up to 2 compute from one adversary project; draw 1 card.",
+  "text": "Hack: drain 2. Draw 1.",
   "effects": [
    {
     "op": "drain_project",
@@ -314,7 +314,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Help: another player gains 1 insight; you draw 1 card.",
+  "text": "Help: another player gains 1 insight. Draw 1.",
   "effects": [
    {
     "op": "choose_player"
@@ -347,7 +347,7 @@
    "kind": "datasets",
    "per_round": 1
   },
-  "text": "Gains 1 Dataset a round. Once a round: spend 2 Datasets, draw 1 card.",
+  "text": "Gains 1 Dataset a round. Once a round: spend 2 Datasets, draw 1.",
   "ability": {
    "cost": [
     [
@@ -375,7 +375,7 @@
   "keywords": [
    "tokens"
   ],
-  "text": "Gain 1 insight; add 2 Datasets to one of your cards that holds Datasets.",
+  "text": "Gain 1 insight. Add 2 Datasets to one of your cards that holds Datasets.",
   "effects": [
    {
     "op": "gain",
@@ -402,7 +402,7 @@
   "keywords": [
    "tokens"
   ],
-  "text": "Add 3 Datasets to one of your cards that holds Datasets; gain 1 credit.",
+  "text": "Add 3 Datasets to one of your cards that holds Datasets. Gain 1 credit.",
   "effects": [
    {
     "op": "add_tokens",
@@ -425,7 +425,7 @@
   "tags": [
    "science"
   ],
-  "text": "Draw 1 card; look at the next adversary card.",
+  "text": "Draw 1. Look at the next adversary card.",
   "effects": [
    {
     "op": "draw",
@@ -450,7 +450,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Help: give up to 2 insight to another player; they gain 1 more. Draw 1 card.",
+  "text": "Help: give another player up to 2 insight; if you gave any, they gain 1 more. Draw 1.",
   "effects": [
    {
     "op": "choose_player"
@@ -477,7 +477,7 @@
   "tags": [
    "science"
   ],
-  "text": "Look at the next 2 adversary cards; every player gains 1 insight next round.",
+  "text": "Look at the next 2 adversary cards. Every player gains 1 insight next round.",
   "effects": [
    {
     "op": "peek",
@@ -503,7 +503,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: cut a node in your reach off (it makes no compute in the next build); draw 1 card.",
+  "text": "Hack: cut off a node in reach. Draw 1.",
   "effects": [
    {
     "op": "cut_node"
@@ -568,7 +568,7 @@
   "tags": [
    "science"
   ],
-  "text": "Lower your credit income 1. +1 insight production for the rest of the game; draw 1 card.",
+  "text": "+1 insight production. Draw 1.",
   "effects": [
    {
     "op": "production",
@@ -596,7 +596,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: one threat needs 1 less of each resource it asks for; draw 1 card.",
+  "text": "Hack: one threat needs 1 less of each resource it asks for. Draw 1.",
   "effects": [
    {
     "op": "jam",
@@ -667,7 +667,7 @@
    "kind": "datasets",
    "per_round": 2
   },
-  "text": "Built over one of your Science buildings. When built: add 2 Datasets to one of your cards that holds Datasets. Gains 2 Datasets a round. Once a round: gain 1 credit per 2 Datasets on your cards (they stay; max 4).",
+  "text": "When built: add 2 to a card. Gains 2 Datasets a round. Once a round: 1 credit per 2 held (max 4).",
   "effects": [
    {
     "op": "add_tokens",
@@ -708,7 +708,7 @@
    "science",
    "cyber"
   ],
-  "text": "Built over one of your Science buildings. When built: draw 2 cards. +2 insight income; +1 credit income per Science tag you have (max 6).",
+  "text": "When built: draw 2. +2 insight income. +1 credit income per Science tag you have (max 6).",
   "effects": [
    {
     "op": "draw",
@@ -755,7 +755,7 @@
    "kind": "datasets",
    "per_round": 1
   },
-  "text": "+1 insight income; +1 more if you have 4 Science tags. Gains 1 Dataset a round. Once a round: spend 2 Datasets, draw 2 cards.",
+  "text": "+1 insight income, or +2 at 4 Science tags. Gains 1 Dataset a round. Once a round: spend 2, draw 2.",
   "passives": [
    {
     "op": "income",
@@ -809,7 +809,7 @@
    "science",
    "cyber"
   ],
-  "text": "Lower your credit income 1. +2 insight production for the rest of the game; draw 3 cards.",
+  "text": "+2 insight production. Draw 3.",
   "effects": [
    {
     "op": "production",
@@ -832,7 +832,7 @@
   "tags": [
    "science"
   ],
-  "text": "Gain 1 credit per Dataset on your cards (max 8) and 1 insight per 3 Datasets (max 2); the Datasets stay.",
+  "text": "Gain 1 credit per Dataset on your cards (max 8) and 1 insight per 3 Datasets (max 2). They stay.",
   "effects": [
    {
     "op": "gain_per_tokens",
@@ -864,7 +864,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Help: another player gains 2 insight and 3 credits; you draw 2 cards; every player gains 1 insight next round.",
+  "text": "Help: another player gains 2 insight and 3 credits. Draw 2. Every player gains 1 insight next round.",
   "effects": [
    {
     "op": "choose_player"
@@ -910,7 +910,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove up to 1 compute from every visible adversary project; draw 2 cards.",
+  "text": "Hack: drain 1 from every project. Draw 2.",
   "effects": [
    {
     "op": "drain_all",
@@ -932,7 +932,7 @@
   "tags": [
    "industry"
   ],
-  "text": "+1 credit production for the rest of the game.",
+  "text": "+1 credit production.",
   "effects": [
    {
     "op": "production",
@@ -992,7 +992,7 @@
    "kind": "capital",
    "per_round": 1
   },
-  "text": "Gains 1 Capital a round. Once a round: spend 3 Capital, build a factory on an empty open hex touching a city.",
+  "text": "Gains 1 Capital a round. Once a round: spend 3 Capital, build a factory in reach.",
   "ability": {
    "cost": [
     [
@@ -1018,7 +1018,7 @@
    "industry",
    "power"
   ],
-  "text": "Build a factory on an empty open hex touching a city; gain 2 energy.",
+  "text": "Build a factory in reach. Gain 2 energy.",
   "effects": [
    {
     "op": "build_factory"
@@ -1081,7 +1081,7 @@
    "industry",
    "power"
   ],
-  "text": "Take the adversary cube off 1 corrupted city, research station or factory; gain 2 hardware.",
+  "text": "Take the adversary cube off 1 corrupted research station or factory in reach. Gain 2 hardware.",
   "effects": [
    {
     "op": "cleanse",
@@ -1143,7 +1143,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Gain 2 hardware; another player gains 2 hardware.",
+  "text": "Gain 2 hardware. Another player gains 2 hardware.",
   "effects": [
    {
     "op": "gain",
@@ -1176,7 +1176,7 @@
    "help",
    "move"
   ],
-  "text": "Another player gains 3 credits; +1 credit production for you for the rest of the game; move one of your ambassadors up to 2 hexes.",
+  "text": "Another player gains 3 credits. +1 credit production. Move an ambassador up to 2 hexes.",
   "effects": [
    {
     "op": "choose_player"
@@ -1211,7 +1211,7 @@
    "help",
    "tokens"
   ],
-  "text": "Give up to 4 credits to another player; they gain 2 more. Add 2 Capital to one of your cards that holds Capital.",
+  "text": "Give another player up to 4 credits; they gain 2 more. Add 2 Capital to one of your Capital cards.",
   "effects": [
    {
     "op": "choose_player"
@@ -1331,7 +1331,7 @@
   "tags": [
    "industry"
   ],
-  "text": "Lower your credit income 1. Gain 6 credits.",
+  "text": "Gain 6 credits.",
   "effects": [
    {
     "op": "gain",
@@ -1400,7 +1400,7 @@
    "kind": "capital",
    "per_round": 1
   },
-  "text": "+1 credit income. Gains 1 Capital a round. Once a round: spend 2 Capital, gain 1 energy and 1 hardware.",
+  "text": "+1 credit income. Gains 1 Capital a round. Once a round: spend 2 Capital, gain 1 energy, 1 hardware.",
   "passives": [
    {
     "op": "income",
@@ -1447,7 +1447,7 @@
   "tags": [
    "industry"
   ],
-  "text": "Built over one of your Industry buildings. +5 credit and +2 hardware income.",
+  "text": "+5 credit income. +2 hardware income.",
   "passives": [
    {
     "op": "income",
@@ -1485,7 +1485,7 @@
    "industry",
    "power"
   ],
-  "text": "Built over one of your Industry buildings. +7 credit and +2 hardware income. Your buildings cost 2 less.",
+  "text": "+7 credit income. +2 hardware income. Your buildings cost 2 less.",
   "passives": [
    {
     "op": "income",
@@ -1522,7 +1522,7 @@
    "industry",
    "power"
   ],
-  "text": "Built over one of your Industry buildings. +1 hardware income. In upkeep, convert 2 energy into 6 credits.",
+  "text": "+1 hardware income. In upkeep, if able, convert 2 energy into 6 credits.",
   "passives": [
    {
     "op": "income",
@@ -1594,7 +1594,7 @@
   "tags": [
    "industry"
   ],
-  "text": "+4 credit and +1 hardware production for the rest of the game.",
+  "text": "+4 credit production. +1 hardware production.",
   "effects": [
    {
     "op": "production",
@@ -1621,7 +1621,7 @@
   "keywords": [
    "tokens"
   ],
-  "text": "Add 2 Capital to one of your cards that holds Capital. Then remove up to 6 of your Capital; gain 1+2+...+n credits for n removed.",
+  "text": "Add 2 Capital to one of your Capital cards. Remove up to 6; gain 1+2+...+n credits for n removed.",
   "effects": [
    {
     "op": "add_tokens",
@@ -1684,7 +1684,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove up to 6 compute from one adversary project.",
+  "text": "Hack: drain 6.",
   "effects": [
    {
     "op": "drain_project",
@@ -1705,7 +1705,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: cut a node in your reach off (it makes no compute in the next build); remove up to 3 compute from one adversary project.",
+  "text": "Hack: cut off a node in reach; drain 3.",
   "effects": [
    {
     "op": "cut_node"
@@ -1729,7 +1729,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove 2 worth of adversary pieces in one hex within your reach (an ambassador is 1, a troop 2).",
+  "text": "Hack: remove 2 worth in a hex in reach.",
   "effects": [
    {
     "op": "damage",
@@ -1752,7 +1752,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove up to 6 compute from one adversary project; remove 1 worth of adversary pieces (an ambassador) in one hex within your reach.",
+  "text": "Hack: drain 6; remove 1 worth in a hex in reach.",
   "effects": [
    {
     "op": "drain_project",
@@ -1778,7 +1778,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Once a round: pay 2 credits to remove 1 worth of adversary pieces (an ambassador) in one hex within your reach.",
+  "text": "Once a round: pay 2 credits to remove 1 worth in a hex in reach.",
   "ability": {
    "cost": [
     [
@@ -1806,7 +1806,7 @@
    "cyber",
    "science"
   ],
-  "text": "Look at the next 2 adversary cards; draw 1 card.",
+  "text": "Look at the next 2 adversary cards. Draw 1.",
   "effects": [
    {
     "op": "peek",
@@ -1834,7 +1834,7 @@
    "hack",
    "help"
   ],
-  "text": "Hack: remove up to 3 compute from one adversary project. Another player gains 1 insight; you gain 1 credit.",
+  "text": "Hack: drain 3. Another player gains 1 insight. Gain 1 credit.",
   "effects": [
    {
     "op": "drain_project",
@@ -1868,7 +1868,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove up to 8 compute from one adversary project; cut a node in your reach off (it makes no compute in the next build).",
+  "text": "Hack: drain 8; cut off a node in reach.",
   "effects": [
    {
     "op": "drain_project",
@@ -1896,7 +1896,7 @@
    "cyber",
    "science"
   ],
-  "text": "Lower your credit income 1. +1 insight production for the rest of the game.",
+  "text": "+1 insight production.",
   "effects": [
    {
     "op": "production",
@@ -1918,7 +1918,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Once a round: pay 2 credits to cut a node in your reach off (it makes no compute in the next build).",
+  "text": "Once a round: pay 2 credits to cut off a node in reach.",
   "ability": {
    "cost": [
     [
@@ -1946,7 +1946,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove 1 worth of adversary pieces (an ambassador) in one hex within your reach; gain 1 credit.",
+  "text": "Hack: remove 1 worth in a hex in reach; gain 1 credit.",
   "effects": [
    {
     "op": "damage",
@@ -1973,7 +1973,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: if any clean city holds adversary ambassadors, remove 2 worth of adversary pieces in one hex within your reach; otherwise remove up to 4 compute from one adversary project.",
+  "text": "Hack: if a clean city holds adversary ambassadors, remove 2 worth in a hex in reach; else drain 4.",
   "effects": [
    {
     "op": "if",
@@ -2007,7 +2007,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove up to 5 compute from one adversary project.",
+  "text": "Hack: drain 5.",
   "effects": [
    {
     "op": "drain_project",
@@ -2029,7 +2029,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: cut a node in your reach off (it makes no compute in the next build); remove 2 worth of adversary pieces in one hex within your reach.",
+  "text": "Hack: cut off a node in reach; remove 2 worth in a hex in reach.",
   "effects": [
    {
     "op": "cut_node"
@@ -2054,7 +2054,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Once a round: pay 1 energy to remove up to 2 compute from one adversary project.",
+  "text": "Once a round: pay 1 energy to drain 2.",
   "ability": {
    "cost": [
     [
@@ -2105,7 +2105,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Once a round: pay 2 energy to cut a node in your reach off (it makes no compute in the next build) and remove 1 worth of adversary pieces (an ambassador) in one hex within your reach.",
+  "text": "Once a round: pay 2 energy to cut off a node in reach and remove 1 worth in a hex in reach.",
   "ability": {
    "cost": [
     [
@@ -2137,7 +2137,7 @@
    "cyber",
    "science"
   ],
-  "text": "+1 credit income; +1 insight income if you have 2 Science tags.",
+  "text": "+1 credit income. +1 insight income if you have at least 2 Science tags.",
   "passives": [
    {
     "op": "income",
@@ -2187,7 +2187,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove a node within your reach.",
+  "text": "Hack: remove a node in reach.",
   "effects": [
    {
     "op": "remove_node"
@@ -2207,7 +2207,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove up to 5 compute from every visible adversary project.",
+  "text": "Hack: drain 5 from every project.",
   "effects": [
    {
     "op": "drain_all",
@@ -2231,7 +2231,7 @@
    "hack",
    "help"
   ],
-  "text": "Hack: remove up to 3 compute from every visible adversary project. Another player gains 2 credits; you gain 2 credits.",
+  "text": "Hack: drain 3 from every project. Another player gains 2 credits. Gain 2 credits.",
   "effects": [
    {
     "op": "drain_all",
@@ -2266,7 +2266,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Hack: remove a node within your reach; remove up to 4 compute from every visible adversary project.",
+  "text": "Hack: remove a node in reach; drain 4 from every project.",
   "effects": [
    {
     "op": "remove_node"
@@ -2293,7 +2293,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Built over one of your Cyber buildings. +1 credit income. Once a round: pay 1 energy to remove up to 4 compute from one adversary project.",
+  "text": "+1 credit income. Once a round: pay 1 energy to drain 4.",
   "passives": [
    {
     "op": "income",
@@ -2334,7 +2334,7 @@
   "tags": [
    "cyber"
   ],
-  "text": "Needs 3 Cyber tags. Built over one of your Cyber buildings. +1 insight income; +1 credit income per Cyber tag you have (max 6).",
+  "text": "+1 insight income. +1 credit income per Cyber tag you have (max 6).",
   "passives": [
    {
     "op": "income",
@@ -2360,7 +2360,7 @@
   "tags": [
    "power"
   ],
-  "text": "+1 energy production for the rest of the game.",
+  "text": "+1 energy production.",
   "effects": [
    {
     "op": "production",
@@ -2397,7 +2397,7 @@
   "tags": [
    "power"
   ],
-  "text": "Place 1 presence; gain 1 energy.",
+  "text": "Place 1 presence. Gain 1 energy.",
   "effects": [
    {
     "op": "place_presence",
@@ -2421,7 +2421,7 @@
   "tags": [
    "power"
   ],
-  "text": "Harden 3 buildings in a country where you have a presence.",
+  "text": "Harden 3 in a country with your presence.",
   "effects": [
    {
     "op": "harden",
@@ -2493,7 +2493,7 @@
    "power",
    "industry"
   ],
-  "text": "Lower your credit income 1. +2 energy production for the rest of the game.",
+  "text": "+2 energy production.",
   "effects": [
    {
     "op": "production",
@@ -2517,7 +2517,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Help: another player gains 3 energy; you gain 2 credits.",
+  "text": "Help: another player gains 3 energy. You gain 2 credits.",
   "effects": [
    {
     "op": "choose_player"
@@ -2548,7 +2548,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Help: another player gains 2 energy and 1 insight; you place 1 presence.",
+  "text": "Help: another player gains 2 energy and 1 insight. You place 1 presence.",
   "effects": [
    {
     "op": "choose_player"
@@ -2583,7 +2583,7 @@
   "keywords": [
    "move"
   ],
-  "text": "Place 1 presence; harden 1 building in a country where you have a presence; move one of your ambassadors up to 2 hexes.",
+  "text": "Place 1 presence. Harden 1 in a country with your presence. Move an ambassador up to 2 hexes.",
   "effects": [
    {
     "op": "place_presence",
@@ -2610,7 +2610,7 @@
   "tags": [
    "power"
   ],
-  "text": "+1 energy and +1 credit production for the rest of the game.",
+  "text": "+1 energy production. +1 credit production.",
   "effects": [
    {
     "op": "production",
@@ -2634,7 +2634,7 @@
   "tags": [
    "power"
   ],
-  "text": "Gain 2 energy; harden 1 building in one country.",
+  "text": "Gain 2 energy. Harden 1 in one country.",
   "effects": [
    {
     "op": "gain",
@@ -2678,7 +2678,7 @@
    "power",
    "industry"
   ],
-  "text": "+1 energy income; +1 credit income if you have 2 Industry tags.",
+  "text": "+1 energy income. +1 credit income if you have 2 Industry tags.",
   "passives": [
    {
     "op": "income",
@@ -2704,7 +2704,7 @@
   "tags": [
    "power"
   ],
-  "text": "+1 energy income. Once a round: pay 1 energy, harden 2 buildings in a country where you have a presence.",
+  "text": "+1 energy income. Once a round: pay 1 energy, harden 2 in a country with your presence.",
   "passives": [
    {
     "op": "income",
@@ -2765,7 +2765,7 @@
    "diplomacy",
    "security"
   ],
-  "text": "In one country, buildings can't be destroyed this round; harden 2 buildings in one country.",
+  "text": "Shelter one country. Harden 2 in one country.",
   "effects": [
    {
     "op": "shelter"
@@ -2787,7 +2787,7 @@
   "tags": [
    "power"
   ],
-  "text": "Convert up to 3 energy into 1 hardware each; gain 1 credit.",
+  "text": "Convert up to 3 energy into 1 hardware each. Gain 1 credit.",
   "effects": [
    {
     "op": "convert",
@@ -2822,7 +2822,7 @@
    ]
   ],
   "replaces": "power",
-  "text": "Built over one of your Power buildings. +4 energy income; in upkeep, convert 3 energy into 1 antimatter.",
+  "text": "+4 energy income. In upkeep, convert 3 energy into 1 antimatter if you can.",
   "passives": [
    {
     "op": "income",
@@ -2859,7 +2859,7 @@
    ]
   ],
   "replaces": "power",
-  "text": "Built over one of your Power buildings. +5 energy and +2 credit income.",
+  "text": "+5 energy income. +2 credit income.",
   "passives": [
    {
     "op": "income",
@@ -2922,7 +2922,7 @@
     1
    ]
   ],
-  "text": "Place 3 presence; then gain 1 energy per presence you have on the board (max 6).",
+  "text": "Place 3 presence, then gain 1 energy per presence you have on the board (max 6).",
   "effects": [
    {
     "op": "place_presence",
@@ -2958,7 +2958,7 @@
     2
    ]
   ],
-  "text": "Lower your credit income 1. +1 antimatter production for the rest of the game.",
+  "text": "+1 antimatter production.",
   "effects": [
    {
     "op": "production",
@@ -2988,7 +2988,7 @@
     1
    ]
   ],
-  "text": "Help: another player gains 3 energy and 1 insight; you gain +2 energy production for the rest of the game and place 1 presence.",
+  "text": "Help: another player gains 3 energy and 1 insight. You gain +2 energy production. Place 1 presence.",
   "effects": [
    {
     "op": "choose_player"
@@ -3028,7 +3028,7 @@
    "diplomacy",
    "security"
   ],
-  "text": "In one country, buildings can't be destroyed this round; harden 4 buildings in one country; place 2 presence.",
+  "text": "Shelter one country. Harden 4 in one country. Place 2 presence.",
   "effects": [
    {
     "op": "shelter"
@@ -3075,7 +3075,7 @@
   "keywords": [
    "move"
   ],
-  "text": "Gain 1 ambassador; move one of your ambassadors up to 2 hexes.",
+  "text": "Gain 1 ambassador. Move an ambassador up to 2 hexes.",
   "effects": [
    {
     "op": "gain_ambassadors",
@@ -3100,7 +3100,7 @@
   "keywords": [
    "consolidate"
   ],
-  "text": "Gain 1 ambassador. Consolidate: move up to 3 of your ambassadors within your reach onto one piece in your reach.",
+  "text": "Gain 1 ambassador. Consolidate: move up to 3 of your ambassadors in reach onto one piece in reach.",
   "effects": [
    {
     "op": "gain_ambassadors",
@@ -3130,7 +3130,7 @@
    "kind": "followers",
    "per_round": 1
   },
-  "text": "Gains 1 Follower a round. Once a round: spend 2 Followers, gain 1 ambassador and move one of your ambassadors up to 2 hexes.",
+  "text": "Gains 1 Follower a round. Once a round: spend 2 for 1 ambassador, move an ambassador up to 2 hexes.",
   "ability": {
    "cost": [
     [
@@ -3168,7 +3168,7 @@
    "kind": "followers",
    "per_round": 1
   },
-  "text": "Gains 1 Follower a round. Once a round: spend 2 Followers, sway 1 toward Unity and harden 1 building in a country where you have a presence.",
+  "text": "Gains 1 Follower a round. Once a round: spend 2, sway 1 toward Unity, harden 1 near your presence.",
   "ability": {
    "cost": [
     [
@@ -3207,7 +3207,7 @@
    "kind": "followers",
    "per_round": 1
   },
-  "text": "Gains 1 Follower a round. Once a round: pay 1 credit, gain 1 energy per 2 Followers on your cards in play (they stay), up to 3.",
+  "text": "Gains 1 Follower a round. Once a round: pay 1 credit, gain 1 energy per 2 Followers you have, max 3.",
   "ability": {
    "cost": [
     [
@@ -3261,7 +3261,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Another player gains 4 credits; you gain 1 ambassador.",
+  "text": "Another player gains 4 credits. Gain 1 ambassador.",
   "effects": [
    {
     "op": "choose_player"
@@ -3290,7 +3290,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Give up to 6 credits to another player; they gain 2 more. You gain 1 ambassador.",
+  "text": "Give up to 6 credits to another player; they gain 2 more if you gave any. Gain 1 ambassador.",
   "effects": [
    {
     "op": "choose_player"
@@ -3321,7 +3321,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Another player gains 2 energy and 1 insight; harden 2 buildings in one country.",
+  "text": "Another player gains 2 energy and 1 insight. Harden 2 in one country.",
   "effects": [
    {
     "op": "choose_player"
@@ -3356,12 +3356,11 @@
   "keywords": [
    "move"
   ],
-  "text": "Take the adversary cube off 1 corrupted city, research station or factory; move one of your ambassadors up to 2 hexes.",
+  "text": "Remove up to 2 adversary ambassadors around a corrupted city in reach; move an ambassador 2 hexes.",
   "effects": [
    {
-    "op": "cleanse",
-    "amount": 1,
-    "one_country": false
+    "op": "clear_city",
+    "max": 2
    },
    {
     "op": "move_one",
@@ -3414,7 +3413,7 @@
   "keywords": [
    "move"
   ],
-  "text": "When built, gain 2 ambassadors. Once a round: pay 2 credits, move one of your ambassadors up to 2 hexes.",
+  "text": "When built: gain 2 ambassadors. Once a round: pay 2 credits, move an ambassador up to 2 hexes.",
   "effects": [
    {
     "op": "gain_ambassadors",
@@ -3446,7 +3445,7 @@
   "tags": [
    "diplomacy"
   ],
-  "text": "When built, gain 1 ambassador. +1 credit income per 2 Diplomacy tags you have (max 3).",
+  "text": "When built: gain 1 ambassador. +1 credit income per 2 Diplomacy tags you have (max 3).",
   "effects": [
    {
     "op": "gain_ambassadors",
@@ -3477,7 +3476,7 @@
   "keywords": [
    "move"
   ],
-  "text": "Harden 2 buildings in a country where you have a presence; move one of your ambassadors up to 2 hexes.",
+  "text": "Harden 2 in a country with your presence. Move an ambassador up to 2 hexes.",
   "effects": [
    {
     "op": "harden",
@@ -3502,7 +3501,7 @@
    "security",
    "cyber"
   ],
-  "text": "Remove 1 worth of adversary pieces (an ambassador) in a hex within your reach; gain 1 ambassador.",
+  "text": "Remove 1 worth in a hex in reach. Gain 1 ambassador.",
   "effects": [
    {
     "op": "damage",
@@ -3527,7 +3526,7 @@
    "power",
    "industry"
   ],
-  "text": "+1 energy and +1 credit income.",
+  "text": "+1 energy income. +1 credit income.",
   "passives": [
    {
     "op": "income",
@@ -3551,7 +3550,7 @@
   "tags": [
    "diplomacy"
   ],
-  "text": "Take the adversary cube off 1 corrupted city, research station or factory; sway 1 toward Unity.",
+  "text": "Take the adversary cube off 1 corrupted research station or factory in reach. Sway 1 toward Unity.",
   "effects": [
    {
     "op": "cleanse",
@@ -3577,7 +3576,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Another player gains 2 insight and 4 credits; sway 3 toward Unity.",
+  "text": "Another player gains 2 insight and 4 credits. Sway 3 toward Unity.",
   "effects": [
    {
     "op": "choose_player"
@@ -3614,19 +3613,15 @@
   "tags": [
    "diplomacy"
   ],
-  "keywords": [
-   "move"
-  ],
-  "text": "Take the adversary cube off up to 2 corrupted cities, research stations or factories; move one of your ambassadors up to 2 hexes.",
+  "text": "Remove every adversary ambassador on or next to a corrupted city in reach. Gain 2 ambassadors.",
   "effects": [
    {
-    "op": "cleanse",
-    "amount": 2,
-    "one_country": false
+    "op": "clear_city",
+    "max": 0
    },
    {
-    "op": "move_one",
-    "range": 2
+    "op": "gain_ambassadors",
+    "count": 2
    }
   ]
  },
@@ -3644,7 +3639,7 @@
   "keywords": [
    "spread"
   ],
-  "text": "Gain 2 ambassadors. Spread: each of your ambassadors on the board may move 1 hex onto an adjacent piece.",
+  "text": "Gain 2 ambassadors. Spread: each of your ambassadors may move 1 hex onto an adjacent piece.",
   "effects": [
    {
     "op": "gain_ambassadors",
@@ -3679,18 +3674,19 @@
   "name": "Great Liberation",
   "tier": 2,
   "kind": "event",
-  "cost": 10,
+  "cost": 14,
   "antimatter": 1,
   "insight": 2,
   "tags": [
    "diplomacy"
   ],
-  "text": "Take the adversary cube off up to 3 corrupted cities, research stations or factories in one country; sway 1 toward Unity.",
+  "text": "Free up to 2 corrupted cities, stations or factories in reach in one country. Sway 1 toward Unity.",
   "effects": [
    {
     "op": "cleanse",
-    "amount": 3,
-    "one_country": true
+    "amount": 2,
+    "one_country": true,
+    "cities": true
    },
    {
     "op": "unity",
@@ -3729,7 +3725,7 @@
    "kind": "followers",
    "per_round": 2
   },
-  "text": "Lower your credit income 1. Built over one of your Diplomacy buildings. Gains 2 Followers a round. Once a round: spend 2 Followers, sway 2 toward Unity and gain 1 ambassador.",
+  "text": "Gains 2 Followers a round. Once a round: spend 2 Followers, sway 2 toward Unity, gain 1 ambassador.",
   "ability": {
    "cost": [
     [
@@ -3769,7 +3765,7 @@
    "diplomacy",
    "power"
   ],
-  "text": "Built over one of your Diplomacy buildings. When built, gain 2 ambassadors. +4 credit and +1 insight income.",
+  "text": "When built: gain 2 ambassadors. +4 credit income. +1 insight income.",
   "effects": [
    {
     "op": "gain_ambassadors",
@@ -3806,7 +3802,7 @@
    "kind": "agents",
    "per_round": 1
   },
-  "text": "Gains 1 Agent a round. Once a round: spend 2 Agents, harden 2 buildings in a country where you have a presence.",
+  "text": "Gains 1 Agent a round. Once a round: spend 2 Agents, harden 2 in a country with your presence.",
   "ability": {
    "cost": [
     [
@@ -3841,7 +3837,7 @@
    "kind": "agents",
    "per_round": 1
   },
-  "text": "Gains 1 Agent a round. Once a round: spend 3 Agents, remove 2 worth of adversary pieces (a troop) in a hex in your reach.",
+  "text": "Gains 1 Agent a round. Once a round: spend 3 Agents, remove 2 worth in a hex in reach.",
   "ability": {
    "cost": [
     [
@@ -3876,7 +3872,7 @@
    "kind": "agents",
    "per_round": 1
   },
-  "text": "Gains 1 Agent a round. Once a round: spend 2 Agents; in one country, buildings can't be destroyed this round.",
+  "text": "Gains 1 Agent a round. Once a round: spend 2 Agents, shelter one country.",
   "ability": {
    "cost": [
     [
@@ -3924,7 +3920,7 @@
   "keywords": [
    "help"
   ],
-  "text": "Harden 2 buildings in one country; another player gains 2 credits; you gain 1 energy.",
+  "text": "Harden 2 in one country. Another player gains 2 credits. Gain 1 energy.",
   "effects": [
    {
     "op": "harden",
@@ -3961,7 +3957,7 @@
    "help",
    "hack"
   ],
-  "text": "One threat needs 1 less of each resource it asks for; another player gains 1 insight; you gain 1 credit.",
+  "text": "One threat needs 1 less of each resource. Another player gains 1 insight. Gain 1 credit.",
   "effects": [
    {
     "op": "jam",
@@ -3992,7 +3988,7 @@
   "tags": [
    "security"
   ],
-  "text": "One threat needs 2 less of each resource it asks for.",
+  "text": "One threat needs 2 less of each resource.",
   "effects": [
    {
     "op": "jam",
@@ -4046,7 +4042,7 @@
   "keywords": [
    "move"
   ],
-  "text": "Remove 1 worth of adversary pieces (an ambassador) in a hex in your reach; move one of your ambassadors up to 2 hexes.",
+  "text": "Remove 1 worth in a hex in reach. Move an ambassador up to 2 hexes.",
   "effects": [
    {
     "op": "damage",
@@ -4070,7 +4066,7 @@
    "security",
    "diplomacy"
   ],
-  "text": "Remove 1 worth of adversary pieces (an ambassador) in a hex of a country where you have a presence; sway 1 toward Unity.",
+  "text": "Remove 1 worth in a hex of a country with your presence. Sway 1 toward Unity.",
   "effects": [
    {
     "op": "damage",
@@ -4097,7 +4093,7 @@
   "keywords": [
    "hack"
   ],
-  "text": "Remove up to 3 compute from one adversary project; one threat needs 1 less of each resource it asks for.",
+  "text": "Drain 3. One threat needs 1 less of each resource.",
   "effects": [
    {
     "op": "drain_project",
@@ -4121,7 +4117,7 @@
    "cyber",
    "science"
   ],
-  "text": "Look at the next 2 adversary cards; draw 1 card.",
+  "text": "Look at the next 2 adversary cards. Draw 1.",
   "effects": [
    {
     "op": "peek",
@@ -4150,7 +4146,7 @@
    "kind": "agents",
    "per_round": 1
   },
-  "text": "Gains 1 Agent a round. Once a round: pay 1 energy, gain 1 credit per 2 Agents on your cards (max 3; the Agents stay).",
+  "text": "Gains 1 Agent a round. Once a round: pay 1 energy, gain 1 credit per 2 Agents on your cards (max 3).",
   "ability": {
    "cost": [
     [
@@ -4201,7 +4197,7 @@
   "tags": [
    "security"
   ],
-  "text": "Once a round: pay 3 energy to remove 2 worth of adversary pieces (a troop) in a hex in your reach.",
+  "text": "Once a round: pay 3 energy, remove 2 worth in a hex in reach.",
   "ability": {
    "cost": [
     [
@@ -4250,7 +4246,7 @@
   "tags": [
    "security"
   ],
-  "text": "Remove 2 worth of adversary pieces (a troop) in a hex in your reach; then, if you removed an adversary troop this round, gain 2 credits.",
+  "text": "Remove 2 worth in a hex in reach. If you removed an adversary troop this round, gain 2 credits.",
   "effects": [
    {
     "op": "damage",
@@ -4281,7 +4277,7 @@
   "tags": [
    "security"
   ],
-  "text": "In one country, buildings can't be destroyed this round; harden 2 buildings in a country where you have a presence.",
+  "text": "Shelter one country. Harden 2 in a country with your presence.",
   "effects": [
    {
     "op": "shelter"
@@ -4318,7 +4314,7 @@
    "kind": "agents",
    "per_round": 2
   },
-  "text": "Built over one of your Security buildings. Gains 2 Agents a round. Once a round: spend 4 Agents, remove 2 worth of adversary pieces in each hex of one country.",
+  "text": "Gains 2 Agents a round. Once a round: spend 4 Agents, remove 2 worth in each hex of one country.",
   "ability": {
    "cost": [
     [
@@ -4354,7 +4350,7 @@
     1
    ]
   ],
-  "text": "The adversary's spread places no ambassador on hexes holding your presence. Once a round, prevent the first building destruction in a country where you have a presence. Once a round: pay 2 energy, harden 2 buildings in a country where you have a presence.",
+  "text": "Firewall. Civic shelter. Once a round: pay 2 energy, harden 2 in a country with your presence.",
   "passives": [
    {
     "op": "spread_shield"
@@ -4423,7 +4419,7 @@
   "keywords": [
    "move"
   ],
-  "text": "Remove every adversary ambassador in one country; sway 1 toward Unity per 3 removed; move one of your ambassadors up to 2 hexes.",
+  "text": "Remove a country's adversary ambassadors; sway 1 to Unity per 3. Move an ambassador up to 2 hexes.",
   "effects": [
    {
     "op": "remove_ambassadors_country",
@@ -4453,7 +4449,7 @@
    "kind": "agents",
    "per_round": 1
   },
-  "text": "Gains 1 Agent a round. Once a round: pay 1 energy, gain 1 credit per Agent on your cards (max 5; the Agents stay).",
+  "text": "Gains 1 Agent a round. Once a round: pay 1 energy, gain 1 credit per Agent on your cards (max 5).",
   "ability": {
    "cost": [
     [
@@ -4483,7 +4479,7 @@
   "tags": [
    "security"
   ],
-  "text": "Remove 3 worth of adversary pieces in each hex of one country that holds them.",
+  "text": "Remove 3 worth in each hex of one country.",
   "effects": [
    {
     "op": "damage_country",
@@ -4508,7 +4504,7 @@
     1
    ]
   ],
-  "text": "Remove every adversary ambassador and troop in one hex; in one country, buildings can't be destroyed this round.",
+  "text": "Remove every adversary ambassador and troop in one hex. Shelter one country.",
   "effects": [
    {
     "op": "destroy_all"

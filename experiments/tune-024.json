@@ -1,0 +1,29 @@
+{
+  "name": "tune-024",
+  "note": "024 tuning probe (r15): greedy and the engine at d0 and d2, 2 and 3 countries.",
+  "configs": [
+    "configs/baseline.json"
+  ],
+  "variants": [
+    {
+      "name": "c2",
+      "set": []
+    },
+    {
+      "name": "c3",
+      "set": [
+        "countries=3"
+      ]
+    }
+  ],
+  "difficulties": [
+    0,
+    2
+  ],
+  "agents": [
+    "greedy",
+    "engine"
+  ],
+  "games": 16,
+  "records": 0
+}

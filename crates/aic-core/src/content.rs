@@ -407,11 +407,20 @@ pub enum Effect {
     },
     /// Build a factory on an empty open hex touching a city.
     BuildFactory,
-    /// Take the adversary cube off up to `amount` corrupted cities or
-    /// stations, one at a time (`one_country`: all in the first one's country).
+    /// Take the adversary cube off up to `amount` corrupted stations or
+    /// factories, one at a time (`one_country`: all in the first one's
+    /// country). `cities` (024): corrupted cities too, outright; only a tier-2
+    /// ultimate prints it.
     Cleanse {
         amount: i64,
         one_country: bool,
+        #[serde(default)]
+        cities: bool,
+    },
+    /// Remove up to `max` adversary ambassadors (0: all) on or next to one
+    /// corrupted city in your reach, the ones next to it first (024).
+    ClearCity {
+        max: i64,
     },
     /// Put `count` hardening tokens on buildings in one country.
     Harden {
@@ -851,6 +860,9 @@ pub enum AlignOp {
     PlayersLose { resource: String, amount: i64 },
     /// Remove `count` nodes anywhere on the board, one at a time (players choose).
     RemoveNodes { count: i64 },
+    /// In each country, the city that is not corrupted with the most
+    /// adversary ambassadors (ties: lower hex number) becomes corrupted (024).
+    CorruptCities,
 }
 
 // ---------- AI boards ----------

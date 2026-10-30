@@ -112,6 +112,10 @@ pub const LADDER: &[(&str, &[Param])] = &[
             // 022: keeping by plan, and the dominance checks' forced behaviours.
             ("plan_keep", 1.0, "keep by a sketch of the next rounds (0: the heuristic keeps)"),
             ("plan_rounds", 3.0, "rounds the keep plan sketches, this one included"),
+            ("plan_reserve", 2.0, "insight the keep plan holds back in each later round for that round's keeps"),
+            ("plan_hand", 0.0, "keep nothing while the hand holds this many cards (0: off)"),
+            ("plan_t2", 1.0, "share of a tier-2 card's value the keep plan counts"),
+            ("plan_credit", 3.0, "what a credit paid for a keep costs the keep plan"),
             ("keep_all", 0.0, "dominance check: keep every drafted card"),
             ("keep_k", 0.0, "dominance check: keep only the k cheapest drafted cards (0: off)"),
             ("tier1_only", 0.0, "dominance check: never draft from tier 2"),
@@ -187,6 +191,10 @@ pub const LADDER: &[(&str, &[Param])] = &[
             // 022: keeping by plan, and the dominance checks' forced behaviours.
             ("plan_keep", 1.0, "keep by a sketch of the next rounds (0: the heuristic keeps)"),
             ("plan_rounds", 3.0, "rounds the keep plan sketches, this one included"),
+            ("plan_reserve", 2.0, "insight the keep plan holds back in each later round for that round's keeps"),
+            ("plan_hand", 0.0, "keep nothing while the hand holds this many cards (0: off)"),
+            ("plan_t2", 1.0, "share of a tier-2 card's value the keep plan counts"),
+            ("plan_credit", 3.0, "what a credit paid for a keep costs the keep plan"),
             ("keep_all", 0.0, "dominance check: keep every drafted card"),
             ("keep_k", 0.0, "dominance check: keep only the k cheapest drafted cards (0: off)"),
             ("tier1_only", 0.0, "dominance check: never draft from tier 2"),
@@ -333,6 +341,10 @@ impl AgentSpec {
             events_only: on("events_only"),
             plan_keep: on("plan_keep"),
             plan_rounds: self.params.get("plan_rounds").map_or(3, |v| *v as usize),
+            plan_reserve: self.params.get("plan_reserve").map_or(2, |v| *v as i64),
+            plan_hand: self.params.get("plan_hand").map_or(0, |v| *v as usize),
+            plan_t2: self.params.get("plan_t2").copied().unwrap_or(1.0),
+            plan_credit: self.params.get("plan_credit").copied().unwrap_or(3.0),
         }
     }
 
@@ -344,6 +356,10 @@ impl AgentSpec {
         if forced
             == (policy::Forced {
                 plan_rounds: forced.plan_rounds,
+                plan_reserve: forced.plan_reserve,
+                plan_hand: forced.plan_hand,
+                plan_t2: forced.plan_t2,
+                plan_credit: forced.plan_credit,
                 ..policy::Forced::default()
             })
         {

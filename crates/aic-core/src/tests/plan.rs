@@ -13,6 +13,8 @@ fn the_build_forecast_matches_the_build_step() {
         let mut c = lab_config(&["adversary.build", ACTIONS]);
         c.apply_override(&format!("adversary.difficulty={difficulty}"))
             .unwrap();
+        // No compute: a project resolving in the build would place ambassadors too (024).
+        c.apply_override("adversary.node_compute=0").unwrap();
         let rules = Rules::new(&c).unwrap();
         for seed in 0..3 {
             let mut g0 = rules.new_game(seed);

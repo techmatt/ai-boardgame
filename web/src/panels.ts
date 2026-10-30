@@ -37,10 +37,14 @@ export function valueChip(v: Value, scope: string, label = v.label, near = true)
   return `<span class="value${warn}" data-value="${esc(v.key)}" data-scope="${scope}"><span class="label">${esc(label)}</span> <b>${val}</b></span>`;
 }
 
-export function cardChip(c: CardView, where: string): string {
+export function cardChip(c: CardView, where: string, printed = false): string {
   const cost = c.cost !== undefined ? ` <small title="cost">${c.cost}</small>` : '';
   const status = c.status && !['in slot', 'draft', 'drafted', 'built', 'slotted', 'resolved', 'done', 'ongoing'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
-  return `<span class="card ${esc(c.status.replace(/\s+/g, '-'))}" data-card="${esc(c.id)}" data-where="${where}">${esc(c.name)}${cost}${status}</span>`;
+  // 024: a card repeats its rules text under its name, as Terraforming Mars' do.
+  // The view's text starts with a bracketed cost line ("[3 credits, 1 insight] ..."), drawn on the chip.
+  const rules = (c.text ?? '').replace(/^\[[^\]]*\]\s*/, '');
+  const text = printed && rules ? `<span class="ctext">${esc(rules)}</span>` : '';
+  return `<span class="card${printed ? ' printed' : ''} ${esc(c.status.replace(/\s+/g, '-'))}" data-card="${esc(c.id)}" data-where="${where}">${esc(c.name)}${cost}${status}${text}</span>`;
 }
 
 /** Adversary pieces on the board, by kind. */
@@ -392,7 +396,7 @@ export function seatCardsHtml(v: View, seatIndex: number): string {
   return groups.map((g) => {
     const label = GROUP_LABEL[g.key] ?? g.label;
     const cls = g.key.replace(/\W/g, '-');
-    const body = g.cards.length ? g.cards.map((c) => cardChip(c, `seat:${seatIndex}:${g.key}`)).join('') : '<span class="slot">—</span>';
+    const body = g.cards.length ? g.cards.map((c) => cardChip(c, `seat:${seatIndex}:${g.key}`, true)).join('') : '<span class="slot">—</span>';
     return `<div class="row ${cls}"><span class="what" title="${esc(g.key)}">${esc(label)}</span>${body}</div>`;
   }).join('');
 }

@@ -101,12 +101,23 @@ pub struct Weights {
     /// Each player ambassador on the board (shields a building, cancels an
     /// arriving adversary ambassador, unites a base).
     pub ambassador_board: f64,
-    /// Player ambassadors on a corrupted city: this share of `corrupted`
-    /// per ambassador of the `board.free_city_at` that free it.
+    /// One player's ambassadors on a corrupted city: this share of
+    /// `corrupted` per ambassador of the `board.free_city_at` that free it,
+    /// halved while an adversary ambassador is on or next to it (024).
     pub freeing: f64,
+    /// Each adversary ambassador next to a corrupted city (024: it blocks
+    /// the freeing), on top of `adv_ambassador`.
+    #[serde(default)]
+    pub guard: f64,
     /// Each point of per-round income (AI tracks).
     pub income: f64,
     pub credits: f64,
+    /// 024: credits a seat holds beyond `credit_cap` are worth `credit_idle`
+    /// each: a stockpile buys nothing this round, so spending wins.
+    #[serde(default)]
+    pub credit_cap: f64,
+    #[serde(default)]
+    pub credit_idle: f64,
     pub compute: f64,
     /// A program in a seat's play area (021: its tags pay AI-board powers).
     pub program: f64,
@@ -218,7 +229,7 @@ impl Default for Weights {
             discord_tip: 16.0,
             level: 10.0,
             // 017: chosen by hand, not swept.
-            project: 8.0,
+            project: 30.0,
             data_centre: 4.0,
             // 022 (020's D9): a node is permanent since 019; at 6 agents made
             // nodes answering the spread when an equal free option existed.
@@ -235,8 +246,11 @@ impl Default for Weights {
             ambassador: 5.0,
             ambassador_board: 2.5,
             freeing: 0.8,
+            guard: 3.0,
             income: 3.0,
             credits: 0.6,
+            credit_cap: 12.0,
+            credit_idle: 0.15,
             compute: 0.8,
             program: 1.0,
             token: 0.5,
@@ -383,6 +397,14 @@ impl Eval {
         g.pile(adversary::DECK).len() + g.pile(adversary::NEXT).len()
     }
 
+    /// What a seat's credits are worth: `credits` each up to `credit_cap`,
+    /// `credit_idle` each beyond it (024).
+    fn credit_value(&self, n: f64) -> f64 {
+        let w = &self.w;
+        let cap = if w.credit_cap > 0.0 { w.credit_cap } else { f64::MAX };
+        w.credits * n.min(cap) + w.credit_idle * (n - cap).max(0.0)
+    }
+
     /// The next build and corrupt steps, read off the face-up card (public).
     /// The build is the core's own forecast (`plan::next_build`).
     fn forecast(&self, rules: &Rules, g: &GameState) -> Forecast {
@@ -444,9 +466,14 @@ impl Eval {
                     corrupted += 1;
                     let mine: i64 = (0..g.seats.len())
                         .map(|s| g.tokens(h, &common::ambassador(s)))
-                        .sum();
+                        .max()
+                        .unwrap_or(0);
                     let share = (mine as f64 / self.free_at as f64).min(1.0);
-                    v += w.corrupted * w.freeing * share;
+                    let open = if board::guarded(&world, g, h) { 0.5 } else { 1.0 };
+                    v += w.corrupted * w.freeing * share * open;
+                    let around = world.map.hexes[h].neighbours.iter();
+                    let near: i64 = around.map(|&n| g.tokens(n, ADV_AMBASSADOR)).sum();
+                    v -= w.guard * near as f64;
                 } else {
                     safe_cities += 1;
                     if common::cube_owner(g, h).is_some() {
@@ -663,7 +690,7 @@ impl Eval {
         let world = rules.world();
         for s in 0..self.seats {
             let res = |k: &str| g.resource(s, k) as f64;
-            *v += w.credits * res("credits")
+            *v += self.credit_value(res("credits"))
                 + w.energy * res("energy")
                 + w.antimatter * res("antimatter")
                 + w.insight * res("insight");
@@ -769,7 +796,9 @@ impl Eval {
             let res = |k: &str| g.resource(s, k);
             // Insight is reset each round, so what is held now only counts this round.
             for (i, r) in RESOURCES.iter().enumerate() {
-                if *r != "hardware" {
+                if *r == "credits" {
+                    v += fade * self.credit_value(res(r) as f64);
+                } else if *r != "hardware" {
                     v += fade * unit[i] * res(r) as f64;
                 }
             }

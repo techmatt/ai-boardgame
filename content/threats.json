@@ -3,47 +3,7 @@
   "id": "requisition",
   "name": "Requisition",
   "tier": 1,
-  "text": "Each player here discards 2 cards or pays 4 credits.",
-  "counter": [
-   [
-    "insight",
-    1
-   ]
-  ],
-  "effects": [
-   {
-    "op": "requisition",
-    "resource": "credits",
-    "amount": 4,
-    "cards": 2
-   }
-  ]
- },
- {
-  "id": "commandeer",
-  "name": "Commandeer",
-  "tier": 1,
-  "text": "Each player here discards 1 card or pays 3 energy.",
-  "counter": [
-   [
-    "credits",
-    3
-   ]
-  ],
-  "effects": [
-   {
-    "op": "requisition",
-    "resource": "energy",
-    "amount": 3,
-    "cards": 1
-   }
-  ]
- },
- {
-  "id": "supply_raid",
-  "name": "Supply raid",
-  "tier": 1,
-  "text": "Each player with presence here loses 3 credits.",
+  "text": "Each player here discards 2 cards or pays 6 credits.",
   "counter": [
    [
     "credits",
@@ -52,9 +12,49 @@
   ],
   "effects": [
    {
+    "op": "requisition",
+    "resource": "credits",
+    "amount": 6,
+    "cards": 2
+   }
+  ]
+ },
+ {
+  "id": "commandeer",
+  "name": "Commandeer",
+  "tier": 1,
+  "text": "Each player here discards 2 cards or pays 4 energy.",
+  "counter": [
+   [
+    "credits",
+    4
+   ]
+  ],
+  "effects": [
+   {
+    "op": "requisition",
+    "resource": "energy",
+    "amount": 4,
+    "cards": 2
+   }
+  ]
+ },
+ {
+  "id": "supply_raid",
+  "name": "Supply raid",
+  "tier": 1,
+  "text": "Each player with presence here loses 6 credits.",
+  "counter": [
+   [
+    "credits",
+    5
+   ]
+  ],
+  "effects": [
+   {
     "op": "players_lose",
     "resource": "credits",
-    "amount": 3
+    "amount": 6
    }
   ]
  },
@@ -62,11 +62,11 @@
   "id": "blackout",
   "name": "Blackout",
   "tier": 1,
-  "text": "Cities here produce no energy next round; the adversary gains 2 compute.",
+  "text": "Cities here produce no energy next round; the adversary gains 3 compute.",
   "counter": [
    [
-    "energy",
-    2
+    "credits",
+    4
    ]
   ],
   "effects": [
@@ -76,7 +76,7 @@
    },
    {
     "op": "compute",
-    "amount": 2
+    "amount": 3
    }
   ]
  },
@@ -84,15 +84,11 @@
   "id": "sabotage",
   "name": "Sabotage",
   "tier": 1,
-  "text": "Players here make no energy in upkeep (until the end of next round) and each loses 2 tokens from their cards; the adversary gains compute.",
+  "text": "Players here make no energy in upkeep next round and each loses 3 tokens from their cards; the adversary gains 3 compute.",
   "counter": [
    [
-    "energy",
-    2
-   ],
-   [
     "credits",
-    1
+    5
    ]
   ],
   "effects": [
@@ -102,11 +98,11 @@
    },
    {
     "op": "compute",
-    "amount": 2
+    "amount": 3
    },
    {
     "op": "lose_tokens",
-    "amount": 2
+    "amount": 3
    }
   ]
  },
@@ -114,22 +110,22 @@
   "id": "infiltration",
   "name": "Infiltration",
   "tier": 1,
-  "text": "2 adversary ambassadors land on player-owned pieces here (presence, aligned cities, owned buildings; players choose each); the adversary gains 2 compute.",
+  "text": "3 adversary ambassadors land on player-owned pieces here (players choose each); the adversary gains 3 compute.",
   "counter": [
    [
-    "energy",
-    3
+    "credits",
+    5
    ]
   ],
   "effects": [
    {
     "op": "ambassadors",
     "at": "player_buildings",
-    "count": 2
+    "count": 3
    },
    {
     "op": "compute",
-    "amount": 2
+    "amount": 3
    }
   ]
  },
@@ -137,18 +133,18 @@
   "id": "agitators",
   "name": "Agitators",
   "tier": 1,
-  "text": "2 adversary ambassadors land on clean cities here (players choose each).",
+  "text": "3 adversary ambassadors land on clean cities here (players choose each).",
   "counter": [
    [
     "credits",
-    3
+    5
    ]
   ],
   "effects": [
    {
     "op": "ambassadors",
     "at": "clean_cities",
-    "count": 2
+    "count": 3
    }
   ]
  },
@@ -156,15 +152,11 @@
   "id": "orbital_strike",
   "name": "Orbital strike",
   "tier": 1,
-  "text": "An adversary troop lands on a factory here (players choose); with no factory, on a city; the adversary gains 2 compute.",
+  "text": "An adversary troop lands on a factory here (players choose); with no factory, on a city; the adversary gains 3 compute.",
   "counter": [
    [
-    "energy",
-    2
-   ],
-   [
     "credits",
-    2
+    6
    ]
   ],
   "effects": [
@@ -174,7 +166,7 @@
    },
    {
     "op": "compute",
-    "amount": 2
+    "amount": 3
    }
   ]
  },
@@ -182,11 +174,11 @@
   "id": "defection",
   "name": "Defection",
   "tier": 1,
-  "text": "Each player here loses an ambassador (from supply, else from the board); sway 1 toward Discord.",
+  "text": "Each player here loses an ambassador (from supply, else from the board); sway 2 toward Discord.",
   "counter": [
    [
-    "insight",
-    1
+    "credits",
+    4
    ]
   ],
   "effects": [
@@ -195,7 +187,7 @@
    },
    {
     "op": "discord",
-    "amount": 1
+    "amount": 2
    }
   ]
  },
@@ -203,11 +195,11 @@
   "id": "station_seizure",
   "name": "Station seizure",
   "tier": 2,
-  "text": "A research station here that is not corrupted becomes corrupted (players choose); the adversary gains 3 compute.",
+  "text": "A research station here that is not corrupted becomes corrupted (players choose); the adversary gains 4 compute.",
   "counter": [
    [
-    "antimatter",
-    1
+    "credits",
+    7
    ]
   ],
   "effects": [
@@ -216,7 +208,7 @@
    },
    {
     "op": "compute",
-    "amount": 3
+    "amount": 4
    }
   ]
  },
@@ -227,8 +219,8 @@
   "text": "The city here that is not corrupted (clean or aligned) with the most adversary ambassadors becomes corrupted (ties: lower hex number).",
   "counter": [
    [
-    "antimatter",
-    2
+    "credits",
+    8
    ]
   ],
   "effects": [
@@ -241,11 +233,11 @@
   "id": "mass_production",
   "name": "Mass production",
   "tier": 2,
-  "text": "The adversary builds now, here; the adversary gains 3 compute.",
+  "text": "The adversary builds now, here; the adversary gains 4 compute.",
   "counter": [
    [
-    "energy",
-    6
+    "credits",
+    7
    ]
   ],
   "effects": [
@@ -254,7 +246,7 @@
    },
    {
     "op": "compute",
-    "amount": 3
+    "amount": 4
    }
   ]
  },
@@ -265,8 +257,8 @@
   "text": "Each player discards their most expensive card in hand.",
   "counter": [
    [
-    "antimatter",
-    1
+    "credits",
+    6
    ]
   ],
   "effects": [
@@ -279,15 +271,11 @@
   "id": "total_war",
   "name": "Total war",
   "tier": 2,
-  "text": "2 adversary troops land on factories here (else cities), and 2 adversary ambassadors on military bases; the adversary gains 3 compute.",
+  "text": "2 adversary troops land on factories here (else cities), and 2 adversary ambassadors on military bases; the adversary gains 4 compute.",
   "counter": [
    [
-    "antimatter",
-    1
-   ],
-   [
-    "energy",
-    3
+    "credits",
+    8
    ]
   ],
   "effects": [
@@ -302,7 +290,7 @@
    },
    {
     "op": "compute",
-    "amount": 3
+    "amount": 4
    }
   ]
  },
@@ -310,11 +298,11 @@
   "id": "conscription",
   "name": "Conscription",
   "tier": 2,
-  "text": "Each player here discards 2 cards or pays 6 energy; the adversary gains 2 compute.",
+  "text": "Each player here discards 3 cards or pays 6 energy; the adversary gains 3 compute.",
   "counter": [
    [
-    "antimatter",
-    1
+    "credits",
+    7
    ]
   ],
   "effects": [
@@ -322,34 +310,7 @@
     "op": "requisition",
     "resource": "energy",
     "amount": 6,
-    "cards": 2
-   },
-   {
-    "op": "compute",
-    "amount": 2
-   }
-  ]
- },
- {
-  "id": "fifth_column",
-  "name": "Fifth column",
-  "tier": 2,
-  "text": "3 adversary ambassadors land on player-owned pieces here (presence, aligned cities, owned buildings; players choose each); the adversary gains 3 compute.",
-  "counter": [
-   [
-    "antimatter",
-    1
-   ],
-   [
-    "energy",
-    2
-   ]
-  ],
-  "effects": [
-   {
-    "op": "ambassadors",
-    "at": "player_buildings",
-    "count": 3
+    "cards": 3
    },
    {
     "op": "compute",
@@ -358,29 +319,48 @@
   ]
  },
  {
+  "id": "fifth_column",
+  "name": "Fifth column",
+  "tier": 2,
+  "text": "4 adversary ambassadors land on player-owned pieces here (players choose each); the adversary gains 4 compute.",
+  "counter": [
+   [
+    "credits",
+    7
+   ]
+  ],
+  "effects": [
+   {
+    "op": "ambassadors",
+    "at": "player_buildings",
+    "count": 4
+   },
+   {
+    "op": "compute",
+    "amount": 4
+   }
+  ]
+ },
+ {
   "id": "insurrection",
   "name": "Insurrection",
   "tier": 2,
-  "text": "3 adversary ambassadors land on clean cities here (players choose each); sway 1 toward Discord.",
+  "text": "4 adversary ambassadors land on clean cities here (players choose each); sway 2 toward Discord.",
   "counter": [
    [
-    "antimatter",
-    1
-   ],
-   [
     "credits",
-    3
+    7
    ]
   ],
   "effects": [
    {
     "op": "ambassadors",
     "at": "clean_cities",
-    "count": 3
+    "count": 4
    },
    {
     "op": "discord",
-    "amount": 1
+    "amount": 2
    }
   ]
  },
@@ -388,28 +368,24 @@
   "id": "siege",
   "name": "Siege",
   "tier": 2,
-  "text": "An adversary troop lands on a factory here (players choose; with no factory, on a city), and each player here loses an ambassador (from supply, else from the board); the adversary gains 2 compute.",
+  "text": "2 adversary troops land on factories here (players choose; with no factory, on cities), and each player here loses an ambassador (from supply, else from the board); the adversary gains 3 compute.",
   "counter": [
    [
-    "energy",
-    5
-   ],
-   [
     "credits",
-    2
+    8
    ]
   ],
   "effects": [
    {
     "op": "troop",
-    "count": 1
+    "count": 2
    },
    {
     "op": "lose_ambassador"
    },
    {
     "op": "compute",
-    "amount": 2
+    "amount": 3
    }
   ]
  }

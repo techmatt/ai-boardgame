@@ -15,6 +15,7 @@ fn next_unity(g: &mut GameState, card: &str) {
 /// The baseline playing only the action phase, after setup (no build yet).
 fn action_only(sets: &[&str]) -> (Rules, GameState) {
     let mut c = baseline_with(sets);
+    c.apply_override("alignment.purge_round=0").unwrap();
     c.round = vec![ACTIONS.into()];
     let rules = Rules::new(&c).unwrap();
     let g = rules.new_game(4);

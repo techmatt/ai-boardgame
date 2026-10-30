@@ -30,12 +30,23 @@ pub fn damage_hexes(w: &World, g: &GameState, seat: usize, at: DamageAt) -> Vec<
         .collect()
 }
 
-/// A corrupted city, research station or factory (a cleanse target).
-fn cleansable(w: &World, g: &GameState, h: usize) -> bool {
+/// A corrupted research station or factory, or with `cities` (024: tier-2
+/// ultimates only) a corrupted city: a cleanse target.
+fn cleansable(w: &World, g: &GameState, h: usize, cities: bool) -> bool {
     corrupted(g, h)
-        && (w.map.hexes[h].kind == HexKind::City
+        && ((cities && w.map.hexes[h].kind == HexKind::City)
             || g.tokens(h, STATION) > 0
             || g.tokens(h, FACTORY) > 0)
+}
+
+/// Corrupted cities in seat `s`'s reach with an adversary ambassador on or
+/// next to them (a `clear_city` target, 024).
+fn guarded_cities(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
+    (0..g.hexes.len())
+        .filter(|&h| {
+            is_city(w, h) && corrupted(g, h) && in_reach(w, g, seat, h) && board::guarded(w, g, h)
+        })
+        .collect()
 }
 
 /// Free industrial zones in seat `s`'s reach (a card's factory site).
@@ -90,7 +101,10 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
             .any(|&h| in_reach(w, g, seat, h)),
         Effect::RemoveAmbassadorsCountry { .. } => any_hex(g, |h| g.tokens(h, ADV_AMBASSADOR) > 0),
         Effect::BuildFactory => !factory_sites(w, g, seat).is_empty(),
-        Effect::Cleanse { .. } => any_hex(g, |h| cleansable(w, g, h) && in_reach(w, g, seat, h)),
+        Effect::Cleanse { cities, .. } => {
+            any_hex(g, |h| cleansable(w, g, h, *cities) && in_reach(w, g, seat, h))
+        }
+        Effect::ClearCity { .. } => !guarded_cities(w, g, seat).is_empty(),
         Effect::Jam { .. } | Effect::CounterThreat => !threats::active(g).is_empty(),
         Effect::DrainProject { .. } => adversary::projects(g)
             .iter()
@@ -99,6 +113,11 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Effect]) -> bo
         Effect::DrainAll { .. } => adversary::projects(g)
             .iter()
             .any(|p| g.var(&adversary::project_key(p)) > 0),
+        // 024: too few to count, nothing to cash in: the card would do nothing.
+        Effect::GainPerTokens { kind, per, .. } => {
+            let cards = cards::token_cards(w, g, seat, Some(kind));
+            cards.iter().map(|c| g.var(&cards::tokens_key(seat, c))).sum::<i64>() >= *per
+        }
         Effect::CashOut { kind, .. } => cards::token_cards(w, g, seat, Some(kind))
             .iter()
             .any(|c| g.var(&cards::tokens_key(seat, c)) > 0),
@@ -272,11 +291,12 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         Effect::Cleanse {
             amount,
             one_country,
+            cities,
         } => {
             let mut country: Option<u8> = None;
             for k in 0..*amount {
                 let hexes: Vec<usize> = (0..g.hexes.len())
-                    .filter(|&h| cleansable(&w, g, h) && in_reach(&w, g, seat, h))
+                    .filter(|&h| cleansable(&w, g, h, *cities) && in_reach(&w, g, seat, h))
                     .filter(|&h| country.is_none_or(|c| w.map.hexes[h].country == c))
                     .collect();
                 if hexes.is_empty() {
@@ -300,6 +320,24 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                 }
                 if *one_country {
                     country = Some(w.map.hexes[hexes[i]].country);
+                }
+            }
+        }
+        Effect::ClearCity { max } => {
+            let cities = guarded_cities(&w, g, seat);
+            let opts = cities.iter().map(|&h| hex_opt(&w, h)).collect();
+            let prompt = format!("Seat {seat}: clear adversary ambassadors around which corrupted city?");
+            if let Some(i) = cx.choose(seat, &prompt, opts)? {
+                let city = cities[i];
+                let mut left = if *max > 0 { *max } else { i64::MAX };
+                let mut hexes = w.map.hexes[city].neighbours.to_vec();
+                hexes.sort_unstable();
+                hexes.push(city);
+                for h in hexes {
+                    while left > 0 && g.tokens(h, ADV_AMBASSADOR) > 0 {
+                        adversary::remove_piece(g, cx, Some(seat), h, ADV_AMBASSADOR);
+                        left -= 1;
+                    }
                 }
             }
         }

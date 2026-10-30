@@ -41,18 +41,18 @@ fn setup_deals_three_cheap_projects_from_a_staged_deck() {
 #[test]
 fn compute_fills_the_cheapest_project_which_resolves_when_full() {
     let (rules, mut g) = lab(&[]);
-    // At 2 players: False Flag 14, Disinformation 12, Node Swarm 12.
+    // At 2 players: False Flag 12, Disinformation 10, Node Swarm 10.
     row(&mut g, &["false_flag", "disinformation", "node_swarm"]);
-    with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, 13)).unwrap();
-    // Disinformation (the first of the cheapest) filled at 12 and resolved:
-    // 3 toward Discord. The 13th point went onto Node Swarm.
+    with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, 11)).unwrap();
+    // Disinformation (the first of the cheapest) filled at 10 and resolved:
+    // 4 toward Discord. The 11th point went onto Node Swarm.
     assert_eq!(g.pile(PROJECTS_DONE), ["disinformation"]);
-    assert_eq!(g.var("alignment.discord"), 3);
+    assert_eq!(g.var("alignment.discord"), 4);
     assert_eq!(g.var(&adversary::project_key("node_swarm")), 1);
     assert_eq!(g.var(&adversary::project_key("false_flag")), 0);
-    assert_eq!(g.var(adversary::COMPUTE), 13);
+    assert_eq!(g.var(adversary::COMPUTE), 11);
     assert_eq!(g.stats.counters["adversary.projects_resolved.cheap"], 1);
-    assert_eq!(g.stats.per_round["adversary.compute"][1], 13);
+    assert_eq!(g.stats.per_round["adversary.compute"][1], 11);
 }
 
 #[test]
@@ -70,9 +70,9 @@ fn a_new_row_is_dealt_when_all_three_have_resolved() {
         .map(String::from)
         .to_vec(),
     );
-    set_res(&mut g, 0, "credits", 7);
-    with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, 13)).unwrap();
-    // Market Crash (12) resolved: 5 credits each (as much as they have).
+    set_res(&mut g, 0, "credits", 10);
+    with_cx(&rules, |cx| adversary::gain_compute(&mut g, cx, 11)).unwrap();
+    // Market Crash (10) resolved: 8 credits each (as much as they have).
     assert_eq!(g.resource(0, "credits"), 2);
     assert_eq!(
         g.pile(PROJECTS),
@@ -116,9 +116,9 @@ fn a_player_ambassador_on_a_node_stops_its_compute_and_stays() {
     g.piles
         .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()]);
     run(&rules, &mut g);
-    assert_eq!(g.var(adversary::COMPUTE), before + 1);
+    assert_eq!(g.var(adversary::COMPUTE), before + 3);
     assert_eq!(g.tokens(a, &ambassador(0)), 1);
-    assert_eq!(g.stats.counters["adversary.compute_blocked"], 1);
+    assert_eq!(g.stats.counters["adversary.compute_blocked"], 3);
 }
 
 #[test]
@@ -257,14 +257,13 @@ fn freeing_a_city_and_removing_a_node_sway_unity() {
     let city = m.numbered(0, piece(0).cities[0]);
     put(&mut g, city, ADV_CUBE, 1);
     put(&mut g, city, &presence(0), 1);
-    put(&mut g, city, &ambassador(0), 2);
     set_res(&mut g, 0, "ambassadors", 1);
     set_res(&mut g, 0, "energy", 10);
     rules.apply_mut(&mut g, &std_act(0, "move"), None).unwrap();
     answer_hex(&rules, &mut g, city);
     answer_all(&rules, &mut g);
     assert_eq!(g.tokens(city, ADV_CUBE), 0);
-    assert_eq!(g.var("alignment.unity"), 5);
+    assert_eq!(g.var("alignment.unity"), 4);
     // No standard action removes a node (019); the Decommission Unity card does.
     put(&mut g, city, NODE, 1);
     assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "node"), None).is_err());
@@ -277,9 +276,9 @@ fn freeing_a_city_and_removing_a_node_sway_unity() {
     })
     .unwrap();
     assert_eq!(g.tokens(city, NODE), 0);
-    // Freeing a city sways 5 (023; 019: 3), removing a node 2 (the bucket tips
+    // Freeing a city sways 4 (024; 023: 5), removing a node 2 (the bucket tips
     // only once an action or phase finishes, so it holds both here).
-    assert_eq!(g.var("alignment.unity"), 7);
+    assert_eq!(g.var("alignment.unity"), 6);
 }
 
 #[test]
@@ -320,6 +319,10 @@ fn purge_the_unaligned_sacrifices_a_presence_that_is_on_the_board() {
     for (s, &h) in homes.iter().enumerate() {
         put(&mut g, h, &presence(s), 1);
         set_res(&mut g, s, AMBASSADORS, 0);
+    }
+    // One factory a country, so its troop asks nothing (024).
+    for c in 0..2 {
+        put(&mut g, rules.map.numbered(c, piece(c).factories[0]), FACTORY, 1);
     }
     row(&mut g, &["purge_the_unaligned"]);
     let cost = adversary::project_cost(&rules.world(), &g, "purge_the_unaligned");

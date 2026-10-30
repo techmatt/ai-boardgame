@@ -784,6 +784,13 @@ pub fn corrupt_city(g: &mut GameState, cx: &mut Cx, h: usize) {
     cx.add_tokens(g, h, ADV_CUBE, 1);
     let n = g.tokens(h, ADV_AMBASSADOR);
     remove(g, cx, h, n);
+    // 024: player ambassadors waiting here are lost, or they would free the
+    // city in the same step (and pay Unity for an adversary attack).
+    for s in 0..g.seats.len() {
+        let k = ambassador(s);
+        let mine = g.tokens(h, &k);
+        cx.add_tokens(g, h, &k, -mine);
+    }
     cx.tally(g, "adversary.corruptions", 1);
     if g.round > 0 && g.var(FIRST_CORRUPTION) == 0 {
         cx.set_key(g, FIRST_CORRUPTION.into(), g.round as i64);

@@ -275,16 +275,16 @@ fn nodes_start_on_the_stations_and_make_adversary_compute() {
         assert_eq!(g.tokens(m.numbered(c, piece(c).stations[0]), NODE), 1);
     }
     assert_eq!(total(&g, NODE), 2);
-    // Round 1's build has run: 1 compute a node.
-    assert_eq!(g.var(adversary::COMPUTE), 2);
+    // Round 1's build has run: 3 compute a node (024).
+    assert_eq!(g.var(adversary::COMPUTE), 6);
     g.piles
         .insert(NEXT.into(), vec!["adv_s1_probing_strikes".into()]);
     run(&rules, &mut g);
-    assert_eq!(g.var(adversary::COMPUTE), 4);
+    assert_eq!(g.var(adversary::COMPUTE), 12);
     put(&mut g, m.numbered(0, piece(0).stations[0]), NODE, 0);
     g.piles.insert(NEXT.into(), vec!["adv_s1_war_drums".into()]);
     run(&rules, &mut g);
-    assert_eq!(g.var(adversary::COMPUTE), 5);
+    assert_eq!(g.var(adversary::COMPUTE), 15);
 }
 
 #[test]
