@@ -84,11 +84,11 @@ pub struct Weights {
     /// Each node on the board (a cost: adversary compute, contests presence,
     /// blocks the purge).
     pub node: f64,
-    /// Each player-owned factory (hardware each production step); an
+    /// Each player-owned factory (chips each production step); an
     /// adversary-owned one costs as much.
     pub owned_factory: f64,
-    /// Each hardware a seat holds.
-    pub hardware: f64,
+    /// Each chip a seat holds.
+    pub chips: f64,
     /// Each city, base or station hex inside some seat's reach.
     pub reach: f64,
     /// Each research station a player owns; a corrupted one costs as much.
@@ -178,7 +178,7 @@ pub struct Weights {
 }
 
 /// Weights renamed since experiments named them: (former name, name).
-const RENAMED: [(&str, &str); 1] = [("opp_rate", "unity_rate_start")];
+const RENAMED: [(&str, &str); 2] = [("opp_rate", "unity_rate_start"), ("hardware", "chips")];
 
 /// A drafted card's keep price in credits (its tier's insight at
 /// `INSIGHT_COST`), for valuing the draft packet (023).
@@ -223,7 +223,7 @@ impl Default for Weights {
             // nodes answering the spread when an equal free option existed.
             node: 25.0,
             owned_factory: 4.0,
-            hardware: 2.0,
+            chips: 2.0,
             reach: 0.5,
             station: 5.0,
             project_cube: 2.0,
@@ -522,7 +522,7 @@ impl Eval {
         }
         for s in 0..self.seats {
             v += w.ambassador * g.resource(s, Resource::Ambassadors) as f64;
-            v += w.hardware * g.resource(s, Resource::Hardware) as f64;
+            v += w.chips * g.resource(s, Resource::Chips) as f64;
         }
         // The win bar: what still stands between the team and a clear board.
         let level = alignment::bar_level(&world, g);
@@ -767,7 +767,7 @@ impl Eval {
         } else {
             1.0
         };
-        // 021: hardware sells 1:1 for credits (what it holds counts in `hardware`).
+        // 021: chips sell 1:1 for credits (what a seat holds counts in `chips`).
         let unit = [w.credits, w.credits, w.energy, w.antimatter, w.insight];
         let mut v = 0.0;
         for s in 0..self.seats {
@@ -776,7 +776,7 @@ impl Eval {
             for (i, r) in RESOURCES.iter().enumerate() {
                 if *r == Resource::Credits {
                     v += fade * self.credit_value(res(*r) as f64);
-                } else if *r != Resource::Hardware {
+                } else if *r != Resource::Chips {
                     v += fade * unit[i] * res(*r) as f64;
                 }
             }

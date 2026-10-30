@@ -10,8 +10,9 @@ use serde::{Deserialize, Serialize};
 /// Everything a seat holds as a count (`Seat::resources`).
 ///
 /// **Declared alphabetically on purpose:** the derived `Ord` then matches the
-/// order of the words, which `Seat::resources` serializes in and `Action`
-/// ties break in. Reordering these changes state fingerprints and agents' play.
+/// order of the words, which `Seat::resources` serializes in. Reordering these
+/// changes state fingerprints. Play doesn't read the order: nothing sorts
+/// actions, and legal actions and agents walk [`RESOURCES`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Resource {
@@ -19,9 +20,9 @@ pub enum Resource {
     /// resource; never a cost or an income).
     Ambassadors,
     Antimatter,
+    Chips,
     Credits,
     Energy,
-    Hardware,
     Insight,
     /// Destroyed presence back beside the seat's board, placed before the
     /// track's next token (018; rules bookkeeping, never printed on content).
@@ -33,7 +34,7 @@ pub enum Resource {
 /// adversary's, `adversary.compute`.
 pub const RESOURCES: [Resource; 5] = [
     Resource::Credits,
-    Resource::Hardware,
+    Resource::Chips,
     Resource::Energy,
     Resource::Antimatter,
     Resource::Insight,
@@ -46,9 +47,18 @@ impl Resource {
             Resource::Antimatter => "antimatter",
             Resource::Credits => "credits",
             Resource::Energy => "energy",
-            Resource::Hardware => "hardware",
+            Resource::Chips => "chips",
             Resource::Insight => "insight",
             Resource::PresenceReserve => "presence_reserve",
+        }
+    }
+
+    /// `n` of this resource in words: "2 chips", "1 chip". Only chips take a
+    /// singular so far; the other words print as they are.
+    pub fn amount(self, n: i64) -> String {
+        match (self, n) {
+            (Resource::Chips, 1) => "1 chip".to_string(),
+            _ => format!("{n} {self}"),
         }
     }
 

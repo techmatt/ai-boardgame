@@ -535,7 +535,7 @@ impl Module for Threats {
             let req = requirement(w, g, t);
             let progress: Vec<String> = req
                 .iter()
-                .map(|(r, n)| format!("{}/{n} {r}", paid(g, t, *r)))
+                .map(|(r, n)| format!("{}/{}", paid(g, t, *r), r.amount(*n)))
                 .collect();
             // Who paid what so far (returned if they withdraw), and Jam Signals.
             let mut extra = String::new();
@@ -543,7 +543,7 @@ impl Module for Threats {
                 .flat_map(|s| {
                     req.iter().filter_map(move |(r, _)| {
                         let n = g.var(&paid_key(t, s, *r));
-                        (n > 0).then(|| format!("seat {s} {n} {r}"))
+                        (n > 0).then(|| format!("seat {s} {}", r.amount(n)))
                     })
                 })
                 .collect();
@@ -648,12 +648,12 @@ pub fn requisition(
     for s in seats_in_scope(&w, g, scope) {
         let mut opts = Vec::new();
         if g.resource(s, resource) >= amount {
-            opts.push(opt(format!("pay {amount} {resource}")));
+            opts.push(opt(format!("pay {}", resource.amount(amount))));
         }
         if g.pile(&cards::hand(s)).len() as i64 >= n {
             opts.push(opt(format!("discard {n} cards")));
         }
-        let prompt = format!("Seat {s}: pay {amount} {resource} or discard {n} cards?");
+        let prompt = format!("Seat {s}: pay {} or discard {n} cards?", resource.amount(amount));
         match cx.choose(s, &prompt, opts.clone())? {
             Some(i) if opts[i].option.starts_with("pay") => {
                 cx.add_resource(g, s, resource, -amount);

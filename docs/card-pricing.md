@@ -51,7 +51,7 @@ Prices below are 023's reasoning; where 024 changed a card, the list above wins.
   a removal event); 2 for big effects and nearly all tier 2. Events are not
   automatically 0 (022: free removal events made keep-all beat the engine).
 - **Other costs follow the tag:** Science and Cyber pay insight; Industry pays
-  hardware and lowered income; Power pays energy and credits; Diplomacy credits;
+  chips and lowered income; Power pays energy and credits; Diplomacy credits;
   Security credits and energy. Antimatter appears only on tier-2 ultimates (8 cards,
   1-2 a tag). Strong income cards carry an income cut.
 - **Tokens.** Science's Datasets, Industry's Capital, Diplomacy's Followers and
@@ -77,15 +77,15 @@ Yardsticks: a tier-1 keep costs 1 insight (5 credits when short), so **one drawn
 - **Help cards** (Open Preprint, Shared Compute Grant, Open-Weights Release): the helper pays credits and insight and draws; the other player gets the insight. Net table gain is +1 insight and a card, so they cost about what a draw costs.
 - **Dataset engines (rounds 2-5).** One Dataset ~ 1 credit. Telemetry Archive and Grad Student Pool yield one insight/card every 2 rounds: they earn their 2-3 credits + 1 insight back in ~4 rounds, so they are round-2-to-4 buys. Synthetic Data Forge (2 a round, 5 cr) is the faster battery. Every Dataset spent is one the tier-2 counters no longer see: that is the tension.
 - **Endowed Research Chair** (5 cr, 1 insight, credit income -1): +1 insight a round and draw 1. Played in round 3 it returns ~6 insight (~25 credit-equivalent at the keep rate) for ~13 credits of cost and lost income; played after round 6 it barely breaks even, which is the intended window.
-- **Simulation Cluster** (5 cr + 1 hardware): 3 credits a draw is a premium over a keep's insight, but it never runs out; a mid-game credit sink.
+- **Simulation Cluster** (5 cr + 1 chip): 3 credits a draw is a premium over a keep's insight, but it never runs out; a mid-game credit sink.
 - **Citation Engine** (5 cr): +1 credit per Science tag (max 3); with 2 tags it beats Payroll Automation by round 5.
 
 Tier 2 lands in rounds 5-8, so it pays back in 2-4 rounds or not at all:
 
-- **Exabyte Archive** (8 cr, 1 hardware, 2 insight, over a Science building): +2 Datasets on build, +2 a round, and a free ability worth 1 credit per 2 Datasets (max 4). With one other Dataset card it reaches 4 a round in two rounds: ~10-12 credits over 3 rounds, at a lower price than Arcology Foundry because it takes a Science slot and the Datasets must be kept, not spent.
-- **Orbital Observatory Array** (9 cr, 1 hardware, needs 1 Cyber): +1-2 insight income and 2 cards every other round; the Cyber-hook building.
+- **Exabyte Archive** (8 cr, 1 chip, 2 insight, over a Science building): +2 Datasets on build, +2 a round, and a free ability worth 1 credit per 2 Datasets (max 4). With one other Dataset card it reaches 4 a round in two rounds: ~10-12 credits over 3 rounds, at a lower price than Arcology Foundry because it takes a Science slot and the Datasets must be kept, not spent.
+- **Orbital Observatory Array** (9 cr, 1 chip, needs 1 Cyber): +1-2 insight income and 2 cards every other round; the Cyber-hook building.
 - **Data Licensing Deal** (0 cr, 1 insight): one-shot cash-out of a Dataset pile, up to 8 credits + 2 insight, kept tokens. Cheap because its value is entirely what you already built; the tier-2 keep (3 insight) is its real price.
-- **Ultimates carry antimatter (1 each)**: Recursive Self-Improvement (10 cr, -1 credit income, +2 insight production, draw 3) and Foundation Model Campus (15 cr, 2 hardware, needs 3 Science: +2 insight income, +1 credit per Science tag max 6, draw 2). From round 6 each must return ~10 insight-equivalents in 3 rounds to beat their keep + play cost, hence numbers above any tier-1 rate.
+- **Ultimates carry antimatter (1 each)**: Recursive Self-Improvement (10 cr, -1 credit income, +2 insight production, draw 3) and Foundation Model Campus (15 cr, 2 chips, needs 3 Science: +2 insight income, +1 credit per Science tag max 6, draw 2). From round 6 each must return ~10 insight-equivalents in 3 rounds to beat their keep + play cost, hence numbers above any tier-1 rate.
 - **Adversarial Inference Sweep** (7 cr, 2 insight): drain_all 1 is a Cyber primitive borrowed at half strength; the draw 2 is the Science half.
 - No keep-discount primitive exists; Predictive Modelling and Open-Weights Release approximate one with `next_round_insight` 1 (every player).
 
@@ -94,20 +94,20 @@ Tier 2 lands in rounds 5-8, so it pays back in 2-4 rounds or not at all:
 Baseline: 20 starting credits, ~9-10 credits and 5-6 insight a round, games of 8-10
 rounds. One permanent +1 credit is worth about (rounds left) credits, so ~8 if played
 in round 2 and ~3 in round 7. Prices are against Payroll Automation (4 for +1 credit),
-Bridge Loan (0 for 6 credits and -1 income) and Arcology Foundry (16 + 3 hardware for +5
-credits +2 hardware).
+Bridge Loan (0 for 6 credits and -1 income) and Arcology Foundry (16 + 3 chips for +5
+credits +2 chips).
 
 - **Tier-1 income (Payroll Automation 4, Supply Chain Treaty 7, Grid-Tied Smelter 5,
   Bonded Warehouse 5):** earns its cost by round 4-5 when played in rounds 1-3; a dead
   draft pick after round 6. Insight 1: the default price.
-- **Robotic Foundry (7 + 1 hardware, insight 2):** +3 credit income is the strongest
-  tier-1 income, so it carries the hardware cost and the second insight.
-- **Instant gains (Bridge Loan, Bulk Silicon Procurement, Hardware Spot Market, Station
+- **Robotic Foundry (7 + 1 chip, insight 2):** +3 credit income is the strongest
+  tier-1 income, so it carries the chip cost and the second insight.
+- **Instant gains (Bridge Loan, Bulk Silicon Procurement, Chip Spot Market, Station
   Prefab Order):** small, any-round tempo cards; insight 0 where the gain is about 3-5
   credits' worth. Bridge Loan's 6 credits are paid back by its -1 income in an early
   round and are nearly free in round 8+, which is fine for a cheap tempo card.
 - **Factories (Prefab Plant Kit 3, Expansion Fund 3):** priced at about 2 for the factory
-  plus the rider; a factory pays 1 hardware on production steps and a site, so these are
+  plus the rider; a factory pays 1 chip on production steps and a site, so these are
   best in rounds 2-5.
 - **Capital engines (Retained Earnings 2/0, Expansion Fund, Bonded Warehouse, Sovereign
   Capital Fund 2 a round):** tokens are worth little alone; their value is the cash-out.
@@ -124,14 +124,14 @@ credits +2 hardware).
   helper pays credits and gets a little less than the receiver; Vendor Financing's
   2 Capital is the helper's gain and needs a Capital card to be playable.
 - **Tier 2 (rounds 5-9, ~3-5 incomes left):** slow income must pay back in 3 rounds.
-  Full Automation Mandate (12, +4 credit +1 hardware production, insight 1) repays by its
-  third round; Arcology Foundry (16 + 3 hardware, +5/+2) is the tag's big income card
+  Full Automation Mandate (12, +4 credit +1 chip production, insight 1) repays by its
+  third round; Arcology Foundry (16 + 3 chips, +5/+2) is the tag's big income card
   short of the ultimate; Arc Furnace Complex
   turns 2 energy into 6 credits a round for a Power-heavy player.
-- **Orbital Mass Driver (25, 1 antimatter, 4 hardware):** the tag's one ultimate: +7
-  credits, +2 hardware and a 2-credit building discount; ~4 incomes left make it ~40
+- **Orbital Mass Driver (25, 1 antimatter, 4 chips):** the tag's one ultimate: +7
+  credits, +2 chips and a 2-credit building discount; ~4 incomes left make it ~40
   credits of value, so the 25 is the brake. The only antimatter cost in the tag.
-- **Asteroid Salvage Rights (5, insight 2):** a big one-off (10 credits, 4 hardware,
+- **Asteroid Salvage Rights (5, insight 2):** a big one-off (10 credits, 4 chips,
   1 antimatter) that is equally good in any late round; its cost is the tier-2 keep (3
   insight) plus the play insight.
 
@@ -179,7 +179,7 @@ Anchors: Baseload Contract 4 credits for +1 energy production, Capacitor Dischar
 - **Tier-1 income (rounds 1-4, 6-9 rounds of payoff).** +1 energy production costs 4 as a program (Baseload Contract), which takes no slot and can't be built over. A building pays for itself by round 3-4: Tidal Barrage costs 5 for +2. Peaker Turbines gives +2 energy production for 5 credits and lowers your credit income by 1, a net gain of about 1 a round. It is the strong income card, and the income cut keeps it from being an automatic keep.
 - **Presence cards earn their cost at once.** Pylon Drop (1 credit, 0 insight, 1 presence + 1 energy) is barely better than the standard action, and that is on purpose: it is a filler card, also worth playing for its tag. Relay Mast Rollout (2 presence for 2 credits) is worth playing early, while track spaces still have many rounds left to pay out.
 - **Hardening is cheap but conditional.** A token only lands on a station or factory a troop can strike, so harden cards cost 0-1 credits and usually 1 energy, which is the standard action's price paid once for several tokens. They are worth it in war rounds and dead otherwise, so the 0-insight ones stay cheap enough to hold on to.
-- **Tier 2 (rounds 5+, 3-5 rounds left).** Slow income has to pay back in about 3 rounds, so it is priced well above tier-1 rates. Dyson Swarm Tranche gives +5 energy and +2 credits a round (about 7) for 16 credits, 3 energy, 2 hardware and 1 antimatter, and it has to be built over a Power building. Continental Supergrid gives up to +5 energy for 10. Antimatter output, the scarce tier-2 resource, is priced at about 1 antimatter a round for 8-11 credits: Antiproton Offtake Deal (also 1 credit of income), and Positron Storage Ring, a 3:1 conversion that needs a Power building to replace.
+- **Tier 2 (rounds 5+, 3-5 rounds left).** Slow income has to pay back in about 3 rounds, so it is priced well above tier-1 rates. Dyson Swarm Tranche gives +5 energy and +2 credits a round (about 7) for 16 credits, 3 energy, 2 chips and 1 antimatter, and it has to be built over a Power building. Continental Supergrid gives up to +5 energy for 10. Antimatter output, the scarce tier-2 resource, is priced at about 1 antimatter a round for 8-11 credits: Antiproton Offtake Deal (also 1 credit of income), and Positron Storage Ring, a 3:1 conversion that needs a Power building to replace.
 - **One-shot tier-2 cards pay back at once.** Beamed Power Constellation places 3 presence and then pays energy for each presence you have, so it is worth playing even in round 8. Interconnector Treaty's +2 energy production is backed by an immediate gift and a presence, so it is not dead late.
 - **Insight.** It is set at 0 for one-shot fillers and helps that net you little (Pylon Drop, Capacitor Discharge, Surplus Auction, Shared Grid Accord, the cheap harden cards). It is 1 for anything that lasts (production, buildings, abilities) and for Storm Hardening, a strong event that blocks a destruction. Every tier-2 card costs 2. With 5-6 insight a round, shared with keeps, a 1-insight income card effectively costs a second card.
 - **Energy as a cost.** The tag's own currency gates its strong plays: helps and harden cards spend energy, and most tier-2 cards cost 2-3 energy. That keeps a Power engine from being only credits in disguise, and it makes Power's income matter to Power's own cards.
@@ -199,9 +199,9 @@ Baseline: 20 starting credits, ~9-10 credits and 5-6 insight a round, 8-10 round
 - **Tier-1 buildings** (4-6 credits) follow the tier-1 income rate: Treaty Grid Exchange is +1 energy +1 credit at 6 (a slot and three tags); Consulate Tower scales with Diplomacy tags, max 3, so it is only strong in a committed build. Embassy Compound pays for its 2 ambassadors up front and sells movement at 2 credits a use.
 - **Help cards** (4): the helper pays (credits, or the card and its insight); the receiver gets slightly more than the helper spends (Mutual Aid: 3 credits for 4 plus an ambassador to you; Development Loan gives a +2 bonus on up to 6). Each gives the helper something back (ambassador, hardening, Unity) so playing one is never a pure gift. Coalition Charter's 3 Unity helps everyone.
 - **Tier 2 arrives around round 5-6, so 3-4 rounds remain.** One-shots must pay off now: Liberation Accords (9 credits, needs 1 Diplomacy) clears one city in reach and gives the 2 ambassadors to free it, ~4 Unity; Great Liberation frees up to 2 in one country (~9 Unity) and so is an ultimate carrying 1 antimatter. Planetary Referendum (4 credits, 4 Unity, no needs) is the plain Unity event.
-- **Slow tier-2 income has to be extremely strong.** Planetary Assembly gets 2 Followers a round and spends 2 for 2 Unity plus an ambassador every round: ~6-8 Unity and 3-4 ambassadors over the remaining rounds, for 12 credits, 1 hardware, a credit-income cut and building over a Diplomacy building. Orbital Embassy (+4 credits, +1 insight, 2 ambassadors) returns ~16 credits and 4 insight by game end against 14 credits, 2 hardware and 1 antimatter, which is why it is the tag's second (and last) antimatter card.
+- **Slow tier-2 income has to be extremely strong.** Planetary Assembly gets 2 Followers a round and spends 2 for 2 Unity plus an ambassador every round: ~6-8 Unity and 3-4 ambassadors over the remaining rounds, for 12 credits, 1 chip, a credit-income cut and building over a Diplomacy building. Orbital Embassy (+4 credits, +1 insight, 2 ambassadors) returns ~16 credits and 4 insight by game end against 14 credits, 2 chips and 1 antimatter, which is why it is the tag's second (and last) antimatter card.
 - **Spread is rare**: only Exodus Corridors (7 credits, plus 2 ambassadors to spread with).
-- No Diplomacy card spends ambassadors as a cost (there is no primitive for it); credits are the extra cost throughout, with hardware and needs/replaces on the two tier-2 buildings.
+- No Diplomacy card spends ambassadors as a cost (there is no primitive for it); credits are the extra cost throughout, with chips and needs/replaces on the two tier-2 buildings.
 
 ## Security
 
@@ -218,5 +218,5 @@ Yardsticks: troop = 2 removal worth (`adversary.troop_health` 2); Breach and Cle
 - **Help cards.** Mutual Defense Pact (3 credits: harden 2, the partner gets 2 credits, you 1 energy) and Shared Threat Intel: the helper pays roughly what they gain plus the gift.
 - **Tier 2 sweeps.** Kinetic Interdiction (damage 3 in every hex of a country: a troop and an ambassador per hex) is the ultimate: 6 credits + 1 antimatter + 2 insight, the tag's only antimatter card. Total Containment (destroy_all + shelter) pays credits and 2 energy, not antimatter, so 9 credits and needs 1 Security. Martial Cordon is a program (tags stay) with a move and 1 Unity per 3, so 8 credits at 1 insight.
 - **Threat Neutralization Mandate** is a counter with no antimatter: 7 credits + 2 energy + 2 insight and needs 1 Security. A tier-2 threat uncountered costs a permanent loss plus 3-4 compute, worth 10+ credits late.
-- **Agency Directorate (12 credits, 2 hardware, built over Security, needs 2)**: 2 Agents a round fires a 2-worth country sweep every other round, about 2 sweeps in the rounds left. Aegis Dome Array bundles Firewall and Civic shelter with a harden ability: 10 credits + 2 energy + 1 hardware, worth it only where a war front sits near your buildings.
+- **Agency Directorate (12 credits, 2 chips, built over Security, needs 2)**: 2 Agents a round fires a 2-worth country sweep every other round, about 2 sweeps in the rounds left. Aegis Dome Array bundles Firewall and Civic shelter with a harden ability: 10 credits + 2 energy + 1 chip, worth it only where a war front sits near your buildings.
 

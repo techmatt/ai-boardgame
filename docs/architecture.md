@@ -306,7 +306,7 @@ Content is data in `content/`, composed from code primitives:
 - **Player cards** (`cards.json`, 021): a `tier` (1 or 2; 0 for an AI's unique card or
   starting building), a `kind` (`building`, `program`: stays in the play area, or
   `event`: discarded), a credit `cost` and optional `insight` (022: to play, shared
-  with keeps), `energy`, `hardware` and `antimatter` costs and `lowers` (022: incomes
+  with keeps), `energy`, `chips` and `antimatter` costs and `lowers` (022: incomes
   the play lowers for good, `[["credits", 1]]`), 1-3 `tags` (`vocab::Tag`), `needs` (tags in play), `effects`
   (ops: on play, or when built), `passives` (ops: a building's standing effects), an
   `ability` (once a round; buildings and programs; `cost` from the seat, `tokens` from the
@@ -524,7 +524,7 @@ differ.
     cities aligned and freed, stations and factories owned, megaprojects completed,
     presence placed, nodes made, removed and at their peak per board
     (`adversary.nodes_peak.c<c>`), adversary compute made, factories built per side,
-    destroyed and owned per side at the end (`board.factories_end.<side>`), hardware
+    destroyed and owned per side at the end (`board.factories_end.<side>`), chips
     made, bought and spent, Alignment sway, tips (and their rounds, `alignment.tip_<side>.rNN`), cards
     resolved and antimatter actions, insight given and credit income.
 - **Outcome**: `won`, the `round` the game ended, a stable `reason` code for aggregation,

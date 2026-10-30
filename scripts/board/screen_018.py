@@ -2,7 +2,7 @@
 rate, rounds, how games ended and what was left on the board at the end
 (corrupted cities, nodes, troops; the purge's blockers), then the
 strategy-health gate per game: presence placed, factories built per side
-and player-owned at the end, hardware made and spent, nodes removed, compute
+and player-owned at the end, chips made and spent, nodes removed, compute
 blocked by a player ambassador on a node, Security Patch played, cities
 freed, Unity and Discord tips.
 
@@ -43,11 +43,11 @@ def main(d, short):
         return
     print()
     print('Strategy-health gate, per game (means over the cell): presence placed; factories built '
-          'player / adversary / neutral; player-owned factories at the end; hardware made / spent; '
+          'player / adversary / neutral; player-owned factories at the end; chips made / spent; '
           'nodes made / removed; adversary compute made / blocked (a player ambassador on a node); '
           'Security Patch played; corrupted cities freed; cards played.')
     print()
-    print('| variant | d | agent | presence | factories P / A / N | owned at end | hardware made / spent '
+    print('| variant | d | agent | presence | factories P / A / N | owned at end | chips made / spent '
           '| nodes made / removed | compute made / blocked | Security Patch | freed | cards |')
     print('|---|---|---|---|---|---|---|---|---|---|---|---|')
     for cell in sorted(games):
@@ -57,7 +57,7 @@ def main(d, short):
         print(f"| {c['variant']} | {c['difficulty']} | {c['agent']} | {m('board.presence_placed'):.1f} "
               f"| {m('board.factories_built.player'):.1f} / {m('board.factories_built.adversary'):.1f} / "
               f"{m('board.factories_built.neutral'):.1f} | {m('board.factories_end.player'):.1f} "
-              f"| {m('board.hardware_made'):.1f} / {m('board.hardware_spent'):.1f} "
+              f"| {m('board.chips_made'):.1f} / {m('board.chips_spent'):.1f} "
               f"| {m('adversary.nodes_made'):.1f} / {m('adversary.nodes_removed'):.1f} "
               f"| {m('adversary.compute_made'):.1f} / {m('adversary.compute_blocked'):.1f} "
               f"| {m('cards.played.security_patch'):.2f} | {m('board.cities_freed'):.2f} | {cards:.1f} |")

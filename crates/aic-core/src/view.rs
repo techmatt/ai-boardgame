@@ -69,7 +69,7 @@ pub struct StandardView {
     pub act: String,
     pub energy: i64,
     pub credits: i64,
-    pub hardware: i64,
+    pub chips: i64,
     /// What it does and costs, in words.
     pub doc: String,
 }
@@ -307,12 +307,12 @@ impl ViewOut<'_> {
     }
 
     /// Publishes a standard action and its cost.
-    pub fn standard(&mut self, act: &str, energy: i64, credits: i64, hardware: i64, doc: &str) {
+    pub fn standard(&mut self, act: &str, energy: i64, credits: i64, chips: i64, doc: &str) {
         self.view.standard.push(StandardView {
             act: act.to_string(),
             energy,
             credits,
-            hardware,
+            chips,
             doc: doc.to_string(),
         });
     }

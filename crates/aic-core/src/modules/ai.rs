@@ -112,7 +112,7 @@ pub fn can_place(w: &World, g: &GameState, seat: usize) -> bool {
 
 /// What uncovering a space gives, as a short label (`+1 credits, T2 keep -1`).
 pub fn uncover_label(u: &Uncover) -> String {
-    let mut parts: Vec<String> = u.income.iter().map(|(r, n)| format!("+{n} {r}")).collect();
+    let mut parts: Vec<String> = u.income.iter().map(|(r, n)| format!("+{}", r.amount(*n))).collect();
     if u.keep2 {
         parts.push("T2 keep -1".into());
     }
@@ -126,7 +126,7 @@ struct Ai {
 
 fn power_text(p: &crate::content::Power) -> String {
     let mut cost: Vec<String> = p.tags.iter().map(|(t, n)| format!("{n} {t}")).collect();
-    cost.extend(p.cost.iter().map(|(r, n)| format!("{n} {r}")));
+    cost.extend(p.cost.iter().map(|(r, n)| r.amount(*n)));
     format!("Sacrifice {}: {} (once a round)", cost.join(" + "), p.text)
 }
 
@@ -237,8 +237,8 @@ impl Module for Ai {
                         .iter()
                         .map(|(r, n)| TrackMark {
                             key: r.to_string(),
-                            label: format!("+{n} {r}"),
-                            doc: format!("+{n} {r} every round once uncovered"),
+                            label: format!("+{}", r.amount(*n)),
+                            doc: format!("+{} every round once uncovered", r.amount(*n)),
                         })
                         .collect();
                     if u.keep2 {

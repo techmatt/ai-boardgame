@@ -137,7 +137,7 @@
       1
      ]
     ],
-    "text": "gain 5 credits and 2 hardware",
+    "text": "gain 5 credits and 2 chips",
     "effects": [
      {
       "op": "gain",
@@ -146,7 +146,7 @@
      },
      {
       "op": "gain",
-      "resource": "hardware",
+      "resource": "chips",
       "amount": 2
      }
     ]
@@ -164,7 +164,7 @@
    {
     "income": [
      [
-      "hardware",
+      "chips",
       1
      ]
     ]

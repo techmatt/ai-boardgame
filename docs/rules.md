@@ -327,7 +327,7 @@ A printed round track (`board.clock`) says what each round's production holds: 1
 round 1 production, 2 war, 3 production, 4 war, 5 production, then production + war
 every round from 6. Cards with the War twist (Border War, Blitzkrieg, Iron Doctrine)
 make their round a war step too. **Default** (Matt confirmed): the clock gates only
-factories, troops, hardware and war; the income every round (cities' energy, the
+factories, troops, chips and war; the income every round (cities' energy, the
 presence track, stations, upkeep, the adversary troops' march) is unchanged.
 
 ### Factories
@@ -340,7 +340,7 @@ presence track, stations, upkeep, the adversary troops' march) is unchanged.
   neutral factory as it claims a station (§2, needs a site claim). Cards that build a
   factory (Turnkey Factory, Prefab Plant Kit) build the player's own, on a free zone in
   reach. An owned factory keeps its owner if its city changes hands later.
-- **Growth** (each production step, after troops and hardware): every city builds one
+- **Growth** (each production step, after troops and chips): every city builds one
   factory. A clean or aligned city builds on a free industrial zone next to it, where
   the players choose (an aligned city's owner, else seat 0). A **corrupted** city builds
   at a free industrial zone in its own country **next to an adversary ambassador if
@@ -357,8 +357,8 @@ presence track, stations, upkeep, the adversary troops' march) is unchanged.
   player ambassador on a factory is used up instead and sways `factory_unity` Unity; on
   an adversary-owned factory it is used up for the Unity and the troop is still made
   (022: it was never used up there).
-- **Hardware** (working name): each player-owned factory makes `factory_hardware` (1)
-  hardware for its owner on each production step.
+- **Chips**: each player-owned factory makes `factory_chips` (1)
+  chip for its owner on each production step.
 
 ### Troops and war
 
@@ -650,9 +650,9 @@ the purge.
 
 | Resource | Comes from | Spent on |
 |---|---|---|
-| Credits | Credit production on the AI board (10 / 9), the presence track, cards and Unity cards, in upkeep; megaprojects; selling cards and hardware | Card costs; keeps beyond the opening's free ones (5 each); insight for keeps (5 each); neutral cities' energy; standard projects; threat counters (024: every counter) |
+| Credits | Credit production on the AI board (10 / 9), the presence track, cards and Unity cards, in upkeep; megaprojects; selling cards and chips | Card costs; keeps beyond the opening's free ones (5 each); insight for keeps (5 each); neutral cities' energy; standard projects; threat counters (024: every counter) |
 | Energy (keeps between rounds) | Cities' cubes in production (§6 below); Power buildings and the starting Sentinel Post (+1 a round); Power programs (2-3 at once); growth | Placing presence; Power cards' `energy` cost; powers; hardening; standard actions; buildings at the Builder's rate, Security cards at the Protector's |
-| Hardware | Player-owned factories on production steps (1 each); Industry cards (hardware income, Bulk Silicon Procurement, Capital spent for hardware) | Some buildings' `hardware` cost; research stations (2); sold at 1 credit |
+| Chips | Player-owned factories on production steps (1 each); Industry cards (chip income, Bulk Silicon Procurement, Capital spent for chips) | Some buildings' `chips` cost; research stations (2); sold at 1 credit |
 | Antimatter | Each board's last presence-track space (+1 a round); tier-2 cards (Antiproton Offtake Deal, Positron Storage Ring); the antimatter action | Tier-2 cards |
 | Insight | Each round, set to the AI board's insight (4; 022: was 3) plus the presence track's uncovers plus buildings; less 1 per adversary ambassador that drained your presence | Keeping drafted cards; playing cards (022); giving (expires at the round's end) |
 | Ambassadors | 1 at the start; Diplomacy cards (Consular Pouch, Embassy Compound); the standard action | Moving onto pieces; aligning cities |
@@ -681,13 +681,13 @@ Every map target is in the player's reach. The view publishes each action with i
 | Action | Cost | What |
 |---|---|---|
 | Place presence | `presence_energy` 1 | the next token off your track (uncovering its space) on a land hex next to your presence, 1 presence per hex (**locked**) |
-| Build a research station | `build_energy` 2 + `station_hardware` 2 hardware | on an open hex in reach that is not an industrial zone; it is yours (your cube) |
+| Build a research station | `build_energy` 2 + `station_chips` 2 chips | on an open hex in reach that is not an industrial zone; it is yours (your cube) |
 | Remove an adversary ambassador | `remove_energy` 1 (021: was 2) | in reach |
 | Move a player ambassador | `move_energy` 1 | from your supply or the board onto a piece in reach (not the hex it comes from, 020) |
 | Gain a player ambassador | `ambassador_credits` 6 | into your supply |
 | Align a clean city | `align_energy` 2 + 1 ambassador | in reach, with a site claim: your cube on it |
-| Harden a building (Protector only) | `harden_energy` 1 energy a token (021: was hardware) | a player-owned station or factory in reach that is not corrupted, one a troop can strike (022: any building, the adversary's too) |
-| Sell hardware | 1 hardware | gain `hardware_credits` (1) credit (021: replaces buying hardware at 4) |
+| Harden a building (Protector only) | `harden_energy` 1 energy a token (021: was chips) | a player-owned station or factory in reach that is not corrupted, one a troop can strike (022: any building, the adversary's too) |
+| Sell chips | 1 chip | gain `chips_credits` (1) credit (021: replaces buying chips at 4) |
 | Sell a card | gain `sell_credits` 1 | from your hand |
 | Project: place presence (`presence_buy`) | `presence_credits` 3 credits | as Place presence, no energy |
 | Project: harden (`harden_buy`) | `harden_credits` 3 credits | any player: a hardening token on a player-owned station or factory in reach |
@@ -710,7 +710,7 @@ There is no "build a factory" standard action: cities build factories.
 | 8–11 | `cards.tier`, `.deal`, `.draft`, `.keep` | Round 1: the opening deal and keep. Later: build the draft hand card by card (tier each), draft, keep (§8) |
 | 12 | `ai.growth` | Each player picks a growth option |
 | 13 | `cards.play+threats.counter+economy.give+alignment.act+board.act+ai.power` | Actions, simultaneous: cards, abilities, AI-board powers, standard actions, countering threats, giving, antimatter |
-| 14 | `board.bases` | Production 1, on a production step: bases and factories make troops (ambassadors divert), factories make hardware, cities grow factories |
+| 14 | `board.bases` | Production 1, on a production step: bases and factories make troops (ambassadors divert), factories make chips, cities grow factories |
 | 15 | `board.war` | Production 2, on a war step: front battles |
 | 16 | `board.produce` | Production 3: cities' energy cubes (neutral ones for sale) and stations (ambassadors divert); ambassadors on presence drain insight |
 | 17 | `economy.upkeep` | Production 4: income; building upkeep; token cards gain their tokens |
@@ -745,7 +745,7 @@ end of a board's track").
 **Second presence track (021, placeholder).** Each board has a second track
 (`presence2`) of 3 tokens, none on the board at setup. Placing presence takes the next
 token from the track the player chooses (asked when both have tokens; a reserve token
-comes first, as before). Builder: +1 credit, +1 hardware, +1 insight. Protector: +1
+comes first, as before). Builder: +1 credit, +1 chip, +1 insight. Protector: +1
 energy, +1 credit, +1 insight. Real track contents and powers come with the AI-board
 rework.
 
@@ -759,7 +759,7 @@ power is used; the player chooses the cards one at a time among those that still
 
 | Board | Power | Cost | Effect |
 |---|---|---|---|
-| Builder | Retool | 2 Industry + 1 any | gain 5 credits and 2 hardware |
+| Builder | Retool | 2 Industry + 1 any | gain 5 credits and 2 chips |
 | Protector | Lockdown | 2 Security + 1 any | remove 3 worth of adversary pieces in a hex in your reach; sway 1 toward Unity |
 
 `ai.boards` (`[0, 1]`: Builder, Protector) gives each seat its board; the list repeats
@@ -881,7 +881,7 @@ The cards config lists which cards are in the game (baseline: all of them).
   purchase is used first. The rest are discarded when the action phase begins.
 - **Playing** a card costs its credits (buildings minus your discounts: Economies of
   scale, Orbital Mass Driver, the Builder growth's next-building discount; less what you
-  spend at your AI's rate, §6), and any `insight`, `energy`, `hardware` and `antimatter`
+  spend at your AI's rate, §6), and any `insight`, `energy`, `chips` and `antimatter`
   it prints, and lowers any income it prints under `lowers` (022: "lower your credit
   income 1": your production of that resource falls for the rest of the game; it can't
   be played if that income is lower). **Insight to play (022):** 0 for small programs
@@ -1014,7 +1014,7 @@ with cards off only Decommission removes a node: 0%. Threats off wins
 32.5%: Unity leans on the threats' churn. `board`, `adversary`, `alignment` and
 `ai` are not removable (each is read by another); `threats=off`, `cards=off` and
 `economy=off` remove the module (016 trimmed `requires` to what each module reads). Parts switch off by
-parameters (`factory_units` 0, `factory_hardware` 0, `escalation_ambassadors` 0,
+parameters (`factory_units` 0, `factory_chips` 0, `escalation_ambassadors` 0,
 `board.troop_steps` 0 (no march), `adversary.node_compute` 0,
 `economy.give_insight` 0, or leaving `ai.growth` out of the round).
 
@@ -1049,9 +1049,9 @@ tables above (`aic-sim docs`): edit the source, not the table.
 | `board.presence_returns` | 1 | 0..1 | 1: a destroyed presence goes to its owner's reserve, placed before the track |
 | `board.presence_energy` | 1 | 0..20 | standard action: energy to place a presence |
 | `board.build_energy` | 2 | 0..20 | standard action: energy to build a research station |
-| `board.station_hardware` | 2 | 0..20 | standard action: hardware to build a research station |
-| `board.factory_hardware` | 1 | 0..5 | hardware a player-owned factory makes its owner on a production step |
-| `board.hardware_credits` | 1 | 0..50 | standard action: credits for selling 1 hardware |
+| `board.station_chips` | 2 | 0..20 | standard action: chips to build a research station |
+| `board.factory_chips` | 1 | 0..5 | chips a player-owned factory makes its owner on a production step |
+| `board.chips_credits` | 1 | 0..50 | standard action: credits for selling 1 chip |
 | `board.remove_energy` | 1 | 0..20 | standard action: energy to remove an adversary ambassador within reach |
 | `board.move_energy` | 1 | 0..20 | standard action: energy to move a player ambassador |
 | `board.ambassador_credits` | 6 | 1..50 | standard action: credits to gain a player ambassador (at least 1: a free untargeted action has no limit) |
@@ -1170,7 +1170,7 @@ that matches its intent):
     is not offered without another player; other help cards, such as Venture Capital, are
     (their own gain still applies).
 30. (016) The presence track replaces both AI tracks; uncovers are per-round income.
-31. (016) The clock gates factories, troops, hardware and war only.
+31. (016) The clock gates factories, troops, chips and war only.
 32. (016) Setup factories start neutral.
 33. (016) A corrupted city builds within its own country; its preferences come before
     distance.

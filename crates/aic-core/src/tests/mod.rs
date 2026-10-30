@@ -346,7 +346,8 @@ fn variant_matrix() -> Vec<Config> {
 
 // ---------- the golden game ----------
 
-const GOLDEN_FINGERPRINT: &str = "0011fb28bdb81e65";
+// 026 moved this at r15: the state's JSON holds the name, hardware became chips, play is the same.
+const GOLDEN_FINGERPRINT: &str = "cabcd8af9d312b28";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).

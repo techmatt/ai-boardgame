@@ -2,3 +2,5 @@
 /crates/aic-wasm/pkg
 /out
 __pycache__/
+/art-originals
+/tools/card-art/node_modules

@@ -51,7 +51,7 @@ fn guess(rules: &Rules, g: &mut GameState, rng: &mut ChaCha8Rng) {
         if let Some(pile) = g.piles.get_mut(key) {
             // Sorted first, so the guess depends on the contents (public)
             // and the agent's RNG, never on the true order.
-            pile.sort_unstable();
+            pile.sort_unstable_by(|a, b| super::id_order(a, b));
             pile.shuffle(rng);
         }
     }

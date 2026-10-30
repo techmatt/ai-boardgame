@@ -35,7 +35,7 @@ fn standard_actions_are_offered_only_when_affordable_and_targeted() {
     for s in 0..2 {
         set_res(&mut g, s, Resource::Energy, 0);
         set_res(&mut g, s, Resource::Credits, 0);
-        set_res(&mut g, s, Resource::Hardware, 0);
+        set_res(&mut g, s, Resource::Chips, 0);
         assert!(standard_offered(&rules, &g, s as u8).is_empty(), "seat {s}");
     }
     // 1 energy: placing presence and moving an ambassador.
@@ -55,10 +55,10 @@ fn standard_actions_are_offered_only_when_affordable_and_targeted() {
     for s in 0..2 {
         set_res(&mut g, s, Resource::Energy, 20);
         set_res(&mut g, s, Resource::Credits, 50);
-        set_res(&mut g, s, Resource::Hardware, 5);
+        set_res(&mut g, s, Resource::Chips, 5);
     }
     let o0 = standard_offered(&rules, &g, 0);
-    for a in ["presence", "station", "move", "ambassador", "hardware"] {
+    for a in ["presence", "station", "move", "ambassador", "chips"] {
         assert!(o0.contains(a), "{a}: {o0:?}");
     }
     assert!(
@@ -95,7 +95,7 @@ fn standard_actions_are_offered_only_when_affordable_and_targeted() {
     assert_eq!(acts, board::STANDARD.map(board::StandardAction::name));
     let station = v.standard.iter().find(|x| x.act == "station").unwrap();
     assert_eq!(
-        (station.energy, station.credits, station.hardware),
+        (station.energy, station.credits, station.chips),
         (2, 0, 2)
     );
 }
@@ -106,13 +106,13 @@ fn standard_actions_cost_what_the_config_says() {
     for s in 0..2 {
         set_res(&mut g0, s, Resource::Energy, 20);
         set_res(&mut g0, s, Resource::Credits, 50);
-        set_res(&mut g0, s, Resource::Hardware, 5);
+        set_res(&mut g0, s, Resource::Chips, 5);
     }
     let spent = |g: &GameState, s: usize| {
         (
             g0.resource(s, Resource::Energy) - g.resource(s, Resource::Energy),
             g0.resource(s, Resource::Credits) - g.resource(s, Resource::Credits),
-            g0.resource(s, Resource::Hardware) - g.resource(s, Resource::Hardware),
+            g0.resource(s, Resource::Chips) - g.resource(s, Resource::Chips),
         )
     };
 
@@ -130,8 +130,8 @@ fn standard_actions_cost_what_the_config_says() {
     assert_eq!(board::track_taken(&g, 0), 2);
 
     let mut g = g0.clone();
-    act(&rules, &mut g, std_act(0, "hardware"));
-    // 021: sell 1 hardware for 1 credit.
+    act(&rules, &mut g, std_act(0, "chips"));
+    // 021: sell 1 chip for 1 credit.
     assert_eq!(spent(&g, 0), (0, -1, 1));
 
     let mut g = g0.clone();

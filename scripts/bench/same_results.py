@@ -1,6 +1,7 @@
 """Checks that two experiment output directories hold the same games.
 
 Usage: python scripts/bench/same_results.py DIR_A DIR_B [--ignore-content-hash]
+           [--map OLD=NEW]...
 
 Compares games.csv row by row and results.json field by field, ignoring
 what is timing (any `ms` field or column, wall seconds, threads), record
@@ -9,9 +10,13 @@ difference. For checking that a speed change left play unchanged, or that
 a stopped and resumed run matches an unbroken one (012).
 --ignore-content-hash is for a content refactor that renames ops but must
 play the same (025).
+--map is for a rename (026): each OLD becomes NEW in DIR_A's text before
+parsing, in the order given, so the longest words go first. Implies
+ignoring the content and config hashes, since the names are in them.
 """
 
 import csv
+import io
 import json
 import sys
 
@@ -37,12 +42,29 @@ def strip(v):
     return v
 
 
-def rows(path):
+def take_maps(args):
+    """Removes each `--map OLD=NEW` from `args`; returns the (OLD, NEW) pairs."""
+    maps = []
+    while "--map" in args:
+        i = args.index("--map")
+        maps.append(tuple(args[i + 1].split("=", 1)))
+        del args[i:i + 2]
+    return maps
+
+
+def read(path, maps=()):
     with open(path, encoding="utf-8", newline="") as f:
-        return [
-            {k: v for k, v in r.items() if not timing(k) and k not in IGNORED}
-            for r in csv.DictReader(f)
-        ]
+        text = f.read()
+    for old, new in maps:
+        text = text.replace(old, new)
+    return text
+
+
+def rows(path, maps=()):
+    return [
+        {k: v for k, v in r.items() if not timing(k) and k not in IGNORED}
+        for r in csv.DictReader(io.StringIO(read(path, maps), newline=""))
+    ]
 
 
 def diff(a, b, where=""):
@@ -67,19 +89,24 @@ def diff(a, b, where=""):
 
 
 def main():
-    args = [x for x in sys.argv[1:] if x != "--ignore-content-hash"]
-    if len(args) != len(sys.argv) - 1:
+    args = sys.argv[1:]
+    maps = take_maps(args)
+    flagged = "--ignore-content-hash" in args
+    args = [x for x in args if x != "--ignore-content-hash"]
+    if flagged or maps:
         IGNORED.append("content_hash")
+    if maps:
+        IGNORED.append("config_hash")
     a, b = args[0], args[1]
     problems = []
-    ra, rb = rows(f"{a}/games.csv"), rows(f"{b}/games.csv")
+    ra, rb = rows(f"{a}/games.csv", maps), rows(f"{b}/games.csv")
     if len(ra) != len(rb):
         problems.append(f"games.csv: {len(ra)} rows != {len(rb)}")
     for i, (x, y) in enumerate(zip(ra, rb)):
         if x != y:
             problems.append(f"games.csv row {i + 2}: {x} != {y}")
-    ja = strip(json.load(open(f"{a}/results.json", encoding="utf-8")))
-    jb = strip(json.load(open(f"{b}/results.json", encoding="utf-8")))
+    ja = strip(json.loads(read(f"{a}/results.json", maps)))
+    jb = strip(json.loads(read(f"{b}/results.json")))
     problems += diff(ja, jb, "results.json")
     for p in problems[:20]:
         print(p)

@@ -12,7 +12,7 @@ Reads DIR/games.jsonl and DIR/results.json (cell labels) as written by
 
 The gate (021): in every greedy and engine cell, per game on average,
 presence placed >= 5, cards played >= 5 and cards kept >= 8 (018-019's gate,
-less hardware: a factory's hardware now only pays buildings); and in the
+less chips: a factory's chips now only pay buildings); and in the
 engine cells at d0, some AI power used and some building replaced (the new
 primitives are reachable and used).
 """

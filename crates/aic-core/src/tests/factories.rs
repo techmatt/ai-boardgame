@@ -1,4 +1,4 @@
-//! Factories, troops and hardware.
+//! Factories, troops and chips.
 
 use super::*;
 
@@ -177,7 +177,7 @@ fn a_clean_citys_factory_goes_to_the_most_presence_by_its_zone() {
 }
 
 #[test]
-fn player_factories_make_hardware_on_production_steps_only() {
+fn player_factories_make_chips_on_production_steps_only() {
     let (rules, mut g0) = lab(&["board.bases"]);
     let m = &rules.map;
     let f = m.numbered(0, piece(0).factories[0]);
@@ -191,12 +191,12 @@ fn player_factories_make_hardware_on_production_steps_only() {
     }
     let mut g = g0.clone();
     run(&rules, &mut g);
-    assert_eq!(g.resource(0, Resource::Hardware) - g0.resource(0, Resource::Hardware), 1);
-    // Round 2 is a war step only: no hardware, troops or growth.
+    assert_eq!(g.resource(0, Resource::Chips) - g0.resource(0, Resource::Chips), 1);
+    // Round 2 is a war step only: no chips, troops or growth.
     let mut g = g0.clone();
     g.round = 2;
     run(&rules, &mut g);
-    assert_eq!(g.resource(0, Resource::Hardware), g0.resource(0, Resource::Hardware));
+    assert_eq!(g.resource(0, Resource::Chips), g0.resource(0, Resource::Chips));
     assert_eq!(total(&g, UNIT), 0);
 }
 

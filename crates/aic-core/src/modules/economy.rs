@@ -1,6 +1,6 @@
 //! Economy: insight each round, income in upkeep (AI credit production,
 //! AI tracks, buildings, Unity cards), building upkeep, and giving insight
-//! to another player. What the board produces (energy, hardware, megaproject
+//! to another player. What the board produces (energy, chips, megaproject
 //! cubes) is the board's production phase.
 
 use crate::action::Action;
@@ -225,9 +225,9 @@ impl Module for Economy {
                     "credits in upkeep: credit production, tracks, buildings",
                 ),
                 (
-                    "hardware",
-                    inc[Resource::Hardware],
-                    "hardware in upkeep: Industry cards (player-owned factories make it in production)",
+                    "chips",
+                    inc[Resource::Chips],
+                    "chips in upkeep: Industry cards (player-owned factories make them in production)",
                 ),
                 (
                     "energy",

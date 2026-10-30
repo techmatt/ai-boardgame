@@ -21,8 +21,14 @@ def load(d):
     return cells, games
 
 
+def old_name(k):
+    """The counter's name in results from before 026, when chips were called hardware."""
+    return k.replace('chips', 'hardware')
+
+
 def cnt(g, k):
-    return g['counters'].get(k, 0)
+    c = g['counters']
+    return c.get(k, c.get(old_name(k), 0))
 
 
 def mean(gs, f):
@@ -36,7 +42,7 @@ def checked_cnt(games):
     warned = set()
 
     def checked(g, k):
-        if k not in seen and k not in warned:
+        if k not in seen and old_name(k) not in seen and k not in warned:
             warned.add(k)
             print(f'warning: no game has counter {k}: it may be gone, so its 0 means nothing', file=sys.stderr)
         return cnt(g, k)

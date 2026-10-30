@@ -206,9 +206,9 @@ pub struct CardDef {
     /// Energy to play it (Power cards, 021).
     #[serde(default)]
     pub energy: i64,
-    /// Hardware a building needs (021: a requirement in the cost).
+    /// Chips a building needs (021: a requirement in the cost).
     #[serde(default)]
-    pub hardware: i64,
+    pub chips: i64,
     /// Insight to play it (022: 0 for small programs and events, 1 by
     /// default, 2 for big effects; shared with keeps).
     #[serde(default)]

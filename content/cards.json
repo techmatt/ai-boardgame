@@ -211,7 +211,7 @@
   "kind": "building",
   "cost": 5,
   "insight": 1,
-  "hardware": 1,
+  "chips": 1,
   "tags": [
    "science",
    "cyber"
@@ -634,7 +634,7 @@
   "kind": "building",
   "cost": 8,
   "insight": 2,
-  "hardware": 1,
+  "chips": 1,
   "needs": [
    [
     "science",
@@ -681,7 +681,7 @@
   "cost": 15,
   "antimatter": 1,
   "insight": 2,
-  "hardware": 2,
+  "chips": 2,
   "needs": [
    [
     "science",
@@ -722,7 +722,7 @@
   "kind": "building",
   "cost": 9,
   "insight": 2,
-  "hardware": 1,
+  "chips": 1,
   "needs": [
    [
     "cyber",
@@ -938,13 +938,13 @@
    "kind": "capital",
    "per_round": 1
   },
-  "text": "Gains 1 Capital a round. Once a round: spend 1 Capital, gain 1 hardware.",
+  "text": "Gains 1 Capital a round. Once a round: spend 1 Capital, gain 1 chip.",
   "ability": {
    "tokens": 1,
    "effects": [
     {
      "op": "gain",
-     "resource": "hardware",
+     "resource": "chips",
      "amount": 1
     }
    ]
@@ -1001,8 +1001,8 @@
   ]
  },
  {
-  "id": "hardware_spot_market",
-  "name": "Hardware Spot Market",
+  "id": "chip_spot_market",
+  "name": "Chip Spot Market",
   "tier": 1,
   "kind": "program",
   "cost": 0,
@@ -1010,11 +1010,11 @@
   "tags": [
    "industry"
   ],
-  "text": "Convert up to 4 hardware into 2 credits each.",
+  "text": "Convert up to 4 chips into 2 credits each.",
   "effects": [
    {
     "op": "convert",
-    "from": "hardware",
+    "from": "chips",
     "to": "credits",
     "max": 4,
     "rate": 2
@@ -1031,11 +1031,11 @@
   "tags": [
    "industry"
   ],
-  "text": "Gain 3 hardware.",
+  "text": "Gain 3 chips.",
   "effects": [
    {
     "op": "gain",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 3
    }
   ]
@@ -1051,7 +1051,7 @@
    "industry",
    "power"
   ],
-  "text": "Take the adversary cube off 1 corrupted research station or factory in reach. Gain 2 hardware.",
+  "text": "Take the adversary cube off 1 corrupted research station or factory in reach. Gain 2 chips.",
   "effects": [
    {
     "op": "cleanse",
@@ -1060,7 +1060,7 @@
    },
    {
     "op": "gain",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 2
    }
   ]
@@ -1113,11 +1113,11 @@
   "keywords": [
    "help"
   ],
-  "text": "Gain 2 hardware. Another player gains 2 hardware.",
+  "text": "Gain 2 chips. Another player gains 2 chips.",
   "effects": [
    {
     "op": "gain",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 2
    },
    {
@@ -1125,7 +1125,7 @@
    },
    {
     "op": "other_gain",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 2
    }
   ]
@@ -1210,7 +1210,7 @@
    "industry",
    "power"
   ],
-  "text": "Once a round: pay 1 energy, gain 1 hardware and 2 credits.",
+  "text": "Once a round: pay 1 energy, gain 1 chip and 2 credits.",
   "ability": {
    "cost": [
     [
@@ -1221,7 +1221,7 @@
    "effects": [
     {
      "op": "gain",
-     "resource": "hardware",
+     "resource": "chips",
      "amount": 1
     },
     {
@@ -1245,7 +1245,7 @@
   "keywords": [
    "tokens"
   ],
-  "text": "Once a round: pay 1 credit, remove all your Capital; gain 1+2+...+n hardware for n removed.",
+  "text": "Once a round: pay 1 credit, remove all your Capital; gain 1+2+...+n chips for n removed.",
   "ability": {
    "cost": [
     [
@@ -1257,7 +1257,7 @@
     {
      "op": "cash_out",
      "kind": "capital",
-     "resource": "hardware"
+     "resource": "chips"
     }
    ]
   }
@@ -1317,7 +1317,7 @@
   "kind": "building",
   "cost": 7,
   "insight": 2,
-  "hardware": 1,
+  "chips": 1,
   "tags": [
    "industry",
    "power"
@@ -1370,7 +1370,7 @@
    "kind": "capital",
    "per_round": 1
   },
-  "text": "+1 credit income. Gains 1 Capital a round. Once a round: spend 2 Capital, gain 1 energy, 1 hardware.",
+  "text": "+1 credit income. Gains 1 Capital a round. Once a round: spend 2 Capital, gain 1 energy, 1 chip.",
   "passives": [
    {
     "op": "income",
@@ -1388,7 +1388,7 @@
     },
     {
      "op": "gain",
-     "resource": "hardware",
+     "resource": "chips",
      "amount": 1
     }
    ]
@@ -1401,7 +1401,7 @@
   "kind": "building",
   "cost": 16,
   "insight": 2,
-  "hardware": 3,
+  "chips": 3,
   "needs": [
    [
     "industry",
@@ -1412,7 +1412,7 @@
   "tags": [
    "industry"
   ],
-  "text": "+5 credit income. +2 hardware income.",
+  "text": "+5 credit income. +2 chip income.",
   "passives": [
    {
     "op": "income",
@@ -1421,7 +1421,7 @@
    },
    {
     "op": "income",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 2
    }
   ]
@@ -1434,7 +1434,7 @@
   "cost": 25,
   "insight": 2,
   "antimatter": 1,
-  "hardware": 4,
+  "chips": 4,
   "needs": [
    [
     "industry",
@@ -1450,7 +1450,7 @@
    "industry",
    "power"
   ],
-  "text": "+7 credit income. +2 hardware income. Your buildings cost 2 less.",
+  "text": "+7 credit income. +2 chip income. Your buildings cost 2 less.",
   "passives": [
    {
     "op": "income",
@@ -1459,7 +1459,7 @@
    },
    {
     "op": "income",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 2
    },
    {
@@ -1475,7 +1475,7 @@
   "kind": "building",
   "cost": 10,
   "insight": 2,
-  "hardware": 2,
+  "chips": 2,
   "needs": [
    [
     "power",
@@ -1487,11 +1487,11 @@
    "industry",
    "power"
   ],
-  "text": "+1 hardware income. In upkeep, if able, convert 2 energy into 6 credits.",
+  "text": "+1 chip income. In upkeep, if able, convert 2 energy into 6 credits.",
   "passives": [
    {
     "op": "income",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 1
    },
    {
@@ -1554,7 +1554,7 @@
   "tags": [
    "industry"
   ],
-  "text": "+4 credit production. +1 hardware production.",
+  "text": "+4 credit production. +1 chip production.",
   "effects": [
    {
     "op": "production",
@@ -1563,7 +1563,7 @@
    },
    {
     "op": "production",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 1
    }
   ]
@@ -1612,7 +1612,7 @@
   "tags": [
    "industry"
   ],
-  "text": "Gain 10 credits, 4 hardware and 1 antimatter.",
+  "text": "Gain 10 credits, 4 chips and 1 antimatter.",
   "effects": [
    {
     "op": "gain",
@@ -1621,7 +1621,7 @@
    },
    {
     "op": "gain",
-    "resource": "hardware",
+    "resource": "chips",
     "amount": 4
    },
    {
@@ -2092,7 +2092,7 @@
   "kind": "building",
   "cost": 5,
   "insight": 1,
-  "hardware": 1,
+  "chips": 1,
   "tags": [
    "cyber",
    "science"
@@ -2244,7 +2244,7 @@
   "kind": "building",
   "cost": 9,
   "insight": 2,
-  "hardware": 2,
+  "chips": 2,
   "replaces": "cyber",
   "tags": [
    "cyber",
@@ -2283,7 +2283,7 @@
   "kind": "building",
   "cost": 13,
   "insight": 2,
-  "hardware": 1,
+  "chips": 1,
   "replaces": "cyber",
   "needs": [
    [
@@ -2747,12 +2747,12 @@
   "tags": [
    "power"
   ],
-  "text": "Convert up to 3 energy into 1 hardware each. Gain 1 credit.",
+  "text": "Convert up to 3 energy into 1 chip each. Gain 1 credit.",
   "effects": [
    {
     "op": "convert",
     "from": "energy",
-    "to": "hardware",
+    "to": "chips",
     "max": 3,
     "rate": 1
    },
@@ -2770,7 +2770,7 @@
   "kind": "building",
   "cost": 11,
   "energy": 2,
-  "hardware": 1,
+  "chips": 1,
   "insight": 2,
   "tags": [
    "power"
@@ -2806,7 +2806,7 @@
   "cost": 16,
   "antimatter": 1,
   "energy": 3,
-  "hardware": 2,
+  "chips": 2,
   "insight": 2,
   "tags": [
    "power",
@@ -2839,7 +2839,7 @@
   "tier": 2,
   "kind": "building",
   "cost": 10,
-  "hardware": 1,
+  "chips": 1,
   "insight": 2,
   "tags": [
    "power",
@@ -3657,7 +3657,7 @@
   "kind": "building",
   "cost": 12,
   "insight": 2,
-  "hardware": 1,
+  "chips": 1,
   "lowers": [
    [
     "credits",
@@ -3705,7 +3705,7 @@
   "cost": 14,
   "antimatter": 1,
   "insight": 2,
-  "hardware": 2,
+  "chips": 2,
   "needs": [
    [
     "diplomacy",
@@ -4233,7 +4233,7 @@
   "tier": 2,
   "kind": "building",
   "cost": 12,
-  "hardware": 2,
+  "chips": 2,
   "insight": 2,
   "tags": [
    "security"
@@ -4270,7 +4270,7 @@
   "kind": "building",
   "cost": 10,
   "energy": 2,
-  "hardware": 1,
+  "chips": 1,
   "insight": 2,
   "tags": [
    "security",

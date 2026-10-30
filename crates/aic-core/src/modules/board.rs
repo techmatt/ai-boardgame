@@ -2,7 +2,7 @@
 //! ocean, industrial zones; military bases on the fronts), player presence
 //! (owned here; AI boards read the track through `track_taken`), the setup,
 //! the production/war clock, production (factories grow from cities and
-//! make corp units and hardware, front battles on war steps, adversary
+//! make corp units and chips, front battles on war steps, adversary
 //! troops, cities, stations, megaprojects), player ambassadors and site
 //! claims, the standard actions and the round-end cleanup.
 
@@ -47,9 +47,9 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("presence_returns", 0, 1, "1: a destroyed presence goes to its owner's reserve, placed before the track"),
             ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence"),
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
-            ParamSpec::int("station_hardware", 0, 20, "standard action: hardware to build a research station"),
-            ParamSpec::int("factory_hardware", 0, 5, "hardware a player-owned factory makes its owner on a production step"),
-            ParamSpec::int("hardware_credits", 0, 50, "standard action: credits for selling 1 hardware"),
+            ParamSpec::int("station_chips", 0, 20, "standard action: chips to build a research station"),
+            ParamSpec::int("factory_chips", 0, 5, "chips a player-owned factory makes its owner on a production step"),
+            ParamSpec::int("chips_credits", 0, 50, "standard action: credits for selling 1 chip"),
             ParamSpec::int("remove_energy", 0, 20, "standard action: energy to remove an adversary ambassador within reach"),
             ParamSpec::int("move_energy", 0, 20, "standard action: energy to move a player ambassador"),
             ParamSpec::int("ambassador_credits", 1, 50, "standard action: credits to gain a player ambassador (at least 1: a free untargeted action has no limit)"),
@@ -63,8 +63,8 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("drain_amount", 1, 20, "standard project: compute drained"),
         ],
         phases: &[
-            PhaseSpec::decision("act", "standard actions and projects: presence, station, remove, move, ambassador, align, harden, hardware, sell, buy energy, drain"),
-            PhaseSpec::auto("bases", "on a production step: bases and factories make corp units and hardware, cities grow factories"),
+            PhaseSpec::decision("act", "standard actions and projects: presence, station, remove, move, ambassador, align, harden, chips, sell, buy energy, drain"),
+            PhaseSpec::auto("bases", "on a production step: bases and factories make corp units and chips, cities grow factories"),
             PhaseSpec::auto("war", "on a war step, the corp units on either side of each front fight"),
             PhaseSpec::auto("march", "each adversary troop takes its steps: destroy a target next to it, else move toward the nearest"),
             PhaseSpec::auto("produce", "cities and research stations produce; ambassadors divert them, and one on a lone presence drains its owner's insight into adversary compute"),
@@ -123,7 +123,7 @@ pub enum StandardAction {
     Ambassador,
     Align,
     Harden,
-    Hardware,
+    Chips,
     // 024: the credit sinks, Terraforming Mars' standard projects.
     PresenceBuy,
     HardenBuy,
@@ -140,7 +140,7 @@ pub const STANDARD: [StandardAction; 12] = [
     StandardAction::Ambassador,
     StandardAction::Align,
     StandardAction::Harden,
-    StandardAction::Hardware,
+    StandardAction::Chips,
     StandardAction::PresenceBuy,
     StandardAction::HardenBuy,
     StandardAction::Energy,
@@ -158,7 +158,7 @@ impl StandardAction {
             StandardAction::Ambassador => "ambassador",
             StandardAction::Align => "align",
             StandardAction::Harden => "harden",
-            StandardAction::Hardware => "hardware",
+            StandardAction::Chips => "chips",
             StandardAction::PresenceBuy => "presence_buy",
             StandardAction::HardenBuy => "harden_buy",
             StandardAction::Energy => "energy",
@@ -177,7 +177,7 @@ pub fn clock_step(w: &World, round: u32) -> i64 {
     scheduled(w.list("board.clock"), round)
 }
 
-/// Whether this round has a production step (factories, troops, hardware).
+/// Whether this round has a production step (factories, troops, chips).
 pub fn production_round(w: &World, g: &GameState) -> bool {
     clock_step(w, g.round) & 1 != 0
 }
@@ -303,18 +303,18 @@ fn build(_b: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Board))
 }
 
-/// A standard action's cost: (energy, credits, hardware).
+/// A standard action's cost: (energy, credits, chips).
 pub fn std_cost(w: &World, act: StandardAction) -> (i64, i64, i64) {
     let i = |k: &str| w.int(&format!("board.{k}"));
     match act {
         StandardAction::Presence => (i("presence_energy"), 0, 0),
-        StandardAction::Station => (i("build_energy"), 0, i("station_hardware")),
+        StandardAction::Station => (i("build_energy"), 0, i("station_chips")),
         StandardAction::Remove => (i("remove_energy"), 0, 0),
         StandardAction::Move => (i("move_energy"), 0, 0),
         StandardAction::Ambassador => (0, i("ambassador_credits"), 0),
         StandardAction::Align => (i("align_energy"), 0, 0),
         StandardAction::Harden => (i("harden_energy"), 0, 0),
-        StandardAction::Hardware => (0, 0, 1),
+        StandardAction::Chips => (0, 0, 1),
         StandardAction::PresenceBuy => (0, i("presence_credits"), 0),
         StandardAction::HardenBuy => (0, i("harden_credits"), 0),
         StandardAction::Energy => (0, i("energy_credits"), 0),
@@ -332,7 +332,7 @@ pub fn std_text(act: StandardAction) -> &'static str {
         StandardAction::Ambassador => "gain a player ambassador",
         StandardAction::Align => "align a clean city you can claim (1 ambassador)",
         StandardAction::Harden => "harden a building in reach (Harden passive)",
-        StandardAction::Hardware => "sell 1 hardware for credits",
+        StandardAction::Chips => "sell 1 chip for credits",
         StandardAction::PresenceBuy => "standard project: place a presence next to yours",
         StandardAction::HardenBuy => "standard project: harden a building in reach",
         StandardAction::Energy => "standard project: gain 1 energy",
@@ -340,10 +340,10 @@ pub fn std_text(act: StandardAction) -> &'static str {
     }
 }
 
-fn can_afford(g: &GameState, seat: usize, (e, cr, hw): (i64, i64, i64)) -> bool {
+fn can_afford(g: &GameState, seat: usize, (e, cr, chips): (i64, i64, i64)) -> bool {
     g.resource(seat, Resource::Energy) >= e
         && g.resource(seat, Resource::Credits) >= cr
-        && g.resource(seat, Resource::Hardware) >= hw
+        && g.resource(seat, Resource::Chips) >= chips
 }
 
 /// The hexes a standard action of `seat` may target (empty: not offered).
@@ -401,7 +401,7 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: StandardAction) -> Ve
             }
         }
         // Gaining an ambassador, credits or energy needs no target.
-        StandardAction::Ambassador | StandardAction::Hardware | StandardAction::Energy => {
+        StandardAction::Ambassador | StandardAction::Chips | StandardAction::Energy => {
             vec![usize::MAX]
         }
     }
@@ -424,9 +424,9 @@ fn std_resolve(
     };
     match act {
         StandardAction::Ambassador => cx.add_resource(g, s, Resource::Ambassadors, 1),
-        StandardAction::Hardware => {
-            cx.add_resource(g, s, Resource::Credits, w.int("board.hardware_credits"));
-            cx.tally(g, "board.hardware_sold", 1);
+        StandardAction::Chips => {
+            cx.add_resource(g, s, Resource::Credits, w.int("board.chips_credits"));
+            cx.tally(g, "board.chips_sold", 1);
         }
         StandardAction::Presence | StandardAction::PresenceBuy => {
             place_presence(g, cx, s)?;
@@ -681,7 +681,7 @@ fn add_unit(g: &mut GameState, cx: &mut Cx, base: usize) {
 /// factories, make their corp's units (a factory 1 at each of its corp's
 /// bases); an ambassador on the piece diverts it and is removed; an
 /// adversary-owned factory makes an adversary troop. Player-owned factories
-/// make hardware. Then the cities grow factories.
+/// make chips. Then the cities grow factories.
 fn produce_units(g: &mut GameState, cx: &mut Cx) -> Res {
     let w = cx.world;
     if !production_round(&w, g) {
@@ -704,14 +704,14 @@ fn produce_units(g: &mut GameState, cx: &mut Cx) -> Res {
         }
     }
     let per = w.int("board.factory_units");
-    let hw = w.int("board.factory_hardware");
+    let chips = w.int("board.factory_chips");
     for h in 0..g.hexes.len() {
         if g.tokens(h, FACTORY) == 0 {
             continue;
         }
         if let Some(s) = cube_owner(g, h) {
-            cx.add_resource(g, s, Resource::Hardware, hw);
-            cx.tally(g, "board.hardware_made", hw);
+            cx.add_resource(g, s, Resource::Chips, chips);
+            cx.tally(g, "board.chips_made", chips);
         }
         if per == 0 {
             continue;
@@ -1316,11 +1316,11 @@ impl Module for Board {
                 if !can_afford(g, s, cost) || targets.is_empty() {
                     return Err("can't take that standard action now".into());
                 }
-                let (e, cr, hw) = cost;
+                let (e, cr, chips) = cost;
                 cx.add_resource(g, s, Resource::Energy, -e);
                 cx.add_resource(g, s, Resource::Credits, -cr);
-                cx.add_resource(g, s, Resource::Hardware, -hw);
-                cx.tally(g, "board.hardware_spent", hw);
+                cx.add_resource(g, s, Resource::Chips, -chips);
+                cx.tally(g, "board.chips_spent", chips);
                 cx.tally(g, &format!("board.std.{}", act.name()), 1);
                 cx.tally(g, "board.std_actions", 1);
                 std_resolve(g, cx, s, act, &targets)
@@ -1508,11 +1508,11 @@ impl Module for Board {
             }
         }
         for act in STANDARD {
-            let (e, cr, hw) = std_cost(w, act);
-            let cost: Vec<String> = [(e, "energy"), (cr, "credits"), (hw, "hardware")]
+            let (e, cr, chips) = std_cost(w, act);
+            let cost: Vec<String> = [(e, Resource::Energy), (cr, Resource::Credits), (chips, Resource::Chips)]
                 .iter()
                 .filter(|(n, _)| *n > 0)
-                .map(|(n, r)| format!("{n} {r}"))
+                .map(|(n, r)| r.amount(*n))
                 .collect();
             let doc = format!(
                 "{}; costs {}",
@@ -1523,7 +1523,7 @@ impl Module for Board {
                     cost.join(" + ")
                 }
             );
-            out.standard(act.name(), e, cr, hw, &doc);
+            out.standard(act.name(), e, cr, chips, &doc);
         }
         for s in 0..g.seats.len() {
             out.seat(

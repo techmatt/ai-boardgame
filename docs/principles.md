@@ -35,11 +35,11 @@ and tier-1 cards average about 3 credits with tier 2 about 9.
   Foundry and Dyson Swarm Tranche 16): within "about 50", but the income is not "produce
   1".
 - **Credit sinks priced off that income:** threat counters 4–8; a megaproject cube pays
-  `project_credits` 10; a player ambassador costs `ambassador_credits` 6; hardware sells
-  for `hardware_credits` 1; Market Crash takes 8 and Propaganda 4–8.
+  `project_credits` 10; a player ambassador costs `ambassador_credits` 6; chips sell
+  for `chips_credits` 1; Market Crash takes 8 and Propaganda 4–8.
 - **Adversary compute:** project costs are 5–10 *a player*, so 15–30 at 3 players and
   20–40 at 4: the top of the range, still under 50. A node makes 3, not 1.
-- Within the principle: energy (cities make 1, presence costs 1), hardware (a factory
+- Within the principle: energy (cities make 1, presence costs 1), chips (a factory
   makes 1), insight, antimatter, Sway (tips at 2 a player), the supply (24 a country,
   pieces rather than a currency).
 

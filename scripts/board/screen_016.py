@@ -2,7 +2,7 @@
 win rate, rounds and how games ended; then per game, as means over the
 cell's games: presence placed, node peaks per board, nodes made and
 removed, factories built per side, destroyed and owned per side at the end,
-hardware made, bought and spent, and adversary compute made; then
+chips made, bought and spent, and adversary compute made; then
 standard actions by kind (the strategy-health gate reads these).
 
     python scripts/board/screen_016.py out/screen-016
@@ -36,11 +36,11 @@ def main(d):
     print()
     print('Per game (means over the cell): presence placed (std action / all routes); node peak per board '
           '(mean of each board\'s peak; the highest board); nodes made / removed; factories built player / '
-          'adversary / neutral; destroyed; owned at the end player / adversary / neutral; hardware made / '
+          'adversary / neutral; destroyed; owned at the end player / adversary / neutral; chips made / '
           'bought / spent; adversary compute made.')
     print()
     print('| cell | variant | d | agent | presence | node peak/board (max) | nodes made / removed | factories built P/A/N '
-          '| destroyed | owned at end P/A/N | hardware made / bought / spent | adv. compute |')
+          '| destroyed | owned at end P/A/N | chips made / bought / spent | adv. compute |')
     print('|---|---|---|---|---|---|---|---|---|---|---|---|')
     for cell in sorted(games):
         gs, c = games[cell], cells[cell]
@@ -58,7 +58,7 @@ def main(d):
               f"| {m('board.factories_built.player'):.2f} / {m('board.factories_built.adversary'):.2f} / {m('board.factories_built.neutral'):.2f} "
               f"| {m('board.factories_destroyed'):.2f} "
               f"| {m('board.factories_end.player'):.2f} / {m('board.factories_end.adversary'):.2f} / {m('board.factories_end.neutral'):.2f} "
-              f"| {m('board.hardware_made'):.2f} / {m('board.hardware_bought'):.2f} / {m('board.hardware_spent'):.2f} "
+              f"| {m('board.chips_made'):.2f} / {m('board.chips_bought'):.2f} / {m('board.chips_spent'):.2f} "
               f"| {m('adversary.compute_made'):.1f} |")
     print()
     print('Standard actions per game, by kind:')

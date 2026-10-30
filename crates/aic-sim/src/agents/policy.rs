@@ -10,7 +10,7 @@
 //!
 //! The plan is simple and deterministic, and reads only the public state
 //! and the seat's own hand: projected credit, insight,
-//! hardware and energy income; the cards it would play (hand plus the
+//! chips and energy income; the cards it would play (hand plus the
 //! candidates) in value-per-cost order, filled into each round's budget.
 
 use aic_core::content::{CardDef, Op, Resource, Tag};
@@ -18,7 +18,7 @@ use aic_core::modules::{ai, cards, economy, effects};
 use aic_core::module::World;
 use aic_core::{Action, Agent, GameState, Rules};
 
-use super::credit_equivalent;
+use super::{credit_equivalent, id_order};
 
 /// A play's value falls by this share for each round it waits.
 const WAIT: f64 = 0.15;
@@ -147,7 +147,11 @@ impl Policy {
             drafted
         } else if self.forced.keep_k > 0 {
             let mut d = drafted;
-            d.sort_by_key(|id| (list_cost(cards::def(&world, id)), id.clone()));
+            d.sort_by(|a, b| {
+                list_cost(cards::def(&world, a))
+                    .cmp(&list_cost(cards::def(&world, b)))
+                    .then_with(|| id_order(a, b))
+            });
             d.truncate(self.forced.keep_k);
             d
         } else if full {
@@ -237,7 +241,7 @@ impl Agent for Policy {
     }
 }
 
-/// A card's printed cost in credits (antimatter, insight, energy, hardware
+/// A card's printed cost in credits (antimatter, insight, energy, chips
 /// and lowered income at fixed rates): the plan's measure of what it does.
 pub fn list_cost(d: &CardDef) -> i64 {
     credit_equivalent(d, d.cost)
@@ -256,7 +260,7 @@ fn keep_affordable(w: &World, g: &GameState, s: usize, tier: u8) -> bool {
 struct Budget {
     credits: i64,
     insight: i64,
-    hardware: i64,
+    chips: i64,
     energy: i64,
     antimatter: i64,
 }
@@ -269,7 +273,7 @@ pub fn plan_keeps(w: &World, g: &GameState, s: usize, f: &Forced) -> Vec<String>
         ids.sort_by(|a, b| {
             ratio(w, g, s, b)
                 .total_cmp(&ratio(w, g, s, a))
-                .then_with(|| a.cmp(b))
+                .then_with(|| id_order(a, b))
         })
     };
     order(&mut drafted);
@@ -346,7 +350,7 @@ fn plan(
     let mut now = Budget {
         credits: res(Resource::Credits),
         insight: res(Resource::Insight),
-        hardware: res(Resource::Hardware),
+        chips: res(Resource::Chips),
         energy: res(Resource::Energy),
         antimatter: res(Resource::Antimatter),
     };
@@ -370,18 +374,18 @@ fn plan(
     pool.sort_by(|a, b| {
         ratio(w, g, s, b)
             .total_cmp(&ratio(w, g, s, a))
-            .then_with(|| a.cmp(b))
+            .then_with(|| id_order(a, b))
     });
     let mut planned: Vec<String> = Vec::new();
     let mut total = 0.0;
     let mut b = now;
     for round in 0..rounds.max(1) {
         if round > 0 {
-            // Credits, hardware, energy and antimatter carry over; insight resets.
+            // Credits, chips, energy and antimatter carry over; insight resets.
             b = Budget {
                 credits: b.credits + inc(Resource::Credits),
                 insight: (inc(Resource::Insight) - reserve).max(0),
-                hardware: b.hardware + inc(Resource::Hardware),
+                chips: b.chips + inc(Resource::Chips),
                 energy: b.energy + inc(Resource::Energy),
                 antimatter: b.antimatter + inc(Resource::Antimatter),
             };
@@ -394,7 +398,7 @@ fn plan(
             let credits = cards::play_cost(w, g, s, d);
             let fits = b.credits >= credits
                 && b.insight >= d.insight
-                && b.hardware >= d.hardware
+                && b.chips >= d.chips
                 && b.energy >= d.energy
                 && b.antimatter >= d.antimatter
                 && cards::lowers_ok(w, g, s, d)
@@ -404,7 +408,7 @@ fn plan(
             if fits {
                 b.credits -= credits;
                 b.insight -= d.insight;
-                b.hardware -= d.hardware;
+                b.chips -= d.chips;
                 b.energy -= d.energy;
                 b.antimatter -= d.antimatter;
                 let share = if d.tier == 2 { f.plan_t2 } else { 1.0 };

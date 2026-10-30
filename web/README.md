@@ -63,7 +63,7 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   in the seat's colour). The adversary's sit on the lower row, in purple: its owner cube
   (a corrupted city, station or factory), its ambassadors (pawn), its nodes (diamond)
   and its troops (dark spearhead). The clock's step (`board.clock`), adversary compute
-  and each seat's hardware show as values. A number by a glyph is its count.
+  and each seat's chips show as values. A number by a glyph is its count.
 - **Around the board:** the Alignment track (the Unity bucket, blue, filling leftward
   and the Discord bucket, red, filling rightward on either side of the Undecided; each
   side's tip count with its next threshold; the Unity tips that win outright; the
@@ -84,7 +84,7 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
 - **Actions:** besides cards, threats and gifts, each seat panel offers the board's
   standard actions (`standard`: place presence, build a research station, remove an
   adversary ambassador, move an ambassador, gain an ambassador, align a city,
-  harden a building, buy hardware) labelled with the words and costs the rules publish
+  harden a building, sell chips) labelled with the words and costs the rules publish
   in the view (`standard`), and one *sell*
   button per card in hand. A standard action that needs a hex asks for it next, as a
   hex pick.

@@ -318,7 +318,7 @@ export function seatValuesHtml(v: View, seatIndex: number): string {
     const r = x.key.startsWith('economy.income.') ? x.key.slice('economy.income.'.length) : null;
     if (r && x.value !== 0) names.add(r);
   }
-  const order = ['credits', 'energy', 'insight', 'hardware', 'antimatter', 'ambassadors'];
+  const order = ['credits', 'energy', 'insight', 'chips', 'antimatter', 'ambassadors'];
   const sorted = [...names].sort((a, b) => (order.indexOf(a) + 99) % 99 - (order.indexOf(b) + 99) % 99 || a.localeCompare(b));
   const resHtml = sorted.map((r) => {
     const have = findValue(s.values, `resource.${r}`);

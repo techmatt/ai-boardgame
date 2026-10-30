@@ -48,13 +48,14 @@ fn a_misspelt_word_does_not_load() {
     assert!(serde_json::from_str::<DiscountOn>(r#""buildings""#).is_err());
 }
 
-/// `Seat::resources` serializes in `Ord` order and `Action` ties break in it:
-/// the fingerprint and the agents' play depend on it being the words' order.
+/// `Seat::resources` serializes in `Ord` order: the fingerprint depends on it
+/// being the words' order.
 #[test]
 fn resources_order_as_their_words() {
     use Resource::*;
-    let all = [Ambassadors, Antimatter, Credits, Energy, Hardware, Insight, PresenceReserve];
+    let all = [Ambassadors, Antimatter, Chips, Credits, Energy, Insight, PresenceReserve];
     assert!(all.windows(2).all(|p| p[0] < p[1] && p[0].name() < p[1].name()));
+    assert_eq!((Chips.amount(1), Chips.amount(2)), ("1 chip".to_string(), "2 chips".to_string()));
     for r in all {
         assert_eq!(serde_json::to_string(&r).unwrap(), format!("\"{}\"", r.name()));
         assert_eq!(r.is_player(), RESOURCES.contains(&r));

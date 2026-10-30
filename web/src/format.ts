@@ -11,6 +11,9 @@ export const isHex = (v: unknown): v is Hex =>
 
 const words = (s: string) => s.replace(/_/g, ' ');
 
+/** `n` of a resource: "2 chips", "1 chip" (as `Resource::amount` in the core). */
+const amount = (n: number, what: string) => (what === 'chips' && n === 1 ? '1 chip' : `${n} ${what}`);
+
 function field(k: string, v: unknown): string {
   if (isHex(v)) return `@${hexKey(v)}`;
   if (k === 'card' && typeof v === 'string') return cardName(v);
@@ -63,7 +66,7 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       return `power: ${p ? `${p.name} (sacrifice ${tags})` : `power ${a.power}`}`;
     }
     case 'pay':
-      return `pay ${a.amount} ${a.resource} → ${threatName(String(a.threat))}`;
+      return `pay ${amount(Number(a.amount), String(a.resource))} → ${threatName(String(a.threat))}`;
     case 'withdraw':
       return `take back ${a.resource} ← ${threatName(String(a.threat))}`;
     case 'give': {
@@ -78,9 +81,9 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       // The rules publish each standard action's words and cost in the view.
       const s = cx.view?.standard?.find((x) => x.act === String(a.act));
       if (!s) return `standard: ${words(String(a.act))}`;
-      const costs = ([[s.energy, 'energy'], [s.credits, 'credits'], [s.hardware, 'hardware']] as const)
+      const costs = ([[s.energy, 'energy'], [s.credits, 'credits'], [s.chips, 'chips']] as const)
         .filter(([v]) => v > 0)
-        .map(([v, what]) => `${v} ${what}`);
+        .map(([v, what]) => amount(v, what));
       return `${s.doc.split(';')[0]}${costs.length ? ` (${costs.join(', ')})` : ''}`;
     }
     case 'sell': {

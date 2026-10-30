@@ -182,7 +182,7 @@ fn extra_costs(d: &CardDef) -> [(Resource, i64); 4] {
     [
         (Resource::Insight, d.insight),
         (Resource::Energy, d.energy),
-        (Resource::Hardware, d.hardware),
+        (Resource::Chips, d.chips),
         (Resource::Antimatter, d.antimatter),
     ]
 }
@@ -724,7 +724,7 @@ impl Cards {
             let short = (credits - g.resource(seat, Resource::Credits)).max(0);
             let least = (short + rate - 1) / rate;
             let opts = (least..=most)
-                .map(|k| opt(format!("spend {k} {resource}")))
+                .map(|k| opt(format!("spend {}", resource.amount(k))))
                 .collect();
             let prompt =
                 format!("Seat {seat}: spend how much {resource} at {rate} credit each on {id}?");
@@ -736,8 +736,8 @@ impl Cards {
             }
         }
         cx.add_resource(g, seat, Resource::Credits, -credits);
-        let [insight, energy, hardware, antimatter] = extra_costs(d);
-        for (r, n) in [antimatter, energy, hardware, insight] {
+        let [insight, energy, chips, antimatter] = extra_costs(d);
+        for (r, n) in [antimatter, energy, chips, insight] {
             cx.add_resource(g, seat, r, -n);
         }
         if d.insight > 0 {
@@ -747,8 +747,8 @@ impl Cards {
         for (r, n) in &d.lowers {
             cx.add_key(g, economy::production_key(seat, *r), -n);
         }
-        if d.hardware > 0 {
-            cx.tally(g, "board.hardware_spent", d.hardware);
+        if d.chips > 0 {
+            cx.tally(g, "board.chips_spent", d.chips);
         }
         cx.count(g, &format!("played.{id}"), 1);
         cx.per_round(g, "cards.played", 1);
@@ -1079,11 +1079,11 @@ impl Module for Cards {
             }
             for (r, n) in extra_costs(d) {
                 if n > 0 {
-                    bits.push(format!("+{n} {r}"));
+                    bits.push(format!("+{}", r.amount(n)));
                 }
             }
             for (r, n) in &d.lowers {
-                bits.push(format!("-{n} {r} income"));
+                bits.push(format!("-{} income", r.amount(*n)));
             }
             if !d.needs.is_empty() {
                 let needs: Vec<String> = d.needs.iter().map(|(t, n)| format!("{n} {t}")).collect();

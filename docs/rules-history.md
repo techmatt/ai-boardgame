@@ -1,5 +1,7 @@
 # Rules history
 
+The resource called hardware in older rows is **Chips** since item 026 (name only).
+
 What each rules revision changed, what it replaced and whether it is **locked** or a
 **candidate**, newest first. [rules.md](rules.md) is the current rules; this file is the
 record, moved out of it in 025 otherwise as written, so a row quoting a number or a card

@@ -1,7 +1,8 @@
 """Proves a refactor left play unchanged: same games, state by state where it can tell.
 
     python scripts/bench/same_play.py run SIM DIR       # play the matrix on binary SIM into DIR
-    python scripts/bench/same_play.py compare SIM BASE NEW   # SIM: the new binary
+    python scripts/bench/same_play.py compare SIM BASE NEW [--map OLD=NEW]...
+        # SIM: the new binary
 
 The matrix covers both configs, 1-4 countries, three difficulties, the off and still
 variants, with the random, greedy and engine agents, saving every game. `compare` checks:
@@ -11,6 +12,10 @@ variants, with the random, greedy and engine agents, saving every game. `compare
 - every game saved by the old binary replays on the new one to the same fingerprint, so
   option labels, counters and vars all survived.
 
+--map is for a rename (026), as in `same_results.py`: each OLD becomes NEW in BASE's text.
+The state's JSON holds the name, so fingerprints move and old records can't replay; each
+record is compared with the new one instead, field by field, hashes and fingerprint aside.
+
 Exits 1 on any difference. About 15 min for each `run` on 12 threads (025); build the old
 binary first and copy it aside. For experiment specs use `same_results.py`.
 """
@@ -18,13 +23,18 @@ binary first and copy it aside. For experiment specs use `same_results.py`.
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
+
+from same_results import read, take_maps
 
 CONFIGS = ["baseline", "shared_row"]
 # Fields and trace lines that differ between runs of the same play.
 IGNORED = ("content_hash", "ms_per_game", "paths")
 TRACE_NOISE = ("wall ms/game", "seeds ")
+# And what a rename moves in a record.
+RENAME_IGNORED = ("config_hash", "final_fingerprint")
 
 
 def play(sim, out, label, agent, games, config, sets):
@@ -54,32 +64,33 @@ def run(sim, out):
         play(sim, out, "v-" + v, "greedy", 6, "baseline", [v])
 
 
-def clean(v):
+def clean(v, ignored=IGNORED):
     if isinstance(v, dict):
-        return {k: clean(x) for k, x in v.items()
-                if k not in IGNORED}
+        return {k: clean(x, ignored) for k, x in v.items()
+                if k not in ignored}
     if isinstance(v, list):
-        return [clean(x) for x in v]
+        return [clean(x, ignored) for x in v]
     return v
 
 
-def compare(sim, base, new):
+def same_records(records, base, new, maps):
+    """The renamed records against the new binary's, by parsed fields."""
     bad = 0
-    summaries = sorted(glob.glob(os.path.join(base, "*.json")))
-    for f in summaries:
-        g = os.path.join(new, os.path.basename(f))
-        with open(f, encoding="utf-8") as a, open(g, encoding="utf-8") as b:
-            if clean(json.load(a)) != clean(json.load(b)):
-                print("summary differs:", os.path.basename(f))
-                bad += 1
-    traces = sorted(glob.glob(os.path.join(base, "*.trace")))
-    for f in traces:
-        with open(f, encoding="utf-8") as a, open(os.path.join(new, os.path.basename(f)), encoding="utf-8") as b:
-            keep = lambda h: [x for x in h if not x.startswith(TRACE_NOISE)]
-            if keep(a) != keep(b):
-                print("trace differs:", os.path.basename(f))
-                bad += 1
-    records = sorted(glob.glob(os.path.join(base, "rec", "*", "*.json")))
+    ignored = IGNORED + RENAME_IGNORED
+    for f in records:
+        g = os.path.join(new, os.path.relpath(f, base))
+        if not os.path.exists(g):
+            print("record missing:", g)
+            bad += 1
+        elif clean(json.loads(read(f, maps)), ignored) != clean(json.loads(read(g)), ignored):
+            print("record differs:", os.path.relpath(f, base))
+            bad += 1
+    return bad
+
+
+def replays(sim, records):
+    """The old binary's records on the new binary."""
+    bad = 0
     for i in range(0, len(records), 40):
         p = subprocess.run([os.path.abspath(sim), "replay", *records[i:i + 40]], capture_output=True, text=True)
         lines = (p.stdout + p.stderr).splitlines()
@@ -92,14 +103,48 @@ def compare(sim, base, new):
         if p.returncode not in (0, 1) or (p.returncode == 1 and warned == 0):
             print(f"replay exited {p.returncode}: {records[i]}...")
             bad += 1
+    return bad
+
+
+def trace_lines(text, maps):
+    """A trace's comparable lines. Actions and events stay in order; under a rename the
+    config hash goes and the closing table is compared as a set of rows, since a renamed
+    counter sorts to another row and its padding moves."""
+    lines = [x for x in text.splitlines() if not x.startswith(TRACE_NOISE)]
+    if not maps:
+        return lines
+    events = [re.sub(r'"config_hash":"\w+"', "", x) for x in lines if x.startswith("{")]
+    table = [" ".join(x.split()) for x in lines if not x.startswith(("{", "config hash"))]
+    return events + sorted(table)
+
+
+def compare(sim, base, new, maps=()):
+    bad = 0
+    ignored = IGNORED + RENAME_IGNORED if maps else IGNORED
+    summaries = sorted(glob.glob(os.path.join(base, "*.json")))
+    for f in summaries:
+        g = os.path.join(new, os.path.basename(f))
+        if clean(json.loads(read(f, maps)), ignored) != clean(json.loads(read(g)), ignored):
+            print("summary differs:", os.path.basename(f))
+            bad += 1
+    traces = sorted(glob.glob(os.path.join(base, "*.trace")))
+    for f in traces:
+        g = os.path.join(new, os.path.basename(f))
+        if trace_lines(read(f, maps), maps) != trace_lines(read(g), maps):
+            print("trace differs:", os.path.basename(f))
+            bad += 1
+    records = sorted(glob.glob(os.path.join(base, "rec", "*", "*.json")))
+    bad += same_records(records, base, new, maps) if maps else replays(sim, records)
     print(f"{len(summaries)} summaries, {len(traces)} traces, {len(records)} records: {bad} difference(s)")
     return 1 if bad else 0
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["run"] and len(sys.argv) == 4:
-        run(sys.argv[2], sys.argv[3])
-    elif sys.argv[1:2] == ["compare"] and len(sys.argv) == 5:
-        sys.exit(compare(*sys.argv[2:5]))
+    argv = sys.argv[1:]
+    pairs = take_maps(argv)
+    if argv[:1] == ["run"] and len(argv) == 3:
+        run(argv[1], argv[2])
+    elif argv[:1] == ["compare"] and len(argv) == 4:
+        sys.exit(compare(*argv[1:4], pairs))
     else:
         sys.exit(__doc__)

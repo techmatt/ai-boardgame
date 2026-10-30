@@ -116,7 +116,7 @@ export interface StandardView {
   act: string;
   energy: number;
   credits: number;
-  hardware: number;
+  chips: number;
   doc: string;
 }
 

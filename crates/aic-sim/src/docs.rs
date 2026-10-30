@@ -23,7 +23,7 @@ const OP_SOURCE: &str = "crates/aic-core/src/op.rs";
 
 /// `3 credits, 1 energy`.
 fn costs(c: &[Cost]) -> String {
-    let parts: Vec<String> = c.iter().map(|(r, n)| format!("{n} {r}")).collect();
+    let parts: Vec<String> = c.iter().map(|(r, n)| r.amount(*n)).collect();
     parts.join(", ")
 }
 

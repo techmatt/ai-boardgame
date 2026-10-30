@@ -4,7 +4,7 @@ win rate, rounds, how games ended and what was left on the board at the end
 moves, strikes, destructions by target, absorbed), presence lost to troops
 and placed back from the reserve; nodes made, removed and their peak, and
 the rounds that ended with only nodes blocking the purge; then the
-strategy-health gate (presence, factories, hardware, nodes removed, cards,
+strategy-health gate (presence, factories, chips, nodes removed, cards,
 tier-2 node removal) with a pass/fail line per cell.
 
     python scripts/board/screen_019.py out/screen-019 [--short]
@@ -13,7 +13,7 @@ Reads DIR/games.jsonl and DIR/results.json (cell labels) as written by
 `aic-sim experiment`. Prints markdown. `--short` prints only the first table.
 
 The gate (019): in every greedy and engine cell, per game on average,
-presence placed >= 5, player factories built >= 1, hardware made >= 1, cards
+presence placed >= 5, player factories built >= 1, chips made >= 1, cards
 played >= 5 (018's gate); and in the engine cells at d0, some node removed
 (the tier-2 removal is reachable and used: removal is meant to be rare, so
 the bar is above zero, not one a game) and some presence placed back from the
@@ -73,10 +73,10 @@ def main(d, short):
               f"| {m('alignment.purge_blocked_by_nodes'):.1f} ({blocked:.0f}%) |")
     print()
     print('Strategy-health gate, per game (means over the cell): presence placed; factories built '
-          'player / adversary / neutral; hardware made / spent; Node Takedown played; Decommission drawn; '
+          'player / adversary / neutral; chips made / spent; Node Takedown played; Decommission drawn; '
           'cities freed; cards played; gate (rules in the script docstring).')
     print()
-    print('| variant | d | agent | presence | factories P / A / N | hardware made / spent | Node Takedown '
+    print('| variant | d | agent | presence | factories P / A / N | chips made / spent | Node Takedown '
           '| Decommission | freed | cards | gate |')
     print('|---|---|---|---|---|---|---|---|---|---|---|')
     fails = []
@@ -87,7 +87,7 @@ def main(d, short):
         gate = '–'
         if c['agent'] != 'random':
             ok = (m('board.presence_placed') >= 5 and m('board.factories_built.player') >= 1
-                  and m('board.hardware_made') >= 1 and cards >= 5)
+                  and m('board.chips_made') >= 1 and cards >= 5)
             if c['agent'] == 'engine' and c['difficulty'] == 0:
                 ok = ok and m('adversary.nodes_removed') > 0 and m('board.presence_from_reserve') > 0
             gate = 'pass' if ok else 'FAIL'
@@ -96,7 +96,7 @@ def main(d, short):
         print(f"| {c['variant']} | {c['difficulty']} | {c['agent']} | {m('board.presence_placed'):.1f} "
               f"| {m('board.factories_built.player'):.1f} / {m('board.factories_built.adversary'):.1f} / "
               f"{m('board.factories_built.neutral'):.1f} "
-              f"| {m('board.hardware_made'):.1f} / {m('board.hardware_spent'):.1f} "
+              f"| {m('board.chips_made'):.1f} / {m('board.chips_spent'):.1f} "
               f"| {m('cards.played.node_takedown'):.2f} | {m('alignment.card.decommission'):.2f} "
               f"| {m('board.cities_freed'):.2f} | {cards:.1f} | {gate} |")
     print()

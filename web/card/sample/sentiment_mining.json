@@ -1,0 +1,17 @@
+{
+  "_note": "The round-1 sample, as the 026 prompt gives it: not (yet) in content/cards.json. art_prompt shows where each card's art prompt lives: beside its content.",
+  "id": "sentiment_mining",
+  "name": "Sentiment Mining",
+  "kind": "program",
+  "tier": 1,
+  "cost": 6,
+  "insight": 1,
+  "tags": ["science", "diplomacy"],
+  "effect": [
+    [{ "text": "+2" }, { "icon": "dataset" }, { "icon": "arrow" }, { "icon": "anycard" }],
+    [{ "icon": "ambassador" }, { "icon": "arrow" }, { "text": "2" }, { "icon": "hex" }]
+  ],
+  "text": "Add 2 Datasets to any of your cards. Move one ambassador up to 2 hexes.",
+  "number": "001",
+  "art_prompt": "Rows of glowing faces and speech bubbles in a dark data centre, being sifted into streams of light."
+}

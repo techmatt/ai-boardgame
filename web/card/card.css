@@ -1,0 +1,33 @@
+/* Bundled fonts only: nothing is fetched at render time. */
+@font-face { font-family: 'Saira Condensed'; font-weight: 600; src: url('fonts/saira-condensed-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Saira Condensed'; font-weight: 700; src: url('fonts/saira-condensed-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Source Serif 4'; font-weight: 400; src: url('fonts/source-serif-4-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Source Serif 4'; font-weight: 600; src: url('fonts/source-serif-4-latin-600-normal.woff2') format('woff2'); }
+
+.card { position: relative; width: 69mm; height: 94mm; overflow: hidden; background: #333; color: #15181c; }
+.card .frame { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.card .content { position: absolute; inset: 0; }
+.card .content > div { position: absolute; display: flex; align-items: center; justify-content: center; }
+
+.card .cost, .card .insight, .card .number {
+  font-family: 'Saira Condensed', sans-serif; font-weight: 700; line-height: 1;
+  color: #101215; paint-order: stroke fill; -webkit-text-stroke: 0.5mm #f4f1e8;
+}
+.card .cost { font-size: 19pt; }
+.card .cost span { display: block; line-height: 0.76; }
+.card .insight { font-size: 12pt; gap: 0.5mm; }
+.card .insight .ico { width: 3.4mm; height: 3.4mm; }
+.card .content .number { font-size: 5.8pt; font-weight: 600; -webkit-text-stroke: 0.25mm #f4f1e8; }
+.card .number span { display: block; line-height: 0.72; }
+
+.card .name { font-family: 'Saira Condensed', sans-serif; font-weight: 600; font-size: 15pt; letter-spacing: 0.02em; line-height: 1; padding-bottom: 0.7mm; box-sizing: border-box; }
+.card .tag .medallion { width: 100%; height: 100%; display: block; }
+
+.card .effect { flex-direction: column; gap: 1.1mm; padding: 0 1.1mm; box-sizing: border-box; }
+.card .fx-icons { display: flex; justify-content: center; gap: 5mm; }
+.card .fx-line { display: flex; align-items: center; gap: 0.9mm; }
+.card .fx-num { font-family: 'Saira Condensed', sans-serif; font-weight: 700; font-size: 13pt; line-height: 1; }
+.card .fx-line .ico { width: 6mm; height: 6mm; }
+.card .fx-line .anycard { height: 8mm; width: 5.4mm; }
+.card .fx-line .arrow { width: 4.2mm; height: 4.2mm; }
+.card .rules { margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 7.5pt; line-height: 1.22; text-align: center; }

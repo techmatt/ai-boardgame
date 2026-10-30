@@ -60,7 +60,7 @@ pub use search::{Beam, Greedy};
 const ANTIMATTER_COST: i64 = 3;
 /// ...each insight this many...
 pub(crate) const INSIGHT_COST: i64 = 2;
-/// ...and each point of income lowered this many (energy and hardware, 1).
+/// ...and each point of income lowered this many (energy and chips, 1).
 const LOWERED_COST: i64 = 3;
 
 /// A card's cost in credits, with `credits` as its credit price (printed,
@@ -69,9 +69,19 @@ pub(crate) fn credit_equivalent(d: &CardDef, credits: i64) -> i64 {
     credits
         + ANTIMATTER_COST * d.antimatter
         + d.energy
-        + d.hardware
+        + d.chips
         + INSIGHT_COST * d.insight
         + LOWERED_COST * d.lowers.iter().map(|(_, n)| n).sum::<i64>()
+}
+
+/// The order agents sort card ids in, for tie-breaks and before a guess: the
+/// ids' own, with Chip Spot Market in the place of its id until 026,
+/// `hardware_spot_market`. The new word would sort it elsewhere, and every
+/// guess of a deck and every keep tie with it, so a rename would change play.
+/// Goes at the next `RULES_REVISION` bump, when play may change anyway.
+pub(crate) fn id_order(a: &str, b: &str) -> std::cmp::Ordering {
+    let place = |id| if id == "chip_spot_market" { "hardware_spot_market" } else { id };
+    place(a).cmp(place(b))
 }
 
 /// Uniform over legal actions. Seeded per game, so results do not depend on
@@ -505,6 +515,16 @@ mod tests {
         assert_eq!(replay(&r, seed, &rec.actions).unwrap(), g);
         let (_, again) = play(&r, seed, &mut *spec.build(&r, seed), max_actions);
         assert_eq!(rec.actions, again.actions, "{}", spec.label());
+    }
+
+    /// What keeps the rename out of play: sorted, a chip card sits under its
+    /// old word, not its new one.
+    #[test]
+    fn card_ids_sort_with_chip_spot_market_at_its_old_place() {
+        use std::cmp::Ordering::Less;
+        assert_eq!(id_order("cyber_range", "chip_spot_market"), Less);
+        assert_eq!(id_order("chip_spot_market", "hyperscale_botnet"), Less);
+        assert_eq!(id_order("alpha", "beta"), Less);
     }
 
     /// Fast lane: the first 30 actions, which take every agent into round 2

@@ -60,10 +60,13 @@ Current:
   screen summary and dominance gate; `screen_023.py` and `screen_022.py` still read r15.
 - `board/screen_summary.py` (014), `alignment/screen_summary.py` (013): screen summaries
   whose counters still exist.
-- `bench/same_results.py` (012): compares two experiment outputs.
+- `bench/same_results.py` (012): compares two experiment outputs. `--map OLD=NEW` (026)
+  renames in the old output first, for a rename that must play the same.
 - `bench/same_play.py` (025): proves a refactor left play unchanged: a matrix of configs,
   countries, difficulties and variants on the old and new binaries, ~15 min a run on 12
   threads; every saved game replays on the new binary. Keep a copy of the old binary.
+  Takes `--map` too (026): records are then compared by field, since a renamed state's
+  fingerprint moves.
 - `tune/` (007-008): `sweep.py`, `log_table.py`, `engine_sweep.py`.
 
 Historical, kept for the record and not expected to run on current rules:
@@ -133,6 +136,52 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
   module bookkeeping vars (threat payments, discounts, flags, ...) out of the globals:
   each module declares them and shows what players need where it belongs.
 
+## Card art
+
+The card renderer is `web/card/` (`card.js`, `card.css`, `icons.js`, `layout.json`,
+bundled `fonts/`): `renderCard(card, layout, frameUrl)` turns card content into HTML, in
+mm, so one template serves print and, later, the web client. **Cards are composed live,
+never pre-baked:** composed cards and print sheets go to `out/cards/` (git-ignored).
+Committed: frame templates (`art/frames/`), guides (`art/guides/`), fonts. Changing a
+card's text or numbers changes no asset. The one exception is `art/picks/card_frames_r1/`,
+small composed previews that exist only because a picker reads committed images: delete
+them, with `picks/card_frames_r1.json`, once the picks are in. Each card's art prompt
+stays beside its content (`art_prompt`; so far on the sample,
+`web/card/sample/sentiment_mining.json`). Icons are placeholders.
+
+Run from `tools/card-art/` (Node 24, system Chrome through `playwright-core`, one
+browser; `npm ci` first):
+
+- `npm run guides`: six labelled guides plus unlabelled `-blocks` twins, from
+  `layout.json`. The twins are what the image tool sees: labels invite text.
+- `npm run gen -- steel-1 holo-2 … --pool=3`: draws frames with Codex CLI's `$imagegen` on
+  Matt's ChatGPT Plus login, the wordwarriors route: `codex exec --json -s read-only`, the
+  prompt on stdin, the guide on `-i`, the PNG collected from
+  `~/.codex/generated_images/<thread>/`. No API key. Prompts are in `prompts.json`. The tool
+  has no seed parameter, so a "seed" is an independent draw. Redrawing an id keeps the old
+  original as `<id>.try<n>.png`. It stops at the first usage-limit message.
+- `npm run fit`: measures each frame's real plates into `art/frames/r1/fit.json`, which the
+  renderer uses instead of the guide. Run it after any draw: the tool lands sockets up to
+  about 2 mm off the guide, and not uniformly, so no single offset fixes a frame.
+- `npm run render -- [ids] [--pdf]`: composes the sample at 300 dpi (815×1110). Fails if a
+  font fell back or anything printed leaves the safe zone (x 6–63, y 6–88 mm). All 20
+  with `--pdf` takes about a minute.
+- `node sheet.mjs <out.png> <images…>`: a one-row inspection sheet.
+- `npm run picker`: writes the previews and `picks/card_frames_r1.json` from `out/cards/`.
+
+- **Numbers (2026-10-30, 026):** asking for 69:94 with a same-shape guide returns
+  1075×1464, the right shape already, so the crop takes at most a pixel. 44–71 s an image,
+  about 0.35% of the 5-hour Plus window each; three at once ran fine.
+- **Originals:** `art-originals/` is a git-ignored junction to
+  `C:\Code\gdrive-sync\aicomplete\art-originals` (`mklink /J art-originals <that path>`).
+  The scripts fall back to that path in a checkout without the junction;
+  `AIC_ART_ORIGINALS` overrides it. Round 1 is in `card-frames-r1/`: full-size originals,
+  `frames/` (815×1110 PNG) and `log.jsonl`.
+- **Sockets in the frame are fixed:** a painted frame shows every plate and socket whether
+  or not the card fills it.
+- **The guide's number tab crosses the safe zone** (to y 89.3, x 64.1), so the number sits
+  high in it; the octagon's top (y 5.6) does too, but its figure is inside.
+
 ## Toolchain
 
 - Rust stable (built with 1.98.1), target `wasm32-unknown-unknown`
@@ -181,8 +230,10 @@ first action" can now pay and withdraw a threat counter forever). If a rules cha
 intended, bump `RULES_REVISION` in `crates/aic-core/src/lib.rs` and update the
 fingerprint in both `crates/aic-core/src/tests/mod.rs` (`GOLDEN_FINGERPRINT`) and
 `scripts/wasm-smoke.mjs`. The fingerprint covers the whole final state, config `name`
-included. The revision is recorded with every sim result, so old and new results are
-never mixed up.
+included, so a rename that plays the same moves it with no bump (026: hardware to chips,
+still r15). The revision is recorded with every sim result, so old and new results are
+never mixed up. The exception is that rename: records from before 026 are r15 too and no
+longer load (`board.factory_hardware: not a parameter`).
 
 Git Bash on this machine mangles backslashes inside heredocs, even with a quoted
 delimiter. Write scripts with the editor, not with `cat <<'EOF'`.
@@ -295,7 +346,7 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
   (`blocker` 2); Alignment (Unity and Discord tips made, each bucket's fill as a share of
   its next tip, the bar level, and each visible adversary project's fill as a share of
   its cost, `project` 8, 017); the players' board (presence
-  4, nodes −25 (022, 020's D9: was −6, and agents made nodes when an equal free choice existed), owned factories 4 (an adversary-owned one −4), hardware 2, cities/bases/stations in reach 0.5, owned stations 5 (a corrupted one −5),
+  4, nodes −25 (022, 020's D9: was −6, and agents made nodes when an equal free choice existed), owned factories 4 (an adversary-owned one −4), chips 2, cities/bases/stations in reach 0.5, owned stations 5 (a corrupted one −5),
   megaproject cubes 2 (adversary's −1), factories 0.5, hardening 1, player ambassadors
   5 in supply (018: was 3, below their 6-credit cost, so agents never bought one) / 2.5 on the board, and toward freeing a corrupted city `freeing` 0.8 ×
   `corrupted` × share of `free_city_at`); track income, resources, cards in hand and
@@ -313,7 +364,7 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
 **Keeping by plan and the dominance checks (022, `agents/policy.rs`).** Greedy and
 engine keep drafted cards by a plan (`plan_keep` 1; 0 lets the heuristic decide keeps,
 as before 022): at its first keep of the round a seat sketches this round's action phase
-and the next two (credits, insight, hardware, energy and antimatter from what it holds and
+and the next two (credits, insight, chips, energy and antimatter from what it holds and
 its income; insight resets each round, the rest carries over), fills each round's
 budget with the cards it would play (hand plus the candidates) in value-per-cost order
 (value: the card's printed cost in credits, antimatter 3, insight 2, a lowered income
@@ -445,7 +496,7 @@ script's docstring); and d0's by-round table (hand size after keeping, kept, pla
 insight and credits left unspent at upkeep, powers). Counters new in 021:
 `cards.replaced`, `.sacrificed`, `.tokens_gained`, `.tokens_spent`, `.dealt_tier1|2`,
 `.insight_bought`, `ai.powers_used`, `ai.tags_sacrificed`, `board.city_energy_bought`,
-`.hardware_sold`, `.presence_drained`, `effects.nodes_cut`, `threats.tokens_lost`; and
+`.chips_sold` (`.hardware_sold` before 026), `.presence_drained`, `effects.nodes_cut`, `threats.tokens_lost`; and
 per-round `cards.hand_size`, `.kept`, `.played`, `.insight_after_keep`,
 `economy.credits_unspent`, `.insight_unspent`, which `aic-sim experiment` writes into
 `games.jsonl` as `<key>.rNN` (summed over seats; 021).
@@ -475,7 +526,7 @@ experiments/screen-018-calibration.json --quick --out out/screen-018` (**~3 min*
 then `python scripts/board/screen_018.py out/screen-018`: per cell the win rate,
 rounds, what was left on the board at the end (corrupted cities, nodes, troops: the
 purge's blockers), tips and ends, then the strategy-health gate per game (presence,
-factories per side and owned at the end, hardware made and spent, nodes made and
+factories per side and owned at the end, chips made and spent, nodes made and
 removed, compute blocked by a player ambassador on a node, Security Patch, cities
 freed, cards). `margin.nodes_end` / `troops_end` in `games.jsonl` are new in 018.
 Committed in `experiments/results/screen-018-calibration/` (`calibration.md`).
@@ -496,7 +547,7 @@ as 014's): `aic-sim experiment experiments/screen-016-presence.json --quick` (12
 **20 s** wall on 12 threads; d0 engine at 3 countries is the slowest cell, ~5 s a
 game per worker), then `python scripts/board/screen_016.py DIR`: per cell the win rate,
 rounds, tips and ends, then per game presence placed, node peaks per board, nodes made
-and removed, factories built, destroyed and owned per side, hardware made, bought and
+and removed, factories built, destroyed and owned per side, chips made, bought and
 spent, adversary compute made, and standard actions by kind. Committed in
 `experiments/results/screen-016-presence/` (`presence.md`).
 

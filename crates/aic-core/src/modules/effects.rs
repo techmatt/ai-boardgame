@@ -261,7 +261,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             if let Some(o) = ctx.other {
                 let most = (*max).min(g.resource(seat, *resource)).max(0);
                 let opts = (0..=most)
-                    .map(|k| opt(format!("give {k} {resource}")))
+                    .map(|k| opt(format!("give {}", resource.amount(k))))
                     .collect();
                 let prompt = format!("Seat {seat}: give how much {resource} to seat {o}?");
                 let k = cx.choose(seat, &prompt, opts)?.unwrap_or(0) as i64;
@@ -279,7 +279,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
         } => {
             let most = (*max).min(g.resource(seat, *from)).max(0);
             let opts = (0..=most)
-                .map(|k| opt(format!("convert {k} {from}")))
+                .map(|k| opt(format!("convert {}", from.amount(k))))
                 .collect();
             let prompt = format!("Seat {seat}: convert how much {from} into {to}?");
             let k = cx.choose(seat, &prompt, opts)?.unwrap_or(0) as i64;

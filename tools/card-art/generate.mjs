@@ -1,0 +1,84 @@
+// `npm run gen -- <direction>-<seed>… [--pool=N] [--raw=<tag>]`: draw program tier-1 frames.
+// The image tool has no seed parameter: a "seed" is an independent draw, keyed 1, 2, …
+// A redraw of `steel-1` replaces it; the earlier original stays as steel-1.try<n>.png.
+// Originals and log.jsonl go to the originals folder (lib.mjs). Print-size PNGs go
+// next to them in frames/; a web-size JPEG, the committed template, to art/frames/r1/.
+// Stops at the first usage-limit message.
+import { appendFile, copyFile, mkdir, readFile, readdir, rename } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
+import sharp from 'sharp';
+
+import { ART, ORIGINALS, TOOL, layout, readJson, runCodex } from './lib.mjs';
+
+const argv = process.argv.slice(2);
+const pool = Number(argv.find((a) => a.startsWith('--pool='))?.slice(7) ?? 3);
+const ids = argv.filter((a) => !a.startsWith('--'));
+const p = await readJson(path.join(TOOL, 'prompts.json'));
+const l = await layout();
+const [W, H] = l.print_px;
+const guide = path.join(ART, 'guides', 'program-t1-blocks.png');
+const origDir = path.join(ORIGINALS, 'card-frames-r1');
+const printDir = path.join(ORIGINALS, 'card-frames-r1', 'frames');
+const webDir = path.join(ART, 'frames', 'r1');
+await mkdir(printDir, { recursive: true });
+await mkdir(webDir, { recursive: true });
+
+export const framePrompt = (dir) =>
+  [
+    'Use your built-in image_gen tool ($imagegen) exactly once to generate the image below.',
+    'Do not read any files, run any commands, or try to save the image anywhere: just generate it, then stop.',
+    'Image shape: portrait, width to height 69:94, the attached guide\'s shape.',
+    '',
+    p.frame + p.directions[dir].style,
+  ].join('\n');
+
+/** Crop centred to the bleed's shape, then scale: the kept original is untouched. */
+async function cut(src, id) {
+  const m = await sharp(src).metadata();
+  const want = W / H;
+  const cw = Math.min(m.width, Math.round(m.height * want));
+  const ch = Math.min(m.height, Math.round(m.width / want));
+  const img = sharp(src).extract({ left: Math.floor((m.width - cw) / 2), top: Math.floor((m.height - ch) / 2), width: cw, height: ch }).resize(W, H, { kernel: 'lanczos3' });
+  await img.clone().png().toFile(path.join(printDir, `${id}.png`));
+  await img.clone().jpeg({ quality: 88, mozjpeg: true }).toFile(path.join(webDir, `${id}.jpg`));
+  return { w: m.width, h: m.height };
+}
+
+let stop = false;
+async function one(id) {
+  const dir = id.split('-')[0];
+  if (!p.directions[dir]) throw new Error(`no direction ${dir}`);
+  let run = await runCodex(framePrompt(dir), guide);
+  let ref = !!run.image;
+  if (!run.image && !run.limit) {
+    console.error(`gen: ${id}: no image with the guide (${run.message ?? '?'}); retrying with text alone`);
+    run = await runCodex(framePrompt(dir));
+    ref = false;
+  }
+  await appendFile(path.join(origDir, 'log.jsonl'), `${JSON.stringify({ id, at: new Date().toISOString(), ref, seconds: run.seconds, thread: run.thread, limit: run.limit, usage: run.usage, message: run.image ? undefined : run.message })}\n`);
+  if (run.limit) {
+    stop = true;
+    console.error(`gen: usage limit: ${run.limit}`);
+  }
+  if (!run.image) {
+    console.error(`gen: ${id}: no image after ${run.seconds}s. ${run.message ?? ''}`);
+    return;
+  }
+  const dest = path.join(origDir, `${id}.png`);
+  if (existsSync(dest)) {
+    const tries = (await readdir(origDir)).filter((f) => f.startsWith(`${id}.try`)).length;
+    await rename(dest, path.join(origDir, `${id}.try${tries + 1}.png`));
+  }
+  await copyFile(run.image, dest);
+  const s = await cut(await readFile(dest), id);
+  console.log(`gen: ${id}: ${s.w}×${s.h}, ${run.seconds}s, ref ${ref}, usage ${JSON.stringify(run.usage)}`);
+}
+
+const queue = [...ids];
+await Promise.all(
+  Array.from({ length: pool }, async () => {
+    while (queue.length && !stop) await one(queue.shift());
+  }),
+);

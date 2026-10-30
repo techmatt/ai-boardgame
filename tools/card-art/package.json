@@ -1,0 +1,20 @@
+{
+  "name": "aic-card-art",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "guides": "node guides.mjs",
+    "gen": "node generate.mjs",
+    "fit": "node fit.mjs",
+    "render": "node render.mjs",
+    "picker": "node picker.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/saira-condensed": "^5.2.5",
+    "@fontsource/source-serif-4": "^5.2.5",
+    "playwright-core": "^1.50.0",
+    "sharp": "^0.34.0"
+  }
+}
