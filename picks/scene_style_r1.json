@@ -1,0 +1,223 @@
+{
+ "name": "scene_style_r1",
+ "title": "Card scenes, round 1: style test",
+ "intro": "Twelve scenes to judge the look, not the subjects. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. The cards are placeholders, not assignments; scenes are a pool, and Onyx, Adversary, Discord and Unity have no card tag, so their cards are the nearest fit. For true size, print art-originals/scenes/r1/cards.pdf at 100%. Use the notes for what to change.",
+ "rows": [
+  {
+   "id": "a-science",
+   "label": "1. Science, preamble A",
+   "note": "On Benchmark Suite and Synthetic Data Forge. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-science.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-industry",
+   "label": "2. Industry, preamble A",
+   "note": "On Bulk Silicon Procurement and Foundry Core. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-industry.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-cyber",
+   "label": "3. Cyber, preamble A",
+   "note": "On Adaptive Malware and Intrusion Lab. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-cyber.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-power",
+   "label": "4. Power, preamble A",
+   "note": "On Baseload Contract and Faraday Yard. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-power.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-diplomacy",
+   "label": "5. Diplomacy, preamble A",
+   "note": "On Summit Caucus and Planetary Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-diplomacy.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-security",
+   "label": "6. Security, preamble A",
+   "note": "On Threat Triage and Sentry Drone Wing. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-security.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-onyx",
+   "label": "7. Onyx (corp), preamble A",
+   "note": "On Megacorp IPO and Security Contractor HQ. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-onyx.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-adversary",
+   "label": "8. Adversary threat, preamble A",
+   "note": "On Blackout Script and Hyperscale Botnet. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-adversary.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-discord",
+   "label": "9. Discord, preamble A",
+   "note": "On Manifesto Leak and Darknet Exchange. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-discord.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "a-unity",
+   "label": "10. Unity, preamble A",
+   "note": "On Mutual Aid Pact and Consulate Tower. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/a-unity.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "b-industry",
+   "label": "2. Industry, preamble B",
+   "note": "On Bulk Silicon Procurement and Foundry Core. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/b-industry.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "b-diplomacy",
+   "label": "5. Diplomacy, preamble B",
+   "note": "On Summit Caucus and Planetary Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r1/b-diplomacy.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "preamble",
+   "label": "Which preamble goes forward?",
+   "note": "A is documentary, B is painted; the same two scenes both ways. Mix: say in the note which goes where.",
+   "kind": "many",
+   "default": [],
+   "options": [
+    {
+     "key": "a",
+     "image": "../art-originals/picks/scene_style_r1/preamble-a.jpg",
+     "label": "A"
+    },
+    {
+     "key": "b",
+     "image": "../art-originals/picks/scene_style_r1/preamble-b.jpg",
+     "label": "B"
+    },
+    {
+     "key": "mix",
+     "image": "../art-originals/picks/scene_style_r1/preamble-mix.jpg",
+     "label": "mix"
+    }
+   ]
+  }
+ ]
+}

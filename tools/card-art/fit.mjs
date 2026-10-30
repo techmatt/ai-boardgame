@@ -67,8 +67,8 @@ const frames = Object.keys(l.kinds).sort().flatMap((k) => [`${k}-t1`, `${k}-t2`]
 for (const id of frames) {
   const { data, info } = await sharp(path.join(dir, `${id}.jpg`)).blur(1.2).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const { cost, banner } = l.common;
-  const { top, effect } = l.kinds[id.split('-')[0]];
-  const zones = { cost, banner, ...(top ? { top } : {}), effect };
+  const { top, art, effect } = l.kinds[id.split('-')[0]];
+  const zones = { cost, banner, ...(top ? { top } : {}), art, effect };
   const m = Object.fromEntries(Object.entries(zones).map(([k, z]) => [k, measure(data, info.width, info.height, z)]));
   const missed = Object.entries(m).filter(([, v]) => !v.ok).map(([k]) => k);
   const [x0, y0, x1, y1] = m.cost.box;

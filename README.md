@@ -214,6 +214,17 @@ browser; `npm ci` first):
   `art/frames/r3/`, which `fit` and `render` read by variant name only, so a draw is
   ignored until it is copied over `master.jpg`.
 
+- `npm run scene-gen -- [a-science …] [--pool=N]`: draws card scenes, the same Codex route,
+  into `art-originals/scenes/<round>/raw/`, all of them with no ids named. Scenes and their
+  preambles are in `tools/card-art/scenes.json`, not `art/prompts.json`: a scene is a pool
+  image, not bound to a card. Round 1 (035): 12 draws at 3 at once, 30–55 s each, about
+  2.5 min, 3% of the 5-hour window.
+- `npm run scene-picker`: from the raw draws, each scene cut to the program window's shape
+  (`<id>.png`), its two cards at 300 dpi (`cards/`), the same at true size (`cards.pdf`),
+  and `picks/scene_style_<round>.json` with previews, about 40 s. Passes the scene to
+  `renderCard`'s `artUrl`, which centre-crops it to the window `fit` measured: 53.3×33.2 mm
+  for program and event, 53.3×25.3 mm for buildings, so a building shows the middle 76%.
+
 - **Numbers (2026-10-30, 026):** asking for 69:94 with a same-shape guide returns
   1075×1464, the right shape already, so the crop takes at most a pixel. 44–71 s an image,
   about 0.35% of the 5-hour Plus window each; three at once ran fine. Round 2 (029):

@@ -101,13 +101,15 @@ const effectBox = (cls, box, lines = [], text = '') => {
  * @param layout   web/card/layout.json, through inset()
  * @param frameUrl the frame for this kind and tier
  * @param fit      optional measured zones of this frame (art/frames/r3/fit.json), in mm:
- *                 cost, banner, top, effect, the guide's where absent; plate, a colour
+ *                 cost, banner, top, art, effect, the guide's where absent; plate, a colour
+ * @param artUrl   optional scene for the art window, centre-cropped to it
  */
-export function renderCard(card, layout, frameUrl, fit = {}) {
+export function renderCard(card, layout, frameUrl, fit = {}, artUrl) {
   const z = { ...layout.common, ...layout.kinds[card.kind], ...fit };
   const reqX = card.insight ? z.insight[2] + 0.5 : z.cost[2] + 2.4;
   return `<article class="card kind-${esc(card.kind)} tier-${card.tier >= 2 ? 2 : 1}" style="--strip:${layout.kind_colour[card.kind]}${fit.plate ? `;--plate:${esc(fit.plate)}` : ''}">
   <img class="frame" src="${esc(frameUrl)}" alt="">
+  ${artUrl ? `<img class="art" src="${esc(artUrl)}" alt="" style="${place(z.art)}">` : ''}
   <div class="content">
     <div class="cost${card.insight ? ' beside' : ''}" style="${place(z.cost)}"><span data-safe>${esc(card.cost)}</span></div>
     ${insight(card, z.insight)}

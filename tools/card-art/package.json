@@ -11,7 +11,9 @@
     "containers": "node containers.mjs",
     "fit": "node fit.mjs",
     "render": "node render.mjs",
-    "picker": "node picker.mjs"
+    "picker": "node picker.mjs",
+    "scene-gen": "node scene-gen.mjs",
+    "scene-picker": "node scene-picker.mjs"
   },
   "devDependencies": {
     "@fontsource/saira-condensed": "^5.2.5",
