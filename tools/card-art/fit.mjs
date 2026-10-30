@@ -1,18 +1,19 @@
 // `node fit.mjs`: measure where each frame really put its zones, into
 // art/frames/r3/fit.json (mm boxes the renderer uses instead of the guide's). The master
 // was painted, so its zones sit a little off the guide; every variant derives from it, so
-// all of them should measure alike, and this prints where one doesn't. Each zone is light inside a darker rim: flood from the guide's centre over the
+// all of them should measure alike, and this prints where one doesn't. It seeds from layout.json's zones, inset as derive.mjs insets the frames. Each zone is light inside a darker rim: flood from the guide's centre over the
 // lightly blurred image (texture would stop it), take the bounding box. When no
 // threshold gives a box of about the right size, the guide's stays. Also records the
 // octagon's inside colour, so the plates the renderer draws match it.
-import { writeFile, readdir } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import sharp from 'sharp';
 
 import { ART, layout } from './lib.mjs';
+import { inset } from '../../web/card/card.js';
 
-const l = await layout();
+const l = inset(await layout());
 const mm = l.print_px[0] / l.bleed_mm[0];
 // A pixel below this share of the seed's brightness ends the plate. Shiny rims leak at
 // the lower ones, textured plates stop short at the higher: first size that fits wins.
@@ -62,11 +63,11 @@ const hex = (data, W, [x, y]) => {
 
 const dir = path.join(ART, 'frames', 'r3');
 const out = {};
-for (const f of (await readdir(dir)).filter((n) => n.endsWith('.jpg')).sort()) {
-  const id = f.slice(0, -4);
-  const { data, info } = await sharp(path.join(dir, f)).blur(1.2).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+const frames = Object.keys(l.kinds).sort().flatMap((k) => [`${k}-t1`, `${k}-t2`]);
+for (const id of frames) {
+  const { data, info } = await sharp(path.join(dir, `${id}.jpg`)).blur(1.2).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const { cost, banner } = l.common;
-  const { top, effect } = l.kinds[id === 'master' ? 'event' : id.split('-')[0]];
+  const { top, effect } = l.kinds[id.split('-')[0]];
   const zones = { cost, banner, ...(top ? { top } : {}), effect };
   const m = Object.fromEntries(Object.entries(zones).map(([k, z]) => [k, measure(data, info.width, info.height, z)]));
   const missed = Object.entries(m).filter(([, v]) => !v.ok).map(([k]) => k);
@@ -74,9 +75,9 @@ for (const f of (await readdir(dir)).filter((n) => n.endsWith('.jpg')).sort()) {
   out[id] = { ...Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.box])), plate: hex(data, info.width, [(x0 + x1) / 2, (y0 + y1) / 2]) };
   console.log(`fit: ${id}: ${missed.length ? `guide kept for ${missed.join(', ')}` : 'all measured'}`);
 }
-const base = out.master;
+const base = out['event-t1'];
 for (const [id, zones] of Object.entries(out)) {
   const off = ['cost', 'banner', 'effect'].filter((k) => zones[k].some((v, i) => Math.abs(v - base[k][i]) > 0.05) && !(id.startsWith('building') && k === 'effect'));
-  if (off.length) console.log(`fit: ${id} differs from the master: ${off.map((k) => `${k} ${zones[k]} vs ${base[k]}`).join('; ')}`);
+  if (off.length) console.log(`fit: ${id} differs from event-t1: ${off.map((k) => `${k} ${zones[k]} vs ${base[k]}`).join('; ')}`);
 }
 await writeFile(path.join(dir, 'fit.json'), `${JSON.stringify(out, null, 1)}\n`);

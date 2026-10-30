@@ -1,17 +1,17 @@
 // `npm run render -- [variants…] [--pdf]`: compose each frame variant in art/frames/r3/
-// with its real card (samples.json: card from content/cards.json, face from
-// web/card/sample/) into out/cards/<variant>.png at 300 dpi. With no variants named, also
-// the splay, the icon sheet and a strip check of every card in content. Composed cards are build
+// with its real card (samples.json: card from content/cards.json, face from the generated
+// web/card/faces.json) into out/cards/<variant>.png at 300 dpi. With no variants named, also
+// the splay, the icon sheet and a check of every card in content. Composed cards are build
 // outputs, never committed. Fails if a font fell back, anything printed leaves the safe
 // zone, a panel overflows or a requirement plate reaches the tags. `--pdf` also writes
-// out/cards/<variant>.pdf at true size.
+// out/cards/<variant>.pdf at true size and, with no variants named, all-cards.pdf (every
+// real card at true size, 9 to an A4 page) and splay.pdf.
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { ART, CARD, OUT, REPO, TOOL, layout, openPage, readJson } from './lib.mjs';
-import { renderCard } from '../../web/card/card.js';
-import { composeFace } from '../../web/card/face.js';
+import { inset, renderCard } from '../../web/card/card.js';
 import { icon, stacked, tagMedallion } from '../../web/card/icons.js';
 
 const argv = process.argv.slice(2);
@@ -20,10 +20,11 @@ const named = argv.filter((a) => !a.startsWith('--'));
 const framesDir = path.join(ART, 'frames', 'r3');
 const samples = await readJson(path.join(TOOL, 'samples.json'));
 const ids = named.length ? named : Object.keys(samples.variants);
-const l = await layout();
+const l = inset(await layout());
 const fits = await readJson(path.join(framesDir, 'fit.json'));
 const cards = Object.fromEntries((await readJson(path.join(REPO, 'content', 'cards.json'))).map((c) => [c.id, c]));
-const faced = async (id) => composeFace(cards[id], await readJson(path.join(CARD, 'sample', `${id}.json`)));
+const faces = await readJson(path.join(CARD, 'faces.json'));
+const faced = (id) => ({ ...cards[id], ...faces[id] });
 const frameOf = (card) => `${card.kind}-t${card.tier >= 2 ? 2 : 1}`;
 const frameUrl = (v) => pathToFileURL(path.join(framesDir, `${v}.jpg`)).href;
 await mkdir(OUT, { recursive: true });
@@ -81,7 +82,7 @@ const report = (id, check) => {
 const clip = { x: 0, y: 0, width: l.bleed_mm[0] * MM, height: l.bleed_mm[1] * MM };
 
 for (const id of ids) {
-  const card = await faced(samples.variants[id]);
+  const card = faced(samples.variants[id]);
   if (frameOf(card) !== id) console.error(`render: ${id}: closest fit, ${card.id} is ${frameOf(card)}`);
   await show(renderCard(card, l, frameUrl(id), fits[id]));
   report(id, await inspect());
@@ -90,30 +91,45 @@ for (const id of ids) {
 }
 
 if (!named.length) {
-  // Every card's strip, with an empty face: the crowded ones are where it breaks.
+  // Every real card, whole.
   for (const c of Object.values(cards)) {
-    await show(renderCard({ ...c, top: [], effect: [], text: '' }, l, frameUrl(frameOf(c)), fits[frameOf(c)]));
-    report(c.id, (await inspect()).filter((b) => !b.startsWith('font'))); // no text, so no serif loads
+    await show(renderCard(faced(c.id), l, frameUrl(frameOf(c)), fits[frameOf(c)]));
+    report(c.id, await inspect());
   }
 
-  // The splay: both trimmed, the older one's strip and name showing above the newer.
-  const [older, newer] = await Promise.all(samples.splay.map(faced));
+  // The splay: trimmed, each newer card over the older's name, only its top strip showing.
+  const stack = samples.splay.map(faced);
   const trim = (l.bleed_mm[0] - l.trim_mm[0]) / 2;
   const [tw, th] = l.trim_mm;
-  const showing = l.common.banner[3] + 1 - trim;
-  const slot = (card, top) =>
-    `<div class="slot-card" style="top:${top}mm;width:${tw}mm;height:${th}mm"><div style="margin:${-trim}mm">${renderCard(card, l, frameUrl(frameOf(card)), fits[frameOf(card)])}</div></div>`;
-  await show(`<div class="splay" style="width:${tw}mm;height:${th + showing}mm;margin:2mm">${slot(older, 0)}${slot(newer, showing)}</div>`, 'body{background:#3a3f46}');
-  await p.screenshot({ path: path.join(OUT, 'splay.png'), clip: { x: 0, y: 0, width: (tw + 4) * MM, height: (th + showing + 4) * MM } });
+  const showing = fits['building-t1'].banner[1] - trim;
+  const slot = (card, i) =>
+    `<div class="slot-card" style="top:${i * showing}mm;width:${tw}mm;height:${th}mm"><div style="margin:${-trim}mm">${renderCard(card, l, frameUrl(frameOf(card)), fits[frameOf(card)])}</div></div>`;
+  const height = th + (stack.length - 1) * showing;
+  await show(`<div class="splay" style="width:${tw}mm;height:${height}mm;margin:2mm">${stack.map(slot).join('')}</div>`, `@page{size:${tw + 4}mm ${height + 4}mm;margin:0}body{background:#3a3f46}`);
+  await p.screenshot({ path: path.join(OUT, 'splay.png'), clip: { x: 0, y: 0, width: (tw + 4) * MM, height: (height + 4) * MM } });
+  if (pdf) await p.pdf({ path: path.join(OUT, 'splay.pdf'), printBackground: true, preferCSSPageSize: true });
+
+  // Every real card at true size: 9 to an A4 page, bleeds touching, in content order.
+  if (pdf) {
+    const all = Object.values(cards);
+    const pages = [];
+    for (let i = 0; i < all.length; i += 9) pages.push(all.slice(i, i + 9));
+    const body = pages
+      .map((row) => `<section class="sheet-page">${row.map((c) => renderCard(faced(c.id), l, frameUrl(frameOf(c)), fits[frameOf(c)])).join('')}</section>`)
+      .join('');
+    await show(body, '@page{size:210mm 297mm;margin:0}.sheet-page{width:207mm;height:282mm;padding:7.500mm 1.500mm;display:grid;grid-template-columns:repeat(3,69mm);grid-auto-rows:94mm;break-after:page}');
+    await p.pdf({ path: path.join(OUT, 'all-cards.pdf'), printBackground: true, preferCSSPageSize: true });
+    console.log(`render: all-cards.pdf, ${all.length} cards on ${pages.length} pages`);
+  }
 
   // Every icon, for review.
   const set = (names) => names.map((n) => `<div class="cell">${n.startsWith('#') ? tagMedallion(n.slice(1)) : icon(n)}<small>${n.replace('#', '')}</small></div>`).join('');
-  const sheet = `<div class="card sheet" style="--strip:#333;height:auto;width:120mm;background:#efeadc"><div class="row">${set(['credits', 'insight', 'chips', 'energy', 'antimatter', 'compute', 'cards', 'datasets', 'capital', 'followers', 'agents', 'ambassador', 'presence', 'factory', 'move', 'harden', 'shelter', 'country', 'project', 'hex', '#science', '#power', '#cyber', '#diplomacy', '#industry', '#security'])}</div>
+  const sheet = `<div class="card sheet" style="--strip:#333;height:auto;width:120mm;background:#efeadc"><div class="row">${set(['credits', 'insight', 'chips', 'energy', 'antimatter', 'compute', 'cards', 'datasets', 'capital', 'followers', 'agents', 'ambassador', 'presence', 'factory', 'move', 'harden', 'shelter', 'country', 'project', 'hex', 'troop', 'node', 'cube', 'city', 'building', 'slot', 'sway', 'threat', 'counter', 'peek', '#science', '#power', '#cyber', '#diplomacy', '#industry', '#security'])}</div>
     <div class="row">${['<span class="income">', '<span class="adversary">', '<span class="other">'].map((o) => `<div class="fx-line">${o}<span class="fx-num">2</span>${icon('credits')}</span></div>`).join('')}</div>
     <div class="row plates"><div class="requirement at-least"><span class="fx-num">2</span>${tagMedallion('power')}</div><div class="requirement at-most"><span class="fx-num">1</span>${tagMedallion('cyber')}</div><div class="requirement replaces">${stacked()}${tagMedallion('science')}</div></div></div>`;
   await show(sheet, '.sheet .row{display:flex;flex-wrap:wrap;gap:2mm;padding:2mm}.cell{width:17mm;display:flex;flex-direction:column;align-items:center;gap:.5mm}.cell small{font:6pt sans-serif}.cell .medallion{width:6.2mm;height:6.2mm}.plates>div{height:5.2mm}');
   await (await p.$('.sheet')).screenshot({ path: path.join(OUT, 'icons.png') });
 }
 await close();
-console.log(`render: ${ids.length} cards in out/cards/${failed ? `, ${failed} with problems` : ''}`);
+console.log(`render: ${ids.length} variants in out/cards/${failed ? `, ${failed} with problems` : ''}`);
 process.exit(failed ? 1 : 0);

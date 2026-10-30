@@ -30,6 +30,16 @@ def load():
         return json.load(f)
 
 
+def load_faces():
+    """Each card's generated face (`aic-sim docs` writes web/card/faces.json)."""
+    with open(os.path.join(ROOT, 'web', 'card', 'faces.json'), encoding='utf-8') as f:
+        return json.load(f)
+
+
+def face_text(face):
+    return ' '.join(t for t in (face['top_text'], face['text']) if t)
+
+
 def deck_ids():
     with open(os.path.join(ROOT, 'configs', 'baseline.json'), encoding='utf-8') as f:
         cfg = json.load(f)
@@ -111,6 +121,7 @@ def render(cards):
         tier = c['tier'] if c['tier'] else 9
         prim = TAGS.index(c['tags'][0]) if c['tags'] else 9
         return (tier == 9, prim, tier, c['name'])
+    faces = load_faces()
     groups = collections.OrderedDict()
     for c in sorted(cards, key=key):
         g = 'AI-unique cards' if c['tier'] == 0 else c['tags'][0].capitalize()
@@ -125,7 +136,7 @@ def render(cards):
                 name += ' *(not in deck)*'
             kw = c.get('keywords', [])
             kind = c['kind'] + (' (help)' if 'help' in kw else '')
-            text = c.get('text', '').replace('|', '/')
+            text = face_text(faces[c['id']]).replace('|', '/')
             lines.append(
                 f"| {name} | {c['tier'] or '-'} | {kind} | {cost_text(c)} | "
                 f"{c.get('insight', 0)} | {', '.join(c['tags'])} | {text} |")

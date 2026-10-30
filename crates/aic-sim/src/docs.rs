@@ -3,7 +3,8 @@
 //!
 //! `docs/rules.md` holds blocks between `<!-- generated: NAME -->` and
 //! `<!-- /generated -->`; `docs/ops.md` and `docs/harms.md` are generated
-//! whole (the ledger's checks fail the run). `--check` changes
+//! whole (the ledger's checks fail the run); `web/card/faces.json`, every
+//! card's face from its ops (`aic_core::face`), too. `--check` changes
 //! nothing and exits 1 if anything is stale, or if `rules.md` backticks a
 //! `module.param` that isn't a tunable. The fast test lane runs the check.
 
@@ -13,6 +14,7 @@ use std::process::exit;
 
 use aic_core::config::ParamValue;
 use aic_core::content::{content, Cost, Op, Resource};
+use aic_core::face::card_face;
 use aic_core::Rules;
 
 use crate::cli::{die, load, rules, Options};
@@ -22,6 +24,7 @@ const RULES_MD: &str = "docs/rules.md";
 const OPS_MD: &str = "docs/ops.md";
 const OP_SOURCE: &str = "crates/aic-core/src/op.rs";
 const HARMS_MD: &str = "docs/harms.md";
+const FACES_JSON: &str = "web/card/faces.json";
 
 /// The harms of the ledger, in its row order.
 pub const HARMS: [&str; 14] = [
@@ -468,6 +471,23 @@ fn ops_md(src: &str) -> String {
     out
 }
 
+/// Every card's face, one card a line, so a change shows as that card's diff.
+fn faces_json() -> String {
+    let rows: Vec<String> = content()
+        .cards
+        .iter()
+        .map(|c| {
+            let face = serde_json::to_string(&card_face(c)).expect("a face is JSON");
+            format!(" {}: {face}", serde_json::to_string(&c.id).expect("an id is JSON"))
+        })
+        .collect();
+    format!("{{
+{}
+}}
+", rows.join(",
+"))
+}
+
 const OPEN: &str = "<!-- generated: ";
 const CLOSE: &str = "<!-- /generated -->";
 
@@ -547,7 +567,12 @@ pub fn run(o: &Options) {
     let old_ops = fs::read_to_string(OPS_MD).unwrap_or_default();
     let harms = harms_md();
     let old_harms = fs::read_to_string(HARMS_MD).unwrap_or_default();
+    let faces = faces_json();
+    let old_faces = fs::read_to_string(FACES_JSON).unwrap_or_default();
     let mut stale = Vec::new();
+    if faces != old_faces {
+        stale.push(FACES_JSON);
+    }
     if new != old {
         stale.push(RULES_MD);
     }
@@ -579,6 +604,9 @@ pub fn run(o: &Options) {
     }
     if ops != old_ops {
         fs::write(OPS_MD, ops).unwrap_or_else(|e| die(&format!("{OPS_MD}: {e}")));
+    }
+    if faces != old_faces {
+        fs::write(FACES_JSON, faces).unwrap_or_else(|e| die(&format!("{FACES_JSON}: {e}")));
     }
     if harms != old_harms {
         fs::write(HARMS_MD, harms).unwrap_or_else(|e| die(&format!("{HARMS_MD}: {e}")));

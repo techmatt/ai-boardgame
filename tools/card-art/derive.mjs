@@ -1,13 +1,13 @@
 // `npm run derive`: every frame variant from the one master, art/frames/r3/master.jpg
 // (Matt's pick, steel-event-3), into art/frames/r3/<kind>-t<tier>.jpg. Nothing is redrawn,
 // because independent draws drift by up to 3.5 mm: the steel stays the master's pixels.
-// Numbers in derive.json. Three steps, in this order:
+// Numbers in derive.json. Four steps, in this order:
 //   split:    buildings only. Restack the inside of the frame row by row, so master rows
 //             also make a divider above the art. The outer border is not touched.
 //   gold:     tier 2 only. Tint the steel to gold, leaving enamel and plates.
 //   recolour: remap the enamel, found by hue, through the kind's colour ramp.
-import { copyFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+//   inset:    scale the frame in so its steel lands inside the trim (layout.json's
+//             inset_mm, 0.5 mm inside it), and fill the bleed by mirroring the frame's edge.
 import path from 'node:path';
 
 import sharp from 'sharp';
@@ -16,8 +16,6 @@ import { ART, TOOL, layout, readJson } from './lib.mjs';
 
 const dir = path.join(ART, 'frames', 'r3');
 const master = path.join(dir, 'master.jpg');
-await mkdir(dir, { recursive: true });
-if (!existsSync(master)) await copyFile(path.join(ART, 'frames', 'r2', 'steel-event-3.jpg'), master);
 
 const cfg = await readJson(path.join(TOOL, 'derive.json'));
 const l = await layout();
@@ -117,13 +115,27 @@ function recolour(src, stops) {
   return out;
 }
 
+/** The finished frame, scaled in, its bleed the steel band mirrored outward (twice, so the enamel never shows). */
+async function inset(px) {
+  const left = Math.round((l.inset_mm * W) / l.bleed_mm[0]);
+  const top = Math.round((l.inset_mm * H) / l.bleed_mm[1]);
+  const band = Math.floor((cfg.steel * (W - 2 * left)) / W);
+  const mirror = (buf, n) => sharp(buf).extend({ left: n, right: n, top: n, bottom: n, extendWith: 'mirror' });
+  const small = await sharp(px, { raw: { width: W, height: H, channels: 3 } })
+    .resize(W - 2 * left, H - 2 * top, { fit: 'fill', kernel: 'lanczos3' })
+    .png()
+    .toBuffer();
+  const once = await mirror(small, Math.min(band, left)).png().toBuffer();
+  return mirror(once, left - Math.min(band, left));
+}
+
 const { data: base } = await sharp(master).removeAlpha().raw().toBuffer({ resolveWithObject: true });
 for (const kind of Object.keys(l.kinds)) {
   for (const tier of [1, 2]) {
     let px = kind === 'building' ? split(base) : Buffer.from(base);
     if (tier === 2) px = gild(px, kind);
     px = recolour(px, cfg.ramps[kind]);
-    await sharp(px, { raw: { width: W, height: H, channels: 3 } })
+    await (await inset(px))
       .jpeg({ quality: 92, mozjpeg: true, chromaSubsampling: '4:4:4' })
       .toFile(path.join(dir, `${kind}-t${tier}.jpg`));
     console.log(`derive: ${kind}-t${tier}`);

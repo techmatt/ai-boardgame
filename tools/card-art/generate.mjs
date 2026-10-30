@@ -3,7 +3,8 @@
 // A redraw of `steel-program-1` replaces it; the earlier original stays as
 // steel-program-1.try<n>.png. Originals and log.jsonl go to the originals folder
 // (lib.mjs). Print-size PNGs go next to them in frames/; a web-size JPEG, the committed
-// template, to art/frames/r2/.
+// template, to art/frames/r3/. A draw is raw: `npm run derive` only reads master.jpg, so
+// promoting one means copying it over the master.
 // Stops at the first usage-limit message.
 import { appendFile, copyFile, mkdir, readFile, readdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -19,9 +20,9 @@ const ids = argv.filter((a) => !a.startsWith('--'));
 const p = await readJson(path.join(TOOL, 'prompts.json'));
 const l = await layout();
 const [W, H] = l.print_px;
-const origDir = path.join(ORIGINALS, 'card-frames-r2');
-const printDir = path.join(ORIGINALS, 'card-frames-r2', 'frames');
-const webDir = path.join(ART, 'frames', 'r2');
+const origDir = path.join(ORIGINALS, 'card-frames-r3');
+const printDir = path.join(ORIGINALS, 'card-frames-r3', 'frames');
+const webDir = path.join(ART, 'frames', 'r3');
 await mkdir(printDir, { recursive: true });
 await mkdir(webDir, { recursive: true });
 

@@ -312,12 +312,13 @@ Content is data in `content/`, composed from code primitives:
   with keeps), `energy`, `chips` and `antimatter` costs and `lowers` (022: incomes
   the play lowers for good, `[["credits", 1]]`), 1-3 `tags` (`vocab::Tag`), `needs` (tags in play), `effects`
   (ops: on play, or when built), `passives` (ops: a building's standing effects), an
-  `ability` (once a round; buildings and programs; `cost` from the seat, `tokens` from the
+  `ability` (once a round; buildings only; `cost` from the seat, `tokens` from the
   card), `upkeep`, `replaces` (a tag: built over one of your
   buildings whose top card carries it), `tokens` (`{kind, per_round}`, a type from
-  `vocab::TokenKind`), `keywords` (printed words, read by nothing yet; `help` marks
-  a help card), `slotless` and `unique`. List the id in the `cards` module's config
-  `cards`, then run `python scripts/cards/cards_doc.py` to regenerate `docs/cards.md`
+  `vocab::TokenKind`), `keywords` (words read by nothing yet, not printed; `help` marks
+  a help card), `slotless` and `unique`. A card has no `text`: `aic_core::face` generates
+  its icons and words from these fields, and a new op doesn't compile until it has a face. List the id in the `cards` module's config
+  `cards`, then run `aic-sim docs` (it writes the faces) and `python scripts/cards/cards_doc.py`, which reads them, to regenerate `docs/cards.md`
   (023). Every op, with where it is printed, is listed in [ops.md](ops.md).
 - **Threats** (`threats.json`): `counter` costs and `effects` (ops, with `Spot`s naming
   the pieces they hit).

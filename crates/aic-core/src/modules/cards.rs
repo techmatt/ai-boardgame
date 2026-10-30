@@ -236,12 +236,10 @@ pub fn tags(w: &World, g: &GameState, seat: usize, tag: Tag) -> i64 {
         .sum()
 }
 
-/// Cards seat `s` has in play holding tokens of `kind` (active buildings
-/// and programs), in that order.
+/// Active buildings of seat `s` holding tokens of `kind`.
 pub fn token_cards(w: &World, g: &GameState, seat: usize, kind: Option<TokenKind>) -> Vec<Key> {
     g.pile(&built(seat))
         .iter()
-        .chain(g.pile(&played(seat)).iter())
         .filter(|id| {
             def(w, id)
                 .tokens
@@ -951,7 +949,7 @@ impl Module for Cards {
                         });
                     }
                 }
-                for id in g.pile(&built(s)).iter().chain(g.pile(&played(s)).iter()) {
+                for id in g.pile(&built(s)) {
                     if def(w, id).ability.is_some() && ability_blocked(w, g, s, id).is_none() {
                         out.push(Action::Use {
                             seat,
@@ -1057,7 +1055,7 @@ impl Module for Cards {
             }
             Action::Play { card, .. } => self.play(g, cx, s, card)?,
             Action::Use { card, .. } => {
-                if !g.pile(&built(s)).contains(card) && !g.pile(&played(s)).contains(card) {
+                if !g.pile(&built(s)).contains(card) {
                     return Err(Halt::Illegal(format!("seat {s} has no {card} in play")));
                 }
                 if let Some(why) = ability_blocked(&w, g, s, card) {
@@ -1158,14 +1156,7 @@ impl Module for Cards {
             let progs: Vec<CardView> = g
                 .pile(&played(s))
                 .iter()
-                .map(|id| {
-                    let st = if def(w, id).ability.is_some() {
-                        ability_blocked(w, g, s, id).unwrap_or("ready")
-                    } else {
-                        "in play"
-                    };
-                    card(s, id, st, None)
-                })
+                .map(|id| card(s, id, "in play", None))
                 .collect();
             if !progs.is_empty() {
                 out.cards(s, "played", "programs in play", progs);

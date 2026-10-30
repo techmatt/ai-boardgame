@@ -1021,30 +1021,59 @@ The cards config lists which cards are in the game (baseline: all of them).
   sacrificed with the stack. A building with `replaces` (most tier-2 buildings, over
   their own tag) must be built over one whose top card carries that tag. A building whose
   upkeep went unpaid is off (no passive, no ability) the next round.
-- **Tokens** (021) live on cards that print a type (`tokens`): Datasets (Science),
-  Followers (Diplomacy), Capital (Industry), Agents (Security). A token card in play gains
-  its `per_round` in upkeep; abilities may cost tokens from their own card; some cards
+- **Tokens** (021) live on buildings that print a type (`tokens`): Datasets (Science),
+  Followers (Diplomacy), Capital (Industry), Agents (Security). An active token building
+  gains its `per_round` in upkeep; a covered one holds its tokens but gains none and
+  counts for nothing; Actions may cost tokens from their own card; some cards
   (Dataset Scraper, Manifesto Leak, Recruit Operatives) add tokens to a card of a type;
   Sabotage and Purge protocols make each player lose 3 tokens.
   Sacrificing or discarding a card loses its tokens.
-- **Abilities** ("once a round", buildings and programs) are used with `Use`, pay their
-  cost, and refresh at the start of a round.
+- **Actions** (abilities: `ability`, buildings only, 033) are used with `Use` once a round,
+  pay their cost, and refresh at the start of a round. **Ongoing abilities live only on
+  buildings:** income, Effect or Action on a program or event is refused when content loads.
 
 Effects needing choices ask the acting player: hexes, countries, players, threats,
 amounts ("up to N" offers 0..N), or "stop".
 
 (Variant `off`: no draft, §9. 011's `free_keep` variant went with 021: keeps cost insight.)
 
+### The card grammar
+
+(033, **locked**; `crates/aic-core/src/face.rs` generates every face from the card's ops, so
+a card's words can't differ from how it plays. No card text is hand-written.)
+
+**Where it sits is what it is.** The top strip holds the credit octagon, the insight hexagon,
+requirement plates (yellow: at least; red: at most; stacked cards: built over) and tags,
+and nothing else. Above the art, on buildings only, is what lasts while the building is
+active: income, *Effect:*, *Action:*. Cover the building and it stops. Below the art is what
+happens once, when you play the card: extra costs first, then gains, placements and moves.
+
+**Boxes.** No box: gain it once, now. A brown box is income: above the art it pays each
+round ("Each round, ..."); below the art it moves your income track once ("Raise your X
+income by N", "Lower ..." for a minus). A minus before a plain icon: pay or lose it now. A
+dark frame acts on the adversary's pieces, projects or threats. A dashed outline is another
+player or another card of yours; no outline is you, or this card.
+
+**Connectors.** `→` is an Action: once a round, pay the left to get the right. A bare `→`
+is free ("Action: once a round, get ..."). `:` is an Effect: when the left happens, get the
+right. `/` is per. OR is written out. `*` is an exception, explained in brackets in the text.
+
+**Shapes.** Square tiles are resources, discs are tokens on cards (alone, on this card),
+bare silhouettes are pieces on the board and moving them, ringed circles are tags. A number
+goes before its icon, no number means 1, and a negative always has its minus. The rules
+text says what the icons say, in the same order, and opens with the box's word.
+
 Card details beyond the card text:
 
-The card set (023): 150 cards in the draft decks, 108 tier 1 and 42 tier 2, about 60%
-programs, 25% buildings and 15% events, each tag primary on 25; every card is listed
+The card set (023): 150 cards in the draft decks, 108 tier 1 and 42 tier 2, about 50%
+programs, 34% buildings and 16% events (033 moved the engines onto buildings), each tag
+primary on 25; every card is listed
 with its cost, insight, tags, kind and text in [cards.md](cards.md) (generated:
-`python scripts/cards/cards_doc.py`), and priced in [card-pricing.md](card-pricing.md).
+`aic-sim docs`, then `python scripts/cards/cards_doc.py`), and priced in [card-pricing.md](card-pricing.md).
 Card text says what a card does; how each primitive resolves:
 
-- **Reach (016):** every card's map target is in your reach (within 1 of your
-  presence). A removal (`damage`) takes a hex in reach holding adversary pieces (some
+- **Reach (016):** a card's map target is in your reach (within 1 of your
+  presence) where its text says so; Total Containment's hex and a country sweep are not. A removal (`damage`) takes a hex in reach holding adversary pieces (some
   cards narrow it to a country where you have presence); a country sweep any country
   holding them. An ambassador is worth 1, a troop 2.
 - **Hardening:** any country holding a building a token can protect (022, 020's D10: a
@@ -1068,15 +1097,12 @@ Card text says what a card does; how each primitive resolves:
   Accords: all) around one corrupted city in reach, on it or next to it, the ones next to
   it first. This is how cards help free a city; moving your ambassadors there is the other
   half.
-- **Card text (024):** a card repeats its rules text in full; the effect text is at most
-  100 characters so it fits a fixed art height (a test checks it). What the cost line
-  prints (credits, needs, built-over, lowered income) is not repeated. Keywords, defined
-  here: **Hack** names the effect; **cut off a node** (in reach: it makes no compute in the
-  next build); **drain N** (remove up to N compute from one adversary project, Projects
-  below); **remove N worth** (an ambassador 1, a troop 2); **harden N** (N different
-  buildings in reach); **shelter one country** (its buildings can't be destroyed this
-  round); **Firewall** (the adversary's spread skips hexes holding your presence);
-  **Civic shelter** (below). "Around" a city is on it or next to it.
+- **Card text (033):** generated from the card's ops (*The card grammar*, above), so it says
+  everything, extra costs and lowered income included; a long card sets smaller. Terms:
+  **remove N worth** (an ambassador 1, a troop 2); **harden N buildings** (N different ones
+  in reach; only a player-owned, uncorrupted station or factory takes a token, Hardening
+  above); **shelter one country** (nothing in it, building or presence, can be destroyed this round); **cut off
+  a node** (it makes no compute in the next build).
 - **Upkeep** on a building is paid automatically in upkeep if you can; if not, its
   effects are off next round. Upkeep conversions likewise.
 - **Projects:** a drain removes compute from one visible adversary project; **drain all
@@ -1088,13 +1114,14 @@ Card text says what a card does; how each primitive resolves:
 - **Draw (023):** take the top cards of the tier-1 deck into your hand, no keep paid
   (the deck reshuffles its discards when empty). Science's card draw.
 - **Count as power (023, `gain_per_tokens`):** gain 1 of a resource per N tokens of a
-  type on your cards in play, up to a cap; the tokens stay.
-- **Cash out (023, `cash_out`):** remove all your tokens of a type; gain 1 + 2 + ... + n
+  type on your active buildings, up to a cap; the tokens stay.
+- **Cash out (023, `cash_out`):** remove all your tokens of a type from your active
+  buildings (a capped card takes as many as it can, card by card); gain 1 + 2 + ... + n
   of a resource for the n removed (Industry's Capital: 4 Capital cash out for 10).
 - **Help cards** (keyword `help`, ~10%): the player chooses another player; both gain,
   the helper paying.
 - **Modular Expansion (Deviation):** it takes no building slot itself, so it is a net +1
-  slot. **Civic shelter:** automatic, the first building destruction each round in a
+  slot. **Civic shelter:** automatic, the first destruction of a building or presence each round in a
   country where its owner has presence.
 
 History: the placeholder cards as remapped in 014 (data centres became presence in 016).

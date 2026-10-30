@@ -20,8 +20,7 @@ patches it led to, are in
   ceiling on what a credit buys: 3 credits for 1 energy or a presence or a hardening token,
   5 for 3 compute drained, 6 for an ambassador. A card should beat those rates by half or
   more, or it's a bad buy.
-- **Card text.** At most 100 characters of effect text (a test checks it): what the cost
-  line prints is not repeated, and keywords (rules.md §8) carry the long phrases. 024's
+- **Card text.** Generated from ops since 033 (rules.md, *The card grammar*). 024's
   audit against the JSON corrected Hyperscale Botnet (said 3 Cyber, needs 2), the factory
   cards (a free industrial zone in reach, not "an open hex touching a city") and the give
   cards' bonus (only if you gave any).
@@ -113,13 +112,12 @@ credits +2 chips).
   Capital Fund 2 a round):** tokens are worth little alone; their value is the cash-out.
   cash_out pays n(n+1)/2, so 4 Capital is 10 credits and 6 is 21 (Liquidity Event caps at
   5, Megacorp IPO at 6). Holding two engines
-  from round 3 and cashing out once in round 7 is the intended arc; cashing out every
-  round (Materials Hedge Desk, 1 credit a use) is the low-yield alternative.
+  from round 3 and cashing out once in round 7 is the intended arc; Materials Hedge Desk (3, 033: one-time) cashes out for chips instead.
 - **Liquidity Event (0, insight 1)** and **Megacorp IPO (3, insight 2, +2 Capital first):**
   the insight is the gate, not the credits, because the payout scales with how long you
   saved. IPO's +2 Capital adds 2n+3 credits on top of an n-token cash-out.
-- **Collateralized Grid:** the "count as power" pattern; up to 3 energy a round with 6
-  Capital held, tokens kept, so it rewards saving rather than spending.
+- **Collateralized Grid (3, 033: one-time, its 1-credit use folded into the price):** the
+  "count as power" pattern; up to 3 energy once, with 6 Capital held, tokens kept.
 - **Help cards (Joint Fabrication Pact, Supply Chain Treaty, Vendor Financing):** the
   helper pays credits and gets a little less than the receiver; Vendor Financing's
   2 Capital is the helper's gain and needs a Capital card to be playable.
@@ -192,9 +190,9 @@ Anchors: Baseload Contract 4 credits for +1 energy production, Capacitor Dischar
 Baseline: 20 starting credits, ~9-10 credits and 5-6 insight a round, 8-10 rounds. Freeing a corrupted city sways 4 Unity and takes one ambassador once the adversary's around it are cleared; we price 1 ambassador at about 1.5-2 credits, a Move-2 rider at about 1, Consolidate 3 at about 2, 1 Unity at about 1.5-2.
 
 - **Insight 0 (6 cards)**: the cheap round-1 to round-3 tools (Consular Pouch, Shuttle Diplomacy, Peace Dividend, Peacekeeping Detail, Mutual Aid Pact, Manifesto Leak). Each is one or two small effects; charging insight would crowd out the keeps, and they are what a Diplomacy player fills a turn with.
-- **Insight 1 (12 cards)**: everything that persists (token programs, buildings) or does two real things (Summit Caucus, Ceasefire Monitors, Amnesty Decree). Amnesty Decree is an event but a removal (it clears a city), so it pays 1 like other removal events.
+- **Insight 1 (12 cards)**: everything that persists (token buildings, buildings) or does two real things (Summit Caucus, Ceasefire Monitors, Amnesty Decree). Amnesty Decree is an event but a removal (it clears a city), so it pays 1 like other removal events.
 - **Insight 2 (all 7 tier 2)**: tier-2 effects change the board state (clear or free cities, 3-4 Unity, spread) and should compete with a tier-2 keep (3 insight).
-- **Token programs** (Liaison Corps, Open Assembly, Commons Grid) earn their cost only if played by round 3-4: 1 Follower a round means the first spend lands two rounds later, so 4-5 spends a game at most. Priced 2-4 credits. Manifesto Leak (1 credit, +3 Followers) is the catch-up that makes a late token card fire immediately.
+- **Token buildings** (033: programs before; Liaison Corps, Open Assembly, Commons Grid) earn their cost only if played by round 3-4: 1 Follower a round means the first spend lands two rounds later, so 4-5 spends a game at most. Priced 2-4 credits. Manifesto Leak (1 credit, +3 Followers) is the catch-up that makes a late token card fire immediately.
 - **Commons Grid** is the "count as power" pattern: Followers stay, so it rewards stacking several Follower cards; the 1-credit activation keeps it from being free energy, max 3 caps it.
 - **Tier-1 buildings** (4-6 credits) follow the tier-1 income rate: Treaty Grid Exchange is +1 energy +1 credit at 6 (a slot and three tags); Consulate Tower scales with Diplomacy tags, max 3, so it is only strong in a committed build. Embassy Compound pays for its 2 ambassadors up front and sells movement at 2 credits a use.
 - **Help cards** (4): the helper pays (credits, or the card and its insight); the receiver gets slightly more than the helper spends (Mutual Aid: 3 credits for 4 plus an ambassador to you; Development Loan gives a +2 bonus on up to 6). Each gives the helper something back (ambassador, hardening, Unity) so playing one is never a pure gift. Coalition Charter's 3 Unity helps everyone.

@@ -238,7 +238,7 @@ pub struct CardDef {
     pub lowers: Vec<Cost>,
     #[serde(default)]
     pub tags: Vec<Tag>,
-    /// Printed keywords, for reading the card (021): `hack`, `token`, ...
+    /// Keywords (021): `hack`, `token`, ... Not printed: faces come from ops (033).
     #[serde(default)]
     pub keywords: Vec<String>,
     /// A building that must be built over one of yours whose top card
@@ -252,6 +252,7 @@ pub struct CardDef {
     /// Tags you must have (on your buildings) to play it.
     #[serde(default)]
     pub needs: Vec<TagCount>,
+    /// Filled in at load from [`crate::face`]: never written in content (033).
     #[serde(default)]
     pub text: String,
     /// On play (a program), or when built (a building).
@@ -276,7 +277,7 @@ pub struct CardDef {
 }
 
 /// A card's token type and its gain a round (in upkeep, while the card is
-/// an active building or in your play area).
+/// an active building).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TokenSpec {
@@ -507,10 +508,13 @@ impl Content {
         c.alignment_ix = index_of(&c.alignment, |x| &x.id);
         c.adversary_ix = index_of(&c.adversary, |x| &x.id);
         c.check()?;
+        for card in &mut c.cards {
+            card.text = crate::face::card_face(card).full_text();
+        }
         Ok(c)
     }
 
-    fn check(&self) -> Result<(), String> {
+    pub(crate) fn check(&self) -> Result<(), String> {
         let mut ids = BTreeSet::new();
         let all = self
             .cards
@@ -538,9 +542,6 @@ impl Content {
             if c.tags.is_empty() || c.tags.len() > 3 {
                 return Err(format!("card {:?}: 1-3 tags", c.id));
             }
-            if c.tokens.is_some() && c.is_event() {
-                return Err(format!("{what}: an event can't hold tokens"));
-            }
             if !c.is_building()
                 && (!c.passives.is_empty() || !c.upkeep.is_empty() || c.slotless)
             {
@@ -549,8 +550,13 @@ impl Content {
                     c.id
                 ));
             }
-            if c.is_event() && c.ability.is_some() {
-                return Err(format!("card {:?}: an event has no ability", c.id));
+            if !c.text.is_empty() {
+                return Err(format!("{what}: card text is generated from its ops, not written"));
+            }
+            if !c.is_building() && (c.ability.is_some() || c.tokens.is_some()) {
+                return Err(format!(
+                    "{what}: only a building has an Action or gains tokens each round"
+                ));
             }
             if c.replaces.is_some() && !c.is_building() {
                 return Err(format!("card {:?}: only a building replaces one", c.id));

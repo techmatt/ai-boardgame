@@ -247,7 +247,7 @@ fn the_023_primitives_draw_drain_all_count_and_cash_out() {
     assert_eq!(g.var(&adversary::project_key("disinformation")), 0);
 
     // Retained Earnings holds Capital.
-    g.piles.insert("cards.played.0".into(), vec!["retained_earnings".into()].into());
+    g.piles.insert("cards.built.0".into(), vec!["retained_earnings".into()].into());
     g.vars.insert(cards::tokens_key(0, "retained_earnings").into(), 5);
     let credits = g.resource(0, Resource::Credits);
     run(
@@ -296,10 +296,60 @@ fn the_023_primitives_draw_drain_all_count_and_cash_out() {
     assert!(effects::feasible(&w, &g, 0, &gate));
 }
 
-/// 024: a card repeats its rules text; it must fit a fixed art height.
+fn face_of(id: &str) -> crate::face::Face {
+    crate::face::card_face(content().cards.iter().find(|c| c.id == id).expect("a card"))
+}
+
 #[test]
-fn card_text_fits_the_art_height() {
-    for c in &crate::content().cards {
-        assert!(c.text.len() <= 100, "{}: {} chars", c.id, c.text.len());
+fn a_face_opens_with_its_boxes_word() {
+    let f = face_of("telemetry_archive");
+    assert_eq!(f.top_text, "Each round, 1 Dataset on this card. Action: pay 2 Datasets from this card, get 1 insight.");
+    assert_eq!(f.text, "");
+    let f = face_of("orbital_embassy");
+    assert_eq!(f.top_text, "Each round, 4 credits and 1 insight.");
+    assert_eq!(f.text, "Pay 2 chips and 1 antimatter. Gain 2 ambassadors.");
+}
+
+#[test]
+fn a_bare_arrow_is_a_free_action() {
+    let f = face_of("exabyte_archive");
+    assert!(f.top_text.contains("Action: once a round, get 1 credit per 2 Datasets on your active"), "{}", f.top_text);
+}
+
+#[test]
+fn income_below_the_art_raises_or_lowers_the_track() {
+    let f = face_of("antiproton_offtake_deal");
+    assert_eq!(f.top_text, "");
+    assert_eq!(f.text, "Pay 3 energy. Lower your credit income by 1. Raise your antimatter income by 1.");
+}
+
+#[test]
+fn only_buildings_print_above_the_art() {
+    for c in &content().cards {
+        let f = crate::face::card_face(c);
+        assert!(c.is_building() || f.top.is_empty(), "{} prints above the art", c.id);
+        assert!(!c.text.is_empty() && c.text == f.full_text(), "{}", c.id);
     }
+}
+
+#[test]
+fn hand_written_card_text_is_refused() {
+    let mut c = content().clone();
+    for card in &mut c.cards {
+        card.text.clear();
+    }
+    c.cards[0].text = "Gain a thousand credits.".to_string();
+    assert!(c.check().unwrap_err().contains("generated"));
+}
+
+#[test]
+fn only_a_building_keeps_an_action() {
+    let mut c = content().clone();
+    for card in &mut c.cards {
+        card.text.clear();
+    }
+    assert_eq!(c.check(), Ok(()));
+    let bld = c.cards.iter_mut().find(|d| d.id == "telemetry_archive").expect("a card");
+    bld.kind = crate::content::CardKind::Program;
+    assert!(c.check().unwrap_err().contains("only a building"));
 }

@@ -1,5 +1,5 @@
 {
-  "_note": "Which real card shows each variant, and the splay's older and newer building. Faces are in web/card/sample/<id>.json; everything else comes from content/cards.json.",
+  "_note": "Which real card shows each variant, and the splay's buildings, oldest first. Everything comes from content/cards.json and its generated faces (web/card/faces.json).",
   "variants": {
     "program-t1": "mutual_defense_pact",
     "program-t2": "antiproton_offtake_deal",
@@ -8,5 +8,5 @@
     "event-t1": "hardpoint_lockdown",
     "event-t2": "adversarial_inference_sweep"
   },
-  "splay": ["telemetry_archive", "exabyte_archive"]
+  "splay": ["telemetry_archive", "exabyte_archive", "foundation_model_campus"]
 }

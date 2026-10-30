@@ -7,6 +7,18 @@ What each rules revision changed, what it replaced and whether it is **locked** 
 record, moved out of it in 025 otherwise as written, so a row quoting a number or a card
 is as of its revision. Add a table here with every rules change.
 
+**Revision 18 (033): ongoing abilities only on buildings, card text from ops.**
+
+| What | Was | Now | Status |
+|---|---|---|---|
+| Ongoing abilities | programs could gain tokens each round and carry an ability | buildings only, refused at load | **locked** (Matt, 2026-10-30) |
+| Grad Student Pool, Synthetic Data Forge, Retained Earnings, Expansion Fund, Sovereign Capital Fund, Liaison Corps, Open Assembly, Sentry Drone Wing, Kill Team Roster, Safehouse Network, Deep State Ledger, Lights-Out Assembly, Honeypot Relay, Rootkit Cache, Demand Response Grid | program with an Action | building, every number the same | candidate |
+| Collateralized Grid | 2 credits; Action: pay 1 credit, 1 energy per 2 Capital (max 3) | 3 credits; once, when played: 1 energy per 2 Capital (max 3) | candidate |
+| Materials Hedge Desk | 2 credits; Action: pay 1 credit, remove all Capital, 1+2+...+n chips | 3 credits; once, when played: remove all Capital, 1+2+...+n chips | candidate |
+| Card text | hand-written in `content/cards.json` | generated from ops (`aic_core::face`) | **locked** (Matt, 2026-10-30) |
+
+The grammar is in rules.md, *The card grammar*.
+
 **Revision 17 (028): presence loss that bites, a Unity deck that can run out.**
 
 | What | Was | Now | Status |

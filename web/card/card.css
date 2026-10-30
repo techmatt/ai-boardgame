@@ -75,8 +75,34 @@
 .card .adversary .ico.piece, .card .income .ico.piece { color: currentColor; }
 .card .other { display: flex; align-items: center; gap: 0.7mm; padding: 0.5mm 1.200mm; border: 0.4mm dashed #23262a; border-radius: 1.200mm; }
 
-.card .rules { margin: 0; max-width: 56mm; font-family: 'Source Serif 4', Georgia, serif; font-size: 7.500pt; line-height: 1.220; text-align: center; }
+.card .rules { margin: 0; max-width: 51mm; font-family: 'Source Serif 4', Georgia, serif; font-size: 7.500pt; line-height: 1.220; text-align: center; }
+.card .rules.fit-1 { font-size: 6.900pt; }
+.card .rules.fit-2 { font-size: 6.300pt; }
+.card .rules.fit-3 { font-size: 5.800pt; line-height: 1.150; }
+.card .fx-tag .medallion { width: 5.200mm; height: 5.200mm; }
+.card .lasting .ico { width: 4.500mm; height: 4.500mm; }
+.card .lasting .fx-tag .medallion { width: 4.300mm; height: 4.300mm; }
+.card .lasting .fx-num { font-size: 11pt; }
+.card .lasting .fx-per { font-size: 12pt; }
+.card .lasting .fx-word { font-size: 8pt; }
+.card .lasting .fx-line svg.arrow { width: 3.400mm; height: 3.400mm; }
+.card .lasting { gap: 0.5mm; }
+.card .effect.dense { gap: 0.2mm; }
+.card .effect.dense .fx-icons { column-gap: 0.800mm; row-gap: 0.1mm; flex-wrap: nowrap; }
+.card .effect.dense .fx-line { gap: 0.3mm; }
+.card .effect.lasting.dense .fx-line + .fx-line { padding-left: 0.800mm; }
+.card .effect.dense .rules { max-width: 54.500mm; font-size: 5.400pt; line-height: 1.030; }
+.card .effect.dense .ico { width: 3.300mm; height: 3.300mm; }
+.card .effect.dense .fx-tag .medallion { width: 3.300mm; height: 3.300mm; }
+.card .effect.dense .fx-num { font-size: 9.500pt; }
+.card .effect.dense .income, .card .effect.dense .adversary { padding: 0 0.800mm; border-width: 0.500mm; }
+.card .effect.dense .fx-line svg.arrow { width: 3mm; height: 3mm; }
+.card .requirements.crowded { gap: 0.3mm; }
+.card .requirements.crowded .requirement { padding: 0 0.3mm; gap: 0.1mm; }
+.card .requirements.crowded .medallion { width: 3.600mm; height: 3.600mm; }
+.card .requirements.crowded .fx-num { font-size: 9.500pt; }
+.card .requirements.crowded svg.stack { width: 3.200mm; height: 3.200mm; }
 
-/* A slot of buildings: the newer card over the older, the older's strip and name showing. */
+/* A slot of buildings: the newer card over the older, only the older's top strip showing. */
 .splay { position: relative; }
 .splay .slot-card { position: absolute; left: 0; overflow: hidden; border-radius: 3mm; box-shadow: 0 0 1mm rgb(0 0 0 / 60%); }

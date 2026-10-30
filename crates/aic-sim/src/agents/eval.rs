@@ -832,14 +832,6 @@ impl Eval {
                     v += w.ability * left;
                 }
             }
-            // 023: a program in play with a once-a-round ability earns like a
-            // building's (021 allowed them; before 023 they scored nothing once
-            // played, so agents kept them and never played them).
-            for id in g.pile(&cards::played(s)) {
-                if cards::def(&world, id).ability.is_some() {
-                    v += w.ability * left;
-                }
-            }
             // A card in hand is worth its value times the chance of paying
             // for it before the game ends, from what the seat has and earns.
             // Insight is spent one card at a time: each card waits for the

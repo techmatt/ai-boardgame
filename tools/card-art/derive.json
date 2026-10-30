@@ -1,5 +1,6 @@
 {
-  "_note": "Everything derive.mjs needs, in pixels of the 815×1110 master. inside: columns the building split may touch (the outer border and most of the enamel stay the master's). split: [dst0, dst1, src0, src1], top to bottom: the frame as it stands, then the top box (the effect panel's ivory), the divider (the bottom bevel of a pale panel, then the top bevel of the art window: all master rows), the art window, the master's own art/effect divider, the effect panel. plates: what stays untouched by the gold, per layout. ramps: value to colour, per kind; none means the master's own. gold: value to colour.",
+  "_note": "Everything derive.mjs needs, in pixels of the 815×1110 master. steel: the outer steel band's width, mirrored to fill the bleed. inside: columns the building split may touch (the outer border and most of the enamel stay the master's). split: [dst0, dst1, src0, src1], top to bottom: the frame as it stands, then the top box (the effect panel's ivory), the divider (the bottom bevel of a pale panel, then the top bevel of the art window: all master rows), the art window, the master's own art/effect divider, the effect panel. plates: what stays untouched by the gold, per layout. ramps: value to colour, per kind; none means the master's own. gold: value to colour.",
+  "steel": 24,
   "inside": [38, 777],
   "feather": 8,
   "split": [

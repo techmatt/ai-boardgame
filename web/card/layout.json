@@ -1,9 +1,10 @@
 {
-  "_note": "Card geometry in mm from the bleed's top-left corner. The one source for guides, frame prompts and the card renderer. Candidate layout: close guides, not exact. Fixed in the frame: border, strip, cost octagon, banner, art, top, effect. Drawn by the renderer, never in the frame: the insight hexagon, requirement plates, tags.",
+  "_note": "Card geometry in mm from the bleed's top-left corner, as the master was painted: the one source for guides and frame prompts. A printed frame is that scaled in (derive.mjs), so its outer steel edge lands inset_mm from the bleed, inside the trim: the renderer and fit read these zones through inset() in card.js. Candidate layout: close guides, not exact. Fixed in the frame: border, strip, cost octagon, banner, art, top, effect. Drawn by the renderer, never in the frame: the insight hexagon, requirement plates, tags.",
   "bleed_mm": [69, 94],
   "trim_mm": [63, 88],
   "safe": { "x0": 6, "y0": 6, "x1": 63, "y1": 88 },
   "print_px": [815, 1110],
+  "inset_mm": 3.5,
   "common": {
     "frame": [3.9, 3.9, 65.1, 90.3],
     "strip": [4.9, 4.9, 64.1, 16.0],

@@ -36,6 +36,11 @@ at half cost (◆ `econ_half`). Neither is reachable by config.
 | ◆ `insight_inc` | 94.6 / 96.7 | 70.8 / 77.1 | +6.2 ±3.1 (p 0.06) | 2.05 | 74% |
 | ◆ `econ_half` + `insight_inc` | 96.7 / 95.8 | 70.4 / **82.5** | **+12.1 ±2.9 (p < 0.001**; 41 seeds only the engine won, 12 only greedy) | 3.42 | 96% |
 
+**Audit (032):** the headline holds on 144 fresh seeds: `econ_half` + `insight_inc`, d4
++11.8, p 0.002. The explanations below do not carry that weight: the tier-2 "agent
+artifact", insight being what binds the engine, the cause given for the keep cost's cliff
+and `pool_reduction` 6 landing on "about 70%" are **unverified hypotheses**, not findings.
+
 - Greedy builds no economy building under `insight_inc`, and 0.8 a game under the
   half-cost combination (cheap Solar Field). Its win rates stay at the base's, so the
   difficulty targets hold for a team that doesn't build.
@@ -101,7 +106,7 @@ figures. Base on these seeds: d4 greedy 77.1, engine 70.8 (−6.2).
 | 23 | `keep_cost` 0 + `stage_cards` 4,4,4 (± `factory_credits` 4) | 97.9 / 97.9 | 86.5 / 80.2 | −6.2 ±4.6 (−7.3 with fc4) | 2.02 | 2.75 | 8.3 / 7.5 | 49 / 62% | Longer, still no engine win |
 | 24 | `adversary.stage_cards` 4,4,3 / 4,4,4 / 4,4,6 (longer game) | 97.9 / 91.7–85.4 | 78.1 / 68.8–65.6 | −9.4 / **−12.5** / −9.4 (d0 −6 / −7 / **−12.5**) | 1.3 / 1.5 / 2.0 | 2.5–3.0 | 8.5–8.9 / 7.4–7.6 | 47–58 / 61–67% | Engine builds more and loses more; greedy still wins in 7.8 rounds |
 | 25 | `keep_cost` 3 (v0's) | 64.6 / 9.4 | 31.2 / 12.5 | **−18.8** (d0 **−55.2**) | 0.18 | 1.91 | 8.0 / 6.9 | 39 / 60% | Breaks the game; credits are scarce early |
-| 26 | ◆ `t2_half` + `t2_noam`: tier 2 half cost, no antimatter | 97.9 / 61.5 | 67.7 / 35.4 | **−32.3** (d0 **−36.5**) | 1.10 | 2.17 | 9.2 / 7.7 | 40 / 47% | **Agent artifact**, below |
+| 26 | ◆ `t2_half` + `t2_noam`: tier 2 half cost, no antimatter | 97.9 / 61.5 | 67.7 / 35.4 | **−32.3** (d0 **−36.5**) | 1.10 | 2.17 | 9.2 / 7.7 | 40 / 47% | **Agent artifact** (unverified hypothesis), below |
 
 Strategy health in 008's terms, for the headline lever against the base (d4):
 - Buildings played: engine 3.64 a game (base 2.51), greedy 1.82 (Turnkey Factory and
@@ -126,8 +131,8 @@ Strategy health in 008's terms, for the headline lever against the base (d4):
 - **Cheaper tier 2** (◆ `t2_half`+`t2_noam`): greedy is barely touched at d0 (97.9) but
   drops 9 points at d4. The engine collapses: 46 cards a game (35 at base), mostly
   Counter-intelligence (98 plays over 96 games at d0) and Purge Protocol, and 26 of 96
-  d0 games run out the deck. This is the agents' known blind spot (no term for the
-  adversary deck running out, 007 proposal 10), not a verdict on the lever. **Unmeasured
+  d0 games run out the deck. Unverified hypothesis: this is the agents' known blind spot
+  (no term for the adversary deck running out, 007 proposal 10), not a verdict on the lever. **Unmeasured
   for a building team.**
 - **More antimatter** (◆ `antimatter`): tier 2 +0.3 a game, +1 point; not an engine
   lever while tier 2 is mostly Purge Protocol.
@@ -140,8 +145,8 @@ Strategy health in 008's terms, for the headline lever against the base (d4):
   - With the spread slowed down (`calm`), games are no longer than at the base.
   - There is no pipeline-speed parameter. The pipeline's three slots are code.
 - **Keep cost:** 0 helps both agents (+5 at d4) and the engine slightly more (+1 vs
-  −6 at base). 2 and 3 wreck d0 for both, the engine most, because credits are short in
-  rounds 1–2 (the Builder starts with 12). 007's keep cost of 1 sits next to a cliff.
+  −6 at base). 2 and 3 wreck d0 for both, the engine most; unverified hypothesis: because
+  credits are short in rounds 1–2 (the Builder starts with 12). 007's keep cost of 1 sits next to a cliff.
 - **Config proxies** (`factory_credits` 4–5, `processor_compute` 2, `draw_cost` 2,
   `start_credits` 18) make d4 easier for both agents by up to 10 points and leave the
   engine-vs-greedy gap within noise. `factory_credits` 4 is the best config-only lever
@@ -174,8 +179,8 @@ players, the one sink the traces point at, would be a rule.
      | 5 | 64.6 | 79.2 | **+14.6** (p 0.01) | 7.04 | 3.32 |
      | 6 | 60.4 | 69.8 | +9.4 (p 0.11) | 6.88 | 3.33 |
 
-     At 6, a building team lands on today's d4 rate (about 70%) and a non-building team
-     falls to 60%: building becomes the way to beat the top difficulty. The cost is
+     At 6 (unverified hypothesis, 96 seeds, p 0.11), a building team lands on today's d4 rate
+     (about 70%) and a non-building team falls to 60%: building becomes the way to beat the top difficulty. The cost is
      about 0.3 rounds shorter at d4.
 2. **Income buildings give +1 insight, at today's costs** (◆ `insight_inc`): the smaller
    change.

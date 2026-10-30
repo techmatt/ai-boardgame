@@ -43,6 +43,19 @@ const PIECES = {
   country: fill('M8 2.500 12 4.800v4.600L8 11.700 4 9.400V4.800zM16.500 2.500l4 2.300v4.600l-4 2.300-4-2.300V4.800zM12.200 12.300l4 2.300v4.600l-4 2.300-4-2.300v-4.600z'),
   project: `<rect x="3.500" y="4" width="17" height="16" rx="1" fill="none" stroke="currentColor" stroke-width="2.200"/>${fill('M7 8h10v2H7zM7 12h6v2H7z')}`,
   hex: line('M12 2 20.700 7v10L12 22 3.300 17V7z', 2.4),
+  troop: fill('M12 2.500 15 7.500h-1.800v2.300l6.800 3.700v3l-6.800-1.800V19l2.300 1.700V22L12 21l-3.500 1v-1.300L10.800 19v-4.300L4 16.500v-3l6.800-3.700V7.500H9z'),
+  node: `<circle cx="12" cy="12" r="4.200" fill="currentColor"/>${line('M12 2.500v5M12 16.500v5M2.500 12h5M16.500 12h5M5.300 5.300l3.500 3.500M15.200 15.200l3.500 3.500M18.700 5.300l-3.500 3.500M8.800 15.200l-3.500 3.500', 1.900)}`,
+  cube: fill('M12 2 21 7v10l-9 5-9-5V7zm0 2.300L6 7.600l6 3.300 6-3.300zM5 9.300v6.500l6 3.300v-6.500z'),
+  city: fill('M3 22V11h5V6h3V2h3v8h7v12z'),
+  building: `<rect x="4" y="3" width="16" height="19" rx="1" fill="currentColor"/><path d="M8 7h3v3H8zM13 7h3v3h-3zM8 12h3v3H8zM13 12h3v3h-3z" fill="#efeadc"/>`,
+  slot: `<rect x="4" y="3" width="16" height="19" rx="1.500" fill="none" stroke="currentColor" stroke-width="2.200" stroke-dasharray="3.500 2.500"/>`,
+  // The Alignment track: a marker moving toward Unity.
+  sway: `${line('M3 12h18M3 8v8M21 8v8', 2.200)}${fill('M9 6.500 16 12l-7 5.500z')}`,
+  threat: fill('M12 2 23 21H1zM10.800 9v6.500h2.400V9zm0 7.800v2.400h2.400v-2.400z'),
+  // The adversary deck, looked at.
+  // A threat struck through: countered.
+  counter: `${fill('M12 2 23 21H1z')}${line('M3 3l18 18', 3)}`,
+  peek: `<rect x="5" y="2.500" width="14" height="19" rx="1.600" fill="none" stroke="currentColor" stroke-width="2"/><g transform="translate(5.400 5.400) scale(.55)">${EYE}</g>`,
 };
 
 const TAGS = {
@@ -56,6 +69,8 @@ const TAGS = {
 
 /** Is this word in a card's icon line an icon, rather than a number or connector? */
 export const isIcon = (name) => name in RESOURCES || name in TOKENS || name in PIECES;
+/** A tag in a count, written `#science` in an icon line. */
+export const isTag = (name) => name.startsWith('#') && name.slice(1) in TAGS;
 
 export function icon(name) {
   if (RESOURCES[name]) return `<span class="ico tile" style="--c:${RESOURCES[name][0]}" aria-label="${name}">${svg(RESOURCES[name][1])}</span>`;
