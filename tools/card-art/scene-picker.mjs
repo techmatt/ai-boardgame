@@ -1,5 +1,6 @@
 // `npm run scene-picker`, after `npm run scene-gen`: everything below the raw draws, and
-// picks/scene_style_<round>.json. Nothing it writes but the manifest is committed.
+// picks/<picker>.json. Nothing it writes but the manifest is committed. Runs at
+// below-normal priority, Chrome with it, one image at a time: the box is shared.
 // Each draw is centre-cut to the program window's shape, <id>.png beside raw/; building
 // windows centre-crop that again. Then its two sample cards (scenes.json) at 300 dpi in
 // cards/, the same cards at true size in cards.pdf (9 to an A4 page), and one preview per
@@ -7,6 +8,7 @@
 // reachable or a draw is missing.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -15,8 +17,11 @@ import sharp from 'sharp';
 import { ART, CARD, REPO, TOOL, layout, openPage, readJson } from './lib.mjs';
 import { inset, renderCard } from '../../web/card/card.js';
 
+os.setPriority(os.constants.priority.PRIORITY_BELOW_NORMAL);
+sharp.concurrency(1);
+
 const s = await readJson(path.join(TOOL, 'scenes.json'));
-const NAME = `scene_style_${s.round}`;
+const NAME = s.picker;
 const shared = path.join(REPO, 'art-originals');
 if (!existsSync(shared)) throw new Error(`scene-picker: ${shared} is not reachable: no picker written`);
 const dir = path.join(shared, 'scenes', s.round);
@@ -64,13 +69,16 @@ const face = (cardId, id) => {
   return renderCard(card, l, frameUrl(frame), fits[frame], pathToFileURL(path.join(dir, `${id}.png`)).href);
 };
 
+// The name of the card a scene was written for, which may be no player card.
+const others = Object.fromEntries((await Promise.all(['adversary', 'alignment', 'threats'].map((f) => readJson(path.join(REPO, 'content', `${f}.json`))))).flat().map((c) => [c.id, c]));
+const written = (id) => (cards[id] ?? others[id]).name;
+
 const SHEET_W = l.print_px[0] * 2 + 20;
 const rows = [];
 const all = [];
-const sceneOf = (id) => id.split('-')[1];
-for (const id of s.draws) {
+const tagOf = (id) => Object.keys(s.scenes).find((tag) => s.scenes[tag][id]);
+for (const [id, pair] of Object.entries(s.batch)) {
   const size = await cut(id);
-  const pair = s.scenes[sceneOf(id)].cards;
   for (const c of pair) {
     await show(face(c, id));
     await p.screenshot({ path: path.join(dir, 'cards', `${id}--${c}.png`), clip });
@@ -89,11 +97,12 @@ for (const id of s.draws) {
     ])
     .jpeg({ quality: 86, mozjpeg: true })
     .toFile(path.join(images, `${id}.jpg`));
-  const [preamble, scene] = id.split('-');
+  const tag = tagOf(id);
+  const scene = s.scenes[tag][id];
   rows.push({
     id,
-    label: `${s.scenes[scene].number}. ${s.scenes[scene].label}, style ${preamble.toUpperCase()}`,
-    note: `On ${pair.map((c) => cards[c].name).join(' and ')}. Tile on: keep. Tile off: reject.`,
+    label: `${rows.length + 1}. ${s.tags[tag].label}: ${scene.subject}`,
+    note: `Written for ${written(scene.card)}. Shown on ${pair.map((c) => cards[c].name).join(' and ')}. Tile on: keep. Tile off: reject.`,
     kind: 'many',
     default: ['keep'],
     options: [{ key: 'keep', image: `../art-originals/picks/${NAME}/${id}.jpg`, label: 'keep' }],
@@ -109,43 +118,13 @@ await show(
 await p.pdf({ path: path.join(dir, 'cards.pdf'), printBackground: true, preferCSSPageSize: true });
 await close();
 
-// The style row's tiles: every scene in one style, and every style side by side for the mix.
-const TILE = [800, Math.round(800 / SHAPE)];
-const tile = async (name, grid) => {
-  const [cols, nrows] = [grid[0].length, grid.length];
-  const parts = await Promise.all(
-    grid.flatMap((row, y) =>
-      row.map(async (id, x) => ({ input: await sharp(path.join(dir, `${id}.png`)).resize(...TILE).toBuffer(), left: x * (TILE[0] + 12), top: y * (TILE[1] + 12) })),
-    ),
-  );
-  await sharp({ create: { width: cols * TILE[0] + (cols - 1) * 12, height: nrows * TILE[1] + (nrows - 1) * 12, channels: 3, background: '#1b1d20' } })
-    .composite(parts)
-    .jpeg({ quality: 86, mozjpeg: true })
-    .toFile(path.join(images, `${name}.jpg`));
-};
-const styles = Object.keys(s.preambles);
-const scenes = Object.keys(s.scenes);
-for (const style of styles) await tile(`style-${style}`, [0, 2].map((i) => scenes.slice(i, i + 2).map((scene) => `${style}-${scene}`)));
-await tile('style-mix', scenes.map((scene) => styles.map((style) => `${style}-${scene}`)));
-rows.push({
-  id: 'style',
-  label: 'Which style goes forward?',
-  note: `${styles.map((style) => `${style.toUpperCase()} is ${s.styles[style]}`).join(', ')}; the same four scenes each way. Mix: say in the note which goes where.`,
-  kind: 'many',
-  default: [],
-  options: [
-    ...styles.map((style) => ({ key: style, image: `../art-originals/picks/${NAME}/style-${style}.jpg`, label: style.toUpperCase() })),
-    { key: 'mix', image: `../art-originals/picks/${NAME}/style-mix.jpg`, label: 'mix' },
-  ],
-});
-
 await writeFile(
   path.join(REPO, 'picks', `${NAME}.json`),
   `${JSON.stringify(
     {
       name: NAME,
-      title: `Card scenes, round ${s.round.slice(1)}: style test`,
-      intro: `Twelve scenes to judge the look, not the subjects: four scenes in each of three illustrative styles. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. The cards are placeholders, not assignments; scenes are a pool, and Adversary has no card tag, so its cards are the nearest fit. For true size, print art-originals/scenes/${s.round}/cards.pdf at 100%. Use the notes for what to change.`,
+      title: `Card scenes, batch ${s.round.slice(1)}`,
+      intro: `Keep or reject each scene, in the C and E mix. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. Scenes are a pool: the card a scene was written for is a suggestion. The second card only shows the other window, and adversary, Discord and Unity cards have no frame yet, so their scenes sit on the nearest fit by name. For true size, print art-originals/scenes/${s.round}/cards.pdf at 100%. Use the notes for what to change.`,
       rows,
     },
     null,

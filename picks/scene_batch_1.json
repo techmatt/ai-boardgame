@@ -1,0 +1,391 @@
+{
+ "name": "scene_batch_1",
+ "title": "Card scenes, batch 1",
+ "intro": "Keep or reject each scene, in the C and E mix. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. Scenes are a pool: the card a scene was written for is a suggestion. The second card only shows the other window, and adversary, Discord and Unity cards have no frame yet, so their scenes sit on the nearest fit by name. For true size, print art-originals/scenes/b1/cards.pdf at 100%. Use the notes for what to change.",
+ "rows": [
+  {
+   "id": "foundry_furnace_hall",
+   "label": "1. Industry: The heart of a foundry, one great crucible tipping a stream of molten metal into a mould, workers small beside it.",
+   "note": "Written for Foundry Core. Shown on Foundry Core and Payroll Automation. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/foundry_furnace_hall.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "factory_on_a_flatbed",
+   "label": "2. Industry: A compact new factory unfolding from a line of flatbed trucks on a cleared industrial lot, its chimney rising into place.",
+   "note": "Written for Turnkey Factory. Shown on Turnkey Factory and Prefab Plant Kit. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/factory_on_a_flatbed.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "founder_pitch",
+   "label": "3. Industry: Investors in a bright glass office gathered round a small working prototype on a table, a founder gesturing beside it.",
+   "note": "Written for Venture Capital. Shown on Venture Capital and Expansion Fund. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/founder_pitch.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "sentinel_watch_post",
+   "label": "4. Security: A lone watchtower with a small solar array on a high ridge, one sentry looking out over the valley below.",
+   "note": "Written for Sentinel Post. Shown on Sentinel Post and Threat Triage. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/sentinel_watch_post.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "strike_team_rooftop",
+   "label": "5. Security: A four-person strike team fast-roping from a helicopter onto a rooftop, dust blowing, figures seen from behind.",
+   "note": "Written for Strike Team. Shown on Strike Team and Kill Team Roster. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/strike_team_rooftop.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "shelter_blast_doors",
+   "label": "6. Security: Families filing down into a public shelter past heavy open blast doors, a warden waving them on under a siren pole.",
+   "note": "Written for Shelter Order. Shown on Shelter Order and Safehouse Network. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/shelter_blast_doors.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "graduate_lab",
+   "label": "7. Science: A cluttered university lab full of students bent over benches and whiteboards, coffee cups and cables everywhere.",
+   "note": "Written for Grad Student Pool. Shown on Grad Student Pool and Open Preprint. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/graduate_lab.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "model_campus",
+   "label": "8. Science: A vast campus of low data halls and cooling ponds on a plain, one gleaming central spire, small buildings for scale.",
+   "note": "Written for Foundation Model Campus. Shown on Foundation Model Campus and Benchmark Suite. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/model_campus.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "lab_door_ajar",
+   "label": "9. Science: A lab whiteboard covered in diagrams, a photographer's figure slipping away down a corridor as loose pages blow after them.",
+   "note": "Written for Breakthrough Leak. Shown on Breakthrough Leak and Telemetry Archive. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/lab_door_ajar.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "server_hall_fault",
+   "label": "10. Cyber: A server hall with one technician tracing a glowing fault.",
+   "note": "Written for Intrusion Lab. Shown on Intrusion Lab and Adaptive Malware. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/server_hall_fault.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "city_of_infected_devices",
+   "label": "11. Cyber: A hillside city from above with thousands of rooftop devices all tilted the same way, linked by fine bright threads.",
+   "note": "Written for Hyperscale Botnet. Shown on Hyperscale Botnet and Compute Siphon. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/city_of_infected_devices.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "silent_breach",
+   "label": "12. Cyber: A sealed glass vault of servers with a single fine crack of green light running through its wall, nobody near it.",
+   "note": "Written for Zero-Click Breach. Shown on Zero-Click Breach and Rootkit Cache. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/silent_breach.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "tidal_barrage",
+   "label": "13. Power: A long concrete barrage across a wide estuary, the tide pouring white through its turbine gates, gulls above.",
+   "note": "Written for Tidal Barrage. Shown on Tidal Barrage and Capacitor Discharge. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/tidal_barrage.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "relay_masts_ridge",
+   "label": "14. Power: A line of new relay masts marching over green hills to the horizon, a crew raising the nearest with a truck winch.",
+   "note": "Written for Relay Mast Rollout. Shown on Relay Mast Rollout and Substation Hub. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/relay_masts_ridge.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "dyson_swarm_panels",
+   "label": "15. Power: Thousands of mirror-bright collector panels unfolding in a curving swarm around a huge sun, a tug placing the next one.",
+   "note": "Written for Dyson Swarm Tranche. Shown on Dyson Swarm Tranche and Beamed Power Constellation. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/dyson_swarm_panels.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "council_chamber",
+   "label": "16. Diplomacy: A curved council chamber seen from the gallery, delegates as small figures.",
+   "note": "Written for Planetary Assembly. Shown on Planetary Assembly and Summit Caucus. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/council_chamber.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "consulate_tower",
+   "label": "17. Diplomacy: A slender glass and stone tower with a line of many flagpoles at its foot, unmarked flags flying in the wind.",
+   "note": "Written for Consulate Tower. Shown on Consulate Tower and Consular Pouch. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/consulate_tower.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "envoy_jet",
+   "label": "18. Diplomacy: A small white government jet on a sunny apron, an envoy climbing the stairs with a document case, a second jet landing behind.",
+   "note": "Written for Shuttle Diplomacy. Shown on Shuttle Diplomacy and Liaison Corps. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/envoy_jet.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "marching_columns",
+   "label": "19. Adversary: Faceless ranks of identical machine troops massing on a military base's parade ground, great war drums beating on a gantry above them.",
+   "note": "Written for War Drums. Shown on Kinetic Interdiction and Interceptor Battery. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/marching_columns.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "dark_districts",
+   "label": "20. Adversary: A city where whole districts have gone dark against a daytime storm sky, one hospital still lit. It is plainly daytime: a mid-grey sky with pale breaks in the cloud, the dark districts mid-toned and readable, not black.",
+   "note": "Written for Blackout. Shown on Blackstart Protocol and Faraday Yard. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/dark_districts.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "breach_in_the_wall",
+   "label": "21. Discord: A city's sea wall broken open, angular grey landing craft pushing through the gap towards a panicked harbour.",
+   "note": "Written for Incursion. Shown on Breach and Clear and Hardened Bunker Complex. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/breach_in_the_wall.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "blight_across_town",
+   "label": "22. Discord: A spreading stain of grey metal fungus creeping street by street through a pretty hill town, blocks already swallowed.",
+   "note": "Written for Blight. Shown on Amnesty Decree and Embassy Compound. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/blight_across_town.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "coins_in_the_jar",
+   "label": "23. Unity: A long folding table at a village fair, a queue of neighbours dropping coins into big glass jars for a shared cause.",
+   "note": "Written for Grassroots Funding. Shown on Mutual Aid Pact and Commons Grid. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/coins_in_the_jar.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "volunteers_with_shovels",
+   "label": "24. Unity: A crowd of volunteers in matching armbands passing sandbags hand to hand down a street to shore up a riverbank.",
+   "note": "Written for Volunteer Corps. Shown on Peace Dividend and Open Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_1/volunteers_with_shovels.jpg",
+     "label": "keep"
+    }
+   ]
+  }
+ ]
+}
