@@ -67,7 +67,8 @@ def main(d, short):
         m = lambda k: mean(gs, lambda g: cnt(g, k))
         blocked = 100 * sum(cnt(g, 'alignment.purge_blocked_by_nodes') > 0 for g in gs) / len(gs)
         print(f"| {c['variant']} | {c['difficulty']} | {c['agent']} "
-              f"| {m('board.troops_built') + m('adversary.project_troops'):.1f} "
+              # Troops from factories, projects and threats (020: threats' were left out).
+              f"| {m('board.troops_built') + m('adversary.project_troops') + m('threats.troops'):.1f} "
               f"| {m('board.troop_steps'):.1f} / {m('board.troop_moves'):.1f} / {m('board.troop_strikes'):.1f} "
               f"| {m('board.troop_destroyed.presence'):.1f} / {m('board.troop_destroyed.station'):.1f} / "
               f"{m('board.troop_destroyed.factory'):.1f} | {m('board.troop_absorbed'):.1f} "

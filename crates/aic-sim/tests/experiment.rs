@@ -386,7 +386,9 @@ fn experiment_streams_games_and_resumes() {
     // A different grid is not the same experiment.
     let res = experiment(&spec, &cut, &["--resume", "--games", "7"]);
     assert_eq!(res.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&res.stderr).contains("another spec"));
+    // 020: and it says the spec (here --games) is what differs.
+    let err = String::from_utf8_lossy(&res.stderr).to_string();
+    assert!(err.contains("another run") && err.contains("the spec"), "{err}");
 
     // Nor is the same spec over an edited config file.
     let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../configs/baseline.json");

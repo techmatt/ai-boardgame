@@ -96,8 +96,11 @@ pub(super) fn findings(run: &Run) -> Vec<String> {
             )
             .unwrap_or(0.0)
         };
+        // Say when it blends several configs or variants (020: unlabelled).
+        let slices = run.groups.iter().filter(|g| g.difficulty == lo).count();
+        let over = if slices > 1 { format!(" (mean over {slices} configs/variants)") } else { String::new() };
         f.push(format!(
-            "Skill gap from difficulty {lo} to {hi}: {:+.0} → {:+.0} pts win rate, {:+.2} → {:+.2} survival (target: widens with difficulty).",
+            "Skill gap from difficulty {lo} to {hi}{over}: {:+.0} → {:+.0} pts win rate, {:+.2} → {:+.2} survival (target: widens with difficulty).",
             100.0 * gap(lo),
             100.0 * gap(hi),
             gap_r(lo),
@@ -105,14 +108,22 @@ pub(super) fn findings(run: &Run) -> Vec<String> {
         ));
     }
     let tops: Vec<&CellSummary> = sums.iter().filter(|s| strongest(s)).collect();
-    if let (Some(lo_s), Some(hi_s)) = (
-        tops.iter().find(|s| s.difficulty == lo),
-        tops.iter().find(|s| s.difficulty == hi),
-    ) {
-        f.push(format!(
-            "Game length for the strongest agent ({}): {:.1} rounds at difficulty {lo}, {:.1} at {hi} (target 8–10).",
-            hi_s.agent, lo_s.rounds_mean, hi_s.rounds_mean
-        ));
+    // One line per config and variant, named like the other findings (020: it took
+    // the first cell at each difficulty, the first slice only, unlabelled).
+    let mut slices: Vec<(&str, &str)> = Vec::new();
+    for s in &tops {
+        if !slices.contains(&(s.config.as_str(), s.variant.as_str())) {
+            slices.push((s.config.as_str(), s.variant.as_str()));
+        }
+    }
+    for (config, variant) in slices {
+        let at = |d: i64| tops.iter().find(|s| s.config == config && s.variant == variant && s.difficulty == d);
+        if let (Some(lo_s), Some(hi_s)) = (at(lo), at(hi)) {
+            f.push(format!(
+                "Game length for the strongest agent ({}; {config}, {variant}): {:.1} rounds at difficulty {lo}, {:.1} at {hi} (target 8–10).",
+                hi_s.agent, lo_s.rounds_mean, hi_s.rounds_mean
+            ));
+        }
     }
     let ends: BTreeMap<&str, usize> =
         sums.iter()
@@ -207,9 +218,10 @@ pub(super) fn findings(run: &Run) -> Vec<String> {
             .map(|s| s.gives_per_game),
     )
     .unwrap_or(0.0);
+    // Over the cells that dealt threats (020: a threats-off cell's 0% halved it).
     let countered = mean(
         sums.iter()
-            .filter(|s| strongest(s))
+            .filter(|s| strongest(s) && s.threats_dealt_per_game > 0.0)
             .map(|s| s.countered_share),
     )
     .unwrap_or(0.0);

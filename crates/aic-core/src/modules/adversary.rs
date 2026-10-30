@@ -194,6 +194,10 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     if stage_cards.len() != 3 {
         return Err("stage_cards: give 3 counts (stage I, II, III)".into());
     }
+    // An empty deck loses before round 1's first decision (020: it was accepted).
+    if stage_cards.iter().sum::<i64>() < 1 {
+        return Err("stage_cards: deal at least one card (the deck is the game's clock)".into());
+    }
     for (s, &n) in stage_cards.iter().enumerate() {
         let have = b
             .world
@@ -489,10 +493,11 @@ impl Module for Adversary {
         let done = g.pile(PROJECTS_DONE);
         out.pile(
             "projects_done",
-            "Adversary projects resolved",
+            // A discarded project (Zero-Day Wipe) goes here too (020: labelled "resolved").
+            "Adversary projects resolved or discarded",
             None,
             done.len(),
-            done.iter().map(|id| pshow(id, "resolved", None)).collect(),
+            done.iter().map(|id| pshow(id, "done", None)).collect(),
         );
         out.pile(
             "project_deck",
@@ -949,7 +954,7 @@ pub fn pushback(g: &mut GameState, cx: &mut Cx, c: usize) -> Res {
     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
     if let Some(i) = cx.choose(
         0,
-        &format!("Unity: remove an adversary ambassador in country {c} from which hex?"),
+        &format!("Unity: remove an adversary ambassador in {} from which hex?", country_name(&w, c)),
         opts,
     )? {
         remove_piece(g, cx, None, hexes[i], ADV_AMBASSADOR);
@@ -958,13 +963,14 @@ pub fn pushback(g: &mut GameState, cx: &mut Cx, c: usize) -> Res {
 }
 
 /// In each country, the clean city with the most adversary ambassadors
-/// (ties: lower hex number) gains `n` more (Discord cards).
+/// (ties: lower hex number) gains `n` more (Discord cards, Infiltration Drive).
 pub fn infiltrate(g: &mut GameState, cx: &mut Cx, n: i64) {
     let w = cx.world;
     for c in 0..w.map.countries.len() {
         if let Some(h) = most_infiltrated_city(&w, g, c, |h| clean_city(&w, g, h)) {
+            // No source in the note: a project calls this too (020: it said "Discord").
             cx.note(Some(h), || {
-                format!("Discord: ambassadors at {}", hex_name(&w, h))
+                format!("{n} adversary ambassador{} gather{} at {}", if n == 1 { "" } else { "s" }, if n == 1 { "s" } else { "" }, hex_name(&w, h))
             });
             place(g, cx, h, n);
         }

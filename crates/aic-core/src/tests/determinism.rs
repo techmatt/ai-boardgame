@@ -208,3 +208,16 @@ fn saved_games_round_trip_and_replay_to_the_saved_state() {
     let empty = SavedGame::new(&rules, 1, vec![], &rules.new_game(1), "");
     assert_eq!(SavedGame::from_json(&empty.to_text()).unwrap(), empty);
 }
+
+/// 020: a hand-written record's seed may be a number; a bad one names the seed.
+#[test]
+fn a_hand_written_record_seed() {
+    let rec = |seed: &str| format!(r#"{{"config": {BASELINE}, "seed": {seed}, "actions": []}}"#);
+    assert!(SavedGame::from_json(&rec("5")).is_ok());
+    assert!(SavedGame::from_json(&rec("\"5\"")).is_ok());
+    for bad in ["-1", "5.5"] {
+        let e = SavedGame::from_json(&rec(bad)).unwrap_err();
+        assert!(e.contains("seed"), "{bad}: {e}");
+    }
+}
+

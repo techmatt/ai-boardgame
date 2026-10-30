@@ -49,11 +49,11 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_hardware", 0, 20, "standard action: hardware to build a research station"),
             ParamSpec::int("factory_hardware", 0, 5, "hardware a player-owned factory makes its owner on a production step"),
-            ParamSpec::int("hardware_credits", 0, 50, "standard action: credits for 1 hardware"),
+            ParamSpec::int("hardware_credits", 1, 50, "standard action: credits for 1 hardware (at least 1: a free untargeted action has no limit)"),
             ParamSpec::int("remove_energy", 0, 20, "standard action: energy to remove an adversary ambassador within reach"),
             ParamSpec::int("move_energy", 0, 20, "standard action: energy to move a player ambassador"),
-            ParamSpec::int("ambassador_credits", 0, 50, "standard action: credits to gain a player ambassador"),
-            ParamSpec::int("harden_hardware", 0, 20, "standard action (Harden passive): hardware a hardening token"),
+            ParamSpec::int("ambassador_credits", 1, 50, "standard action: credits to gain a player ambassador (at least 1: a free untargeted action has no limit)"),
+            ParamSpec::int("harden_hardware", 1, 20, "standard action (Harden passive): hardware a hardening token (at least 1: free, it has no limit)"),
             ParamSpec::int("sell_credits", 0, 20, "standard action: credits for selling a card from hand"),
             ParamSpec::int("align_energy", 0, 20, "standard action: energy (and 1 ambassador) to align a clean city"),
         ],
@@ -71,7 +71,8 @@ pub static DEF: ModuleDef = ModuleDef {
     }],
 };
 
-/// Country flags that last until the end of the round.
+/// Country flags: up while their var is above 0, counted down in cleanup (1 lasts to
+/// the end of the round; a threat sets 2, to the end of the next).
 pub const FLAGS: [RoundFlag; 3] = [RoundFlag::Blackout, RoundFlag::Sabotage, RoundFlag::Shelter];
 
 /// The var key of a country flag.
@@ -263,12 +264,18 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: &str) -> Vec<usize> {
         "remove" => all
             .filter(|&h| reach(h) && g.tokens(h, ADV_AMBASSADOR) > 0)
             .collect(),
+        // Onto a piece in reach, from the supply or another hex: never onto the
+        // hex the seat's only ambassador already holds (020: that charged the
+        // energy and moved nothing).
         "move" => {
-            if g.resource(seat, AMBASSADORS) > 0 || ambassadors_on_board(g, seat) > 0 {
-                all.filter(|&h| reach(h) && has_piece(w, g, h)).collect()
-            } else {
-                Vec::new()
-            }
+            let supply = g.resource(seat, AMBASSADORS) > 0;
+            let on_board = ambassadors_on_board(g, seat);
+            all.filter(|&h| {
+                (supply || on_board > g.tokens(h, &ambassador(seat)))
+                    && reach(h)
+                    && has_piece(w, g, h)
+            })
+            .collect()
         }
         "align" => {
             if g.resource(seat, AMBASSADORS) > 0 {
@@ -436,7 +443,7 @@ pub fn destroy_building(
     }
     cx.tally(g, "board.destroyed", 1);
     cx.note(Some(h), || {
-        format!("{kind} at {} destroyed", hex_name(&w, h))
+        format!("{} at {} destroyed", piece_name(kind), hex_name(&w, h))
     });
     if !by_troop {
         alignment::sway(g, cx, Side::Discord, w.int("board.destruction_discord"));
@@ -856,7 +863,7 @@ fn strike_from(g: &mut GameState, cx: &mut Cx, h: usize) -> Res<bool> {
     }
     let opts = targets
         .iter()
-        .map(|(x, k)| opt(format!("{k} at {}", hex_name(&w, *x))))
+        .map(|(x, k)| opt(format!("{} at {}", piece_name(k), hex_name(&w, *x))))
         .collect();
     let prompt = format!(
         "Adversary troop at {}: which target does it destroy?",
@@ -979,11 +986,17 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
         let Some(s) = presence_owner(g, h) else {
             continue;
         };
+        // (020: a Sabotage flag used to skip the leak here, a data-centre-era
+        // leftover the rules don't have; once F1 let the flag reach production
+        // it would have helped the players.)
         if g.tokens(h, ADV_AMBASSADOR) == 0 {
             continue;
         }
-        let c = w.map.hexes[h].country as usize;
-        if flagged(g, RoundFlag::Sabotage.name(), c) {
+        // Only a lone presence: on a city, base, station or factory the
+        // ambassador belongs to that piece (020: the leak drained a corrupted
+        // city's ambassadors so it never spread, and ate those a clean city or
+        // a base was gathering).
+        if is_city(&w, h) || is_base(&w, h) || has_building(g, h) {
             continue;
         }
         adversary::remove(g, cx, h, 1);
@@ -1161,9 +1174,15 @@ impl Module for Board {
             3 => march(g, cx)?,
             4 => produce(g, cx)?,
             _ => {
+                // A flag counts down: 1 (set this round) clears, 2 (a threat
+                // executed after this round's production) lasts the next round.
                 for c in 0..w.map.countries.len() {
                     for f in FLAGS {
-                        cx.set_key(g, flag(f, c), 0);
+                        let k = flag(f, c);
+                        let v = g.var(&k);
+                        if v > 0 {
+                            cx.set_key(g, k, v - 1);
+                        }
                     }
                 }
                 // Rounds that end with only nodes between the players and the
@@ -1301,7 +1320,11 @@ impl Module for Board {
                 continue;
             }
             if let Some((t, rounds)) = troop_plan(w, g, h) {
-                let what = troop_targets_on(g, t).join(", ");
+                let what = troop_targets_on(g, t)
+                    .iter()
+                    .map(|k| piece_name(k))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 let when = if rounds <= 1 {
                     "strikes it in the next adversary phase".to_string()
                 } else {
@@ -1369,8 +1392,8 @@ impl Module for Board {
 
 fn flag_doc(f: RoundFlag) -> &'static str {
     match f {
-        RoundFlag::Blackout => "Blackout: cities here make no energy this round",
-        RoundFlag::Sabotage => "Sabotage: presence here leaks no compute this round",
+        RoundFlag::Blackout => "Blackout: while this is up, cities here make no energy in production (an uncountered threat's lasts to the end of the next round)",
+        RoundFlag::Sabotage => "Sabotage: while this is up, players with presence here make no compute in upkeep (an uncountered threat's lasts to the end of the next round)",
         RoundFlag::Shelter => "Shelter Order: buildings here can't be destroyed this round",
     }
 }

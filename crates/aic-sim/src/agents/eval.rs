@@ -357,9 +357,21 @@ impl Eval {
     fn forecast(&self, rules: &Rules, g: &GameState) -> Forecast {
         let world = rules.world();
         let content = world.content;
-        let sooner: i64 = g
-            .pile(adversary::NEXT)
-            .first()
+        // Between this round's build and reveal the face-up slot is empty: until
+        // this round's corrupt step has run, the corrupt step ahead is this
+        // round's card's (020: it read nothing, so a Fifth Column round's spread
+        // choices were judged at the normal threshold).
+        let corrupt_ahead = g
+            .config
+            .round
+            .iter()
+            .position(|p| p == "adversary.corrupt")
+            .is_some_and(|i| g.phase <= i);
+        let card = match g.pile(adversary::NEXT).first() {
+            None if corrupt_ahead => g.pile(adversary::CURRENT).first(),
+            next => next,
+        };
+        let sooner: i64 = card
             .and_then(|id| content.adversary_index(id))
             .map_or(0, |i| {
                 content.adversary[i]

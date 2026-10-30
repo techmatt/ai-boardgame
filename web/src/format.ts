@@ -2,7 +2,7 @@
 // readable label without code here; known action types, card ids, threat ids, growth
 // options and the board's standard actions get their content names (and costs).
 
-import { aiBoard, cardName, param, threatName, type Action, type Config, type GameEvent, type Hex, type View } from './engine';
+import { aiBoard, cardName, content, param, threatName, type Action, type Config, type GameEvent, type Hex, type View } from './engine';
 
 export const hexKey = (h: Hex) => `${h[0]},${h[1]}`;
 
@@ -39,7 +39,8 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       return 'pass';
     case 'choose': {
       const t = withTarget && isHex(a.target) ? ` @${hexKey(a.target)}` : '';
-      return `${String(a.option ?? 'choose')}${t}`;
+      // An option that is a content id (one word ids too: `sweep`) shows its name.
+      return `${placeNames(contentName(String(a.option ?? 'choose')))}${t}`;
     }
     case 'tier':
       return `draft from tier ${a.tier}`;
@@ -104,12 +105,58 @@ export function actionLabel(a: Action, withSeat = true, withTarget = true, cx: L
   return withSeat ? `seat ${a.seat}: ${body}` : body;
 }
 
+let contentNames: Map<string, string> | null = null;
+
+/**
+ * A content id's printed name (a card, threat, adversary card, project or Alignment
+ * card), or the id. Choice options and prompts name cards by id (020: buttons read
+ * `overclock_rig`).
+ */
+export function contentName(id: string): string {
+  if (!contentNames) {
+    contentNames = new Map();
+    const walk = (v: unknown) => {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') {
+        const o = v as Record<string, unknown>;
+        if (typeof o.id === 'string' && typeof o.name === 'string' && !contentNames!.has(o.id)) contentNames!.set(o.id, o.name);
+        Object.values(o).forEach(walk);
+      }
+    };
+    walk(content);
+  }
+  return contentNames.get(id) ?? id;
+}
+
+/**
+ * Content ids written into engine text (`snake_case` only, so plain words stay), but
+ * not inside a dotted key (`adversary.project.node_swarm` stays as the state has it).
+ */
+const contentIds = (text: string) => text.replace(/(?<![\w.])[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b(?!\.)/g, (m) => contentName(m));
+
+/** The shown game's country names, for `placeNames` (set on every render). */
+let countryNames: string[] = [];
+export function setCountryNames(names: string[]) {
+  countryNames = names;
+}
+
+/**
+ * The engine names a hex "C1 #5" (country index 1, printed number 5) in prompts,
+ * options and notes; the board labels countries by name, so show "Northern Union #5".
+ */
+export function placeNames(text: string): string {
+  return contentIds(text)
+    // "country 1" (Protector's harden growth, Civil Defense, threat notes) by name too.
+    .replace(/\bcountry (\d+)\b/g, (m, c: string) => countryNames[Number(c)] ?? m)
+    .replace(/\bC(\d+) #(\d+)/g, (m, c: string, n: string) => (countryNames[Number(c)] ? `${countryNames[Number(c)]} #${n}` : m));
+}
+
 /** A one-line event: its type, then its fields. */
 export function eventText(e: GameEvent): string {
   const rest = Object.entries(e)
     .filter(([k]) => k !== 'type')
     .map(([k, v]) => `${k} ${field(k, v)}`);
-  return [words(e.type), ...rest].join(' · ');
+  return placeNames([words(e.type), ...rest].join(' · '));
 }
 
 /** Hexes an action or event mentions (any `[q, r]` field). */
@@ -165,6 +212,7 @@ export const ADVERSARY_COLOUR = '#5b1a8c';
 const KNOWN: Record<string, string> = {
   'cube:adversary': ADVERSARY_COLOUR,
   'ambassador:adversary': ADVERSARY_COLOUR,
+  node: ADVERSARY_COLOUR,
   troop: '#2a0d3d',
   factory: '#7a5230',
   station: '#00796b',

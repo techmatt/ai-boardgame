@@ -386,7 +386,7 @@ impl Module for Threats {
         for (t, scope) in active(g) {
             let d = def(&w, &t);
             cx.note(None, || match scope {
-                Some(c) => format!("Threat {} executes in country {c}", d.name),
+                Some(c) => format!("Threat {} executes in {}", d.name, country_name(&w, c)),
                 None => format!("Threat {} executes everywhere", d.name),
             });
             cx.count(g, "executed", 1);
@@ -543,7 +543,9 @@ impl Module for Threats {
             "threat tier",
             adversary::threat_tier(w, g) as i64,
             Some(2),
-            "the tier of threat dealt next round start",
+            // 020: it was labelled "dealt next round start", one round late at
+            // the switch to stage II.
+            "the tier of threats dealt this round: 2 once this round's adversary card is stage II (at difficulty 4, sooner)",
         );
     }
 }
@@ -630,8 +632,10 @@ fn execute(g: &mut GameState, cx: &mut Cx, op: &ThreatOp, scope: Option<usize>) 
         }
         ThreatOp::Compute { amount } => adversary::gain_compute(g, cx, *amount)?,
         ThreatOp::Flag { name } => {
+            // Threats execute after production and upkeep: the flag lasts through
+            // the next round (cleanup counts it down), or it would never land (020).
             for c in scope_countries(&w, scope) {
-                cx.set_key(g, board::flag(*name, c), 1);
+                cx.set_key(g, board::flag(*name, c), 2);
             }
         }
         ThreatOp::Requisition {

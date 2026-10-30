@@ -189,10 +189,30 @@ pub fn seats_in_scope(w: &World, g: &GameState, scope: Option<usize>) -> Vec<usi
     }
 }
 
-/// "C1 #5" : country 1, printed hex number 5.
+/// A piece's token key in words, for prompts, options and notes: `presence:2`
+/// is "seat 2's presence", `station` "research station".
+pub fn piece_name(kind: &str) -> String {
+    match kind.split_once(':') {
+        Some(("presence", s)) => format!("seat {s}'s presence"),
+        _ if kind == STATION => "research station".into(),
+        _ => kind.replace('_', " "),
+    }
+}
+
+/// "Northern Union #5": the printed piece's name and hex number (020: "C1 #5",
+/// a country index the board never shows).
 pub fn hex_name(w: &World, h: usize) -> String {
     let c = &w.map.hexes[h];
-    format!("C{} #{}", c.country, c.number)
+    format!("{} #{}", country_name(w, c.country as usize), c.number)
+}
+
+/// The printed name of country `c`'s piece ("country 1" if the map has none).
+pub fn country_name(w: &World, c: usize) -> String {
+    w.content
+        .map
+        .countries
+        .get(c)
+        .map_or_else(|| format!("country {c}"), |p| p.name.clone())
 }
 
 /// An option naming a hex (the viewer offers it as a hex pick).
@@ -215,6 +235,6 @@ pub fn seat_opt(s: usize) -> Opt {
     opt(format!("seat {s}"))
 }
 
-pub fn country_opt(c: usize) -> Opt {
-    opt(format!("country {c}"))
+pub fn country_opt(w: &World, c: usize) -> Opt {
+    opt(country_name(w, c))
 }

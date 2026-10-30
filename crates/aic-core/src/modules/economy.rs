@@ -12,7 +12,7 @@ use crate::state::GameState;
 use crate::view::ViewOut;
 
 use super::common::has_presence_in;
-use super::{ai, alignment, board, cards};
+use super::{ai, alignment, cards};
 
 pub static DEF: ModuleDef = ModuleDef {
     id: "economy",
@@ -60,6 +60,26 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Economy {
         give_insight: b.int("give_insight")?,
     }))
+}
+
+/// What the next upkeep pays seat `s`: its `income`, less the compute of a
+/// seat with presence in a country sabotaged then. Once this round's upkeep
+/// has run, a flag counts only if it outlasts this round's cleanup (2+).
+pub fn upkeep_income(w: &World, g: &GameState, seat: usize) -> [i64; RESOURCES.len()] {
+    let mut inc = income(w, g, seat);
+    let upkeep_done = g
+        .config
+        .round
+        .iter()
+        .position(|p| p == "economy.upkeep")
+        .is_some_and(|i| g.phase > i);
+    let at = if upkeep_done { 2 } else { 1 };
+    if (0..w.map.countries.len()).any(|c| {
+        g.var(&format!("board.sabotage.{c}")) >= at && has_presence_in(w, g, seat, c)
+    }) {
+        inc[COMPUTE] = 0;
+    }
+    inc
 }
 
 /// Seat `s`'s income per resource from its AI board, tracks, buildings and
@@ -115,8 +135,10 @@ impl Module for Economy {
         cx.set_key(g, BONUS_INSIGHT.into(), 0);
     }
 
-    fn legal(&self, _phase: usize, g: &GameState, _w: &World, seat: u8, out: &mut Vec<Action>) {
-        if g.resource(seat as usize, "insight") < 1 {
+    fn legal(&self, _phase: usize, g: &GameState, w: &World, seat: u8, out: &mut Vec<Action>) {
+        // `give_insight` 0 switches giving off (rules.md §9; 020: it was still offered
+        // and cost the giver an insight for nothing).
+        if g.resource(seat as usize, "insight") < 1 || w.int("economy.give_insight") <= 0 {
             return;
         }
         for to in 0..g.seats.len() as u8 {
@@ -136,7 +158,7 @@ impl Module for Economy {
             return Err(Halt::Illegal("not a give".into()));
         };
         let (s, t) = (seat as usize, to as usize);
-        if s == t || t >= g.seats.len() || g.resource(s, "insight") < 1 {
+        if s == t || t >= g.seats.len() || g.resource(s, "insight") < 1 || w.int("economy.give_insight") <= 0 {
             return Err("can't give insight there".into());
         }
         cx.add_resource(g, s, "insight", -1);
@@ -153,13 +175,7 @@ impl Module for Economy {
     fn run(&self, _phase: usize, g: &mut GameState, cx: &mut Cx) -> Res {
         let w = cx.world;
         for s in 0..g.seats.len() {
-            let mut inc = income(&w, g, s);
-            // Sabotage: a player with presence in a sabotaged country makes no compute.
-            if (0..w.map.countries.len())
-                .any(|c| board::flagged(g, "sabotage", c) && has_presence_in(&w, g, s, c))
-            {
-                inc[COMPUTE] = 0;
-            }
+            let inc = upkeep_income(&w, g, s);
             for (i, r) in RESOURCES.iter().enumerate() {
                 if *r != "insight" {
                     cx.add_resource(g, s, r, inc[i]);
@@ -173,7 +189,9 @@ impl Module for Economy {
 
     fn view(&self, g: &GameState, w: &World, out: &mut ViewOut) {
         for s in 0..g.seats.len() {
-            let inc = income(w, g, s);
+            // What upkeep will pay, Sabotage included (020: the view showed the
+            // compute a sabotaged seat would not get).
+            let inc = upkeep_income(w, g, s);
             let parts = [
                 (
                     "credits",

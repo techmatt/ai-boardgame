@@ -184,3 +184,36 @@ fn tunables_list_every_module_parameter() {
     let keys: BTreeSet<&str> = t.iter().map(|x| x.key.as_str()).collect();
     assert_eq!(keys.len(), t.len());
 }
+
+/// 020: the documented off-switches switch their part off. `economy.give_insight`
+/// 0 still offered giving (it cost the giver an insight for nothing); free
+/// standard actions and an Undecided smaller than a tip are rejected.
+#[test]
+fn off_switches_and_degenerate_values() {
+    let (rules, mut g) = lab_actions();
+    set_res(&mut g, 0, "insight", 2);
+    let gives = |r: &Rules, g: &GameState| r.legal_actions(g).iter().any(|a| matches!(a, Action::Give { .. }));
+    assert!(gives(&rules, &g));
+    let mut c = lab_config(&[ACTIONS]);
+    c.apply_override("economy.give_insight=0").unwrap();
+    let off = Rules::new(&c).unwrap();
+    let mut g0 = off.new_game(1);
+    set_res(&mut g0, 0, "insight", 2);
+    assert!(!gives(&off, &g0));
+    for bad in ["board.hardware_credits=0", "board.ambassador_credits=0", "board.harden_hardware=0"] {
+        let mut c = baseline();
+        assert!(c.apply_override(bad).is_err() || Rules::new(&c).is_err(), "{bad}");
+    }
+    let mut c = baseline();
+    c.apply_override("alignment.undecided_per_player=1").unwrap();
+    assert!(Rules::new(&c).is_err());
+    // An empty adversary deck is rejected; override errors name the key and the modules.
+    let mut c = baseline();
+    c.apply_override("adversary.stage_cards=0,0,0").unwrap();
+    assert!(Rules::new(&c).err().is_some_and(|e| e.contains("stage_cards")));
+    let e = baseline().apply_override("board.unit_cap=x").unwrap_err();
+    assert!(e.contains("board.unit_cap"), "{e}");
+    let e = baseline().apply_override("boardd.unit_cap=3").unwrap_err();
+    assert!(e.contains("it has: board"), "{e}");
+}
+

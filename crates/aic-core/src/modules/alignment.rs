@@ -18,7 +18,7 @@ use crate::state::GameState;
 use crate::view::{CardView, ViewOut};
 
 use super::common::*;
-use super::{adversary, ai, board, cards, threats};
+use super::{adversary, ai, cards, threats};
 
 const PARAMS: [ParamSpec; 14] = [
     ParamSpec::int("undecided_per_player", 1, 50, "Sway in the Undecided at the start, per player"),
@@ -88,6 +88,11 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     let v = b.list("unity_ease")?;
     if v.is_empty() || v.iter().any(|&x| x < 1) || v.windows(2).any(|p| p[0] > p[1]) {
         return Err("alignment.unity_ease: give tip counts of 1 or more, in order".into());
+    }
+    // Sway only moves between the Undecided and the buckets: with less than a
+    // tip in all, nothing could ever tip (020).
+    if b.int("undecided_per_player")? < b.int("tip_per_player")? {
+        return Err("alignment.undecided_per_player: below tip_per_player, nothing could ever tip (the Undecided must hold at least one tip)".into());
     }
     Ok(Box::new(Alignment))
 }
@@ -384,7 +389,11 @@ fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
     let ambs: Vec<usize> = (0..g.hexes.len())
         .filter(|&h| g.tokens(h, &k) > 0)
         .collect();
-    let pres = board::presence_hexes(&w, g, s);
+    // The hexes holding the seat's presence (020: this listed `presence_hexes`, the
+    // free hexes where it could place one, so a sacrificed presence removed nothing).
+    let pres: Vec<usize> = (0..g.hexes.len())
+        .filter(|&h| g.tokens(h, &presence(s)) > 0)
+        .collect();
     let labelled = |what: &str, h: usize| {
         let mut o = hex_opt(&w, h);
         o.option = format!("{what} at {}", o.option);

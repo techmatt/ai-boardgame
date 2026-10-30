@@ -62,7 +62,7 @@
   "id": "blackout",
   "name": "Blackout",
   "tier": 1,
-  "text": "Cities here produce no energy this round; the adversary gains 2 compute.",
+  "text": "Cities here produce no energy next round; the adversary gains 2 compute.",
   "counter": [
    [
     "compute",
@@ -84,7 +84,7 @@
   "id": "sabotage",
   "name": "Sabotage",
   "tier": 1,
-  "text": "Data centres here produce no compute this round; the adversary gains 2 compute.",
+  "text": "Players with presence here make no compute next round; the adversary gains 2 compute.",
   "counter": [
    [
     "compute",
@@ -110,7 +110,7 @@
   "id": "infiltration",
   "name": "Infiltration",
   "tier": 1,
-  "text": "2 adversary ambassadors land on player buildings here (players choose each); the adversary gains 2 compute.",
+  "text": "2 adversary ambassadors land on player-owned pieces here (presence, aligned cities, owned buildings; players choose each); the adversary gains 2 compute.",
   "counter": [
    [
     "energy",
@@ -224,7 +224,7 @@
   "id": "overrun",
   "name": "Overrun",
   "tier": 2,
-  "text": "The clean city here with the most adversary ambassadors becomes corrupted (ties: lower hex number).",
+  "text": "The city here that is not corrupted (clean or aligned) with the most adversary ambassadors becomes corrupted (ties: lower hex number).",
   "counter": [
    [
     "antimatter",
@@ -241,7 +241,7 @@
   "id": "mass_production",
   "name": "Mass production",
   "tier": 2,
-  "text": "The adversary builds now; the adversary gains 3 compute.",
+  "text": "The adversary builds now, here; the adversary gains 3 compute.",
   "counter": [
    [
     "energy",

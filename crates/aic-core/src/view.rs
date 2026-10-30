@@ -419,6 +419,16 @@ impl ViewOut<'_> {
     }
 }
 
+/// A token kind in words, for a label: `presence:0` is "seat 0's presence",
+/// `ambassador:adversary` "adversary ambassador" (020: labels were raw keys).
+fn token_words(kind: &str) -> String {
+    match kind.split_once(':') {
+        Some((what, "adversary")) => format!("adversary {}", what.replace('_', " ")),
+        Some((what, seat)) => format!("seat {seat}'s {}", what.replace('_', " ")),
+        None => kind.replace('_', " "),
+    }
+}
+
 fn upsert(values: &mut Vec<Value>, v: Value) {
     match values.iter_mut().find(|x| x.key == v.key) {
         Some(x) => *x = v,
@@ -498,7 +508,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
                     .map(|(k, n)| {
                         engine(
                             format!("tokens.{k}"),
-                            k,
+                            &token_words(k),
                             n,
                             "tokens on this country's hexes",
                         )
@@ -519,7 +529,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
             values: seat
                 .resources
                 .iter()
-                .map(|(k, &n)| engine(format!("resource.{k}"), k, n, "on this seat's board"))
+                .map(|(k, &n)| engine(format!("resource.{k}"), &k.replace('_', " "), n, "on this seat's board"))
                 .collect(),
             cards: Vec::new(),
             board: None,

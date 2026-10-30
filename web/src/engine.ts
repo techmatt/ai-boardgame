@@ -178,11 +178,14 @@ export interface Step { snap: Snapshot; events: GameEvent[] }
 
 export let content: Content;
 export let version = '?';
+/** The rules revision the engine plays (`aic_core::RULES_REVISION`). */
+export let rulesRevision = 0;
 
 export async function load(): Promise<void> {
   await init();
   content = JSON.parse(wasm.content());
   version = wasm.version();
+  rulesRevision = wasm.rules_revision();
 }
 
 const snapshot = (json: string): Snapshot => ({ json, state: JSON.parse(json) });

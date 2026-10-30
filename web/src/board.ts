@@ -9,7 +9,7 @@
 // plain counters.
 
 import type { HexView, Token, View } from './engine';
-import { ADVERSARY_COLOUR, hexKey, kindFill, strong, tokenColour } from './format';
+import { ADVERSARY_COLOUR, hexKey, kindFill, placeNames, strong, tokenColour } from './format';
 
 const SQRT3 = Math.sqrt(3);
 const NS = 'http://www.w3.org/2000/svg';
@@ -284,7 +284,7 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
     if (len < 0.8) {
       // A target on the troop's own hex: a ring round the hex instead of an arrow.
       const g = el('g', { class: `arrow ${a.kind}${a.rounds <= 1 ? ' soon' : ''}`, 'data-from': a.from, 'data-to': a.to });
-      g.append(el('circle', { cx: f(bx), cy: f(by), r: 0.78, fill: 'none' }), el('title', {}, a.doc));
+      g.append(el('circle', { cx: f(bx), cy: f(by), r: 0.78, fill: 'none' }), el('title', {}, placeNames(a.doc)));
       arrowLayer.append(g);
       continue;
     }
@@ -296,7 +296,7 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
     const [px, py] = [-uy, ux];
     const head = `M${f(ex + ux * 0.2)},${f(ey + uy * 0.2)} L${f(ex + px * 0.12)},${f(ey + py * 0.12)} L${f(ex - px * 0.12)},${f(ey - py * 0.12)} Z`;
     g.append(el('path', { d: head }));
-    g.append(el('title', {}, a.doc));
+    g.append(el('title', {}, placeNames(a.doc)));
     arrowLayer.append(g);
   }
 

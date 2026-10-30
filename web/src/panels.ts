@@ -30,13 +30,16 @@ const pile = (v: View, key: string) => v.piles.find((p) => p.key === key);
 /** A value chip; `near` marks a value close to its max (where that is a warning). */
 export function valueChip(v: Value, scope: string, label = v.label, near = true): string {
   const val = v.max !== undefined ? `${v.value}<small>/${v.max}</small>` : `${v.value}`;
-  const warn = near && v.max !== undefined && v.max > 0 && v.value >= v.max * 0.75 ? ' near' : '';
+  // A countdown ("antimatter actions left 1/1") is full when it is safe: no warning
+  // near its max (020: drawn red all round).
+  const countdown = /left/.test(label);
+  const warn = near && !countdown && v.max !== undefined && v.max > 0 && v.value >= v.max * 0.75 ? ' near' : '';
   return `<span class="value${warn}" data-value="${esc(v.key)}" data-scope="${scope}"><span class="label">${esc(label)}</span> <b>${val}</b></span>`;
 }
 
 export function cardChip(c: CardView, where: string): string {
   const cost = c.cost !== undefined ? ` <small title="cost">${c.cost}</small>` : '';
-  const status = c.status && !['in slot', 'draft', 'drafted', 'built', 'slotted', 'resolved', 'ongoing'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
+  const status = c.status && !['in slot', 'draft', 'drafted', 'built', 'slotted', 'resolved', 'done', 'ongoing'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
   return `<span class="card ${esc(c.status.replace(/\s+/g, '-'))}" data-card="${esc(c.id)}" data-where="${where}">${esc(c.name)}${cost}${status}</span>`;
 }
 
@@ -110,9 +113,14 @@ export function statusHtml(v: View): string {
     loss.push(`<span class="value${danger}" data-value="${deck.key}" data-scope="global"><span class="label">adversary cards run out</span> <b>${deck.value}</b><small> left</small></span>`);
   }
   // Unlabelled `vars` (source "engine") are folded under the piles: see `varsHtml`.
-  const other = g.filter((x) => !DRAWN_GLOBALS.has(x.key) && x.source !== 'engine').map((x) => valueChip(x, 'global'));
+  // The clock's step is a name, not a count: "clock: war" (020: it read "war 2").
+  const clockChip = (x: Value) => `<span class="value" data-value="${esc(x.key)}" data-scope="global"><span class="label">clock</span> <b>${esc(x.label)}</b></span>`;
+  const other = g.filter((x) => !DRAWN_GLOBALS.has(x.key) && x.source !== 'engine').map((x) => (x.key === 'board.clock' ? clockChip(x) : valueChip(x, 'global')));
   if (loss.length || other.length) {
-    acards.push(`<span class="losses">${loss.length ? `<span class="what">Lose if</span>${loss.join('')}` : ''}${other.length ? `<span class="sep"></span>${other.join('')}` : ''}</span>`);
+    // The other tracks (the clock's step, Unity bonuses) beside the losses, not in them
+    // (020: drawn inside the red "Lose if" group).
+    if (loss.length) acards.push(`<span class="losses"><span class="what">Lose if</span>${loss.join('')}</span>`);
+    if (other.length) acards.push(`<span class="tracks">${other.join('')}</span>`);
   }
   // The Alignment cards and the loss conditions share one wrapping line.
   if (acards.length) parts.push(`<div class="acards">${acards.join('')}</div>`);
@@ -160,7 +168,7 @@ export function pipelineHtml(v: View): string {
     .map((x) => valueChip(x, 'global', short[x.key] ?? x.label.replace('adversary ', ''), false))
     .join('');
   const peek = deck?.visible.length
-    ? `<div class="sline peek">top: ${deck.visible.map((c) => `<span data-card="${esc(c.id)}" data-where="pile:adversary.deck">${esc(c.name)}</span>`).join(', ')}</div>`
+    ? `<div class="sline peek" title="${esc(`top of the deck: ${deck.visible.map((c) => c.name).join(', ')}`)}">top: ${deck.visible.map((c) => `<span data-card="${esc(c.id)}" data-where="pile:adversary.deck">${esc(c.name)}</span>`).join(', ')}</div>`
     : '';
   const deckBox = deck
     ? `<div class="slot-box deck" data-pile="adversary.deck"><div class="sline"><span class="stitle">Deck</span><span class="big">${deck.count}</span><small>left</small></div>${peek}<div class="hint">the clock: lose when no card is left for the next round</div></div>`
@@ -198,7 +206,7 @@ function projectsHtml(v: View): string {
     ? `<span class="agroup ongoing" data-pile="adversary.projects_ongoing"><span class="what">ongoing</span>${on.visible.map((c) => cardChip(c, 'pile:adversary.projects_ongoing')).join('')}</span>`
     : '';
   const last = done?.visible[done.visible.length - 1];
-  const doneText = done ? `<span class="adeck" data-pile="adversary.projects_done">resolved <b>${done.count}</b>${last ? ` <small>last: <span data-card="${esc(last.id)}" data-where="pile:adversary.projects_done">${esc(last.name)}</span></small>` : ''}</span>` : '';
+  const doneText = done ? `<span class="adeck" data-pile="adversary.projects_done" title="resolved or discarded">done <b>${done.count}</b>${last ? ` <small>last: <span data-card="${esc(last.id)}" data-where="pile:adversary.projects_done">${esc(last.name)}</span></small>` : ''}</span>` : '';
   const deckText = deck ? `<span class="adeck" data-pile="adversary.project_deck">deck <b>${deck.count}</b></span>` : '';
   return `<div class="projects-row" data-pile="adversary.projects"><span class="stitle">Projects</span>${cards.join('') || '<span class="empty">none visible</span>'}${ongoing}${doneText}${deckText}</div>`;
 }
@@ -258,10 +266,11 @@ export function countriesHtml(v: View, config: Config): string {
     const some = (n: number, what: string, cls = '') => (n ? [`<span class="${cls}">${n} ${what}</span>`] : []);
     const parts = [
       `cities ${cities.length - corrupted - aligned} clean`, ...some(aligned, 'aligned'), ...some(corrupted, 'corrupted', 'adv'),
-      ...some(tok('ambassador:adversary'), 'amb.', 'adv'), ...some(tok('troop'), `troop${tok('troop') === 1 ? '' : 's'}`, 'adv'),
+      ...some(tok('ambassador:adversary'), 'amb.', 'adv'), ...some(tok('node'), `node${tok('node') === 1 ? '' : 's'}`, 'adv'),
+      ...some(tok('troop'), `troop${tok('troop') === 1 ? '' : 's'}`, 'adv'),
       ...some(tok('unit'), `unit${tok('unit') === 1 ? '' : 's'}`),
     ];
-    const counts = `<span class="counts" title="cities: clean, aligned, corrupted; adversary ambassadors and troops; corp units at bases">${parts.join(' · ')}</span>`;
+    const counts = `<span class="counts" title="cities: clean, aligned, corrupted; adversary ambassadors, nodes and troops; corp units at bases">${parts.join(' · ')}</span>`;
     const flags = c.values.filter((x) => !x.key.startsWith('tokens.') && !x.key.startsWith('board.project')).map((x) => valueChip(x, `country:${c.index}`)).join('');
     const groups = c.cards.map((g) => g.key === 'threats.on'
       ? g.cards.map((x) => threatCard(x, `country:${c.index}:${g.key}`)).join('')
@@ -297,8 +306,9 @@ const SEAT_DRAWN = (k: string) =>
 export function seatValuesHtml(v: View, seatIndex: number): string {
   const s = v.seats[seatIndex];
   const scope = `seat:${seatIndex}`;
-  const res = s.values.filter((x) => x.key.startsWith('resource.'));
-  const names = new Set(res.map((x) => x.key.slice('resource.'.length)));
+  // Every resource any seat has, so seats show the same set (020: the Builder's
+  // energy, 0 with no income, was missing while the Protector's showed).
+  const names = new Set(v.seats.flatMap((x) => x.values).filter((x) => x.key.startsWith('resource.')).map((x) => x.key.slice('resource.'.length)));
   for (const x of s.values) {
     const r = x.key.startsWith('economy.income.') ? x.key.slice('economy.income.'.length) : null;
     if (r && x.value !== 0) names.add(r);
@@ -308,8 +318,10 @@ export function seatValuesHtml(v: View, seatIndex: number): string {
   const resHtml = sorted.map((r) => {
     const have = findValue(s.values, `resource.${r}`);
     const inc = findValue(s.values, `economy.income.${r}`);
-    const incHtml = inc ? `<span class="inc" data-value="${inc.key}" data-scope="${scope}">${inc.value >= 0 ? '+' : ''}${inc.value}</span>` : '';
-    return `<span class="res r-${esc(r)}" data-value="resource.${esc(r)}" data-scope="${scope}"><span class="label">${esc(r)}</span> <b>${have?.value ?? 0}</b>${incHtml}</span>`;
+    // Insight is set to its income each round, not added to (020: "+4" read as more).
+    const sign = r === 'insight' ? '→' : inc && inc.value >= 0 ? '+' : '';
+    const incHtml = inc ? `<span class="inc" data-value="${inc.key}" data-scope="${scope}" title="${r === 'insight' ? 'next round: insight is set to this, plus any insight-next-round bonus' : 'income in upkeep'}">${sign}${inc.value}</span>` : '';
+    return `<span class="res r-${esc(r)}" data-value="resource.${esc(r)}" data-scope="${scope}"><span class="label">${esc(have?.label ?? r.replace(/_/g, ' '))}</span> <b>${have?.value ?? 0}</b>${incHtml}</span>`;
   }).join('');
 
   const ai: string[] = [];

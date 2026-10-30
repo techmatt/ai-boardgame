@@ -147,11 +147,13 @@ fn replay_record(path: &str) -> bool {
     }
 }
 
-/// `win (unity)`, `loss (supply)`, `timeout (100000 actions)`.
+/// `win (unity)`, `loss (supply)`, `not over (100000 actions)`: a game with no
+/// outcome hit the action cap, or (a viewer bug report) was saved mid-game
+/// (020: both read "timeout").
 fn describe(outcome: Option<&Outcome>, actions: usize) -> String {
     match outcome {
         Some(o) => format!("{} ({})", if o.won { "win" } else { "loss" }, o.reason),
-        None => format!("timeout ({actions} actions)"),
+        None => format!("not over ({actions} actions)"),
     }
 }
 
@@ -257,7 +259,8 @@ struct Summary {
     adversary_ops_max_round: u32,
     /// Adversary operations during setup, mean per game.
     setup_ops_per_game: f64,
-    /// Mean per game, by counter name.
+    /// Mean per game, by counter name; a `*_round` counter is the mean over the
+    /// games that tallied it.
     counters: BTreeMap<String, f64>,
     replay_ok: u64,
     ms_per_game: f64,
@@ -417,7 +420,8 @@ fn simulate(
         {
             let seen: Vec<&str> = reasons.iter().copied().collect();
             eprintln!(
-                "warning: --save-when {w:?} matched no game ({label}); known: all, win, loss, timeout, {}",
+                // 020: said "known:", as if a reason no game met (unity, deck_empty) were unknown.
+                "warning: --save-when {w:?} matched no game ({label}); a typo? Selectors: all, win, loss, timeout, or an end reason; these games ended by: {}",
                 seen.join(", ")
             );
         }
@@ -445,6 +449,10 @@ fn simulate(
     let mut ended = BTreeMap::new();
     let mut end_round = BTreeMap::new();
     let mut counters: BTreeMap<String, f64> = BTreeMap::new();
+    // Games that tallied each counter: a `*_round` counter ("the round of the first
+    // corruption") is a mean over the games that reached it (020: averaged over all
+    // games, a game without one counted as round 0).
+    let mut reached: BTreeMap<String, f64> = BTreeMap::new();
     let (mut rounds, mut decisions, mut options, mut forced, mut ops) =
         (0u64, 0u64, 0u64, 0u64, 0u64);
     let (mut rmin, mut rmax, mut max_options, mut ops_max) = (u32::MAX, 0u32, 0u32, 0u32);
@@ -472,10 +480,27 @@ fn simulate(
         setup_ops += per.and_then(|v| v.first()).copied().unwrap_or(0) as u64;
         for (k, v) in &rec.stats.counters {
             *counters.entry(k.clone()).or_insert(0.0) += *v as f64;
+            *reached.entry(k.clone()).or_insert(0.0) += 1.0;
         }
     }
-    for v in counters.values_mut() {
-        *v /= n;
+    for (k, v) in counters.iter_mut() {
+        *v /= if is_round_counter(k) {
+            reached[k]
+        } else if let Some(r) = per_round_counter(k) {
+            // A round's own counter, per game that reached that round (020: games that
+            // had ended counted as 0, so the curves fell away late in the game). A level
+            // tallied every round (`adversary.ambassadors_r06`) is over the games that
+            // tallied it (a game can end in round 6 before the tally); an event count
+            // (`alignment.tip_unity.r03`, tallied only when it happens) over the games
+            // that reached the round.
+            if k.contains("_r") && !k.contains(".r") {
+                reached[k]
+            } else {
+                played.iter().filter(|g| g.record.rounds >= r).count().max(1) as f64
+            }
+        } else {
+            n
+        };
     }
     let first = played.first().map(|p| &p.record);
     let summary = Summary {
@@ -567,12 +592,20 @@ fn print_table(sides: &[Summary], diff: &[String], o: &Options) {
     names.sort();
     names.dedup();
     for k in names {
-        row(&format!("{k} /game"), &|s| {
+        let unit = if is_round_counter(k) {
+            "mean where reached"
+        } else if per_round_counter(k).is_some() {
+            "/game reaching it"
+        } else {
+            "/game"
+        };
+        row(&format!("{k} {unit}"), &|s| {
             s.counters.get(k).map_or("-".into(), |v| format!("{v:.2}"))
         });
     }
     row("replay ok", &|s| format!("{}/{}", s.replay_ok, s.games));
-    row("ms/game (incl. replay)", &|s| {
+    // Wall time over games, all threads at once (020: read as one game's cost).
+    row("wall ms/game (all threads, incl. replay)", &|s| {
         format!("{:.3}", s.ms_per_game)
     });
 
@@ -654,5 +687,35 @@ fn trace(r: &Rules, agent: &AgentSpec, seed: u64, max_actions: usize, to_stderr:
         events.clear();
         r.apply_mut(&mut g, &a, Some(&mut events)).expect("legal");
         events.iter().for_each(line);
+    }
+}
+
+/// A counter that records a round ("the round of the first corruption"): averaged
+/// over the games that reached it, not over all games.
+fn is_round_counter(k: &str) -> bool {
+    k.ends_with("_round")
+}
+
+/// The round of a per-round counter, from its `_rNN` or `.rNN` suffix.
+fn per_round_counter(k: &str) -> Option<u32> {
+    let tail = k.rsplit(['_', '.']).next()?;
+    let digits = tail.strip_prefix('r')?;
+    (digits.len() == 2 && digits.bytes().all(|b| b.is_ascii_digit())).then(|| digits.parse().ok())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 020: which counters average over the games that reached them.
+    #[test]
+    fn counters_that_average_over_reached_games() {
+        assert!(is_round_counter("adversary.first_corruption_round"));
+        assert!(!is_round_counter("board.war_rounds"));
+        assert_eq!(per_round_counter("adversary.ambassadors_r06"), Some(6));
+        assert_eq!(per_round_counter("alignment.tip_unity.r11"), Some(11));
+        assert_eq!(per_round_counter("board.war_rounds"), None);
+        assert_eq!(per_round_counter("adversary.removed_troop.r"), None);
+        assert_eq!(per_round_counter("adversary.nodes_peak.c0"), None);
     }
 }

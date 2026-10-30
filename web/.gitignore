@@ -5,3 +5,4 @@ dist/
 # Built by `npm run wasm` from crates/aic-wasm
 src/wasm/
 e2e-out/
+sweep-out/

@@ -178,7 +178,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         }
         Effect::DamageCountry { amount } => {
             let cs = countries_where(&w, |h| has_adversary(g, h));
-            let opts = cs.iter().map(|&c| country_opt(c)).collect();
+            let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt = format!(
                 "Seat {seat}: remove {amount} worth in each adversary hex of which country?"
             );
@@ -217,7 +217,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         }
         Effect::RemoveAmbassadorsCountry { unity_per } => {
             let cs = countries_where(&w, |h| g.tokens(h, ADV_AMBASSADOR) > 0);
-            let opts = cs.iter().map(|&c| country_opt(c)).collect();
+            let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt =
                 format!("Seat {seat}: remove every adversary ambassador in which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
@@ -284,7 +284,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
                         .any(|&h| has_building(g, h) && in_reach(&w, g, seat, h))
                 })
                 .collect();
-            let opts = cs.iter().map(|&c| country_opt(c)).collect();
+            let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt = format!("Seat {seat}: harden {count} buildings in which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 let hexes: Vec<usize> = w.map.countries[cs[i]]
@@ -331,7 +331,7 @@ fn one(g: &mut GameState, cx: &mut Cx, seat: usize, e: &Effect, ctx: &mut Ctx) -
         Effect::GainAmbassadors { count } => cx.add_resource(g, seat, AMBASSADORS, *count),
         Effect::Shelter => {
             let cs: Vec<usize> = (0..w.map.countries.len()).collect();
-            let opts = cs.iter().map(|&c| country_opt(c)).collect();
+            let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt = format!("Seat {seat}: shelter the buildings of which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 board::shelter(g, cx, cs[i]);

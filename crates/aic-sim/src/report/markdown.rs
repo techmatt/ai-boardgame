@@ -159,7 +159,7 @@ pub fn markdown(run: &Run) -> String {
     }
 
     let _ = writeln!(w, "\n## Win rate by skill tier × difficulty\n");
-    let _ = writeln!(w, "Win % ± standard error, then mean survival (rounds reached; a win counts its rounds plus the adversary cards left plus 2). Skill gap: the strongest agent's win rate minus the weakest's (survival in brackets).\n");
+    let _ = writeln!(w, "Win % ± standard error, then mean survival (rounds reached; a win counts its rounds plus the adversary cards left plus 2). Skill gap: the top ladder tier's win rate minus the bottom tier's, each tier by its best agent (survival in brackets); the top tier is not always the strongest agent.\n");
     for g in run.groups {
         let mut head = format!(
             "| {}{}difficulty {} |",

@@ -2,7 +2,7 @@
  {
   "id": "builder",
   "name": "Builder",
-  "text": "The wide engine: mostly off the board. Many building slots, strong credit income, late tier 2.",
+  "text": "The wide engine: mostly off the board. Many building slots, strong credit income.",
   "slots": 6,
   "innate": {
    "name": "Economies of scale",
@@ -132,7 +132,7 @@
  {
   "id": "protector",
   "name": "Protector",
-  "text": "The board guardian: lives on the map. Few slots, energy income, early tier 2.",
+  "text": "The board guardian: lives on the map. Few slots, energy income.",
   "slots": 3,
   "innate": {
    "name": "Bulwark",

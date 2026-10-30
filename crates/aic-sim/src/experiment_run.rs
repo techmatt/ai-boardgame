@@ -138,9 +138,25 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
         games.len(),
         records
     );
+    // Name the config and variant when there are several (020: a spec with two
+    // variants printed every cell twice, indistinguishable).
+    let configs: std::collections::BTreeSet<&str> = sums.iter().map(|s| s.config_name.as_str()).collect();
+    let variants: std::collections::BTreeSet<&str> = sums.iter().map(|s| s.variant.as_str()).collect();
+    let cell = |s: &report::CellSummary| {
+        let mut c = String::new();
+        if configs.len() > 1 {
+            c.push_str(&format!("{} ", s.config_name));
+        }
+        if variants.len() > 1 {
+            c.push_str(&format!("{} ", s.variant));
+        }
+        c
+    };
+    let width = sums.iter().map(|s| cell(s).len()).max().unwrap_or(0);
     for s in &sums {
+        let cell = format!("{:width$}", cell(s));
         println!(
-            "  d{} {:24} win {:5.1}%  rounds {:5.2}  agent {:8.1} ms/game",
+            "  {cell}d{} {:24} win {:5.1}%  rounds {:5.2}  agent {:8.1} ms/game",
             s.difficulty,
             s.agent,
             100.0 * s.win_rate,

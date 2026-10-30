@@ -78,7 +78,7 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
 ## Config
 
 A config is JSON. [`configs/baseline.json`](../configs/baseline.json) is the baseline
-game, rules revision 9 (2 countries, difficulty 0);
+game, rules revision 11 (2 countries, difficulty 0);
 [`configs/shared_row.json`](../configs/shared_row.json) differs only in the threat
 variant. Abridged:
 
@@ -87,8 +87,8 @@ variant. Abridged:
   "name": "baseline",
   "countries": 2,
   "modules": [
-    { "module": "board", "variant": "corps", "params": { "start_corrupted": 1, "war": [0, 1, 0, 1, 0, 1, 1, 1], ... } },
-    { "module": "adversary", "variant": "militarist", "params": { "difficulty": 0, "stage_cards": [3, 4, 3], ... } },
+    { "module": "board", "variant": "corps", "params": { "start_corrupted": 1, "clock": [1, 2, 1, 2, 1, 3], ... } },
+    { "module": "adversary", "variant": "militarist", "params": { "difficulty": 0, "stage_cards": [4, 4, 3], ... } },
     { "module": "threats", "variant": "countries", "params": { "per_country": 1 } },
     { "module": "alignment", "variant": "tug", "params": { "undecided_per_player": 3, "tip_per_player": 2, ... } },
     { "module": "economy", "variant": "standard", "params": { ... } },
@@ -135,9 +135,10 @@ variant. Abridged:
   - `cards.variant=free_keep` switches variant and drops the parameters the new
     variant doesn't take, so only its new ones need setting
     (`--set cards.free_keeps=1`);
-  - `<module>=off` removes a module and its phases. Today every module is needed by
-    another (`ModuleDef::requires`, see [Modules](#modules)), so this is rejected with
-    the reason. To measure a module's effect, use its `off` *variant* instead
+  - `<module>=off` removes a module and its phases. `threats`, `cards` and `economy`
+    can go; `board`, `adversary`, `alignment` and `ai` are needed by another
+    (`ModuleDef::requires`, see [Modules](#modules)), so that is rejected with the
+    reason. To measure a module's effect, use its `off` *variant* instead
     (`threats.variant=off`,
     `alignment.variant=off`, `cards.variant=off`): it keeps the module's phases and
     the parameters other modules read, and does nothing. See rules.md §9.
@@ -166,21 +167,22 @@ names, reach) and `effects.rs` (the player effect primitives) are shared code;
 (`plan::next_build`, the adversary's next build off the face-up card). Rules
 areas lean on each other, so modules call each other's public functions (a card's
 removal calls `adversary::damage`, which sways toward Unity through
-`alignment::for_kill` when it takes a troop) and read each other's
+`alignment::for_troop_removed` when it takes a troop) and read each other's
 parameters through `World::int("<module>.<param>")`. A module lists the modules it reads
 in `ModuleDef::requires`; a config missing one is rejected. Today:
 
 | Module | `requires` |
 |---|---|
-| `board` | `adversary`, `ai`, `cards`, `alignment` |
-| `adversary` | `board`, `cards`, `alignment` |
-| `threats` | `adversary`, `alignment`, `board`, `cards` |
-| `alignment` | `adversary`, `ai`, `board`, `cards`, `threats` |
-| `economy` | `ai`, `cards`, `alignment` |
-| `ai` | `cards`, `adversary`, `alignment`, `threats` |
-| `cards` | `ai`, `adversary`, `alignment`, `threats`, `economy`, `board` |
+| `board` | `adversary`, `ai`, `alignment` |
+| `adversary` | `board`, `alignment` |
+| `threats` | `adversary`, `alignment` |
+| `alignment` | `adversary`, `ai`, `board` |
+| `economy` | `ai` |
+| `ai` | `board` |
+| `cards` | `ai`, `adversary`, `alignment`, `board` |
 
-Every module is required by at least one other, so `<module>=off` is always rejected
+(020: the table had gone stale; this is `ModuleDef::requires` today.) No module
+requires `threats`, `cards` or `economy`, so `<module>=off` is rejected only
 for `board`, `adversary`, `alignment` and `ai` (the config tests assert it for `alignment=off` and `board=off`); since 016 `requires` lists only the modules whose parameters a module reads, so `threats=off`, `cards=off` and `economy=off` are accepted and play (also tested); a module's effect
 is measured with its `off` variant instead (`threats`, `alignment` and `cards` have one).
 
@@ -315,15 +317,14 @@ Content is data in `content/`, composed from code primitives:
   player, `ongoing`, `text` and `effects` ([`AlignOp`], the same primitives as the
   Alignment cards).
 - **AI boards** (`ais.json`): slots, credit production, resource `discounts`, innate
-  passives, two data-centre tracks, growth options (lists of `Effect`), unique cards,
-  and the Unity sway it adds each round (`unity`).
+  passives, the presence track (`presence`: what each space uncovers) and flat `income`, growth options (lists of `Effect`) and unique cards.
 - **Alignment cards** (`alignment.json`, the Unity and Discord decks): `side` (`unity`
   or `discord`), `tier` (1 or 2), `text`, `effects` ([`AlignOp`]: resolved when its
   side's bucket tips) and `steps` (017: from `at` tips of its side, other `effects`).
   Cards are one-shot; there is no `ongoing` field.
 - **Country pieces** (`map.json`, `countries`): cities, the order cities start
   corrupted in (`corrupted`), ocean, setup buildings (research stations, factories),
-  starting data-centre spots, and the corp's megaproject card.
+  the starting presence spot (`presence`), and the corp's megaproject card.
 
 Ids are unique across all content, and actions refer to content by id, so reordering a
 file does not break action logs. `Content::check` validates references, and every tag
@@ -331,7 +332,7 @@ and resource name, when the content loads.
 
 ## Map
 
-`content/map.json` defines the piece shape (4×4 rhombus, 3 card slots), one layout per
+`content/map.json` defines the piece shape (4×4 rhombus), one layout per
 country count (1–4), and the four printed country pieces. A placed piece covers
 `anchor + i·axes[0] + j·axes[1]` for `i, j` in `0..4`:
 
@@ -355,7 +356,7 @@ web viewer draws only these:
 | Part | Holds | Filled by the engine |
 |---|---|---|
 | `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `number`, `kind` (`city`, `base`, `open`, `ocean`), `facing` (a base's rival country), `tokens` (`{kind, count}`) | every token stack on every hex |
-| `countries[c]` | `name` (the printed piece's, `content/map.json`), `colour`, `hexes`, `slots` (card strip), `values`, `cards` (card groups, such as its threat) | `name`; `tokens.<kind>` totals over the country |
+| `countries[c]` | `name` (the printed piece's, `content/map.json`), `seat`, `colour`, `hexes`, `values`, `cards` (card groups, such as its threat) | `name`; `tokens.<kind>` totals over the country |
 | `seats[s]` | `passed`, `values`, `cards` (card groups), `board` (a player board, or `null`) | `resource.<name>` per resource; exhausted cards no module shows, as group `engine.exhausted` |
 | `globals` | `values` of the whole game | every `vars` track no module declares bookkeeping, by its key |
 | `piles` | `{key, label, owner, count, visible}` | none: modules add them |
@@ -415,8 +416,8 @@ In the baseline:
   `n/cost compute`), `adversary.projects_ongoing`, `adversary.projects_done` and
   `adversary.project_deck` (count only). Bookkeeping: `adversary.project.*` (each
   visible project's compute), `adversary.first_project`.
-- `ai` adds each seat's board (`ai.board`: name, text, innate rule, both tracks with
-  every step, tier-2 and antimatter marks, printed slots, the AI's unique cards and
+- `ai` adds each seat's board (`ai.board`: name, text, innate rule, the presence track
+  with every step, tier-2 and antimatter marks, printed slots, the AI's unique cards and
   where they are), tier-2 unlock and credit production. Bookkeeping: `ai.track.*` (the
   tracks' `uncovered`).
 - `board` shows its per-country flags (blackout, sabotage, shelter) and each country's

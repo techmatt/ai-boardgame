@@ -270,6 +270,21 @@ try {
   }
   await size(1366, 768);
 
+  // 020: the words on screen (engine hex names and content ids are shown by name), the
+  // header's rules revision, and stepping a long game stays fast.
+  const words = await js(`(() => {
+    // Action lines and the step label for ids; every log line (notes too) for hex names.
+    const text = [...document.querySelectorAll('#prompt, #seats button, #tab-log .head, #step')].map((e) => e.textContent).join(' ');
+    const lines = [...document.querySelectorAll('#tab-log .head, #tab-log li')].map((e) => e.textContent).join(' ');
+    const t = []; for (let i = 0; i < 20; i++) { const s = performance.now(); window.aic.seek(Math.floor(window.aic.timeline.last * i / 20)); t.push(performance.now() - s); }
+    window.aic.seek(window.aic.timeline.last);
+    return { place: (text + ' ' + lines).match(/\\bC\\d+ #\\d+/)?.[0] ?? null, id: text.match(/\\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\\b/)?.[0] ?? null,
+      version: document.getElementById('version').textContent, seek: Math.max(...t) };
+  })()`);
+  check(!words.place && !words.id, `log, prompt and buttons name hexes and cards in words${words.place || words.id ? ` (saw ${words.place ?? words.id})` : ''}`);
+  check(/rules r\d+/.test(words.version), `the header shows the rules revision (${words.version})`);
+  check(words.seek < 100, `stepping through ${end.n} actions stays fast (slowest seek ${words.seek.toFixed(0)} ms)`);
+
   // Undo by replay, and the saved session survives a reload.
   await js(`document.getElementById('undo').click()`);
   const afterUndo = await js('window.aic.timeline.last');
@@ -359,10 +374,18 @@ try {
   console.error(e);
   failures++;
 } finally {
+  // Close the browser over the protocol and wait for it, then delete its profile (020:
+  // killing only the parent left the profile held, so every run leaked it in %TEMP%).
+  const exited = new Promise((r) => (browser.exitCode !== null ? r() : browser.once('exit', r)));
+  await Promise.race([send('Browser.close').catch(() => {}), sleep(2000)]);
   ws.close();
-  browser.kill();
-  await sleep(300);
-  try { rmSync(profile, { recursive: true, force: true }); } catch { /* the browser may still hold it */ }
+  await Promise.race([exited, sleep(5000)]);
+  if (browser.exitCode === null) browser.kill();
+  try {
+    rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  } catch (e) {
+    console.warn(`could not delete the browser profile ${profile}: ${e.message}`);
+  }
 }
 console.log(failures ? `e2e FAILED (${failures})` : 'e2e ok');
 process.exit(failures ? 1 : 0);

@@ -4,7 +4,7 @@
 // Undo drops the last action; stepping back moves a cursor; acting from an earlier
 // step drops the later actions first.
 
-import { apply, parseRecord, start, type Action, type GameEvent, type GameRecord, type Snapshot } from './engine';
+import { apply, parseRecord, rulesRevision, start, type Action, type GameEvent, type GameRecord, type Snapshot } from './engine';
 
 const SAVE_KEY = 'aic.session';
 const U64_MAX = 0xffff_ffff_ffff_ffffn;
@@ -173,6 +173,13 @@ export function randomSeed(): string {
 /** A pasted or opened record; throws with the reason it can't be used. */
 export function readRecord(text: string): GameRecord {
   const r = parseRecord(text);
-  if (r.config_error) throw new Error(`the record's config is invalid for this engine: ${r.config_error}`);
+  if (r.config_error) {
+    // Say first that it is an older game (020: only a long parameter list said so).
+    // 0 is "not recorded" (the field defaults to it).
+    const older = r.rules_revision && r.rules_revision !== rulesRevision
+      ? `this record is from rules revision ${r.rules_revision} and this engine plays revision ${rulesRevision}: `
+      : '';
+    throw new Error(`${older}the record's config is invalid for this engine: ${r.config_error}`);
+  }
   return r;
 }

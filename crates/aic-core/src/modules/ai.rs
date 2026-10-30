@@ -180,12 +180,19 @@ impl Module for Ai {
                 .cards
                 .iter()
                 .map(|id| {
+                    // A board two seats play has one copy of each card (rules.md
+                    // §7): say who holds it (020: the second seat read "gone").
+                    let other = (0..g.seats.len()).find(|&o| {
+                        o != s && (g.pile(&cards::hand(o)).contains(id) || g.pile(&cards::built(o)).contains(id))
+                    });
                     let status = if g.pile(&hand).contains(id) {
-                        "in hand"
+                        "in hand".to_string()
                     } else if g.pile(&built).contains(id) {
-                        "built"
+                        "built".to_string()
+                    } else if let Some(o) = other {
+                        format!("with seat {o}")
                     } else {
-                        "gone"
+                        "gone".to_string()
                     };
                     let (name, text) = match w.content.card_index(id) {
                         Some(i) => (

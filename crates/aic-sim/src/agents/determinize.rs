@@ -345,7 +345,15 @@ mod tests {
                                 s.var("alignment.discord_tips"),
                             )
                         };
-                        if x.round == g.round && tips(&x) == tips(&g) && tips(&y) == tips(&g) {
+                        // Or a new project row is dealt (from the hidden
+                        // project deck; 020's r11 games met one).
+                        let row = |s: &GameState| s.pile(aic_core::modules::adversary::PROJECT_DECK).len();
+                        if x.round == g.round
+                            && tips(&x) == tips(&g)
+                            && tips(&y) == tips(&g)
+                            && row(&x) == row(&g)
+                            && row(&y) == row(&g)
+                        {
                             assert_eq!(
                                 (&x.hexes, &x.vars, &x.seats),
                                 (&y.hexes, &y.vars, &y.seats),

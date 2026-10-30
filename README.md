@@ -6,12 +6,14 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 
 - [docs/principles.md](docs/principles.md): design pillars, difficulty targets, lenses,
   measures.
-- [docs/rules.md](docs/rules.md): what the code implements: **rules revision 10** (019: adversary troops march 2 steps a round toward player presence and destroy it, nodes removed only by tier-2 effects, Unity makes nodes stop counting; 018: the structural fixes and calibration, troops used up when they strike; 017: the adversary project deck, one-shot Alignment cards; on 016: presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the purge), on the 014
+- [docs/rules.md](docs/rules.md): what the code implements: **rules revision 11** (020: bug fixes from the bug hunt: Blackout and Sabotage hit the next round, only a lone presence leaks, no no-op move, Purge the Unaligned takes a real presence; 019: adversary troops march 2 steps a round toward player presence and destroy it, nodes removed only by tier-2 effects, Unity makes nodes stop counting; 018: the structural fixes and calibration, troops used up when they strike; 017: the adversary project deck, one-shot Alignment cards; on 016: presence, the adversary ladder with nodes, factories and hardware, the production/war clock, the purge), on the 014
   board model, Militarist against Builder and Protector, 1–4 countries, with every
   default and deviation.
 - [docs/ruleset-v0.md](docs/ruleset-v0.md): the v0 design draft as handed over.
 - [docs/architecture.md](docs/architecture.md): modules, configs and tunables, the
   invariants, and how to add a module, variant or card.
+- [docs/qa-findings.md](docs/qa-findings.md): every bug-hunt finding (fixed, deferred
+  with a recommendation, or won't fix); read it before a hunt.
 - [CLAUDE.md](CLAUDE.md): the working contract for executors.
 
 ## Layout
@@ -24,8 +26,8 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history and does not replay. `archive/`: specs the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces with their cities, ocean, setup buildings and megaproject), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, `alignment.json` (the Unity and Discord decks), all built from code primitives. |
-| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects, r10 (2 countries, difficulty 0; 018 calibrated it and 019 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. Opt-in variants: `cards.variant=free_keep` (+ `cards.free_keeps=1`). The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
-| `scripts/` | `wasm-smoke.mjs`: plays one game through the wasm package in Node (current). `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline (current). `board/`: `screen_019.py` (019), the r10 troop and node summary with the strategy-health gate (current); `screen_018.py` (018), the r9 calibration summary (reads r10 too); `screen_017.py` (017), the r8 screen summary (reads r9 too); `screen_016.py` (016), the r7 screen summary (reads r8 too); `screen_summary.py` (014), the board screen summary (current). `alignment/` (013): the Alignment screen summary (current: the alignment counters it reads still exist). `bench/` (012): `same_results.py`, compares two experiment outputs (current). `tune/` (007–008): `sweep.py`, `log_table.py` and `engine_sweep.py` (`sweep.py` still runs on r9: 018 used it). `payback/` (009): content patches and summaries for r3's payback sweep, not checked against r6 (see [experiments/history.md](experiments/history.md)). |
+| `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects, r11 (2 countries, difficulty 0; 018 calibrated it and 019 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. Opt-in variants: `cards.variant=free_keep` (+ `cards.free_keeps=1`). The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
+| `scripts/` | `wasm-smoke.mjs`: plays one game through the wasm package in Node (current). `wasm-parity.mjs` (020): replays aic-sim records of every variant in wasm (current). `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline (current). `board/`: `screen_019.py` (019), the r10 troop and node summary with the strategy-health gate (current); `screen_018.py` (018), the r9 calibration summary (reads r10 too); `screen_017.py` (017), the r8 screen summary (reads r9 too); `screen_016.py` (016), the r7 screen summary (reads r8 too); `screen_summary.py` (014), the board screen summary (current). `alignment/` (013): the Alignment screen summary (current: the alignment counters it reads still exist). `bench/` (012): `same_results.py`, compares two experiment outputs (current). `tune/` (007–008): `sweep.py`, `log_table.py` and `engine_sweep.py` (`sweep.py` still runs on r9: 018 used it). `payback/` (009): content patches and summaries for r3's payback sweep, not checked against r6 (see [experiments/history.md](experiments/history.md)). |
 | `web/` | Browser viewer (Vite + TS on `aic-wasm`): play any config and seed, watch and step through sim game records, copy bug reports. See [web/README.md](web/README.md). |
 
 Core source map: `rules.rs` (config compilation, round/phase loop, apply, choice
@@ -36,7 +38,8 @@ replay), `module.rs` (the module framework: `ModuleDef`, `VariantDef`, `Module`,
 fingerprints), `driver.rs` (`play`/`replay` with an `Agent`, `GameRecord`), `view.rs`
 (the generic view clients draw), `record.rs` (`SavedGame`, the game record format), `tests/` (`mod.rs`: helpers,
 `variant_matrix`, `golden_game`; one file per area: config, map, setup, adversary,
-plan, board, threats, alignment, cards, determinism, view).
+plan, board, threats, alignment, cards, projects, determinism, view; `invariants`
+(020): checks after every action of random games).
 
 ## Viewer
 
@@ -69,6 +72,17 @@ Details, and the browser check (`npm run e2e`), are in [web/README.md](web/READM
   check passes. Gotcha: a backgrounded `npx vite preview` outlives its tool-runner
   wrapper when that is stopped at its time limit, so the port stays taken: stop the
   `node` process that holds it.
+- **The sweep** (020, the bug hunt's checker): `npm run sweep -- --quick` from `web/`
+  (with `AIC_URL`; needs a release `aic-sim`) plays and watches greedy and random games
+  across countries, difficulties and variants, screenshots the moments that matter into
+  contact sheets and checks the page there (console errors, stuck games, overflow,
+  covered buttons, raw ids, step time, memory). ~4.5 min quick, ~20 min full with
+  `AIC_SWEEP_SEEDS=2` (give a background run a long timeout, and serve the viewer from a
+  process that outlives 10 minutes too); a sweep spawns `aic-sim`, so don't rebuild it
+  mid-sweep (records from a newer engine than the page's wasm load with warnings); details
+  in [web/README.md](web/README.md#the-sweep). Its rules twin is the core test
+  `invariants_hold_in_random_games` (every action of random games: no negative piles,
+  no pieces on the ocean, presence accounted for, a legal action until the end).
 - `node scripts/shots-017.mjs` (with `AIC_URL` and `AIC_SHOTS=<dir>`, ~30–90 s) plays
   baseline seeds and saves viewer shots of the adversary project row mid-fill and after
   a project resolved (017).
@@ -98,6 +112,7 @@ cargo test-slow                                    # the slow lane alone: ~28 s 
 cargo build --release -p aic-sim                   # ~12 s
 wasm-pack build crates/aic-wasm --target web       # ~20 s cold, ~9 s warm -> crates/aic-wasm/pkg (git-ignored)
 node scripts/wasm-smoke.mjs                        # needs the wasm build; checks native = wasm
+node scripts/wasm-parity.mjs [games]               # 020: native = wasm over the variant matrix (aic-sim records replayed in wasm); ~22 s with 2 games a variant and agent
 ```
 
 **Test lanes.** The slow lane is the tests marked `#[ignore = "slow lane: ..."]`: whole
@@ -158,7 +173,7 @@ $S replay out/games/*.json                         # check records natively (als
 | Option | Default | Meaning |
 |---|---|---|
 | `--games N` / `--seed S` | `200` / `0` | Seeds `S` to `S+N-1`, one game per seed per config (any `u64`, up to `u64::MAX`). |
-| `--set K=V` | | Override for every config. Repeatable. `countries=N`; `<module>.<param>=V` with `V` as `3` or `1,2,3`, or empty to unset; `<module>.variant=NAME` (keeps the parameters the new variant shares, drops the rest); `<module>=off` (removes the module and its phases; today every module is required by another, so the config is rejected: use `<module>.variant=off`). |
+| `--set K=V` | | Override for every config. Repeatable. `countries=N`; `<module>.<param>=V` with `V` as `3` or `1,2,3`, or empty to unset; `<module>.variant=NAME` (keeps the parameters the new variant shares, drops the rest); `<module>=off` (removes the module and its phases: `threats`, `cards` and `economy` can go (economy off plays with no upkeep income at all); `board`, `adversary`, `alignment` and `ai` are required by another module, so the config is rejected: use `<module>.variant=off`). |
 | `--set-a K=V` / `--set-b K=V` | | Override for config A or config B only. |
 | `--agent SPEC` | `random` | The team agent (see [Agents](#agents)), e.g. `greedy`, `beam:width=4`. Shown in the table header and in `--json`. |
 | `--max-actions N` | `100000` | Per-game action cap. A capped game ends as `timeout`. |
@@ -178,20 +193,21 @@ The output shows each config's hash, content hash and engine version, plus an
 - games by end reason and by end round;
 - decisions per game, options per decision, forced decisions %, and max options;
 - adversary ops per round (mean, and the max in any one round), and at setup;
-- every module counter, averaged per game;
+- every module counter, averaged per game; a `*_round` counter (the round of the first corruption, of the first project) over the games that reached it ("mean where reached"), and a round's own counter (`_rNN`, `.rNN`) over the games that reached that round (020);
 - `replay ok`;
-- `ms/game`.
+- `wall ms/game`: the run's wall time over its games, all threads at once (so it falls with `--threads`).
 
 **Replay check:** each game is replayed from seed + actions through `Rules` rebuilt from
 the resolved config, and must equal the final state. The exit code is 1 on any
 mismatch, and 2 on a bad config or bad arguments (including a seed range that
 overflows `u64`).
 
-Measured on this machine (014 board, 2 countries, random agent, 12:05am): about 1.5 ms
-per game, replay included (every action and automatic phase clones the state for choice
-replay); 2,000 games take about 3 s. Random games last about 5 rounds and all lose,
-almost all on the adversary's ambassador supply (1,984 of 2,000; the rest on every city
-corrupted).
+Measured on this machine (r11, 2 countries, random agent, 4:09pm, with a browser sweep
+running): about 3.7 ms per game, replay included (every action and automatic phase
+clones the state for choice replay); 2,000 games take about 7.5 s. Random games last
+about 8 rounds (5..12) and all lose: 1,233 of 2,000 on the adversary's ambassador
+supply, 598 on every city corrupted, 169 on the deck running out. (014: 1.5 ms, 5
+rounds, almost all on the supply.)
 
 **Game records** (`aic-game-record/1`, `aic_core::SavedGame`) are JSON: the resolved
 config, the seed and the action list (one action per line), plus a `note` saying why the
@@ -277,7 +293,7 @@ $S experiment experiments/ladder-v0.json                    # -> out/experiments
 $S experiment experiments/smoke.json --out out/smoke        # a quick check (6 seeds)
 $S experiment experiments/ladder-v0.json --games 20 --seed 1000 --threads 6
 $S experiment experiments/screen-014-board.json --quick     # scoping: shallow agents, 16 seeds, no probes
-$S experiment experiments/screen-014-board.json --resume    # continue a stopped run from its games.jsonl
+$S experiment experiments/screen-014-board.json --quick --resume  # continue a stopped run: the same flags (--quick, --out, --games, --seed) as it started with
 ```
 
 **Tuning sweeps** (`scripts/tune/`, from the repo root): `sweep.py` runs `aic-sim run --json`

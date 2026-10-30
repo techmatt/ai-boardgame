@@ -510,7 +510,7 @@ pub struct ThreatDef {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Spot {
-    /// Data centres and player-owned stations and cities.
+    /// Player-owned pieces: presence, aligned cities, owned stations and factories.
     PlayerBuildings,
     CleanCities,
     Factories,
@@ -564,7 +564,7 @@ pub enum ThreatOp {
     Discord {
         amount: i64,
     },
-    /// The adversary builds now (everywhere).
+    /// The adversary builds now, in the threat's scope (its country, or everywhere on the shared row).
     Build,
     DiscardMostExpensive,
     /// The adversary gains `amount` compute (onto its projects, 017).

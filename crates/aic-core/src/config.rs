@@ -94,10 +94,14 @@ impl Config {
     }
 
     fn module_mut(&mut self, id: &str) -> Result<&mut ModuleConfig, String> {
-        self.modules
-            .iter_mut()
-            .find(|m| m.module == id)
-            .ok_or_else(|| format!("config has no module {id:?}"))
+        match self.modules.iter().position(|m| m.module == id) {
+            Some(i) => Ok(&mut self.modules[i]),
+            None => {
+                // 020: name the modules there are, as a config file's typo does.
+                let have: Vec<&str> = self.modules.iter().map(|m| m.module.as_str()).collect();
+                Err(format!("config has no module {id:?} (it has: {})", have.join(", ")))
+            }
+        }
     }
 
     /// Applies one override. Used by sweeps; the result is still validated
@@ -176,7 +180,7 @@ impl Config {
             m.params.remove(param);
         } else {
             m.params
-                .insert(param.to_string(), ParamValue::parse(value)?);
+                .insert(param.to_string(), ParamValue::parse(value).map_err(|e| format!("{module}.{param}: {e}"))?);
         }
         Ok(())
     }

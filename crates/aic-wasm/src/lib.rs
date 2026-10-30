@@ -39,6 +39,12 @@ pub fn version() -> String {
     aic_core::VERSION.to_string()
 }
 
+/// The rules revision this engine plays (`aic_core::RULES_REVISION`).
+#[wasm_bindgen]
+pub fn rules_revision() -> u32 {
+    aic_core::RULES_REVISION
+}
+
 /// All content as JSON: the map (piece shape, layouts, country pieces),
 /// player cards, threats, adversary cards, AI boards and the Unity and
 /// Discord decks.

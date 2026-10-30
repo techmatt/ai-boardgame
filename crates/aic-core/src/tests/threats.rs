@@ -155,3 +155,40 @@ fn difficulty_1_raises_the_counters_and_deals_more_threats() {
     assert_eq!(g1.round, 2);
     assert_eq!((on(&g1, 0), on(&g1, 1)), (3, 3));
 }
+
+/// 020: threats execute after production and upkeep, so a Blackout or
+/// Sabotage flag lasts through the next round's production and upkeep
+/// (cleared "this round", it never landed).
+#[test]
+fn blackout_and_sabotage_last_into_the_next_rounds_production() {
+    let round = [ACTIONS, "board.produce", "economy.upkeep", "threats.execute", "board.cleanup"];
+    let rules = Rules::new(&lab_config(&round)).unwrap();
+    let mut g = rules.new_game(3);
+    deal(&mut g, "blackout", 1);
+    deal(&mut g, "sabotage", 0);
+    let pass_round = |g: &mut GameState| {
+        for s in 0..2 {
+            rules.apply_mut(g, &Action::Pass { seat: s }, None).unwrap();
+        }
+    };
+    // A twin with no threats: what round 2 would have paid.
+    let mut twin = rules.new_game(3);
+    pass_round(&mut g);
+    pass_round(&mut twin);
+    assert_eq!(g.round, 2);
+    assert!(board::flagged(&g, "blackout", 1) && board::flagged(&g, "sabotage", 0));
+    let before = |g: &GameState| (0..2).map(|s| (g.resource(s, "compute"), g.resource(s, "energy"))).collect::<Vec<_>>();
+    let (b, bt) = (before(&g), before(&twin));
+    pass_round(&mut g);
+    pass_round(&mut twin);
+    assert_eq!(g.round, 3);
+    assert!(!board::flagged(&g, "blackout", 1) && !board::flagged(&g, "sabotage", 0));
+    // Round 2's upkeep paid seat 0 (presence in country 0) no compute, and round
+    // 2's production less energy (country 1's cities made none).
+    let gain = |g: &GameState, b: &[(i64, i64)], s: usize| (g.resource(s, "compute") - b[s].0, g.resource(s, "energy") - b[s].1);
+    let track = crate::modules::economy::income(&rules.world(), &twin, 0)[1];
+    assert!(track > 0);
+    assert_eq!(gain(&g, &b, 0).0, gain(&twin, &bt, 0).0 - track);
+    let energy = |g: &GameState, b: &[(i64, i64)]| gain(g, b, 0).1 + gain(g, b, 1).1;
+    assert!(energy(&g, &b) < energy(&twin, &bt), "the Blackout cost no energy");
+}

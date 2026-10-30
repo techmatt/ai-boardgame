@@ -203,6 +203,12 @@ impl AgentSpec {
                 if v < 0.0 || !v.is_finite() {
                     return Err(format!("agent {spec:?}: {k} must be >= 0"));
                 }
+                // Played as at least 1: say so rather than label a cell "0" (020).
+                // (`engine`'s width 0 means "no beam", so width only for beam and rollout.)
+                let at_least_one = ["samples", "depth"].contains(&k) || (k == "width" && (kind == "beam" || kind == "rollout"));
+                if v < 1.0 && at_least_one {
+                    return Err(format!("agent {spec:?}: {k} must be >= 1"));
+                }
                 params.insert(k.to_string(), v);
             } else {
                 let names: Vec<&str> = known.iter().map(|(k, _, _)| *k).collect();
@@ -466,6 +472,10 @@ mod tests {
         assert!(AgentSpec::parse("greedy:w.nope=3").is_err());
         assert!(AgentSpec::parse("mcts").is_err());
         assert!(AgentSpec::parse("random:samples=2").is_err());
+        // 020: a 0 that would be played as 1 is refused; engine's width 0 (no beam) is not.
+        assert!(AgentSpec::parse("greedy:samples=0").is_err());
+        assert!(AgentSpec::parse("beam:width=0").is_err());
+        assert!(AgentSpec::parse("engine:width=0").is_ok());
     }
 
     /// The deck clock (011; 013 on Unity; 014 on the outright Unity win):

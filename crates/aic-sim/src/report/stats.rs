@@ -295,7 +295,7 @@ pub(super) fn top_agent(cells: &[Cell], sums: &[CellSummary]) -> Option<(String,
         let l = a.label();
         let Some(p) = mean(
             sums.iter()
-                .filter(|s| s.difficulty == hi && s.agent == l && s.variant == *base)
+                .filter(|s| s.difficulty == hi && s.agent == l && s.variant == *base && s.games > 0)
                 .map(|s| s.win_rate),
         ) else {
             continue;
@@ -678,8 +678,10 @@ pub fn groups(cells: &[Cell], sums: &[CellSummary], games: &[GameResult]) -> Vec
     }
     keys.into_iter()
         .map(|key| {
+            // Cells with no finished game yet (a partial report mid-run) are left out:
+            // they would read as 0% wins and make a skill gap and a ladder (020).
             let mut idx: Vec<usize> = (0..cells.len())
-                .filter(|&i| cells[i].group() == key)
+                .filter(|&i| cells[i].group() == key && sums[i].games > 0)
                 .collect();
             idx.sort_by_key(|&i| (cells[i].agent.tier(), i));
             let win_rates: Vec<(String, f64)> = idx

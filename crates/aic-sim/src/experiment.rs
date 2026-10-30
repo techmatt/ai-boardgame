@@ -715,10 +715,33 @@ pub fn read_stream(path: &str, spec: &Spec, cells: &[Cell]) -> Result<Vec<GameRe
         ));
     }
     if head != want {
+        // Name what differs (020: it printed the current revision and content,
+        // which pointed at the engine when the cause was --quick left off).
+        let mut differs = Vec::new();
+        if head.spec != want.spec {
+            differs.push(
+                "the spec (as run: --quick, --games, --seed, --variants and the probes rewrite it; \
+                 give the same flags as the run you resume)"
+                    .to_string(),
+            );
+        }
+        if head.engine_version != want.engine_version {
+            differs.push(format!("the engine ({} then, {} now)", head.engine_version, want.engine_version));
+        }
+        if head.rules_revision != want.rules_revision {
+            differs.push(format!("the rules revision (r{} then, r{} now)", head.rules_revision, want.rules_revision));
+        }
+        if head.content_hash != want.content_hash {
+            differs.push(format!("the content ({} then, {} now)", head.content_hash, want.content_hash));
+        }
+        // A changed spec changes the cell grid too: only the same spec over other
+        // config hashes means an edited config file.
+        if head.spec == want.spec && head.config_hashes != want.config_hashes {
+            differs.push("a config file (edited since)".to_string());
+        }
         return Err(format!(
-            "{path} was written by another spec, config, engine, rules revision or content \
-             (written: rules r{}, content {}); start afresh without --resume",
-            head.rules_revision, head.content_hash
+            "{path} was written by another run: {} differs; start afresh without --resume",
+            differs.join(", ")
         ));
     }
     let lines: Vec<&str> = lines.filter(|l| !l.trim().is_empty()).collect();

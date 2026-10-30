@@ -96,6 +96,10 @@ impl SavedGame {
             // A hand-written seed may be a JSON number; records write a string.
             if let Some(n) = o.get("seed").and_then(|s| s.as_u64()) {
                 o.insert("seed".into(), n.to_string().into());
+            } else if let Some(s) = o.get("seed").filter(|s| s.is_number()) {
+                // 020: a negative, fractional or too-large number said "expected a
+                // string", naming no field.
+                return Err(format!("bad record: seed {s} is not a whole number from 0 to {}", u64::MAX));
             }
         }
         serde_json::from_value(rest).map_err(|e| format!("bad record: {e}"))

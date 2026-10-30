@@ -4,11 +4,11 @@
 
 import { renderBoard } from './board';
 import {
-  aiBoard, checkRecord, legalActions, load, recordText, resolveConfig, version, view as engineView,
+  aiBoard, checkRecord, legalActions, load, recordText, resolveConfig, rulesRevision, version, view as engineView,
   type Action, type CardView, type View,
 } from './engine';
 import {
-  actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, kindName, strong, tokenColour, tokenName,
+  actionLabel, choiceKey, escapeHtml, eventText, hexKey, hexesIn, isHex, kindName, placeNames, setCountryNames, strong, tokenColour, tokenName,
   type LabelContext,
 } from './format';
 import {
@@ -103,24 +103,38 @@ function loadRecordText(text: string, file: string) {
   const rec = readRecord(text);
   const t = Timeline.fromRecord(rec, file);
   setTimeline(t);
+  // A record dropped or opened under the dialog: the dialog's old text would be stale.
+  if (ui.recordDialog.open) ui.recordDialog.close();
   const check = checkRecord(text);
   const warn = [...(check.warnings ?? []), ...(check.error ? [check.error] : [])];
   if (warn.length && !t.replayError) showError(`record loaded with warnings: ${warn.join('; ')}`);
+  // A record that stops replaying: say first if it is from another rules revision (020:
+  // only the rejected action showed).
+  else if (t.replayError && rec.rules_revision && rec.rules_revision !== rulesRevision)
+    showError(`this record is from rules revision ${rec.rules_revision} and this engine plays revision ${rulesRevision}: ${t.replayError}`);
 }
 
 function act(a: Action) {
   const later = tl.last - tl.cursor;
   if (later > 0 && !confirm(`Acting here drops the ${later} later action(s). Go on?`)) return;
   armed = null;
+  // Acting from a focused action button (the keyboard): keep focus in that seat's
+  // buttons across the re-render (020: it fell back to the page body every time).
+  const fromButton = !!(document.activeElement as Element | null)?.closest?.('#seats .actions');
   guard(() => {
     tl.act(a);
     showError(null);
   });
   tl.save();
   render();
+  if (fromButton) {
+    const next = (ui.seats.querySelector(`.seat[data-seat="${a.seat}"] .actions button`) ?? ui.seats.querySelector('.actions button')) as HTMLElement | null;
+    next?.focus();
+  }
 }
 
 function seek(i: number) {
+  if (!tl) return; // still loading
   tl.seek(i);
   armed = null;
   tl.save();
@@ -133,6 +147,7 @@ function render() {
   const f = tl.frame;
   shown = engineView(f.snap);
   legal = legalActions(f.snap);
+  setCountryNames(shown.countries.map((c) => c.name));
   if (armed && !legal.some((a) => a.seat === armed!.seat && choiceKey(a) === armed!.key)) armed = null;
   // An open choice answered by picking a hex arms that pick at once.
   if (!armed && shown.choice) {
@@ -145,6 +160,8 @@ function render() {
   ui.source.innerHTML = src.kind === 'record'
     ? `<b>Watching</b> ${escapeHtml(src.file)} · ${escapeHtml(cfgName)} · seed ${tl.seed}${src.note ? ` · <i>${escapeHtml(src.note)}</i>` : ''}`
     : `<b>Playing</b> ${escapeHtml(src.file)} · ${escapeHtml(cfgName)} · seed ${tl.seed}`;
+  // A long record note is cut off with an ellipsis: the hover has it whole.
+  ui.source.title = ui.source.textContent ?? '';
 
   renderPhase();
   const targets = new Set<string>();
@@ -187,7 +204,7 @@ function renderPrompt(targets: number) {
   if (v.choice) {
     ui.prompt.className = 'choice';
     const how = targets ? `click one of the ${targets} highlighted hexes` : `answer in ${seatName(v.choice.seat)}'s panel`;
-    ui.prompt.innerHTML = `<b>${seatName(v.choice.seat)} decides:</b> ${escapeHtml(v.choice.prompt.replace(/^Seat \d+:\s*/, ''))} <span class="how">— ${how}</span>`;
+    ui.prompt.innerHTML = `<b>${seatName(v.choice.seat)} decides:</b> ${escapeHtml(placeNames(v.choice.prompt.replace(/^Seat \d+:\s*/, '')))} <span class="how">— ${how}</span>`;
     return;
   }
   if (armed) {
@@ -214,7 +231,8 @@ function renderPhase() {
   let status: string;
   if (v.outcome) {
     const o = v.outcome;
-    status = `<span class="outcome ${o.won ? 'won' : 'lost'}">${o.won ? 'WON' : 'LOST'} in round ${o.round}: ${escapeHtml(o.reason)} (${escapeHtml(o.detail)})</span>`;
+    // The sentence first, the reason code (what `--save-when` takes) after it.
+    status = `<span class="outcome ${o.won ? 'won' : 'lost'}">${o.won ? 'WON' : 'LOST'} in round ${o.round}: ${escapeHtml(o.detail)} <code>${escapeHtml(o.reason)}</code></span>`;
   } else status = ''; // who is to act is in #prompt; a war round is marked on the adversary row
   ui.phaseBar.innerHTML = `<b>Round ${v.round}</b> <span class="order">${order}</span> ${status}`;
 }
@@ -281,6 +299,23 @@ function actionButtons(seat: number, mine: Action[]): HTMLElement {
         render();
       };
       row.append(b);
+      // Two answers on one hex (a sacrifice: the ambassador or the presence there) can't
+      // both be a click on it: each gets its own button (020: only the first was reachable).
+      const perHex = new Map<string, Action[]>();
+      for (const a of acts) perHex.set(hexKey(a.target!), [...(perHex.get(hexKey(a.target!)) ?? []), a]);
+      for (const same of perHex.values()) {
+        if (same.length < 2) continue;
+        for (const a of same) {
+          const one = document.createElement('button');
+          one.type = 'button';
+          one.textContent = actionLabel(a, false, false, cx);
+          one.className = `a-${a.type}`;
+          one.dataset.action = JSON.stringify(a);
+          one.dataset.hexes = hexKey(a.target!);
+          one.onclick = () => act(a);
+          row.append(one);
+        }
+      }
       continue;
     }
     // Anything else is one button per action, labelled in full.
@@ -322,22 +357,45 @@ function renderPiles() {
   });
 }
 
+/** The timeline and frames whose entries the log shows (see `renderLog`). */
+let logBuilt: { tl: Timeline; frames: unknown[] } | null = null;
+
+function logEntry(f: Timeline['frames'][number], i: number): string {
+  const head = f.action ? `#${i} ${escapeHtml(actionLabel(f.action, true, true, { config: f.snap.state.config }))}` : '#0 setup';
+  const hexes = [...(f.action ? hexesIn(f.action) : []), ...f.events.flatMap(hexesIn)].map(hexKey);
+  const evs = f.events
+    .map((e) => {
+      const hs = hexesIn(e).map(hexKey).join(' ');
+      return `<li class="ev ${escapeHtml(e.type)}"${hs ? ` data-hexes="${hs}"` : ''}>${escapeHtml(eventText(e))}</li>`;
+    })
+    .join('');
+  return `<div class="entry" data-step="${i}" data-hexes="${[...new Set(hexes)].join(' ')}"><div class="head">${head}</div>${evs ? `<ul>${evs}</ul>` : ''}</div>`;
+}
+
+/**
+ * The log keeps the entries of the frames it already shows and only adds or drops
+ * the ones that changed (020: rebuilding a long game's log on every step or action
+ * cost ~130 ms a step at 400 actions, ~30 ms an action at 1,000).
+ */
 function renderLog() {
-  const parts: string[] = [];
-  tl.frames.forEach((f, i) => {
-    const cls = `entry${i === tl.cursor ? ' now' : ''}${i > tl.cursor ? ' future' : ''}`;
-    const head = f.action ? `#${i} ${escapeHtml(actionLabel(f.action, true, true, { config: f.snap.state.config }))}` : '#0 setup';
-    const hexes = [...(f.action ? hexesIn(f.action) : []), ...f.events.flatMap(hexesIn)].map(hexKey);
-    const evs = f.events
-      .map((e) => {
-        const hs = hexesIn(e).map(hexKey).join(' ');
-        return `<li class="ev ${escapeHtml(e.type)}"${hs ? ` data-hexes="${hs}"` : ''}>${escapeHtml(eventText(e))}</li>`;
-      })
-      .join('');
-    parts.push(`<div class="${cls}" data-step="${i}" data-hexes="${[...new Set(hexes)].join(' ')}"><div class="head">${head}</div>${evs ? `<ul>${evs}</ul>` : ''}</div>`);
-  });
-  ui.log.innerHTML = parts.join('');
-  ui.log.querySelector('.entry.now')?.scrollIntoView({ block: 'nearest' });
+  if (logBuilt?.tl !== tl) {
+    ui.log.innerHTML = '';
+    logBuilt = { tl, frames: [] };
+  }
+  const had = logBuilt.frames;
+  let keep = 0;
+  while (keep < had.length && keep < tl.frames.length && had[keep] === tl.frames[keep]) keep++;
+  while (ui.log.children.length > keep) ui.log.lastElementChild!.remove();
+  if (tl.frames.length > keep) {
+    ui.log.insertAdjacentHTML('beforeend', tl.frames.slice(keep).map((f, j) => logEntry(f, keep + j)).join(''));
+  }
+  logBuilt.frames = [...tl.frames];
+  const entries = ui.log.children;
+  for (let i = 0; i < entries.length; i++) {
+    entries[i].classList.toggle('now', i === tl.cursor);
+    entries[i].classList.toggle('future', i > tl.cursor);
+  }
+  entries[tl.cursor]?.scrollIntoView({ block: 'nearest' });
 }
 
 function renderTimeline() {
@@ -353,6 +411,7 @@ function renderTab() {
     $(`tab-${t}`).hidden = t !== activeTab;
     document.querySelector(`#tabs [data-tab="${t}"]`)?.classList.toggle('on', t === activeTab);
   }
+  if (!tl) return; // still loading (020: Raw state and Config threw)
   if (activeTab === 'state') ui.state.textContent = JSON.stringify(tl.frame.snap.state, null, 1);
   if (activeTab === 'view') ui.view.textContent = JSON.stringify(shown, null, 1);
   if (activeTab === 'config') {
@@ -377,10 +436,17 @@ function details(t: HTMLElement | SVGElement): string | null {
   }
   if (d.hex && d.index !== undefined) {
     const h = shown.hexes[Number(d.index)];
-    const toks = h.tokens.map((x) => `<span class="dot" style="background:${tokenColour(x.kind)}"></span>${escapeHtml(tokenName(x.kind))} × ${x.count}`).join('<br>') || 'no tokens';
+    // A seat's piece in its seat's colour, as the board draws it (020: grey).
+    const dot = (k: string) => {
+      const seat = /:(\d+)$/.exec(k)?.[1];
+      const c = seat !== undefined ? shown.countries[shown.seats[Number(seat)]?.country ?? -1]?.colour : undefined;
+      return c ? strong(c) : tokenColour(k);
+    };
+    const toks = h.tokens.map((x) => `<span class="dot" style="background:${dot(x.kind)}"></span>${escapeHtml(tokenName(x.kind))} × ${x.count}`).join('<br>') || 'no tokens';
     const here = legal.filter((a) => isHex(a.target) && hexKey(a.target) === d.hex).map((a) => escapeHtml(actionLabel(a, true, true, labels())));
     const facing = h.facing !== undefined ? ` · <b>front</b> facing ${escapeHtml(countryName(shown, h.facing))}` : '';
-    return `<b>${escapeHtml(countryName(shown, h.country))} #${h.number}</b> · ${escapeHtml(kindName(h.kind))}${facing}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
+    const arrows = (shown.arrows ?? []).filter((a) => a.from === h.index || a.to === h.index).map((a) => escapeHtml(placeNames(a.doc)));
+    return `<b>${escapeHtml(countryName(shown, h.country))} #${h.number}</b> · ${escapeHtml(kindName(h.kind))}${facing}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${arrows.length ? `<hr>${arrows.join('<br>')}` : ''}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
   }
   if (d.pile) {
     const p = shown.piles.find((x) => x.key === d.pile);
@@ -391,6 +457,8 @@ function details(t: HTMLElement | SVGElement): string | null {
     const [scope, idx] = (d.scope ?? 'global').split(':');
     const list = scope === 'seat' ? shown.seats[Number(idx)].values : scope === 'country' ? shown.countries[Number(idx)].values : shown.globals;
     const v = list.find((x) => x.key === d.value);
+    // A resource another seat has but this one never held (drawn as 0 since 020).
+    if (!v && d.value.startsWith('resource.')) return `<b>${escapeHtml(d.value.slice('resource.'.length).replace(/_/g, ' '))}</b>: 0<br><code>${escapeHtml(d.value)}</code> · ${scope}${idx ? ` ${idx}` : ''} (none yet)`;
     if (!v) return null;
     return `<b>${escapeHtml(v.label)}</b>: ${v.value}${v.max !== undefined ? ` / ${v.max}` : ''}<br><code>${escapeHtml(v.key)}</code> · ${scope}${idx ? ` ${idx}` : ''} · from ${escapeHtml(v.source)}${v.doc ? `<br>${escapeHtml(v.doc)}` : ''}`;
   }
@@ -445,6 +513,7 @@ ui.board.addEventListener('click', (e) => {
   const g = (e.target as Element).closest('[data-hex]') as SVGElement | null;
   if (!g || !armed) return;
   const key = g.dataset.hex;
+  // Two answers on one hex: the click takes the first, and each has its own button.
   const a = legal.find((x) => x.seat === armed!.seat && choiceKey(x) === armed!.key && isHex(x.target) && hexKey(x.target) === key);
   if (a) act(a);
 });
@@ -474,6 +543,7 @@ $('random-seed').onclick = () => {
 };
 
 $('undo').onclick = () => {
+  if (!tl) return;
   tl.undo();
   armed = null;
   tl.save();
@@ -490,6 +560,7 @@ function randomAction(): boolean {
 }
 
 function randomly(times: number) {
+  if (!tl) return;
   armed = null;
   guard(() => {
     for (let i = 0; i < times && randomAction(); i++);
@@ -507,17 +578,21 @@ function stopAutoplay() {
 }
 
 $('first').onclick = () => seek(0);
-$('back').onclick = () => seek(tl.cursor - 1);
-$('fwd').onclick = () => seek(tl.cursor + 1);
-$('end').onclick = () => seek(tl.last);
+$('back').onclick = () => tl && seek(tl.cursor - 1);
+$('fwd').onclick = () => tl && seek(tl.cursor + 1);
+$('end').onclick = () => tl && seek(tl.last);
 ui.scrub.oninput = () => seek(Number(ui.scrub.value));
 ui.play.onclick = () => {
+  if (!tl) return;
   if (autoplay !== null) stopAutoplay();
   else {
     if (tl.atEnd) tl.seek(0);
     autoplay = window.setInterval(() => {
       if (tl.atEnd) stopAutoplay();
-      else tl.seek(tl.cursor + 1);
+      else {
+        tl.seek(tl.cursor + 1);
+        tl.save();
+      }
       render();
     }, 250);
   }
@@ -525,7 +600,15 @@ ui.play.onclick = () => {
 };
 
 document.addEventListener('keydown', (e) => {
-  if ((e.target as Element).closest('input, textarea, select, dialog')) return;
+  // Keys and the toolbar do nothing until the engine has loaded (020: they threw).
+  if (!tl) return;
+  const target = e.target as Element;
+  // The slider keeps focus after a drag: it moves itself with the arrows, Home and End,
+  // and the other keys still work (020: Space, R and Ctrl+Z stopped after using it).
+  if (target.closest('input[type=range]') && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+  if (target.closest('input:not([type=range]), textarea, select, dialog')) return;
+  // Space on a focused button presses that button (020: it started autoplay instead).
+  if (e.key === ' ' && target.closest('button')) return;
   const keys: Record<string, () => void> = {
     ArrowLeft: () => seek(tl.cursor - 1),
     ArrowRight: () => seek(tl.cursor + 1),
@@ -572,6 +655,7 @@ async function copy(text: string) {
 }
 
 $('record').onclick = () => {
+  if (!tl) return;
   ui.recordNote.value = tl.source.kind === 'record' ? tl.source.note : '';
   ui.recordText.value = currentRecord(false);
   ui.recordMsg.textContent = '';
@@ -592,28 +676,43 @@ $('record-load').onclick = () => {
 $('open-record').onclick = () => ui.recordFile.click();
 ui.recordFile.onchange = async () => {
   const f = ui.recordFile.files?.[0];
-  if (f) guard(() => void f.text().then((t) => guard(() => loadRecordText(t, f.name))));
+  if (f) guard(() => void f.text().then((t) => guard(() => loadRecordText(t, f.name)), (e) => showError(`could not read ${f.name}: ${e}`)));
   ui.recordFile.value = '';
 };
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => {
   e.preventDefault();
   const f = e.dataTransfer?.files?.[0];
-  if (f) void f.text().then((t) => guard(() => loadRecordText(t, f.name)));
+  // An unreadable drop (a folder, a locked file) says so (020: nothing happened).
+  if (f) void f.text().then((t) => guard(() => loadRecordText(t, f.name)), (e) => showError(`could not read ${f.name}: ${e}`));
 });
 
 // ---------- start ----------
 
+/** Whether two JSON texts hold the same value (whitespace and key order aside). */
+function sameJson(a: string, b: string): boolean {
+  const norm = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(norm)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([x], [y]) => x.localeCompare(y)).map(([k, x]) => [k, norm(x)]))
+    : v;
+  try {
+    return JSON.stringify(norm(JSON.parse(a))) === JSON.stringify(norm(JSON.parse(b)));
+  } catch {
+    return a === b;
+  }
+}
+
 async function main() {
   await load();
-  ui.version.textContent = version;
+  ui.version.textContent = `${version} · rules r${rulesRevision}`;
   $('legend').innerHTML = legendHtml();
   ui.config.innerHTML = Object.keys(CONFIGS).map((f) => `<option>${escapeHtml(f)}</option>`).join('');
   let restored: Timeline | null = null;
+  let restoreError: string | null = null;
   try {
     restored = Timeline.restore();
   } catch (e) {
-    showError(`could not restore the saved session: ${e}`);
+    restoreError = `could not restore the saved session (a config from an older engine?): ${e}`;
   }
   if (restored) {
     const file = restored.source.file;
@@ -621,14 +720,35 @@ async function main() {
     ui.seed.value = restored.seed;
     setTimeline(restored);
     if (restored.replayError) showError(`saved session: ${restored.replayError}`);
+    // The session keeps the config it started with: say so when the file has changed
+    // since (a retuned baseline), or the game shown is not what the file now plays.
+    else if (restored.source.kind === 'play' && CONFIGS[file] !== undefined && !sameJson(CONFIGS[file], restored.configJson))
+      showError(`saved session: this game was started with an older copy of ${file}; New game plays the current one`);
+    else if (restored.source.kind === 'play' && CONFIGS[file] === undefined && file.endsWith('.json'))
+      showError(`saved session: ${file} is no longer in configs/; this game keeps the copy it started with`);
   } else {
     ui.config.value = CONFIGS['baseline.json'] !== undefined ? 'baseline.json' : Object.keys(CONFIGS)[0];
     ui.seed.value = '1';
     newGame(ui.config.value, '1');
+    // After the new game, which clears the error bar (020: the reason was wiped at once).
+    if (restoreError) showError(restoreError);
   }
 }
 
 main().catch((e) => showError(`failed to start: ${e instanceof Error ? e.stack : e}`));
 
-// For scripts/e2e.mjs and the console.
-Object.assign(window, { aic: { get timeline() { return tl; }, get view() { return shown; }, get legal() { return legal; } } });
+// For scripts/e2e.mjs, scripts/sweep.mjs and the console. The helpers go through the
+// same paths as the buttons (render included); `play` takes a config's text, so a script
+// can start a game on any override of a config file.
+Object.assign(window, {
+  aic: {
+    get timeline() { return tl; },
+    get view() { return shown; },
+    get legal() { return legal; },
+    play: (configJson: string, seed: string, file = 'script') => setTimeline(Timeline.start(configJson, seed, { kind: 'play', file })),
+    open: (text: string, file = 'script') => loadRecordText(text, file),
+    act,
+    seek,
+    get error() { return ui.error.hidden ? null : ui.error.textContent; },
+  },
+});

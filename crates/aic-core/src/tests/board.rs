@@ -201,6 +201,23 @@ fn ambassadors_divert_cities_and_stations_and_leak_presence_compute() {
         (1, 1, 0)
     );
 
+    // 020: only a lone presence leaks. On a corrupted city the ambassador is
+    // the city's (it stays to spread); on a neutral station it waits.
+    let mut g = g0.clone();
+    put(&mut g, city, ADV_CUBE, 1);
+    put(&mut g, city, ADV_AMBASSADOR, 1);
+    put(&mut g, city, &presence(0), 1);
+    let station = m.numbered(0, piece(0).stations[0]);
+    put(&mut g, station, STATION, 1);
+    put(&mut g, station, ADV_AMBASSADOR, 1);
+    put(&mut g, station, &presence(1), 1);
+    set_res(&mut g, 0, "compute", g0.resource(0, "compute") + 2);
+    run(&rules, &mut g);
+    assert_eq!(
+        (g.tokens(city, ADV_AMBASSADOR), g.tokens(station, ADV_AMBASSADOR), res(&g, 0, "compute")),
+        (1, 1, 2)
+    );
+
     // An owned station's cube goes to the adversary; a corrupted station's
     // always does; a neutral one makes none.
     let mut g = g0.clone();
@@ -534,7 +551,7 @@ fn adversary_troops_strike_buildings_next_to_them() {
         .ask
         .options
         .iter()
-        .find(|o| o.option.starts_with("presence:0"))
+        .find(|o| o.option.starts_with("seat 0's presence"))
         .unwrap()
         .option
         .clone();
@@ -785,6 +802,33 @@ fn standard_actions_cost_what_the_config_says() {
     assert_eq!((spent(&g, 1), total(&g, HARDEN)), ((0, 0, 1), 1));
 }
 
+/// 020: moving the seat's only ambassador onto the hex it already holds was
+/// offered, charged the energy and moved nothing.
+#[test]
+fn moving_an_ambassador_never_targets_the_hex_it_already_holds() {
+    let (rules, g0) = lab(&[]);
+    let m = &rules.map;
+    for p in hexes_where(m, |h| kind(m, h) != HexKind::Ocean) {
+        let mut g = g0.clone();
+        put(&mut g, p, &presence(0), 1);
+        put(&mut g, p, &ambassador(0), 1);
+        set_res(&mut g, 0, AMBASSADORS, 0);
+        set_res(&mut g, 0, "energy", 3);
+        if !rules.legal_actions(&g).contains(&std_act(0, "move")) {
+            continue;
+        }
+        rules.apply_mut(&mut g, &std_act(0, "move"), None).unwrap();
+        match &g.pending {
+            Some(pc) => assert!(
+                pc.ask.options.iter().all(|o| o.target != Some(m.hexes[p].hex)),
+                "hex {p}: {:?}",
+                pc.ask.options
+            ),
+            None => assert_eq!(g.tokens(p, &ambassador(0)), 0, "hex {p}: paid and moved nothing"),
+        }
+    }
+}
+
 #[test]
 fn aligning_puts_a_cube_on_a_clean_city_in_reach() {
     let (rules, mut g) = lab(&[]);
@@ -1008,7 +1052,7 @@ fn cities_grow_factories_that_take_their_owner() {
     run(&rules, &mut gg);
     let p = gg.pending.as_ref().expect("a factory choice");
     assert!(
-        p.ask.prompt.starts_with("C0 #7 builds a factory"),
+        p.ask.prompt.starts_with(&format!("{} #7 builds a factory", piece(0).name)),
         "{}",
         p.ask.prompt
     );
@@ -1114,7 +1158,7 @@ fn a_clean_citys_factory_goes_to_the_most_presence_by_its_zone() {
     assert!(
         p.ask
             .prompt
-            .starts_with("The factory at C0 #11 goes to which player?"),
+            .starts_with(&format!("The factory at {} #11 goes to which player?", piece(0).name)),
         "{}",
         p.ask.prompt
     );

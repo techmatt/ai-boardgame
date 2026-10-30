@@ -105,6 +105,11 @@ pub fn die(msg: &str) -> ! {
 pub fn parse_args() -> Options {
     let mut args = std::env::args().skip(1);
     let command = args.next().unwrap_or_else(|| die("missing command"));
+    // 020: `aic-sim --help` said "unknown command" and exited 2.
+    if command == "-h" || command == "--help" {
+        println!("{USAGE}");
+        exit(0);
+    }
     let mut o = Options {
         command,
         paths: Vec::new(),
@@ -234,6 +239,20 @@ pub fn parse_args() -> Options {
         {
             die("--out needs a directory");
         }
+    }
+    // Commands that would silently drop an option say so instead (020: `show --set-a`
+    // printed the unmodified config; `replay --json` printed text).
+    let refuse = |what: &str| die(&format!("{} does not take {what}", o.command));
+    if o.command == "show" && (!o.set_a.is_empty() || !o.set_b.is_empty()) {
+        refuse("--set-a / --set-b (one config: use --set)");
+    }
+    if (o.command == "replay" || o.command == "modules")
+        && (!o.set.is_empty() || !o.set_a.is_empty() || !o.set_b.is_empty())
+    {
+        refuse("--set (a record carries its own config)");
+    }
+    if (o.command == "replay" || o.command == "modules") && o.json {
+        refuse("--json");
     }
     if (o.winprob.is_some() || o.closeness.is_some() || o.variants.is_some())
         && o.command != "experiment"

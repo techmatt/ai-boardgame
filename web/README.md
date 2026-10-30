@@ -40,7 +40,10 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   Growth and draft phases offer no pass: pick one of the buttons.
 - **Choices:** when the rules wait for a choice, its question shows in the amber bar
   above the board. A choice answered with a hex highlights its hexes at once: click
-  one. Any other answer is a button in that seat's panel. *Pass every seat* passes
+  one. When two answers name the same hex (a sacrifice: the ambassador or the presence
+  there), each also gets its own button (clicking the hex takes the first). Any other answer
+  is a button in that seat's panel. Prompts, options and the log name hexes by country
+  (`Northern Union #13`; older records say `C1 #13`, shown by name too) and cards by name. *Pass every seat* passes
   all the seats still to act. *Random action* (R) and *Random to end* are for quick
   debugging.
 - **Reading the board:** hexes are filled by what they are (`kind`: city grey, military
@@ -64,11 +67,10 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
 - **Around the board:** the Alignment track (the Unity bucket, blue, filling leftward
   and the Discord bucket, red, filling rightward on either side of the Undecided; each
   side's tip count with its next threshold; the Unity tips that win outright; the
-  clear-board bar level and its win condition; adversary ambassadors and troops on the
-  board), the Unity and Discord cards resolved so far (hover a chip for its
+  clear-board bar level and its win condition), the Unity and Discord cards resolved so far (hover a chip for its
   text) with what is left in each deck, and the loss conditions (adversary ambassador
   supply, corrupted cities out of all cities, adversary cards left); the adversary row
-  (stage, difficulty, adversary compute, threat tier and fronts, then deck →
+  (stage, difficulty, adversary compute, threat tier and fronts, the adversary ambassadors and troops on the board, then deck →
   next round's card, face up → this round's card → discard, each card with its stage,
   text and escalation/war marks; under it the adversary's projects (017: each visible
   project with its compute bar, ongoing ones, the resolved count and the deck)); the countries strip with each country's name, its
@@ -99,9 +101,13 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
 - **Timeline:** ⏮ ◀ ▶ ⏭, the slider, ← → Home End, and Space to auto-play. Clicking an
   event-log entry jumps to that step. Acting from an earlier step drops the later
   actions, after asking first.
-- **Hover** a hex, token, value, card or action button for its details. Hovering a log
-  entry outlines the hexes it touched. Hexes changed by the shown step have an amber
-  outline.
+- **Hover** a hex, token, value, card or action button for its details; a hex's details
+  list the troop arrows from and to it (the arrows themselves let the mouse through).
+  Hovering a log entry outlines the hexes it touched. Hexes changed by the shown step
+  have an amber outline.
+- **The header** shows the engine version and the rules revision it plays. A saved
+  session started with an older copy of its config file, or one that no longer loads,
+  says so in the error bar; so does a record from another rules revision.
 - **Data tabs:** *Event log*, *Raw state* (the engine's JSON, for anything the board
   doesn't draw), *View* (the generic view JSON) and *Config* (resolved config and hash).
 - **Saved session:** the current game (config, seed, actions, cursor) is kept in
@@ -144,6 +150,10 @@ checks the following:
 - *Random to end* plays a new baseline game (seed 5) to an outcome;
 - hover details;
 - no page scroll at 1366×768, 1920×1080 and 2560×1440;
+- (020) at the end of the played game, the log names hexes in words (no `C1 #13` in
+  any line) and its action lines and the step label name cards in words (no
+  `snake_case` ids), the header shows the rules revision, and stepping through the
+  game stays under 100 ms a step;
 - a 4-country game (64 hexes) still fits at 1366×768 and 1920×1080;
 - the shared threat row (`configs/shared_row.json`), if that config exists;
 - loading the record and stepping through it, if one was given.
@@ -166,6 +176,47 @@ With `AIC_SHOTS=<dir>` the mid-game and end-of-game shots are also saved there a
 - **Gotcha:** stopping a backgrounded `npm run dev` wrapper can leave the `vite`
   process serving the port; `--strictPort` then fails on the next start. Kill the
   process that holds the port.
+
+## The sweep
+
+`npm run sweep [-- --quick] [-- --case NAME]` (`scripts/sweep.mjs`, 020) plays and
+watches many games at test speed and checks the page at the moments that matter. It
+needs a served viewer (`AIC_URL`, default `http://localhost:5173/`; use a `vite preview`
+snapshot while the engine is edited) and a release `aic-sim` (`AIC_SIM`, default
+`../target/release/aic-sim[.exe]`).
+
+- **Cases:** baseline at 1–4 countries and difficulties 0, 2 and 4, the shared row,
+  and the off- and still-variants (`CASES` in the script; `--quick` keeps the first
+  four, `--case c4-d0` picks one). For each, `aic-sim` plays greedy games and saves
+  them as records; the sweep **watches** each record step by step (wins, purges, late
+  rounds) and **plays** as many fresh games of the same resolved config, picking
+  legal actions at random through the page (choices, hex picks, now and then an undo).
+  `AIC_SWEEP_SEEDS` games per case and mode (3; `--quick` 1).
+- **Moments:** a new round, the round-1 phases, each new choice prompt, a war step,
+  the first of each key event (tips, projects, corruption, destruction, nodes), the
+  end. At each: a screenshot (at most 14 a game, plus always the end, a stuck game, an
+  error and any failing check) and the checks, at 1366×768 and again
+  at 1920×1080 and 2560×1440 (layout checks only).
+- **Checks that fail the run** (exit 1): console errors and blocking dialogs, no legal
+  action without an outcome (`stuck`), the error bar, page scroll, placeholder text
+  (`undefined`, `NaN`, ...), elements off the screen with nothing to scroll them into
+  view, buttons covered by something else (`hidden-target`). **Reported for a look:**
+  raw ids in the text (`raw-id`), text clipped without an ellipsis (`clipped`),
+  truncated text with no hover (`truncated-no-hover`) or with one (`truncated`),
+  overlapping buttons, hex numbers and counts on top of each other, tokens in the view
+  not drawn, step-time spikes over 150 ms, heap growth over 50 MB across the run.
+- **Output** in `web/sweep-out/` (git-ignored): `shots/`, `issues.json` (every issue
+  with its game, step and moment, the spikes and the heap after each game pair),
+  `index.html` and `sheet-N.png` contact sheets (24 captures each, red frame on a
+  failing one), and the records it watched. `AIC_SWEEP_OUT` moves it;
+  `AIC_SWEEP_VERBOSE=1` prints each moment and its timing.
+- **Hooks:** `window.aic.play(configJson, seed)`, `open(recordText)`, `act(action)`,
+  `seek(i)` and `error` (main.ts) go through the buttons' own paths; nothing changes
+  for a user. `scripts/cdp.mjs` is the DevTools driver (no npm packages).
+- **Times (020):** `--quick` about 4.5 min; the full run with `AIC_SWEEP_SEEDS=2` (10
+  cases, 40 games, 1,305 captures) 19.5 min, so the default 3 seeds about half an hour.
+  A step costs 7–30 ms (render included), a capture about 1 s (three sizes).
+  Run at most one sweep alongside one browser test lane.
 
 ## Source
 
