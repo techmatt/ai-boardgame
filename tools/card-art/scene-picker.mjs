@@ -92,7 +92,7 @@ for (const id of s.draws) {
   const [preamble, scene] = id.split('-');
   rows.push({
     id,
-    label: `${s.scenes[scene].number}. ${s.scenes[scene].label}, preamble ${preamble.toUpperCase()}`,
+    label: `${s.scenes[scene].number}. ${s.scenes[scene].label}, style ${preamble.toUpperCase()}`,
     note: `On ${pair.map((c) => cards[c].name).join(' and ')}. Tile on: keep. Tile off: reject.`,
     kind: 'many',
     default: ['keep'],
@@ -109,7 +109,7 @@ await show(
 await p.pdf({ path: path.join(dir, 'cards.pdf'), printBackground: true, preferCSSPageSize: true });
 await close();
 
-// The preamble row's tiles: the two scenes drawn both ways.
+// The style row's tiles: every scene in one style, and every style side by side for the mix.
 const TILE = [800, Math.round(800 / SHAPE)];
 const tile = async (name, grid) => {
   const [cols, nrows] = [grid[0].length, grid.length];
@@ -123,19 +123,19 @@ const tile = async (name, grid) => {
     .jpeg({ quality: 86, mozjpeg: true })
     .toFile(path.join(images, `${name}.jpg`));
 };
-await tile('preamble-a', [['a-industry'], ['a-diplomacy']]);
-await tile('preamble-b', [['b-industry'], ['b-diplomacy']]);
-await tile('preamble-mix', [['a-industry', 'b-industry'], ['a-diplomacy', 'b-diplomacy']]);
+const styles = Object.keys(s.preambles);
+const scenes = Object.keys(s.scenes);
+for (const style of styles) await tile(`style-${style}`, [0, 2].map((i) => scenes.slice(i, i + 2).map((scene) => `${style}-${scene}`)));
+await tile('style-mix', scenes.map((scene) => styles.map((style) => `${style}-${scene}`)));
 rows.push({
-  id: 'preamble',
-  label: 'Which preamble goes forward?',
-  note: 'A is documentary, B is painted; the same two scenes both ways. Mix: say in the note which goes where.',
+  id: 'style',
+  label: 'Which style goes forward?',
+  note: `${styles.map((style) => `${style.toUpperCase()} is ${s.styles[style]}`).join(', ')}; the same four scenes each way. Mix: say in the note which goes where.`,
   kind: 'many',
   default: [],
   options: [
-    { key: 'a', image: `../art-originals/picks/${NAME}/preamble-a.jpg`, label: 'A' },
-    { key: 'b', image: `../art-originals/picks/${NAME}/preamble-b.jpg`, label: 'B' },
-    { key: 'mix', image: `../art-originals/picks/${NAME}/preamble-mix.jpg`, label: 'mix' },
+    ...styles.map((style) => ({ key: style, image: `../art-originals/picks/${NAME}/style-${style}.jpg`, label: style.toUpperCase() })),
+    { key: 'mix', image: `../art-originals/picks/${NAME}/style-mix.jpg`, label: 'mix' },
   ],
 });
 
@@ -144,8 +144,8 @@ await writeFile(
   `${JSON.stringify(
     {
       name: NAME,
-      title: 'Card scenes, round 1: style test',
-      intro: `Twelve scenes to judge the look, not the subjects. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. The cards are placeholders, not assignments; scenes are a pool, and Onyx, Adversary, Discord and Unity have no card tag, so their cards are the nearest fit. For true size, print art-originals/scenes/${s.round}/cards.pdf at 100%. Use the notes for what to change.`,
+      title: `Card scenes, round ${s.round.slice(1)}: style test`,
+      intro: `Twelve scenes to judge the look, not the subjects: four scenes in each of three illustrative styles. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. The cards are placeholders, not assignments; scenes are a pool, and Adversary has no card tag, so its cards are the nearest fit. For true size, print art-originals/scenes/${s.round}/cards.pdf at 100%. Use the notes for what to change.`,
       rows,
     },
     null,

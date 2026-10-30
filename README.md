@@ -218,10 +218,13 @@ browser; `npm ci` first):
   into `art-originals/scenes/<round>/raw/`, all of them with no ids named. Scenes and their
   preambles are in `tools/card-art/scenes.json`, not `art/prompts.json`: a scene is a pool
   image, not bound to a card. Round 1 (035): 12 draws at 3 at once, 30–55 s each, about
-  2.5 min, 3% of the 5-hour window.
+  2.5 min, 3% of the 5-hour window. Round 2 (036): 39–76 s each, about 3 min for 12, 24 draws in all. A style
+  line alone came back as detailed concept art; each style's `emphasis` line (never a
+  photograph or 3D render, and what to do instead) is what pushes a draw towards illustration.
 - `npm run scene-picker`: from the raw draws, each scene cut to the program window's shape
   (`<id>.png`), its two cards at 300 dpi (`cards/`), the same at true size (`cards.pdf`),
-  and `picks/scene_style_<round>.json` with previews, about 40 s. Passes the scene to
+  and `picks/scene_style_<round>.json` with previews, about 40 s, or about 2 min when writing
+  through the Drive folder: background it. Passes the scene to
   `renderCard`'s `artUrl`, which centre-crops it to the window `fit` measured: 53.3×33.2 mm
   for program and event, 53.3×25.3 mm for buildings, so a building shows the middle 76%.
 

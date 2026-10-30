@@ -1,21 +1,28 @@
 {
-  "_note": "Card scenes, round 1: a style test. Scenes are a pool, not bound to card names: `tag` and `cards` only choose which real cards show a scene here. `cards` is one program or event and one building, so each scene is seen in both art windows. Onyx, Adversary, Discord and Unity are no card tag: their cards are the nearest fit by name. Preamble b is a with the painted line in place of the photograph.",
-  "round": "r1",
+  "_note": "Card scenes, round 2: a style test, four scenes in each of three styles. Scenes are a pool, not bound to card names: `cards` only chooses which real cards show a scene here, one program or event and one building, so each scene is seen in both art windows. Adversary is no card tag: its cards are the nearest fit by name. `emphasis`, `lighting` and `framing` go in every draw after the preamble: the preambles are Matt's wording, `emphasis` is what the first draws needed to stop them reading as photographs; `framing` keeps the subject in the middle 76% the building window crops to.",
+  "round": "r2",
   "preambles": {
-    "a": "Photorealistic near-future concept art, as if a documentary photograph from 2040. Cinematic wide shot, single clear subject centred with empty margin above and below, muted desaturated palette with one warm accent light, fine industrial detail, slight film grain. No text, logos, UI, or close-up faces.",
-    "b": "Near-future concept art, a painted science-fiction illustration with visible brushwork, set in 2040. Cinematic wide shot, single clear subject centred with empty margin above and below, muted desaturated palette with one warm accent light, fine industrial detail, slight film grain. No text, logos, UI, or close-up faces."
+    "c": "Stylised painterly board-game illustration, simplified forms and clean brush shapes, soft but clear light, moderately saturated palette, confident silhouette, near-future setting.",
+    "d": "Flat colour planes with soft gradients, bold simple shapes, limited palette per scene, a mid-century travel-poster feel set in a near future.",
+    "e": "Textured gouache illustration with visible paper grain, warm natural light, gentle stylisation, crisp detail on the subject, near-future setting."
   },
+  "styles": {
+    "c": "painterly board game",
+    "d": "graphic retro-futurist",
+    "e": "editorial gouache"
+  },
+  "emphasis": {
+    "c": "A hand-painted illustration on a board-game box, never a photograph or a 3D render: broad visible brush shapes, few details, large simple masses, shapes grouped by colour.",
+    "d": "A printed poster, never a photograph or a 3D render: at most five flat colours, no textures, no reflections, no fine detail, machinery and buildings reduced to a few geometric shapes.",
+    "e": "A hand-painted picture-book or magazine illustration, never a photograph or a 3D render: matte opaque paint, dry brush texture and paper grain everywhere, loose backgrounds, no glossy reflections."
+  },
+  "lighting": "Mid-key lighting, even daylight or clear interior light, never night-dark or blown-out; the scene's tag colour as its accent; a strong silhouette that reads at card size. No text, logos, UI, or close-up faces.",
+  "framing": "Keep the whole subject inside the middle three-quarters of the image height: only plain floor, ceiling or sky in the top and bottom eighths, nothing important there.",
   "scenes": {
-    "science": { "number": 1, "label": "Science", "cards": ["benchmark_suite", "synthetic_data_forge"], "subject": "Technicians in white suits beside a wafer of glowing chips under amber light." },
-    "industry": { "number": 2, "label": "Industry", "cards": ["bulk_silicon_procurement", "foundry_core"], "subject": "A dark automated factory floor, robot arms lit by one sodium lamp." },
-    "cyber": { "number": 3, "label": "Cyber", "cards": ["adaptive_malware", "intrusion_lab"], "subject": "A cold blue server aisle receding to a single orange warning light." },
-    "power": { "number": 4, "label": "Power", "cards": ["baseload_contract", "faraday_yard"], "subject": "A substation glowing in snow, pylons marching to the horizon." },
-    "diplomacy": { "number": 5, "label": "Diplomacy", "cards": ["summit_caucus", "planetary_assembly"], "subject": "A curved council chamber seen from the gallery, delegates as small figures." },
-    "security": { "number": 6, "label": "Security", "cards": ["threat_triage", "sentry_drone_wing"], "subject": "A hangar of folded drones in rows, one lit on its pad." },
-    "onyx": { "number": 7, "label": "Onyx (corp)", "cards": ["megacorp_ipo", "security_contractor_hq"], "subject": "A black glass headquarters in fog, one floor lit." },
-    "adversary": { "number": 8, "label": "Adversary threat", "cards": ["blackout_script", "hyperscale_botnet"], "subject": "A city at night with whole districts blacked out, one hospital still lit." },
-    "discord": { "number": 9, "label": "Discord", "cards": ["manifesto_leak", "darknet_exchange"], "subject": "A protest crowd at night under floodlights, signs blank." },
-    "unity": { "number": 10, "label": "Unity", "cards": ["mutual_aid_pact", "consulate_tower"], "subject": "Two cities' skylines at dusk joined by a lit bridge, crowds crossing." }
+    "industry": { "number": 1, "label": "Industry", "accent": "brown", "cards": ["bulk_silicon_procurement", "foundry_core"], "subject": "An automated factory floor, robot arms assembling machines." },
+    "diplomacy": { "number": 2, "label": "Diplomacy", "accent": "magenta", "cards": ["summit_caucus", "planetary_assembly"], "subject": "A curved council chamber seen from the gallery, delegates as small figures." },
+    "cyber": { "number": 3, "label": "Cyber", "accent": "teal", "cards": ["adaptive_malware", "intrusion_lab"], "subject": "A server hall with one technician tracing a glowing fault." },
+    "adversary": { "number": 4, "label": "Adversary threat", "accent": "cold blue", "cards": ["blackout_script", "hyperscale_botnet"], "subject": "A city where whole districts have gone dark against a daytime storm sky, one hospital still lit. It is plainly daytime: a mid-grey sky with pale breaks in the cloud, the dark districts mid-toned and readable, not black." }
   },
-  "draws": ["a-science", "a-industry", "a-cyber", "a-power", "a-diplomacy", "a-security", "a-onyx", "a-adversary", "a-discord", "a-unity", "b-industry", "b-diplomacy"]
+  "draws": ["c-industry", "c-diplomacy", "c-cyber", "c-adversary", "d-industry", "d-diplomacy", "d-cyber", "d-adversary", "e-industry", "e-diplomacy", "e-cyber", "e-adversary"]
 }

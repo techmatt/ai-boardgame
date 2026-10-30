@@ -1,0 +1,228 @@
+{
+ "name": "scene_style_r2",
+ "title": "Card scenes, round 2: style test",
+ "intro": "Twelve scenes to judge the look, not the subjects: four scenes in each of three illustrative styles. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. The cards are placeholders, not assignments; scenes are a pool, and Adversary has no card tag, so its cards are the nearest fit. For true size, print art-originals/scenes/r2/cards.pdf at 100%. Use the notes for what to change.",
+ "rows": [
+  {
+   "id": "c-industry",
+   "label": "1. Industry, style C",
+   "note": "On Bulk Silicon Procurement and Foundry Core. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/c-industry.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "c-diplomacy",
+   "label": "2. Diplomacy, style C",
+   "note": "On Summit Caucus and Planetary Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/c-diplomacy.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "c-cyber",
+   "label": "3. Cyber, style C",
+   "note": "On Adaptive Malware and Intrusion Lab. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/c-cyber.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "c-adversary",
+   "label": "4. Adversary threat, style C",
+   "note": "On Blackout Script and Hyperscale Botnet. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/c-adversary.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "d-industry",
+   "label": "1. Industry, style D",
+   "note": "On Bulk Silicon Procurement and Foundry Core. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/d-industry.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "d-diplomacy",
+   "label": "2. Diplomacy, style D",
+   "note": "On Summit Caucus and Planetary Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/d-diplomacy.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "d-cyber",
+   "label": "3. Cyber, style D",
+   "note": "On Adaptive Malware and Intrusion Lab. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/d-cyber.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "d-adversary",
+   "label": "4. Adversary threat, style D",
+   "note": "On Blackout Script and Hyperscale Botnet. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/d-adversary.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "e-industry",
+   "label": "1. Industry, style E",
+   "note": "On Bulk Silicon Procurement and Foundry Core. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/e-industry.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "e-diplomacy",
+   "label": "2. Diplomacy, style E",
+   "note": "On Summit Caucus and Planetary Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/e-diplomacy.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "e-cyber",
+   "label": "3. Cyber, style E",
+   "note": "On Adaptive Malware and Intrusion Lab. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/e-cyber.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "e-adversary",
+   "label": "4. Adversary threat, style E",
+   "note": "On Blackout Script and Hyperscale Botnet. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_style_r2/e-adversary.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "style",
+   "label": "Which style goes forward?",
+   "note": "C is painterly board game, D is graphic retro-futurist, E is editorial gouache; the same four scenes each way. Mix: say in the note which goes where.",
+   "kind": "many",
+   "default": [],
+   "options": [
+    {
+     "key": "c",
+     "image": "../art-originals/picks/scene_style_r2/style-c.jpg",
+     "label": "C"
+    },
+    {
+     "key": "d",
+     "image": "../art-originals/picks/scene_style_r2/style-d.jpg",
+     "label": "D"
+    },
+    {
+     "key": "e",
+     "image": "../art-originals/picks/scene_style_r2/style-e.jpg",
+     "label": "E"
+    },
+    {
+     "key": "mix",
+     "image": "../art-originals/picks/scene_style_r2/style-mix.jpg",
+     "label": "mix"
+    }
+   ]
+  }
+ ]
+}

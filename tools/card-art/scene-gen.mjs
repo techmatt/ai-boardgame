@@ -22,7 +22,7 @@ const scenePrompt = (preamble, scene) =>
     'Do not read any files, run any commands, or try to save the image anywhere: just generate it, then stop.',
     'Image shape: landscape, 3:2.',
     '',
-    `${s.preambles[preamble]} ${s.scenes[scene].subject}`,
+    `${s.preambles[preamble]} ${s.emphasis[preamble]} ${s.lighting} ${s.framing} ${s.scenes[scene].subject} The tag colour is ${s.scenes[scene].accent}.`,
   ].join('\n');
 
 let stop = false;
