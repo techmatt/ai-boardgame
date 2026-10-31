@@ -6,11 +6,11 @@ One row per harm, one column per kind of source. A number is how many printed ca
 
 | Harm | tier-1 threats | tier-2 threats | Discord cards | adversary twists | adversary projects | arrivals | build and spread | corruption | war | march |
 |---|---|---|---|---|---|---|---|---|---|---|
-| presence destroyed | 4 | 7 | 6 | 5 | 1 |  |  | yes | yes |  |
+| presence destroyed | 4 | 7 | 6 | 5 | 2 |  |  | yes | yes |  |
 | credits or income lost | 1 |  | 1 |  | 1 |  |  |  |  |  |
 | cards discarded | 2 | 2 |  |  |  |  |  |  |  |  |
 | insight lost | 1 |  |  |  |  |  | yes |  |  |  |
-| ambassadors lost | 1 | 1 |  |  | 1 | yes | yes | yes |  |  |
+| ambassadors lost | 1 | 2 |  |  | 2 | yes | yes | yes |  |  |
 | tokens stripped from cards | 1 | 1 |  |  |  |  |  |  |  |  |
 | buildings, stations or factories destroyed or seized |  | 1 |  |  | 1 |  |  |  | yes | yes |
 | production blacked out | 2 |  |  |  |  | yes |  | yes |  |  |

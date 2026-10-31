@@ -19,6 +19,31 @@ export const ORIGINALS = process.env.AIC_ART_ORIGINALS ?? (existsSync(path.join(
 
 const CODEX_HOME = process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex');
 const TIMEOUT_MS = 6 * 60_000;
+// How long pipes may stay open after the process has gone: a stray grandchild can hold them.
+const GRACE_MS = 5_000;
+
+/**
+ * The originals folder for a picker, or stops: its manifest links ../art-originals, which
+ * only the junction serves. AIC_ART_ORIGINALS stands in for the junction, with a warning.
+ */
+export function pickerOriginals(who) {
+  const junction = path.join(REPO, 'art-originals');
+  if (process.env.AIC_ART_ORIGINALS !== undefined) console.warn(`${who}: images in ${ORIGINALS}: the manifest's ../art-originals links show them only if ${junction} points there`);
+  else if (!existsSync(junction)) throw new Error(`${who}: ${junction} is not reachable: no picker written`);
+  return ORIGINALS;
+}
+
+/** The n for a kept <id>.try<n>.png: above every n in use, so a gap can't overwrite a try. */
+export async function nextTry(dir, id) {
+  const used = (await readdir(dir)).filter((f) => f.startsWith(`${id}.try`)).map((f) => parseInt(f.slice(id.length + 4), 10));
+  return Math.max(0, ...used.filter(Number.isInteger)) + 1;
+}
+
+/** Ends a process and all it started: on Windows `child` is the cmd.exe before codex's shim. */
+function killTree(child) {
+  if (process.platform !== 'win32') return child.kill();
+  spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' }).on('error', () => child.kill());
+}
 
 export const readJson = async (f) => JSON.parse(await readFile(f, 'utf8'));
 export const layout = () => readJson(path.join(CARD, 'layout.json'));
@@ -42,9 +67,21 @@ export async function runCodex(prompt, image) {
   let err = '';
   child.stdout.on('data', (d) => (out += d.toString('utf8')));
   child.stderr.on('data', (d) => (err += d.toString('utf8')));
-  const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
-  const code = await new Promise((resolve) => child.on('close', resolve));
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    killTree(child);
+  }, TIMEOUT_MS);
+  let grace;
+  // 'close' waits for the pipes, so 'exit' plus a grace settles it if something still holds them.
+  const code = await new Promise((resolve) => {
+    child.on('close', resolve);
+    child.on('exit', (c) => (grace = setTimeout(() => resolve(c), GRACE_MS)));
+  });
   clearTimeout(timer);
+  clearTimeout(grace);
+  child.stdout.destroy();
+  child.stderr.destroy();
   const run = { seconds: Math.round((Date.now() - started) / 100) / 10 };
   for (const line of out.split('\n')) {
     let ev;
@@ -70,6 +107,7 @@ export async function runCodex(prompt, image) {
     }
     run.usage = await rateLimits(run.thread);
   }
+  if (!run.image && timedOut) run.message = `codex stopped after ${TIMEOUT_MS / 1000}s`;
   if (!run.image && code !== 0 && !run.message) run.message = `codex exited ${code}: ${err.trim().split('\n').slice(-3).join(' | ')}`;
   return run;
 }

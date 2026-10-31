@@ -260,7 +260,7 @@ impl Module for Economy {
                     "insight lost next round",
                     debt,
                     None,
-                    "adversary ambassadors on your presence: this much less insight next round",
+                    "this much less insight next round: from adversary ambassadors on your presence, or a threat",
                 );
             }
         }

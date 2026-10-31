@@ -318,6 +318,22 @@ pub fn placing_price(w: &World, g: &GameState, seat: usize, how: Placing, step: 
     }
 }
 
+/// What a placement pays, for its prompt: ", costs 3 energy", or nothing if
+/// free (044: every prompt printed the bare step cost, whatever was charged).
+fn price_words(w: &World, g: &GameState, seat: usize, how: Placing, step: i64) -> String {
+    let Price { energy, credits, .. } = placing_price(w, g, seat, how, step);
+    let parts: Vec<String> = [(energy, Resource::Energy), (credits, Resource::Credits)]
+        .iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, r)| r.amount(*n))
+        .collect();
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(", costs {}", parts.join(" + "))
+    }
+}
+
 /// Whether seat `s` has a token and can pay its cheapest step `how`, with
 /// `gained` more energy than it holds.
 pub fn can_pay_placement(w: &World, g: &GameState, seat: usize, how: Placing, gained: i64) -> bool {
@@ -352,9 +368,10 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize, how: Placing)
         .iter()
         .map(|(two, u)| {
             opt(format!(
-                "track {}: uncovers {}",
+                "track {}: uncovers {}{}",
                 if *two { 2 } else { 1 },
-                ai::uncover_label(u)
+                ai::uncover_label(u),
+                price_words(&w, g, seat, how, u.cost)
             ))
         })
         .collect();
@@ -364,7 +381,7 @@ pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize, how: Placing)
     };
     let second = tracks[k].0;
     let step = tracks[k].1.cost;
-    let what = format!("uncovers {}", ai::uncover_label(tracks[k].1));
+    let what = format!("uncovers {}{}", ai::uncover_label(tracks[k].1), price_words(&w, g, seat, how, step));
     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
     let prompt = format!("Seat {seat}: place presence ({what}) on which hex?");
     let Some(j) = cx.choose(seat, &prompt, opts)? else {
@@ -538,7 +555,7 @@ fn std_resolve(
     let w = cx.world;
     let on_hex = |cx: &mut Cx| -> Res<Option<usize>> {
         let opts = targets.iter().map(|&h| hex_opt(&w, h)).collect();
-        let prompt = format!("Seat {s}: {} on which hex?", act.name());
+        let prompt = format!("Seat {s}: {} on which hex?", act.name().trim_end_matches("_buy"));
         Ok(cx.choose(s, &prompt, opts)?.map(|i| targets[i]))
     };
     match act {
@@ -1236,7 +1253,7 @@ fn has_troop_target(w: &World, g: &GameState, h: usize) -> bool {
 
 /// Walking distance over land from the nearest of `sources`, for every hex
 /// (`None`: no land path). Troops never enter ocean, and some pieces print
-/// ocean inside the board, so straight-line distance would strand a troop.
+/// ocean between hexes, so straight-line distance would strand a troop.
 fn land_distances(w: &World, sources: impl Iterator<Item = usize>) -> Vec<Option<u32>> {
     let mut dist: Vec<Option<u32>> = vec![None; w.map.hexes.len()];
     let mut queue = std::collections::VecDeque::new();
@@ -1766,9 +1783,14 @@ impl Module for Board {
                 .filter(|(n, _)| *n > 0)
                 .map(|(n, r)| r.amount(*n))
                 .collect();
+            // 044: Clear's words say what its reward is.
+            let text = match act {
+                StandardAction::Clear => clear_words(w),
+                _ => std_text(act).to_string(),
+            };
             let doc = format!(
                 "{}; costs {}",
-                std_text(act),
+                text,
                 if cost.is_empty() {
                     "nothing".into()
                 } else {
@@ -1825,11 +1847,28 @@ impl Module for Board {
     }
 }
 
+/// Clear's words with its reward (the configs' `clear_unity`, `clear_credits`).
+fn clear_words(w: &World) -> String {
+    let (unity, credits) = (w.int("board.clear_unity"), w.int("board.clear_credits"));
+    let mut reward = Vec::new();
+    if unity > 0 {
+        reward.push(format!("{unity} Sway toward Unity"));
+    }
+    if credits > 0 {
+        reward.push(Resource::Credits.amount(credits));
+    }
+    if reward.is_empty() {
+        "clear a corruption marker in reach".into()
+    } else {
+        format!("clear a corruption marker in reach: {}", reward.join(" and "))
+    }
+}
+
 fn flag_doc(f: RoundFlag) -> &'static str {
     match f {
         RoundFlag::Blackout => "Blackout: while this is up, cities here make no energy in production (an uncountered threat's lasts to the end of the next round)",
         RoundFlag::Sabotage => "Sabotage: while this is up, players with presence here make no energy in upkeep (an uncountered threat's lasts to the end of the next round)",
-        RoundFlag::Shelter => "Shelter Order: buildings here can't be destroyed this round",
+        RoundFlag::Shelter => "Sheltered: buildings and presence here can't be destroyed this round",
         RoundFlag::Embargo => "Embargo: while this is up, no site here can be claimed (an uncountered threat's lasts to the end of the next round)",
     }
 }

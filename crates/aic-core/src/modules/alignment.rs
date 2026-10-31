@@ -667,7 +667,7 @@ impl Module for Alignment {
         }
         out.bookkeeping(&["alignment.used."]);
         let uses = w.int("alignment.antimatter_uses");
-        if w.int("alignment.antimatter_discord") > 0 {
+        if w.int("alignment.antimatter_discord") > 0 && w.variant("alignment") != Some("off") {
             for s in 0..g.seats.len() {
                 out.seat(
                     s,

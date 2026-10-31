@@ -414,7 +414,7 @@ fn once(op: &Op, gain: &str) -> Vec<Clause> {
         )),
         Op::MoveOne { range } => one(clause(
             vec![w("move"), Part::Word(range.to_string()), w("hex")],
-            format!("you may move an ambassador on the board up to {}, onto a piece", hexes(*range)),
+            format!("you may move one of your ambassadors on the board up to {}, onto a piece", hexes(*range)),
         )),
         Op::SpreadAmbassadors => one(clause(
             vec![w("ALL"), w("move"), w("hex")],

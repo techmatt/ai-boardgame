@@ -106,10 +106,11 @@ fn op_harms(op: &Op) -> Vec<&'static str> {
         | Op::CleanCityAmbassadors { .. }
         | Op::AdversaryBuild
         | Op::AdversarySpread
-        | Op::CorruptCity
         | Op::CityBuild { .. }
         | Op::CleanFactories { .. }
         | Op::StationBuild { .. } => vec![HARMS[8]],
+        // 044: a corruption takes the presence and ambassadors around the city too.
+        Op::CorruptCity => vec![HARMS[8], HARMS[0], HARMS[4]],
         Op::Troops { destroy, .. } => {
             if *destroy {
                 vec![HARMS[8], HARMS[0]]
@@ -701,7 +702,7 @@ fn standard_actions_block(r: &Rules) -> String {
             "in reach, with a site claim: your cube on it".to_string(),
         ],
         [
-            "Harden a building (Protector only)".to_string(),
+            "Harden a building (the Protector; a card can grant it)".to_string(),
             format!("{} energy a token", t("board.harden_energy")),
             "a player-owned station or factory in reach that is not corrupted, one a troop can strike (022: any building, the adversary's too)".to_string(),
         ],

@@ -249,7 +249,7 @@ pub struct CardDef {
     /// in play (021: token engines).
     #[serde(default)]
     pub tokens: Option<TokenSpec>,
-    /// Tags you must have (on your buildings) to play it.
+    /// Tags you must have (on your cards in play) to play it.
     #[serde(default)]
     pub needs: Vec<TagCount>,
     /// Filled in at load from [`crate::face`]: never written in content (033).

@@ -1279,7 +1279,8 @@ impl Module for Cards {
                 .pile(&drafted(s))
                 .iter()
                 .map(|id| {
-                    let (ins, cr) = self.keep_price(w, g, s, id);
+                    // 044: an Open Market purchase waives the price the status showed.
+                    let (ins, cr) = if alignment::free_purchases(g) > 0 { (0, 0) } else { self.keep_price(w, g, s, id) };
                     let st = match (ins, cr) {
                         (0, 0) => "keep free".to_string(),
                         (i, 0) => format!("keep {i} insight"),

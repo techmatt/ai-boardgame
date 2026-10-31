@@ -4,8 +4,9 @@
 // Each draw is centre-cut to the program window's shape, <id>.png beside raw/; building
 // windows centre-crop that again. Then its two sample cards (scenes.json) at 300 dpi in
 // cards/, the same cards at true size in cards.pdf (9 to an A4 page), and one preview per
-// draw, scene over cards, in art-originals/picks/<picker>/. Stops if that folder isn't
-// reachable or a draw is missing.
+// draw, scene over cards, in art-originals/picks/<picker>/. Reads and writes the originals
+// folder (lib.mjs). Stops, before any work, if that folder isn't reachable or a draw is
+// missing.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
@@ -14,7 +15,7 @@ import { pathToFileURL } from 'node:url';
 
 import sharp from 'sharp';
 
-import { ART, CARD, REPO, TOOL, layout, openPage, readJson } from './lib.mjs';
+import { ART, CARD, REPO, TOOL, layout, openPage, pickerOriginals, readJson } from './lib.mjs';
 import { inset, renderCard } from '../../web/card/card.js';
 
 os.setPriority(os.constants.priority.PRIORITY_BELOW_NORMAL);
@@ -22,10 +23,11 @@ sharp.concurrency(1);
 
 const s = await readJson(path.join(TOOL, 'scenes.json'));
 const NAME = s.picker;
-const shared = path.join(REPO, 'art-originals');
-if (!existsSync(shared)) throw new Error(`scene-picker: ${shared} is not reachable: no picker written`);
+const shared = pickerOriginals('scene-picker');
 const dir = path.join(shared, 'scenes', s.round);
 const images = path.join(shared, 'picks', NAME);
+const missing = Object.keys(s.batch).filter((id) => !existsSync(path.join(dir, 'raw', `${id}.png`)));
+if (missing.length) throw new Error(`scene-picker: no raw draw in ${path.join(dir, 'raw')} for ${missing.join(', ')}: no picker written`);
 await mkdir(path.join(dir, 'cards'), { recursive: true });
 await mkdir(images, { recursive: true });
 

@@ -61,14 +61,15 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   presence (server rack in the seat's colour), hardening token (grey shield), corp
   troops at a base (chevrons in the base country's colour) and player ambassadors (pawn
   in the seat's colour). The adversary's sit on the lower row, in purple: its owner cube
-  (a corrupted city, station or factory), its ambassadors (pawn), its nodes (diamond)
-  and its troops (dark spearhead). The clock's step (`board.clock`), adversary compute
+  (a corrupted city, station or factory), its ambassadors (pawn), corruption markers
+  (a crossed lilac and purple disc), its nodes (diamond) and its troops (dark
+  spearhead). The clock's step (`board.clock`), adversary compute
   and each seat's chips show as values. A number by a glyph is its count.
 - **Around the board:** the Alignment track (the Unity bucket, blue, filling leftward
   and the Discord bucket, red, filling rightward on either side of the Undecided; each
   side's tip count with its next threshold; the
   clear-board bar level and its win condition), the Unity and Discord cards resolved so far (hover a chip for its
-  text) with what is left in each deck, and the loss conditions (Discord cards left, adversary cards left); the adversary row
+  text) with what is left in each deck, and the red **Lose if** group (Discord cards left, adversary cards left, and **presence gone** with the fewest presence of any seat, red at 1); the adversary row
   (stage, difficulty, adversary compute, threat tier and fronts, the adversary ambassadors and troops on the board, then deck →
   next round's card, face up → this round's card → discard, each card with its stage,
   text and escalation/war marks; under it the adversary's projects (017: each visible
@@ -77,21 +78,24 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   cities (clean, aligned, corrupted), adversary pieces and corp units, its megaproject
   card (one box per cube place, filled by owner: purple for the adversary, the seat's
   colour for a player; "completed" once done), its round flags (blackout, sabotage,
-  shelter), its threat and counter progress (or the shared threat row). Country names
+  shelter, embargo), its threat and counter progress (or the shared threat row; a threat that executes next
+  round dims and says **waits**, and a jam shows its amount). Country names
   (the printed pieces', from the view's `countries[].name`) also label the board and the
   hover text.
 - **Actions:** besides cards, threats and gifts, each seat panel offers the board's
   standard actions (`standard`: place presence, build a research station, remove an
-  adversary ambassador, move an ambassador, gain an ambassador, align a city,
-  harden a building, sell chips) labelled with the words and costs the rules publish
+  adversary ambassador, clear a corruption marker, move an ambassador, gain an
+  ambassador, align a city, harden a building, sell a chip, the rich action (a presence
+  at a steep price that rises with each use a round) and the standard projects: harden
+  a building, gain 1 energy, remove compute from an adversary project) labelled with the words and costs the rules publish
   in the view (`standard`), and one *sell*
   button per card in hand. A standard action that needs a hex asks for it next, as a
   hex pick.
 - **Seat panels:** the AI board's name (hover it for its text, innate rule, slots and
   unique cards), resources with income, then the board's presence track with every
   printed space: solid spaces are uncovered, dashed ones still under presence, the boxed
-  one is the last uncovered, and each space's marks say what it adds (**+1 compute**,
-  green **T2** for the tier-2 unlock). Hover a step for its details. This is drawn from the generic
+  one is the last uncovered, and each space's marks say what it adds (its income, such as
+  **+1 energy**, a green **T2 keep** where it lowers a tier-2 keep, and **pay N energy** where a placement pays its printed cost). Hover a step for its details. This is drawn from the generic
   `seats[].board` shape, not from AI-specific keys.
 - **Globals** hold only game-wide tracks: modules keep per-seat and per-card
   bookkeeping out of them (`ViewOut::bookkeeping`). A `vars` track no module labels is
@@ -197,24 +201,28 @@ needs a served viewer (`AIC_URL`, default `http://localhost:5173/`; use a `vite 
 snapshot while the engine is edited) and a release `aic-sim` (`AIC_SIM`, default
 `../target/release/aic-sim[.exe]`).
 
-- **Cases:** baseline at 1–4 countries and difficulties 0, 2 and 4, the shared row,
-  and the off- and still-variants (`CASES` in the script; `--quick` keeps the first
-  four, `--case c4-d0` picks one). For each, `aic-sim` plays greedy games and saves
-  them as records; the sweep **watches** each record step by step (wins, purges, late
+- **Cases:** 14 in all (`CASES` in the script; `--quick` keeps the first four, `--case
+  c4-d0` picks one): baseline at 1–4 countries and difficulties 0, 2 and 4, the shared
+  row, the off- and still-variants, `c2-d1-engine`, `c2-d2-engine` and `c3-d3-engine`
+  (the engine agent's fuller games: markers, shields, Clear, delays) and `overlay` (a
+  config that overlays content). For each, `aic-sim` plays games (greedy unless the case
+  names an agent) and saves them as records; the sweep **watches** each record step by step (wins, purges, late
   rounds) and **plays** as many fresh games of the same resolved config, picking
   legal actions at random through the page (choices, hex picks, now and then an undo).
   `AIC_SWEEP_SEEDS` games per case and mode (3; `--quick` 1).
 - **Moments:** a new round, the round-1 phases, each new choice prompt, a war step,
-  the first of each key event (tips, projects, corruption, destruction, nodes), the
-  end. At each: a screenshot (at most 14 a game, plus always the end, a stuck game, an
-  error and any failing check) and the checks, at 1366×768 and again
+  the first of each key event (tips, projects, corruption, destruction, nodes, marker
+  placed and cleared, hardened, threat waits, stage N), the end. At each: a screenshot
+  (at most 14 a game, plus always the end, a stuck game, an error, any failing check,
+  and marker and waiting-threat moments) and the checks, at 1366×768 and again
   at 1920×1080 and 2560×1440 (layout checks only).
 - **Checks that fail the run** (exit 1): console errors and blocking dialogs, no legal
   action without an outcome (`stuck`), the error bar, page scroll, placeholder text
   (`undefined`, `NaN`, ...), elements off the screen with nothing to scroll them into
-  view, buttons covered by something else (`hidden-target`). **Reported for a look:**
-  raw ids in the text (`raw-id`), text clipped without an ellipsis (`clipped`),
-  truncated text with no hover (`truncated-no-hover`) or with one (`truncated`),
+  view, buttons covered by something else (`hidden-target`), text clipped without an
+  ellipsis (`clipped`), a token with no glyph of its own (`token-unknown`), a case
+  `aic-sim` could not play (`case`). **Reported for a look:**
+  raw ids in the text (`raw-id`), truncated text with no hover (`truncated-no-hover`) or with one (`truncated`),
   overlapping buttons, hex numbers and counts on top of each other, tokens in the view
   not drawn, step-time spikes over 150 ms, heap growth over 50 MB across the run.
 - **Output** in `web/sweep-out/` (git-ignored): `shots/`, `issues.json` (every issue
@@ -225,10 +233,21 @@ snapshot while the engine is edited) and a release `aic-sim` (`AIC_SIM`, default
 - **Hooks:** `window.aic.play(configJson, seed)`, `open(recordText)`, `act(action)`,
   `seek(i)` and `error` (main.ts) go through the buttons' own paths; nothing changes
   for a user. `scripts/cdp.mjs` is the DevTools driver (no npm packages).
-- **Times (020):** `--quick` about 4.5 min; the full run with `AIC_SWEEP_SEEDS=2` (10
-  cases, 40 games, 1,305 captures) 19.5 min, so the default 3 seeds about half an hour.
+- **Times:** 044, 14 cases, `AIC_SWEEP_SEEDS=1` (1,337 captures): 25 min beside a planner run, `--quick` 6.7 min. 020, for the 10 cases then: `--quick` about 4.5 min;
+  the full run with `AIC_SWEEP_SEEDS=2` (10 cases, 40 games, 1,305 captures) 19.5 min,
+  so the default 3 seeds about half an hour.
   A step costs 7–30 ms (render included), a capture about 1 s (three sizes).
   Run at most one sweep alongside one browser test lane.
+
+## Odd input
+
+`npm run odd` (`scripts/odd.mjs`, 044) runs twelve scenarios against a served viewer
+(`AIC_URL`), a page reload between each: mashing keys and buttons, *Random to end* twice,
+reloading mid-choice, acting after a seek, resizing and switching tabs during autoplay, a
+frozen page, full storage, broken records through the dialog, old and junk sessions, bad
+seeds. Fails on a console error, a stuck game, a page scroll or a scenario's own check,
+and prints what each bad input said. `--only NAME`, `--seeds N`. About 30 s. A failure's
+screenshot goes to `sweep-out/odd/` (`AIC_SWEEP_OUT`). It counts as one browser lane.
 
 ## Source
 

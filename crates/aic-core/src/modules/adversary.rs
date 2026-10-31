@@ -206,13 +206,19 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     if stage_cards.len() != 3 {
         return Err("stage_cards: give 3 counts (stage I, II, III)".into());
     }
+    // 044: what this difficulty deals, as setup does (the check used to add
+    // stage3_added at every level and take off no removal).
+    let difficulty = b.int("difficulty")?;
+    let dealt = [
+        (stage_cards[0] - if difficulty >= 2 { b.int("stage1_removed")? } else { 0 }).max(0),
+        (stage_cards[1] - if difficulty >= 3 { b.int("stage2_removed")? } else { 0 }).max(0),
+        stage_cards[2] + if difficulty >= 2 { b.int("stage3_added")? } else { 0 },
+    ];
     // An empty deck loses before round 1's first decision (020: it was accepted).
-    if stage_cards.iter().sum::<i64>() < 1 {
+    if dealt.iter().sum::<i64>() < 1 {
         return Err("stage_cards: deal at least one card (the deck is the game's clock)".into());
     }
-    for (s, &n) in stage_cards.iter().enumerate() {
-        // 041: difficulty 2 adds stage-III cards, which must be printed too.
-        let n = n + if s == 2 { b.int("stage3_added")? } else { 0 };
+    for (s, &n) in dealt.iter().enumerate() {
         let have = b
             .world
             .content
@@ -342,7 +348,20 @@ impl Module for Adversary {
                                 }
                             }
                         }
-                        _ => {}
+                        // 044: dropped by the `_` arm since r20, so stage III never pulled.
+                        Op::PullUnity { amount } => alignment::pull_unity(g, cx, *amount),
+                        // Read where they act: the build, spread, corrupt and arrivals
+                        // steps, and the war step.
+                        Op::CityBuild { .. }
+                        | Op::CleanFactories { .. }
+                        | Op::StationBuild { .. }
+                        | Op::SpreadReach { .. }
+                        | Op::CorruptSooner { .. }
+                        | Op::Arrivals { .. }
+                        | Op::War => {}
+                        // The load check lets no other op in: one added to `Slot::Twist`
+                        // needs a reader (044: `_ => {}` swallowed the Unity pull).
+                        other => unreachable!("twist with no reader: {other:?}"),
                     }
                 }
                 build_all(g, cx, None)?;
@@ -980,6 +999,12 @@ fn cost(w: &World, kind: &str) -> i64 {
     } else {
         1
     }
+}
+
+/// Whether a removal worth `amount` can take a piece on hex `h` (044: a troop
+/// is worth `troop_health`, so "remove 1 worth" can't touch one).
+pub fn can_damage(w: &World, g: &GameState, h: usize, amount: i64) -> bool {
+    [ADV_AMBASSADOR, TROOP].into_iter().any(|k| g.tokens(h, k) > 0 && cost(w, k) <= amount)
 }
 
 /// Removes adversary pieces worth `amount` in hex `h` for seat `seat`,

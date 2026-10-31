@@ -21,6 +21,7 @@ mod determinism;
 mod factories;
 mod freeing;
 mod growth;
+mod hunt044;
 mod invariants;
 mod map;
 mod march;
@@ -388,6 +389,6 @@ fn golden_game() {
     assert!(g.is_over());
     assert_eq!(
         (RULES_REVISION, g.fingerprint().as_str()),
-        (20, GOLDEN_FINGERPRINT)
+        (21, GOLDEN_FINGERPRINT)
     );
 }

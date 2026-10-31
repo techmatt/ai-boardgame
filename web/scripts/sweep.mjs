@@ -43,6 +43,12 @@ const CASES = [
   { name: 'alignment-off', config: 'baseline.json', set: ['alignment.variant=off'] },
   { name: 'alignment-still', config: 'baseline.json', set: ['alignment.variant=still', 'alignment.momentum_every=2'] },
   { name: 'cards-off', config: 'baseline.json', set: ['cards.variant=off'] },
+  // 044: the round cap at each difficulty's deck, the engine's fuller games (markers,
+  // shields, Clear, the rich action, delays), a record that overlays content.
+  { name: 'c2-d1-engine', config: 'baseline.json', set: ['adversary.difficulty=1'], agent: 'engine' },
+  { name: 'c2-d2-engine', config: 'baseline.json', set: ['adversary.difficulty=2'], agent: 'engine' },
+  { name: 'c3-d3-engine', config: 'baseline.json', set: ['countries=3', 'adversary.difficulty=3'], agent: 'engine' },
+  { name: 'overlay', config: 'baseline.json', set: ['cards.telemetry_archive.cost=9', 'threats.*.counter=[["credits",1]]'] },
 ];
 const unknown = only.filter((n) => !CASES.some((c) => c.name === n));
 if (unknown.length) throw new Error(`no case ${unknown.join(', ')}; cases: ${CASES.map((c) => c.name).join(', ')}`);
@@ -51,7 +57,7 @@ const cases = CASES.filter((c, i) => (only.length ? only.includes(c.name) : !qui
 /** Viewport sizes: the first is used for play, the others are checked at every capture. */
 const SIZES = [[1366, 768], [1920, 1080], [2560, 1440]];
 /** Checks that fail the run; the rest are reported for a look. */
-const HARD = new Set(['console', 'stuck', 'error-banner', 'page-scroll', 'placeholder', 'offscreen', 'hidden-target', 'case']);
+const HARD = new Set(['console', 'stuck', 'error-banner', 'page-scroll', 'placeholder', 'offscreen', 'hidden-target', 'case', 'clipped', 'token-unknown']);
 /** One act or seek slower than this (ms, render included) is a frame-time spike. */
 const SPIKE_MS = 150;
 /** Captures per game, so a long game can't flood the sheets. */
@@ -81,20 +87,29 @@ const PAGE_LIB = String.raw`(() => {
     if (e.type === 'tokens_changed' && e.token === 'node') return up ? 'node made' : 'node removed';
     if (e.type === 'tokens_changed' && e.token === 'cube:adversary' && up) return 'corruption';
     if (e.type === 'tokens_changed' && e.token === 'troop' && up) return 'troop';
+    // 044: r19 and r20's table: markers, shields on presence, delays, the rich action.
+    if (e.type === 'tokens_changed' && e.token === 'corruption') return up ? 'marker placed' : 'marker cleared';
+    if (e.type === 'tokens_changed' && e.token === 'harden' && up) return 'hardened';
+    if (e.type === 'var_changed' && /^threats\.late\./.test(e.key)) return 'threat waits';
+    if (e.type === 'var_changed' && e.key === 'adversary.stage' && up) return 'stage ' + e.total;
     if (e.type === 'note' && / destroyed$/.test(e.text ?? '')) return 'destruction';
     if (e.type === 'note' && / is freed$/.test(e.text ?? '')) return 'city freed';
     return null;
   }
   /** Why the step from a to b is worth a capture, or null. */
   function moment(a, b, events) {
+    // 044: every new key event of the step is seen and named, whatever else the step is.
+    const fresh = [...new Set(events.map(keyEvent).filter((k) => k && !seenEvents.has(k)))];
+    fresh.forEach((k) => seenEvents.add(k));
+    const ev = fresh.length ? ' event: ' + fresh.join(', ') : '';
     if (b.outcome && !a.outcome) return 'end: ' + b.outcome;
     // A war round starts with its round: say so in the round's label (020: tested after
     // the round, so it never fired).
-    if (b.round !== a.round) return 'round ' + b.round + (b.war ? ' (war)' : '');
-    if (b.choice && b.choice !== a.choice && !seenChoices.has(b.choice)) { seenChoices.add(b.choice); return 'choice: ' + b.choice.slice(0, 60); }
-    if (b.war !== a.war && b.war) return 'war step';
-    const ev = events.map(keyEvent).find((k) => k && !seenEvents.has(k));
-    if (ev) { seenEvents.add(ev); return 'event: ' + ev; }
+    // 044: the adversary's whole turn lands in that one step: say what was new in it.
+    if (b.round !== a.round) return 'round ' + b.round + (b.war ? ' (war)' : '') + ev;
+    if (b.choice && b.choice !== a.choice && !seenChoices.has(b.choice)) { seenChoices.add(b.choice); return 'choice: ' + b.choice.slice(0, 60) + ev; }
+    if (b.war !== a.war && b.war) return 'war step' + ev;
+    if (ev) return ev.trim();
     if (b.phase !== a.phase && !seenPhases.has(b.round + ':' + b.phase)) { seenPhases.add(b.round + ':' + b.phase); return b.round <= 1 ? 'phase ' + b.phase : null; }
     return null;
   }
@@ -149,6 +164,7 @@ const PAGE_LIB = String.raw`(() => {
   /** Words on screen that are code, not text: unfilled values and raw ids. */
   const PLACEHOLDER = /\b(undefined|NaN|null|\[object Object\]|TODO|FIXME)\b|\?\?/;
   const RAW_ID = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/;
+  const TOKENS = new Set(['cube', 'station', 'factory', 'presence', 'harden', 'unit', 'ambassador', 'corruption', 'node', 'troop']);
 
   function checks() {
     const issues = [];
@@ -215,6 +231,9 @@ const PAGE_LIB = String.raw`(() => {
       if (tok.count > 0 && !document.querySelector('#board [data-hex="' + h.hex.join(',') + '"][data-token="' + tok.kind + '"]'))
         add('token-missing', tok.kind + ' x' + tok.count + ' on hex ' + h.hex.join(','));
     }
+    // 044: every token has its own glyph and name (r19's marker fell to a hashed-colour disc).
+    for (const h of aic.view.hexes) for (const tok of h.tokens)
+      if (!TOKENS.has(tok.kind.split(':')[0])) add('token-unknown', tok.kind + ' has no glyph');
     // Arrows (019) point between hexes that exist.
     for (const a of aic.view.arrows ?? []) if (!aic.view.hexes[a.from] || !aic.view.hexes[a.to]) add('arrow', JSON.stringify(a));
     return issues;
@@ -233,7 +252,7 @@ let shotNo = 0;
 
 function simRecords(c) {
   const dir = join(out, 'records', c.name);
-  const r = spawnSync(sim, ['run', join(repo, 'configs', c.config), '--games', String(games), '--seed', '100', '--agent', 'greedy',
+  const r = spawnSync(sim, ['run', join(repo, 'configs', c.config), '--games', String(games), '--seed', '100', '--agent', c.agent ?? 'greedy',
     ...c.set.flatMap((s) => ['--set', s]), '--save', dir, '--save-when', 'all', '--threads', '4'], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`aic-sim failed for ${c.name}: ${r.stderr || r.stdout}`);
   return readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => readFileSync(join(dir, f), 'utf8'));
@@ -257,7 +276,7 @@ async function capture(page, game, what) {
   const file = `shots/${String(++shotNo).padStart(4, '0')}.png`;
   // The end, a stuck game, an error or a failing check is always shot, past the cap
   // (020: the cap used to eat every game's end screen).
-  const must = /^(end|stuck|error)/.test(what) || found.some((i) => HARD.has(i.kind));
+  const must = /^(end|stuck|error)|event: .*(marker|threat waits)/.test(what) || found.some((i) => HARD.has(i.kind));
   const shoot = must || game.shots < MAX_SHOTS;
   if (shoot) {
     game.shots++;

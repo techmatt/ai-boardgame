@@ -47,7 +47,7 @@ fingerprints), `driver.rs` (`play`/`replay` with an `Agent`, `GameRecord`), `vie
 (the generic view clients draw), `record.rs` (`SavedGame`, the game record format), `tests/` (`mod.rs`: helpers,
 `variant_matrix`, `golden_game`; one file per area: config, map, setup, adversary,
 plan, ambassadors, production, war, march, factories, standard_actions, freeing, threats,
-alignment, cards, projects, ops, determinism, view; `invariants`
+alignment, cards, projects, ops, determinism, view, `hunt044` (044's regressions); `invariants`
 (020): checks after every action of random games).
 
 ## Scripts
@@ -59,7 +59,7 @@ Current:
 - `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline.
 - `cards/cards_doc.py`: regenerates `docs/cards.md`.
 - `cards/screen.py`: the screen summary: a table of named columns over experiment outputs
-  (`--columns a,b,c`, `--preset 034|028|018|016`, `--sources`, `--list`) and `--gate DIR`,
+  (`--columns a,b,c`, `--preset 041|034|028|018|016`, `--sources`, `--list`) and `--gate DIR`,
   each check against its own agent, with games per check when `results.json` has a `gate`
   key. `screens.py` holds what it shares with the kept scripts below.
 - Kept for the results docs that cite them, each saying so at its top: `cards/screen_034.py`
@@ -224,7 +224,8 @@ browser; `npm ci` first):
   requirement plate reaches the tags.
 - `node sheet.mjs <out.png> <images…>`: a one-row inspection sheet.
 - `npm run picker`: writes `picks/card_frames_r3.json` from `out/cards/`, with its images
-  in `art-originals/picks/card_frames_r3/`. Stops if that folder isn't reachable.
+  in `art-originals/picks/card_frames_r3/`. Stops if that folder isn't reachable (see
+  *Originals*).
 - `npm run guides`: six labelled guides plus unlabelled `-blocks` twins, from
   `layout.json`. The twins are what the image tool sees: labels invite text.
 - `npm run gen -- steel-program-1 … --pool=3`: raw frame draws for a new direction: Codex CLI's `$imagegen` on Matt's ChatGPT Plus login, the wordwarriors route
@@ -274,8 +275,12 @@ browser; `npm ci` first):
   hence the one master.
 - **Originals:** `art-originals/` is a git-ignored junction to
   `C:\Code\gdrive-sync\aicomplete\art-originals` (`mklink /J art-originals <that path>`).
-  The scripts other than the picker, which needs the junction, fall back to that path;
-  `AIC_ART_ORIGINALS` overrides it. Each round has its folder (`card-frames-r3/` holds the
+  The scripts other than the pickers fall back to that path. The pickers stop without the
+  junction, because their manifests link `../art-originals`. `AIC_ART_ORIGINALS` overrides
+  the folder for all of them: a picker then reads and writes images there, warns, and its
+  manifest still links `../art-originals`, so the images show only where the junction
+  points at that folder. `npm run scene-picker` stops first, naming the ids, if a raw draw
+  is missing. Each round has its folder (`card-frames-r3/` holds the
   container sheet): full-size originals, `frames/` (815×1110 PNG) and `log.jsonl`.
 - **The master's outer steel band lies in its bleed;** `derive` is what brings it inside
   the trim. Composed singles show the full bleed; the splay is trimmed.
@@ -453,16 +458,15 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
   30), a seat down to its last presence (`presence_danger` 60, half with two), aligned cities
   (`aligned` 8); adversary ambassadors (`adv_ambassador` 3 each, `on_piece` 2 more on a
   player piece, base or factory, `on_factory` 6 more on a factory), the pressure on cities
-  not yet corrupted (`pressure` 0.7 × `corrupted` × (ambassadors / threshold)², the
-  threshold and the next build read off the face-up card; the build is the core's
-  `plan::next_build`), troops (`troop` 12); the
+  not yet corrupted (`pressure` 0.7 × `corrupted` × (ambassadors and markers / threshold)², the
+  threshold being `corrupt_at` as the face-up card lowers it), troops (`troop` 12); the
   Discord deck (`discord_danger` 40 per card short of 3 left: the empty tip loses) and the Unity deck (`unity_deck` 40 the same way: the last card wins, 028); the bar's blockers
   (`blocker` 2); Alignment (Unity and Discord tips made, each bucket's fill as a share of
   its next tip, the bar level, and each visible adversary project's fill as a share of
-  its cost, `project` 8, 017); the players' board (presence
+  its cost, `project` 30, 017); the players' board (presence
   4, nodes −25 (022, 020's D9: was −6, and agents made nodes when an equal free choice existed), owned factories 4 (an adversary-owned one −4), chips 2, cities/bases/stations in reach 0.5, owned stations 5 (a corrupted one −5),
   megaproject cubes 2 (adversary's −1), factories 0.5, hardening 1, player ambassadors
-  5 in supply (018: was 3, below their 6-credit cost, so agents never bought one) / 2.5 on the board, and toward freeing a corrupted city `freeing` 0.8 ×
+  5 in supply (018: was 3, below their 6-credit cost, so agents never bought one) / 2.5 on the board, and toward freeing a corrupted city `freeing` 2 ×
   `corrupted` × a share of the hold: gathered ambassadors, then, once enough are at hand, a climbing bonus for landing them, 027); track income, resources, cards in hand and
   built; unpaid threats. Every weight is a parameter: `w.<name>=V` in an agent spec. The
   014 weights are hand-set, not swept.
@@ -473,20 +477,20 @@ through the public API only (`legal_actions_into`, `apply_mut`, reading the stat
 | `greedy` | One action at a time: each scored by the heuristic after it, its own choices resolved best-first. A pass scores the table as it is (else stalling beats stopping). | `samples` 1 (guesses averaged), `depth` 1 (actions looked ahead), `choices` 2 |
 | `beam` | Beam search over the rest of the round's action sequences, scored at the start of the next round (the end-of-round preview); plans once, follows the plan while the table matches, replans when a draw or reveal differs from its guess. | `width` 6, `depth` 120 (steps), `branch` 0 (children per sequence, 0 = all), `choices` 2 (levels of an action's own choices resolved before scoring it; with 1, placing presence, which asks a hex, looks worthless and beam stops growing its engine) |
 | `rollout` | Across rounds: the beam's `candidates` best end-of-round positions, each continued by `rollouts` greedy playouts for `horizon` more rounds on fresh guesses; best mean wins. | `width` 4, `depth` 120, `branch` 0, `choices` 2, `candidates` 3, `rollouts` 4, `horizon` 2 |
-| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and board production (aligned cities' energy, less what adversary ambassadors divert; presence compute is track income) `w.production` of that (014: 1 won 65% at d0 against 37% with 0 on the checkpoint's map; level within noise at d1–d3 on the map since edited); the rounds left are the adversary deck's clock (deck plus the face-up card), cut short by when the team is on course to win (Unity Sway still needed for the Unity deck's last card at its rate so far, `w.unity_rate_start`, `w.win_lag`) and discounted by danger (`w.risk` per unpaid threat per country, supply slack ≤ 2 against the next build, 2 or fewer cities not corrupted); a building without income, and (023) a program in play with an ability, earns `w.ability` per round left; a card dealt into the draft packet counts as drafted less `w.packet_keep` × its keep price (023); a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left; and the **deck clock** (011, `w.clock`): a penalty per round the team, at its Unity rate so far, would still be short of the Unity deck's last card (`alignment.unity_cards`) when the deck runs out. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `unity_rate_start` 2 (`opp_rate` still accepted), `win_lag` 1, `production` 1, `insight_wait` 0, `clock` 30, `packet_keep` 1 (023) |
+| `engine` | The heuristic in **horizon mode** (008): income (tracks, income buildings, rewards) less building upkeep, is worth `w.horizon` × the resource's weight × the rounds left, and board production (aligned cities' energy, less what adversary ambassadors divert) `w.production` of that (014: 1 won 65% at d0 against 37% with 0 on the checkpoint's map; level within noise at d1–d3 on the map since edited); the rounds left are the adversary deck's clock (deck plus the face-up card), cut short by when the team is on course to win (Unity Sway still needed for the Unity deck's last card at its rate so far, `w.unity_rate_start`, `w.win_lag`) and discounted by danger (`w.risk` per unit: unpaid threats per country, plus 0.5 with 1 Discord card or none left, plus 0.5 with a seat on its last presence); a building without income earns `w.ability` per round left, and a program in play a flat `w.program`; a card dealt into the draft packet counts as drafted less `w.packet_keep` × its keep price (023); a card in hand counts by the chance it can be paid for before the end (credits and antimatter, from what the seat has and earns, factory credits included; `w.insight_wait` 1 also queues the hand for insight, but as written it made playing any card look costly and cut wins to 4%, so it is off); resources fade when fewer than `w.spend_horizon` rounds are left; and the **deck clock** (011, `w.clock`): a penalty per round the team, at its Unity rate so far, would still be short of the Unity deck's last card (`alignment.unity_cards`) when the deck runs out. Searched like greedy by default; `width` > 0 makes it a beam over the round, `candidates` > 0 adds rollouts. | `width` 0, `samples` 1, `choices` 2; beam: `depth` 120, `branch` 0, `candidates` 0, `rollouts` 2, `horizon` 1. Weights: `horizon` 1, `hand` 1, `hand_cost` 0.2, `built` 1, `built_cost` 0, `risk` 0.1, `ability` 0.5, `spend_horizon` 2, `unity_rate_start` 2 (`opp_rate` still accepted), `win_lag` 1, `production` 1, `insight_wait` 0, `clock` 30, `packet_keep` 1 (023) |
 
 | `planner` | 028 (`agents/planner.rs`): the engine, with a shortlist of alternatives in the action phase each rolled out to the first decision of round `horizon` rounds on, with the engine as the policy, and the best line by the heuristic taken. A line runs on the real state (**full information**, Matt, 2026-10-29), so it is the game that follows; each decision inside it is still scored on a guess, because scored on open decks the one-step heuristic wins 19% against 59% (it drafts by printed cost). Draft and keeps follow the engine. **Speed:** the line being followed is reused, so a decision pays only for its alternatives. | `horizon` 2, `alts` 2 a decision, `budget` 8 a round, `margin` 40 (only actions this close to the engine's best), `choices` 2, `samples` 1, `prune` 6 (actions each seat keeps through a phase of a rollout, after the phase's first full scoring). Its keep and dominance parameters are the engine's: `planner:never_tag=2` holds the check in its rollouts too. `--quick` keeps it. |
 
 **Planner speed (030, r17 d2, one thread's time a game):** 11.9 s at 2 countries and 33.6 s at 3,
 against the engine's 1.3 s and 4.5 s. A 32-seed d2 screen at both sizes with both agents
-(`experiments/screen-028.json`, 128 games) takes **about 2.5 min** on 12 threads: 153 s and
+(`experiments/archive/screen-028.json`, 128 games) takes **about 2.5 min** on 12 threads: 153 s and
 27 min of thread time, against 352 s and 60 min before 030, on the same busy machine.
 `budget` 8 with `prune` 0 cost twice that and won no more within noise (028).
 
 **Keeping by plan and the dominance checks (022, `agents/policy.rs`).** Greedy and
 engine keep drafted cards by a plan (`plan_keep` 1; 0 lets the heuristic decide keeps,
 as before 022): at its first keep of the round a seat sketches this round's action phase
-and the next two (credits, insight, chips, energy and antimatter from what it holds and
+and the next three (`plan_rounds` 4; credits, insight, chips, energy and antimatter from what it holds and
 its income; insight resets each round, the rest carries over), fills each round's
 budget with the cards it would play (hand plus the candidates) in value-per-cost order
 (value: the card's printed cost in credits, antimatter 3, insight 2, a lowered income
@@ -524,7 +528,7 @@ $S experiment experiments/archive/screen-014-board.json --quick --resume  # cont
 overlay, `<table>.<id>.<path>=<JSON>`: tables `cards`, `threats`, `adversary`, `ais`,
 `alignment`, `projects`; `*` for every id; a path through fields and list indexes.
 `cards.telemetry_archive.cost=3`, `cards.turnkey_factory.effects=[]`,
-`cards.turnkey_factory.passives.0.amount=2`, `ais.*.presence.4.extra=2`,
+`cards.turnkey_factory.passives.0.amount=2`, `ais.*.presence.4.cost=2`,
 `threats.<id>.counter=[["credits",3]]`. It goes through the same parsing and checks as
 `content/`, so a typo or an illegal op is an error naming the entry. The overlay lands in
 the config (`content`), so the config hash, `content_hash` and every saved record name

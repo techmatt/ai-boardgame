@@ -84,8 +84,9 @@ def pair(old, new, out, only):
             n1, nn = max(1, one * 2 // c // (c - 1)), max(cores, many * 2 // c // (c - 1))
             r = {}
             for label, games, threads in (("1", n1, 1), ("all", nn, cores)):
-                a = timed(old, agent, games, c, threads) + timed(old, agent, games, c, threads)
+                first = timed(old, agent, games, c, threads)
                 b = timed(new, agent, games, c, threads) + timed(new, agent, games, c, threads)
+                a = first + timed(old, agent, games, c, threads)
                 r[f"old_{label}"], r[f"new_{label}"] = 120 * games / a, 120 * games / b
             rows[f"{agent} c{c}"] = r
             print(f"{agent} c{c}: 1 thread {r['old_1']:.1f} to {r['new_1']:.1f} ({r['new_1'] / r['old_1']:.2f} x), "

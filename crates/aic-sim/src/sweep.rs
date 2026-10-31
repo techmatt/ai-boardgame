@@ -591,13 +591,19 @@ fn print_table(sides: &[Summary], diff: &[String], o: &Options) {
         format!("{:.3}", s.ms_per_game)
     });
 
+    // 044: an overlay on one side gives it its own content hash.
+    let content = if sides.iter().all(|s| s.content_hash == sides[0].content_hash) {
+        sides[0].content_hash.to_string()
+    } else {
+        sides.iter().map(|s| format!("{} {}", s.label, s.content_hash)).collect::<Vec<_>>().join(", ")
+    };
     println!(
         "seeds {}..={}, agent {} (max {} actions), content {}, engine {} rules r{}",
         o.seed,
         o.last_seed(),
         o.agent.label(),
         o.max_actions,
-        sides[0].content_hash,
+        content,
         aic_core::VERSION,
         aic_core::RULES_REVISION
     );

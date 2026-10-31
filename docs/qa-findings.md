@@ -3,9 +3,10 @@
 Every bug-hunt finding, once: **fixed** (with the change), **deferred** to Matt (with
 the options and a recommendation) or **won't fix** (with the reason). Read this before a
 hunt and never re-report an item on it. Checkers: `web/scripts/sweep.mjs` (the viewer,
-web/README.md *The sweep*), `crates/aic-core/src/tests/invariants.rs` (the rules, and the
-words players read), `scripts/wasm-parity.mjs` (native = wasm over the variant matrix)
-and the e2e's 020 checks (words on screen, the rules revision, step time).
+web/README.md *The sweep*), `web/scripts/odd.mjs` (odd input, *Odd input* there),
+`crates/aic-core/src/tests/invariants.rs` (the rules, the words players read, nothing paid
+for nothing), `scripts/wasm-parity.mjs` (native = wasm over the variant matrix) and the
+e2e's 020 checks (words on screen, the rules revision, step time).
 
 ## 020 bug hunt (rules revision 10 → 11, 2026-10-29)
 
@@ -106,3 +107,76 @@ and the e2e's 020 checks (words on screen, the rules revision, step time).
 | W8 | economy / cards | The seat's `+antimatter` / `+energy` income in the view leaves out a building's upkeep conversion (Antimatter Refinery: +1 antimatter for 4 energy in upkeep). | Card content (out of 020's scope; the rework replaces it): the income passives the view reads don't model conversions. |
 | W9 | viewer | Hover details: a board name drawn from the config fallback (a record whose view has no seat board) has no hover; a grouped hex-pick button's hover shows the raw JSON of its first action only. | Debug-level: the engine always sends the board today, and the raw action JSON is a developer aid. |
 | W10 | viewer | Below the supported 1366×768 (150% zoom on a 1366 laptop, 1024×768) the board pane has no scroll fallback: the strips take the board's height. | The layout's stated floor is 1366×768 (style.css, web/README); a real 1366×768 window (about 1366×650 of viewport) was measured in 020: board 248 px, no page scroll. A `min-height` on the board and a scrolling pane would extend it if smaller screens matter. |
+
+## 044 bug hunt (rules revision 20 → 21, 2026-10-30)
+
+Focus: what changed since 020: revisions 18–20, 040's overlay and gate, the scene art tools.
+The viewer had not been touched since 028, so r18–20 reached it only through the generic view.
+
+### Fixed
+
+| # | Area | Finding | Fix |
+|---|---|---|---|
+| F62 | adversary | **Stage-III cards' "2 Sway leaves the Unity bucket" never happened.** The twist loop in `adversary.build` matches only `Sway` and `EachDestroyPresence`; `_ => {}` dropped `PullUnity`, and twists never go through `effects::run`. The rule shipped in r20 and 041's screen was played without it. | The twist runs. r21; test `a_stage_iii_card_pulls_sway_out_of_the_unity_bucket`. Planner, 32 seeds (first 1000), r20 to r21: see D15. |
+| F63 | cards | A card or ability that only hardens or moves one ambassador was offered and paid for with nothing to act on (`feasible` had no arm for them): Hardened Conduits, Point Defense, Sentry Drone Wing, Faraday Yard, Aegis Dome Array, Embassy Compound. | Not offered when the card does nothing else. A card that also gains something is still playable: the strict reading of rules.md is D15. r21; test `a_card_that_only_hardens_or_moves_needs_a_target_but_one_that_also_gains_does_not`. MoveOne also lists only ambassadors with a destination. |
+| F64 | cards | "Remove 1 worth" was offered on a hex holding only a troop (worth `troop_health` 2): the player paid, the card was spent and nothing came off. Seven cards. | A hex counts as a target only if the amount can pay for a piece on it (`adversary::can_damage`). r21; test `a_small_removal_has_no_target_on_a_hex_holding_only_a_troop`. |
+| F65 | cards | Megacorp IPO's cash-in was refused as "no target" with 0 Capital, though its own add-tokens runs first; the same for a per-tokens gain. | `feasible` counts tokens the same card adds first. r21; test `a_cash_in_counts_the_tokens_the_same_card_adds_first`. |
+| F66 | cards | "Up to N" on the r20 Science ops (Clear, Shield, Delay) forced N: rules.md says "up to". | "stop" from the second pick on, as Cleanse does. r21; test `up_to_two_markers_can_stop_after_one`. |
+| F67 | config | `stage_cards` was checked with `stage3_added` at every difficulty and no removals: `4,5,4` at d0 was refused ("stage 3 has only 4 cards", though 4 were asked for and printed), and a deck that d3's removals emptied was accepted. | Checks what the difficulty deals. Test `stage_cards_are_checked_at_what_the_difficulty_deals`. |
+| F68 | core / viewer | Placement prompts said "costs N energy" whatever was charged: the bare step on a free card (charged 0), on the standard action (charged 1 more), on the rich action (charged credits, no energy). | The prompt names the price of that placement, nothing if free. Test `a_placements_prompt_names_what_it_charges`. |
+| F69 | viewer | The presence and rich-action buttons showed the printed base, not the charge: "(1 energy)" when 3 was charged, "(6 credits)" when 17 was. | Read from the seat's `presence_energy_now` and `presence_credits_now`. |
+| F70 | view / viewer | A presence step's printed cost reached no client: steps costing 1–4 looked free until the prompt. | A `pay N energy` mark on the step, with a hover. |
+| F71 | viewer | The corruption marker fell to the default glyph: a hashed-colour disc on the players' row, named `corruption`. | A crossed lilac-and-purple disc on the adversary's row, "corruption marker" in the hover. Sweep: `token-unknown`. |
+| F72 | viewer | A waiting or jammed threat looked like any other: the regex that cuts "Counter:" cut "Waits:" and "Jammed:" too. | Waiting threats dim and say "waits"; a jam shows its amount. |
+| F73 | viewer | The red "Lose if" group left out presence, a locked end condition. | A chip with the fewest presence of any seat, red at 1. |
+| F74 | view | Clear's button said "for its reward" and nowhere said what the reward is. | "clear a corruption marker in reach: 1 Sway toward Unity", from the config. |
+| F75 | viewer | The second track's first step was boxed and hovered "in effect" at the start, with nothing uncovered. | No step is current with nothing uncovered. |
+| F76 | core | A raw id in a prompt: "harden_buy on which hex?". | "harden on which hex?". |
+| F77 | viewer | Card text clipped with no ellipsis: 1,432 sweep captures at r20, up to 133 px of text in a 72 px box (longer generated text since r18). | Cards grow with their text. Sweep: `clipped` fails the run. |
+| F78 | faces | Move-one text said "an ambassador on the board" on 10 cards; only your own move. | "one of your ambassadors". |
+| F79 | view / core | Shelter's hover said buildings only and named one card, and its prompt said "the buildings of which country": Shelter protects presence too. | Words corrected. |
+| F80 | rules.md | §4 said stage-III cards take one presence (two); the insight split read 35 / 75 / 40 (35 / 78 / 37); `needs` said "on your buildings" in `content.rs` (cards in play). | Corrected. |
+| F81 | sim reports | A gate check stopped on a few seeds could be the report's "top agent" and lead its tier in the skill gap, on other seeds than the rest; a multi-config gate table printed rows that differed only by a config it didn't show; `compare` printed one content hash when an overlay gave a side its own. | Short checks left out of both; rows name the config when there are several; both hashes printed. |
+| F82 | scripts | `speed.py pair` ran old, old, new, new, not the old, new, new, old it promises, so drifting load landed on one binary. | Runs as promised. |
+| F83 | docs | README's overlay example `ais.*.presence.4.extra=2` is an error (no such field); the preset list left out 041; web/README's legend, standard actions and marks were stale. | Corrected. |
+| F84 | scene tools | Hung Codex draws never timed out on Windows (the kill reached only cmd.exe); a mistyped id killed scene-gen with draws in flight; `tryN` could overwrite a kept original after a gap; failed draws and a usage-limit stop exited 0; `--pool=0` did nothing silently; the pickers ignored `AIC_ART_ORIGINALS`, so a redraw there composed the old draw; a missing draw died in sharp; the splay row's label named two of three cards and called the wrong one newer. | All fixed. Checked on a throwaway originals folder: scene-picker's output is byte-identical to the committed manifest, a missing draw stops up front by name, a bad id exits before any draw. The kill itself is not exercised (needs a real hang). |
+| F85 | checker | The sweep's key-event moments were masked by the round moment, since the adversary's whole turn lands in one step; it had no moments or shots for markers, shields, delays or stage changes, no engine games and no overlay case. | A round's moment names what was new in it; 14 cases; marker and waiting-threat moments are always shot. |
+| F86 | content | Hand-written text against what runs: Fifth Column and Occupation said "Clean cities" (aligned cities corrupt at the lower threshold too; F37's fix missed them); Purge protocols and Total war left out "here"; Decommission printed "(placeholder, 019)"; the Protector's Consolidate promised "any one country" though only buildings in reach can be hardened. | Texts say what happens. |
+| F87 | economy | Smear campaign's lost insight was explained in the seat chip as adversary ambassadors on your presence. | The hover and rules.md name both sources. |
+| F88 | view | A drafted card read "keep 3 insight" or "keep 15 credits" during an Open Market free purchase, which charges nothing. | "keep free" while a free purchase is up. |
+| F89 | viewer | A card's insight price showed nowhere but the hover: "unaffordable" could have no visible reason, and the play button left it out. | A `+N insight` chip on the card; the button says "(5 credits + 1 insight)". |
+| F90 | threats | A seat that lost its presence in a country couldn't withdraw a payment there; the credits stayed locked until the threat executed. | Withdraw stays offered; paying doesn't. r21; test `a_seat_that_lost_its_presence_there_can_take_back_a_payment`. |
+| F91 | view | `alignment.variant=off` showed "antimatter actions left 1/1" for an action that doesn't exist. | Not shown. |
+| F92 | docs (generated) | The harms ledger counted a printed corruption only as pieces placed, though it takes presence and ambassadors around the city; the standard-actions table said Harden is "Protector only", though two cards grant it. | `docs.rs` corrected; docs regenerated. |
+| F93 | rules.md | Thirteen statements the code contradicts, most made stale by r18–20: tokens on programs (Default 51), "Firewall card" and "Civic shelter card" (both Aegis Dome Array), "permanent losses only in tier 2", every card target in reach (Terms), ambassador moves (no presence), counter refunds at the end of the action phase (Default 20: at execute), Energy and Chips rows without the tracks, compute sources without the lone-presence drain, Default 55 and shields, ocean inside the board. | Corrected. |
+| F94 | docs | architecture.md: twist timing, fronts from borders, `extra` on presence spaces, a sample with stale values and a card that doesn't exist, agents "never peek" (the planner plays on the real state), `report.rs`, retired names. principles.md and README: moved specs, stale weights (`w.project`, `w.freeing`), a build forecast the heuristic no longer reads, danger terms, keep-plan rounds; `turtle` and `free_only` said they exclude Clear and chips. | Corrected. |
+| F95 | cards | A second Shelter on a sheltered country, or a second cut on a cut node, was offered and paid for with no effect (found by the new paid-for-nothing test). | Only countries and nodes it can act on are offered. r21; test `no_action_is_paid_for_nothing` (and a slow twin over 56 games). |
+| F96 | adversary | The twist loop's `_ => {}` is what hid F62. | Every twist op is named with where it is read; an op added to the slot with no reader panics in the first game that reveals it. |
+| F100 | viewer | The Lose-if row could wrap and take the board below its height budget at 1366×768; the step label, cut on long growth names, had no hover. | Shorter chips ("Discord deck runs out", "presence gone"); the step label has a hover. |
+| F99 | content | The AI boards' energy-for-credits rate (the Builder on buildings, the Protector on Security cards) appeared on no board or view: a 6-credit card read "ready" on 3 credits, and the player learned why at the prompt. | The innate text says it. |
+| F98 | review of 044's own changes | An independent review of this branch's diff found: F63's veto refused Peacekeeping Detail when only one of its two clauses had a target; the paid-for-nothing test could fail only on events; two r21 changes had no history row; F89 showed insight but not a card's chips, energy or antimatter, and showed it on built cards; F73's chip ignored `presence_loss` and named a tunable stage; the sweep lost marker moments on steps that were also a choice; `odd.mjs` never clicked Undo and passed on a mistyped `--only`. | All fixed. |
+| F97 | checker | No check tried odd input after 020, or watched for paid-for-nothing. | `web/scripts/odd.mjs` (`npm run odd`, 12 scenarios: mashing keys and buttons, reload mid-choice, branching from a seek, resize and tabs during autoplay, a frozen page, full storage, broken records, old and junk sessions, bad seeds): all pass. |
+
+### Deferred to Matt
+
+| # | Area | Finding | Options, and the pick |
+|---|---|---|---|
+| D15 | adversary balance | **041's screens and gates were played without F62's Unity pull**, and r21 removed some dud plays. Planner, 32 seeds, r20 to r21: c2 d0 100% to 94%, c2 d2 88% to 81%, c3 d0 75% to 81%, c3 d2 56% to 56%: within noise, but no gate has seen it. | (a) Rerun `experiments/gate-041.json` at r21; (b) leave it until the next revision's screen. **Pick (a)**, about an hour at below-normal priority: it is the cap's "harder end", which Matt's ruling leaned on. |
+| D16 | rules text | rules.md says a program or event is offered only when *each* targeted effect has a target. A Harden or a "you may move" with no target doesn't veto a card that also gains something (Blackstart Protocol, Shuttle Diplomacy; 15 cards): the card plays and that clause does nothing. F63 vetoes only cards that would do nothing at all, and rules.md now says so. | (a) Keep F63's reading: the card is still worth playing; (b) the strict reading: a veto, which would stop Aegis Grid Lockdown in the early rounds. **Pick (a)**: (b) is a real balance change for no gain in clarity. |
+| D17 | rules / Science | A shield on a presence that stands on the seat's own building outlives the presence as free hardening: nothing can tell a shield from a building's token (`lose_presence`). | (a) Say so in rules.md: the token stays and protects the building; (b) remove it with the presence, a shield being a different piece; (c) a separate token kind. **Pick (a)**: a printed game has one token; it is what a table would do. |
+| D18 | Discord text | "3+ Discord tips" steps read the count **before** the tip, as rules.md's prose says, but the card, the table's "Stronger from tip" column and the chip read as the 3rd tip: with the chip at 3, the card plays its base effect, and the step first fires on the 4th tip. | (a) Print "after 3 Discord tips" and retitle the column; (b) read the count after the tip, a harder game (a rules change). **Pick (a)**: the code matches the written rule. |
+| D19 | card icons | Delay and Jam print the same icon line, −1 threat: one counts threats, the other resources off one threat's counter. Only the words differ. | (a) A clock icon for Delay; (b) leave it. **Pick (a)**: the grammar says the icons say what the text says. |
+| D20 | agents | "No peeking" leaks: the guess reshuffles the dealt piles, so agents know *which* 3 of the 6 tier-1 Unity cards are in the game (and at d4 which Discord card was cut), though the rules deal them face down. | (a) Guess the unseen subset from the printed cards, like adversary positions; (b) leave it. **Pick (a)**, in the next agent change: it retunes play, so it goes with a calibration, not a hunt. |
+| D21 | picks | `picks/card_frames_r2.json` and `scene_style_r1.json` point at 51 images that are gone (their folders are empty): opening those pickers shows broken tiles. Superseded rounds. | (a) Delete the two manifests; (b) leave them as a record of the choice. **Pick (b)** unless they confuse: their rulings are recorded in the frames and the preamble. |
+| D22 | scene art | The framing line allows a subject band of 768 px of a 1024 px draw, and a building's window shows about 730: a subject filling the band loses 19 px at each end. | (a) "The middle two-thirds" in the framing line, for the next batch; (b) leave it. **Pick (a)**: a word's change; the cost is cosmetic either way. |
+
+### Won't fix
+
+| # | Area | Report | Why not |
+|---|---|---|---|
+| W11 | view | The shared discard piles print insight prices discounted by seat 0's Science tags. | Debug-level: hover text on a discard pile; the price at play time is right. |
+| W12 | adversary | A station that flips keeps a marker, where a corrupted city's marker goes. | No rule says otherwise; rules.md's sentence is about placing a marker. A rule to write if it ever matters. |
+| W13 | viewer | A record overlaying adversary cards or AI boards shows the printed text. | Documented in README's overlay paragraph; the game plays the overlay. |
+| W14 | viewer | Growth buttons name no cost, and Expand with energy for one step places one. | rules.md's rule: a placement you can't pay doesn't happen. F70 puts the cost on the track. |
+| W15 | sim | `screen.py`'s "cap" column counts deck-out losses. | That is the round cap: rules.md's word for it. |
+| W16 | viewer | The sweep's `truncated` issues (6,405 at r21): threat and project text and adversary lines cut to fit, with a hover. | The no-scroll budget at 1366×768 (D3, W10); every one has a hover or an ellipsis. |

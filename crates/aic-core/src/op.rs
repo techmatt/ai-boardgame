@@ -222,7 +222,7 @@ pub enum Op {
     GainAmbassadors {
         count: i64,
     },
-    /// In one country, buildings can't be destroyed this round.
+    /// In one country, buildings and presence can't be destroyed this round.
     Shelter,
     /// The next `count` adversary cards are shown.
     Peek {
@@ -531,7 +531,7 @@ pub enum Op {
     Arrivals {
         site: Site,
     },
-    /// Clean cities corrupt at `amount` fewer ambassadors.
+    /// Cities corrupt at `amount` fewer ambassadors.
     CorruptSooner {
         amount: i64,
     },

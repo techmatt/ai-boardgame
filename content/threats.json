@@ -338,7 +338,7 @@
   "id": "purge_protocols",
   "name": "Purge protocols",
   "tier": 2,
-  "text": "Each player discards their most expensive card in hand and loses 3 tokens from their cards.",
+  "text": "Each player here discards their most expensive card in hand and loses 3 tokens from their cards.",
   "counter": [
    [
     "credits",
@@ -359,7 +359,7 @@
   "id": "total_war",
   "name": "Total war",
   "tier": 2,
-  "text": "2 adversary troops land on factories here (else cities), each destroying any presence on its hex, and 2 adversary ambassadors on military bases; the adversary gains 4 compute.",
+  "text": "2 adversary troops land on factories here (else cities), each destroying any presence on its hex, and 2 adversary ambassadors on military bases here; the adversary gains 4 compute.",
   "counter": [
    [
     "credits",

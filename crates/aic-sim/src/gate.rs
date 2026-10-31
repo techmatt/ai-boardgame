@@ -206,7 +206,10 @@ impl GateState {
         );
         let _ = writeln!(w, "| variant | d | check | games | stopped | win % | gap to its agent | paired se |");
         let _ = writeln!(w, "|---|---|---|---|---|---|---|---|");
+        // 044: with several configs, rows of one check differ only by config.
+        let several = self.rows.iter().any(|r| r.config != self.rows[0].config);
         for r in &self.rows {
+            let variant = if several { format!("{} ({})", r.variant, r.config) } else { r.variant.clone() };
             let stop = match r.decided {
                 Some(Decided::ClearsNoise) => "clears the noise",
                 Some(Decided::SignSettled) => "sign settled",
@@ -216,7 +219,7 @@ impl GateState {
             let _ = writeln!(
                 w,
                 "| {} | {} | {} | {} | {stop} | {:.0} | {:+.0} ±{:.0}{} | {:.0} |",
-                r.variant,
+                variant,
                 r.difficulty,
                 r.check,
                 r.games,

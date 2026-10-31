@@ -33,10 +33,21 @@ function cardCost(view: View | undefined, seat: number, group: string, id: strin
   return view?.seats[seat]?.cards.find((g) => g.key === group)?.cards.find((c) => c.id === id)?.cost;
 }
 
+/** A card's costs beyond credits ("1 insight", "2 chips"), from its view text's bracket line (044). */
+export function extraCosts(text: string | undefined): string[] {
+  const bracket = (text ?? '').match(/^\[([^\]]*)\]/)?.[1] ?? '';
+  return [...bracket.matchAll(/\+(\d+ [a-z]+)/g)].map((m) => m[1]);
+}
+
+/** " (5 credits + 1 insight)", or nothing for a free card. */
+function playPrice(credits: number | undefined, extra: string[]): string {
+  const parts = [credits ? `${credits} credits` : '', ...extra].filter(Boolean);
+  return parts.length ? ` (${parts.join(' + ')})` : '';
+}
+
 /** The action's own words, without seat; null for a type with no special label. */
 function known(a: Action, withTarget: boolean, cx: LabelContext): string | null {
   const card = typeof a.card === 'string' ? cardName(a.card) : '';
-  const cost = (n: number | undefined, what: string) => (n !== undefined && n > 0 ? ` (${n} ${what})` : '');
   switch (a.type) {
     case 'pass':
       return 'pass';
@@ -56,7 +67,7 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       return `growth: ${g ? g.name : `option ${a.option}`}`;
     }
     case 'play':
-      return `play ${card}${cost(cardCost(cx.view, a.seat, 'cards.hand', a.card ?? ''), 'credits')}`;
+      return `play ${card}${playPrice(cardCost(cx.view, a.seat, 'cards.hand', a.card ?? ''), extraCosts(cx.view?.seats[a.seat]?.cards.find((g) => g.key === 'cards.hand')?.cards.find((c) => c.id === a.card)?.text))}`;
     case 'use':
       return `use ${card}`;
     case 'power': {
@@ -81,7 +92,11 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       // The rules publish each standard action's words and cost in the view.
       const s = cx.view?.standard?.find((x) => x.act === String(a.act));
       if (!s) return `standard: ${words(String(a.act))}`;
-      const costs = ([[s.energy, 'energy'], [s.credits, 'credits'], [s.chips, 'chips']] as const)
+      // 044: a placement's real price is the seat's (step cost, rise), not the printed base.
+      const now = (key: string, base: number) => cx.view?.seats[a.seat]?.values.find((x) => x.key === `board.${key}`)?.value ?? base;
+      const energy = a.act === 'presence' ? now('presence_energy_now', s.energy) : s.energy;
+      const credits = a.act === 'presence_buy' ? now('presence_credits_now', s.credits) : s.credits;
+      const costs = ([[energy, 'energy'], [credits, 'credits'], [s.chips, 'chips']] as const)
         .filter(([v]) => v > 0)
         .map(([v, what]) => amount(v, what));
       return `${s.doc.split(';')[0]}${costs.length ? ` (${costs.join(', ')})` : ''}`;
@@ -201,6 +216,7 @@ const KNOWN: Record<string, string> = {
   'cube:adversary': ADVERSARY_COLOUR,
   'ambassador:adversary': ADVERSARY_COLOUR,
   node: ADVERSARY_COLOUR,
+  corruption: ADVERSARY_COLOUR,
   troop: '#2a0d3d',
   factory: '#7a5230',
   station: '#00796b',
@@ -220,6 +236,7 @@ const TOKEN_NAMES: Record<string, string> = {
   cube: 'owner cube',
   presence: 'presence',
   node: 'adversary node',
+  corruption: 'corruption marker',
   ambassador: 'ambassador',
   station: 'research station',
   troop: 'adversary troop',

@@ -2,22 +2,19 @@
 // (art-originals/picks/card_frames_r3/), never committed: composed cards and the splay
 // from out/cards/ (run `npm run render` first), and a copy of each bare frame. One row per
 // variant, composed card beside the bare frame, then the splay and the icon set. Stops if
-// the folder isn't reachable.
+// the folder isn't reachable (lib.mjs).
 import { copyFile, mkdir, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import sharp from 'sharp';
 
-import { ART, OUT, REPO, TOOL, readJson } from './lib.mjs';
+import { ART, OUT, REPO, TOOL, pickerOriginals, readJson } from './lib.mjs';
 
 const NAME = 'card_frames_r3';
 const samples = await readJson(path.join(TOOL, 'samples.json'));
 const cards = Object.fromEntries((await readJson(path.join(REPO, 'content', 'cards.json'))).map((c) => [c.id, c]));
 const framesDir = path.join(ART, 'frames', 'r3');
-const shared = path.join(REPO, 'art-originals');
-if (!existsSync(shared)) throw new Error(`picker: ${shared} is not reachable: no picker written`);
-const images = path.join(shared, 'picks', NAME);
+const images = path.join(pickerOriginals('picker'), 'picks', NAME);
 await mkdir(images, { recursive: true });
 const url = (f) => `../art-originals/picks/${NAME}/${f}`;
 const label = (v) => {
@@ -40,8 +37,7 @@ for (const [v, id] of Object.entries(samples.variants)) {
   });
 }
 await preview('splay', 600);
-const [older, newer] = samples.splay.map((id) => cards[id].name);
-rows.push({ id: 'splay', label: `Splay: ${newer} built over ${older}`, options: [{ key: 'splay', image: url('splay.jpg') }] });
+rows.push({ id: 'splay', label: `Splay, oldest to newest: ${samples.splay.map((id) => cards[id].name).join(', ')}`, options: [{ key: 'splay', image: url('splay.jpg') }] });
 await preview('icons', 900);
 rows.push({ id: 'icons', label: 'The icon set', note: 'Tag, resource, token and piece glyphs are vector over the one painted container sheet.', options: [{ key: 'icons', image: url('icons.jpg') }] });
 

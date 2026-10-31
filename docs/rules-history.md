@@ -7,6 +7,20 @@ What each rules revision changed, what it replaced and whether it is **locked** 
 record, moved out of it in 025 otherwise as written, so a row quoting a number or a card
 is as of its revision. Add a table here with every rules change.
 
+**Revision 21 (044, bug hunt): rules that didn't run, cards offered for nothing.** All fixes;
+none changes a number.
+
+| What | Was | Now | Status |
+|---|---|---|---|
+| Stage-III cards' "2 Sway leaves the Unity bucket" | printed since r20, never ran (the twist was dropped): 041's screen was played without it | runs | fix |
+| A card or ability that only hardens or moves one ambassador | offered and paid for with no target | not offered | fix |
+| "Remove 1 worth" | offered on a hex holding only a troop (worth 2): paid, nothing removed | such a hex is no target | fix |
+| A cash-in after an add-tokens on the same card | refused when the tokens weren't there yet | counts what the card adds first | fix |
+| "Up to N" on Clear, Shield, Delay | forced to N | "stop" after the first, as Cleanse | fix |
+| A second Shelter on a country, a second cut on a node | offered and paid for, no effect | only what it can act on is offered | fix |
+| Withdraw after losing your presence in a threat's country | not offered: the payment stayed until the threat executed | offered; paying isn't | fix |
+| `stage_cards` check | added `stage3_added` at every difficulty, took off no removal | checks what the difficulty deals | fix |
+
 **Revision 20 (041): growth as a choice, the marker worth clearing, Science on the board.**
 Matt's rulings on 034 (2026-10-30); only "a cap exists and can shorten" is locked.
 

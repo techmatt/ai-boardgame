@@ -834,9 +834,16 @@ pub fn groups(cells: &[Cell], sums: &[CellSummary], games: &[GameResult]) -> Vec
             // budget sweep) are siblings on a rung, so each tier counts with
             // its best agent.
             let tiers: Vec<usize> = idx.iter().map(|&i| cells[i].agent.tier()).collect();
+            // 044: a gate check stopped on a few seeds doesn't lead a tier (as
+            // `strength` leaves it out): its rate is of other seeds than the rest.
+            let most = idx.iter().map(|&i| sums[i].games).max().unwrap_or(0);
+            let short: Vec<bool> = idx.iter().map(|&i| 4 * sums[i].games < 3 * most).collect();
             let best_per_tier = |v: &[(String, f64)]| -> Vec<f64> {
                 let mut out: Vec<(usize, f64)> = Vec::new();
                 for (k, (_, x)) in v.iter().enumerate() {
+                    if short[k] {
+                        continue;
+                    }
                     match out.last_mut() {
                         Some((t, b)) if *t == tiers[k] => *b = b.max(*x),
                         _ => out.push((tiers[k], *x)),

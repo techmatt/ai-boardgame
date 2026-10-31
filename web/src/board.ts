@@ -123,6 +123,13 @@ function glyph(kind: string, s: number, paint: Paint): SVGElement {
       g.append(p(`M0,${f(-s)} L${f(0.85 * s)},${f(-0.62 * s)} V${f(0.05 * s)} Q${f(0.8 * s)},${f(0.75 * s)} 0,${f(1.02 * s)} Q${f(-0.8 * s)},${f(0.75 * s)} ${f(-0.85 * s)},${f(0.05 * s)} V${f(-0.62 * s)} Z`, c));
       g.append(p(`M0,${f(-0.6 * s)} V${f(0.65 * s)}`, 'none', 'detail'));
       break;
+    case 'corruption':
+      // A corruption marker: a burnt patch with a cross through it, where a presence fell.
+      g.append(
+        el('circle', { cx: 0, cy: 0, r: f(0.9 * s), fill: '#e1bee7', stroke: ADVERSARY_COLOUR, 'stroke-width': f(0.22 * s), class: 'glyph' }),
+        el('path', { d: `M${f(-0.45 * s)},${f(-0.45 * s)} L${f(0.45 * s)},${f(0.45 * s)} M${f(0.45 * s)},${f(-0.45 * s)} L${f(-0.45 * s)},${f(0.45 * s)}`, fill: 'none', stroke: ADVERSARY_COLOUR, 'stroke-width': f(0.24 * s), 'stroke-linecap': 'round' }),
+      );
+      break;
     default:
       g.append(el('circle', { cx: 0, cy: 0, r: f(0.9 * s), fill: c, class: 'glyph' }));
   }
@@ -130,10 +137,10 @@ function glyph(kind: string, s: number, paint: Paint): SVGElement {
 }
 
 /** Glyph scale per kind: owner cubes and buildings a little larger than pawns. */
-const SCALE: Record<string, number> = { cube: 1.05, station: 1.1, factory: 1, presence: 1, ambassador: 0.9, troop: 0.95, unit: 0.95, harden: 0.85, node: 1 };
-/** The adversary's tokens: its owner cube, its ambassadors, its troops, its nodes. */
-const isAdversary = (kind: string) => kind === 'troop' || kind === 'node' || kind.endsWith(':adversary');
-const ORDER = ['cube', 'station', 'factory', 'presence', 'harden', 'unit', 'ambassador', 'node', 'troop'];
+const SCALE: Record<string, number> = { cube: 1.05, station: 1.1, factory: 1, presence: 1, ambassador: 0.9, troop: 0.95, unit: 0.95, harden: 0.85, node: 1, corruption: 0.95 };
+/** The adversary's tokens: its owner cube, its ambassadors, its troops, its nodes, a corruption marker. */
+const isAdversary = (kind: string) => kind === 'troop' || kind === 'node' || kind === 'corruption' || kind.endsWith(':adversary');
+const ORDER = ['cube', 'station', 'factory', 'presence', 'harden', 'unit', 'ambassador', 'corruption', 'node', 'troop'];
 const rank = (k: string) => {
   const i = ORDER.indexOf(k.split(':')[0]);
   return i < 0 ? ORDER.length : i;

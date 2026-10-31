@@ -176,7 +176,7 @@ function render() {
   }
   renderBoard(ui.board, shown, { targets, changed });
   renderPrompt(targets.size);
-  ui.status.innerHTML = statusHtml(shown);
+  ui.status.innerHTML = statusHtml(shown, f.snap.state.config);
   ui.pipeline.innerHTML = pipelineHtml(shown);
   ui.countries.innerHTML = countriesHtml(shown, f.snap.state.config);
   renderSeats();
@@ -424,6 +424,7 @@ function renderTimeline() {
   ui.scrub.value = String(tl.cursor);
   const a = tl.frame.action;
   ui.step.textContent = `step ${tl.cursor} / ${tl.last}${a ? ` · ${actionLabel(a, true, true, { config: tl.frame.snap.state.config })}` : ' · setup'}`;
+  ui.step.title = ui.step.textContent;
   ui.play.textContent = autoplay !== null ? '⏸ pause' : '▶ play';
 }
 

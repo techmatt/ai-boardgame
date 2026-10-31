@@ -7,6 +7,7 @@
 use crate::content::{Cond, CountryRule, DamageAt, HexKind, Op, Side};
 use crate::module::{Cx, Res, World};
 use crate::state::GameState;
+use crate::vocab::TokenKind;
 
 use super::common::*;
 use super::{adversary, alignment, board, cards, economy, threats};
@@ -107,9 +108,9 @@ impl Ctx {
 
 /// Hexes a removal effect of seat `s` may target: every card's map target
 /// is within the seat's reach (016), and the card may narrow it further.
-pub fn damage_hexes(w: &World, g: &GameState, seat: usize, at: DamageAt) -> Vec<usize> {
+pub fn damage_hexes(w: &World, g: &GameState, seat: usize, amount: i64, at: DamageAt) -> Vec<usize> {
     (0..g.hexes.len())
-        .filter(|&h| has_adversary(g, h) && in_reach(w, g, seat, h))
+        .filter(|&h| adversary::can_damage(w, g, h, amount) && in_reach(w, g, seat, h))
         .filter(|&h| match at {
             DamageAt::Reach => true,
             DamageAt::PresenceCountry => {
@@ -175,6 +176,44 @@ fn walk(g: &mut GameState, cx: &mut Cx, seat: usize, from: usize, to: usize) {
     cx.tally(g, "effects.ambassador_moves", 1);
 }
 
+/// Nodes in seat `seat`'s reach not already cut off (044: a second cut did nothing).
+fn cuttable_nodes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
+    (0..g.hexes.len())
+        .filter(|&h| g.tokens(h, NODE) > 0 && g.var(&adversary::cut_key(h)) == 0 && in_reach(w, g, seat, h))
+        .collect()
+}
+
+/// Countries with no Shelter up (044: a second one did nothing).
+fn unsheltered(w: &World, g: &GameState) -> Vec<usize> {
+    (0..w.map.countries.len())
+        .filter(|&c| !board::flagged(g, crate::op::RoundFlag::Shelter, c))
+        .collect()
+}
+
+/// Countries where a Harden of seat `seat` has a building a token can protect.
+fn harden_countries(w: &World, g: &GameState, seat: usize, rule: CountryRule) -> Vec<usize> {
+    (0..w.map.countries.len())
+        .filter(|&c| match rule {
+            CountryRule::Any => true,
+            CountryRule::PresenceCountry => has_presence_in(w, g, seat, c),
+        })
+        .filter(|&c| {
+            w.map.countries[c]
+                .hexes
+                .iter()
+                .any(|&h| board::hardenable(g, h) && in_reach(w, g, seat, h))
+        })
+        .collect()
+}
+
+/// Seat `seat`'s ambassadors that have a piece within `range` to move to.
+fn movable_one(w: &World, g: &GameState, seat: usize, range: i64) -> Vec<usize> {
+    ambassador_hexes(g, seat)
+        .into_iter()
+        .filter(|&a| (0..g.hexes.len()).any(|h| h != a && has_piece(w, g, h) && w.map.distance(a, h) as i64 <= range))
+        .collect()
+}
+
 /// Whether every targeted effect in `effects` has something to act on
 /// (a card is not offered when it would do nothing).
 pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Op]) -> bool {
@@ -187,12 +226,31 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Op]) -> bool {
             _ => 0,
         })
         .sum();
-    effects.iter().all(|e| match e {
-        Op::Damage { at, .. } => !damage_hexes(w, g, seat, *at).is_empty(),
+    // 044: tokens the same effects add first can be cashed in or counted.
+    let added = |kind: &TokenKind, upto: usize| -> i64 {
+        let has = !cards::token_cards(w, g, seat, Some(*kind)).is_empty();
+        effects[..upto]
+            .iter()
+            .map(|e| match e {
+                Op::AddTokens { kind: k, amount } if k == kind && has => *amount,
+                _ => 0,
+            })
+            .sum()
+    };
+    // 044: these two only veto a card that would do nothing at all: a card that
+    // also gains something is still worth playing ("you may move").
+    let only_these = effects.iter().all(|e| matches!(e, Op::Harden { .. } | Op::MoveOne { .. }));
+    let one_acts = effects.iter().any(|e| match e {
+        Op::Harden { in_country, .. } => !harden_countries(w, g, seat, *in_country).is_empty(),
+        Op::MoveOne { range } => !movable_one(w, g, seat, *range).is_empty(),
+        _ => false,
+    });
+    effects.iter().enumerate().all(|(at, e)| match e {
+        Op::Damage { amount, at } => !damage_hexes(w, g, seat, *amount, *at).is_empty(),
         Op::DamageCountry { .. } | Op::DestroyAll => any_hex(g, |h| has_adversary(g, h)),
-        Op::RemoveNode | Op::CutNode => {
-            any_hex(g, |h| g.tokens(h, NODE) > 0 && in_reach(w, g, seat, h))
-        }
+        Op::RemoveNode => any_hex(g, |h| g.tokens(h, NODE) > 0 && in_reach(w, g, seat, h)),
+        Op::CutNode => !cuttable_nodes(w, g, seat).is_empty(),
+        Op::Shelter => !unsheltered(w, g).is_empty(),
         Op::AddTokens { kind, .. } => !cards::token_cards(w, g, seat, Some(*kind)).is_empty(),
         Op::Consolidate { .. } => ambassador_hexes(g, seat)
             .iter()
@@ -214,11 +272,15 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Op]) -> bool {
         // 024: too few to count, nothing to cash in: the card would do nothing.
         Op::GainPerTokens { kind, per, .. } => {
             let cards = cards::token_cards(w, g, seat, Some(*kind));
-            cards.iter().map(|c| g.var(&cards::tokens_key(seat, c))).sum::<i64>() >= *per
+            cards.iter().map(|c| g.var(&cards::tokens_key(seat, c))).sum::<i64>() + added(kind, at) >= *per
         }
-        Op::CashOut { kind, .. } => cards::token_cards(w, g, seat, Some(*kind))
-            .iter()
-            .any(|c| g.var(&cards::tokens_key(seat, c)) > 0),
+        Op::CashOut { kind, .. } => {
+            added(kind, at) > 0
+                || cards::token_cards(w, g, seat, Some(*kind))
+                    .iter()
+                    .any(|c| g.var(&cards::tokens_key(seat, c)) > 0)
+        }
+        Op::Harden { .. } | Op::MoveOne { .. } => !only_these || one_acts,
         Op::MoveAmbassadors { .. } => movable_ambassadors(g, seat) > 0,
         Op::PlacePresence { free, .. } => {
             board::can_pay_placement(w, g, seat, placing(*free), gained)
@@ -325,48 +387,76 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
                 }
             }
         }
+        // 044: "up to": after the first, "stop" (as Cleanse does).
         Op::ClearMarkers { count } => {
-            for _ in 0..*count {
+            for k in 0..*count {
                 let hexes: Vec<usize> = (0..g.hexes.len())
                     .filter(|&h| g.tokens(h, MARKER) > 0 && in_reach(&w, g, seat, h))
                     .collect();
-                let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+                if hexes.is_empty() {
+                    break;
+                }
+                let mut opts: Vec<_> = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+                if k > 0 {
+                    opts.push(opt("stop"));
+                }
                 let prompt = format!("Seat {seat}: clear the corruption marker on which hex?");
                 let Some(i) = cx.choose(seat, &prompt, opts)? else {
                     break;
                 };
+                if i >= hexes.len() {
+                    break;
+                }
                 board::clear_marker(g, cx, seat, hexes[i]);
             }
         }
         Op::ShieldPresence { count } => {
-            for _ in 0..*count {
+            for k in 0..*count {
                 let hexes: Vec<usize> = (0..g.hexes.len())
                     .filter(|&h| g.tokens(h, &presence(seat)) > 0 && g.tokens(h, HARDEN) == 0)
                     .collect();
-                let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+                if hexes.is_empty() {
+                    break;
+                }
+                let mut opts: Vec<_> = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+                if k > 0 {
+                    opts.push(opt("stop"));
+                }
                 let prompt = format!("Seat {seat}: shield your presence on which hex?");
                 let Some(i) = cx.choose(seat, &prompt, opts)? else {
                     break;
                 };
+                if i >= hexes.len() {
+                    break;
+                }
                 cx.add_tokens(g, hexes[i], HARDEN, 1);
             }
         }
         Op::DelayThreat { count } => {
-            for _ in 0..*count {
+            for k in 0..*count {
                 let active: Vec<_> = threats::active(g)
                     .into_iter()
                     .filter(|(t, _)| !threats::waits(g, t))
                     .collect();
-                let opts = active.iter().map(|(t, _)| opt(t.clone())).collect();
+                if active.is_empty() {
+                    break;
+                }
+                let mut opts: Vec<_> = active.iter().map(|(t, _)| opt(t.clone())).collect();
+                if k > 0 {
+                    opts.push(opt("stop"));
+                }
                 let prompt = format!("Seat {seat}: delay which threat?");
                 let Some(i) = cx.choose(seat, &prompt, opts)? else {
                     break;
                 };
+                if i >= active.len() {
+                    break;
+                }
                 threats::delay(g, cx, &active[i].0);
             }
         }
         Op::Damage { amount, at } => {
-            let hexes = damage_hexes(&w, g, seat, *at);
+            let hexes = damage_hexes(&w, g, seat, *amount, *at);
             let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
             let prompt =
                 format!("Seat {seat}: remove {amount} worth of adversary pieces in which hex?");
@@ -490,18 +580,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             }
         }
         Op::Harden { count, in_country } => {
-            let cs: Vec<usize> = (0..w.map.countries.len())
-                .filter(|&c| match in_country {
-                    CountryRule::Any => true,
-                    CountryRule::PresenceCountry => has_presence_in(&w, g, seat, c),
-                })
-                .filter(|&c| {
-                    w.map.countries[c]
-                        .hexes
-                        .iter()
-                        .any(|&h| board::hardenable(g, h) && in_reach(&w, g, seat, h))
-                })
-                .collect();
+            let cs = harden_countries(&w, g, seat, *in_country);
             let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
             let prompt = format!("Seat {seat}: harden {count} buildings in which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
@@ -551,9 +630,9 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
         }
         Op::GainAmbassadors { count } => cx.add_resource(g, seat, Resource::Ambassadors, *count),
         Op::Shelter => {
-            let cs: Vec<usize> = (0..w.map.countries.len()).collect();
+            let cs = unsheltered(&w, g);
             let opts = cs.iter().map(|&c| country_opt(&w, c)).collect();
-            let prompt = format!("Seat {seat}: shelter the buildings of which country?");
+            let prompt = format!("Seat {seat}: shelter which country?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
                 board::shelter(g, cx, cs[i]);
             }
@@ -648,7 +727,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             }
         }
         Op::MoveOne { range } => {
-            let from = ambassador_hexes(g, seat);
+            let from = movable_one(&w, g, seat, *range);
             let mut opts: Vec<_> = from.iter().map(|&h| hex_opt(&w, h)).collect();
             opts.push(opt("stop"));
             let prompt = format!("Seat {seat}: move which of your ambassadors (up to {range} hexes)?");
@@ -722,9 +801,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             }
         }
         Op::CutNode => {
-            let hexes: Vec<usize> = (0..g.hexes.len())
-                .filter(|&h| g.tokens(h, NODE) > 0 && in_reach(&w, g, seat, h))
-                .collect();
+            let hexes = cuttable_nodes(&w, g, seat);
             let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
             let prompt = format!("Seat {seat}: cut off the node in which hex?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {

@@ -116,9 +116,6 @@ pub fn uncover_label(u: &Uncover) -> String {
     if u.keep2 {
         parts.push("T2 keep -1".into());
     }
-    if u.cost > 0 {
-        parts.push(format!("costs {} energy", u.cost));
-    }
     parts.join(", ")
 }
 
@@ -249,6 +246,14 @@ impl Module for Ai {
                             key: "tier2".into(),
                             label: "T2 keep".into(),
                             doc: "uncovering this lowers a tier-2 keep (cards.keep_tier2_upgraded insight)".into(),
+                        });
+                    }
+                    // 044: the step's printed cost reached no client.
+                    if u.cost > 0 {
+                        marks.push(TrackMark {
+                            key: "cost".into(),
+                            label: format!("pay {}", Resource::Energy.amount(u.cost)),
+                            doc: "placing this token costs this much energy on top, unless a card says free (the rich action pays it in credits)".into(),
                         });
                     }
                     TrackStep {

@@ -354,7 +354,7 @@ fn card_targets_on_the_map_must_be_in_reach() {
     let far = hexes_where(m, |h| m.distance(h, me) > 2 && kind(m, h) != HexKind::Ocean)[0];
     put(&mut g, near, ADV_AMBASSADOR, 1);
     put(&mut g, far, ADV_AMBASSADOR, 1);
-    assert_eq!(effects::damage_hexes(&w, &g, 0, DamageAt::Reach), vec![near]);
+    assert_eq!(effects::damage_hexes(&w, &g, 0, 1, DamageAt::Reach), vec![near]);
 }
 
 #[test]

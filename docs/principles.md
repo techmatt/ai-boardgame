@@ -116,15 +116,19 @@ The strategy-health gate runs them beside the engine at d0, d2 and d4
 | mono-tag (023), one per tag | `only_tag=N` (1-6: Science, Industry, Cyber, Power, Diplomacy, Security) | keeps and plays only cards carrying that tag (AI-unique cards exempt) |
 | ignore-X (023), one per tag | `never_tag=N` | never keeps or plays a card carrying that tag |
 | event-hoarder (023) | `events_only=1` | keeps and plays only events |
-| ignore threats, turtle, free cities only (027) | `ignore_threats=1`, `turtle=1`, `free_only=1` | no counters; stays on the setup hex and defends it; only Diplomacy cards and ambassador moves |
+| ignore threats, turtle, free cities only (027) | `ignore_threats=1`, `turtle=1`, `free_only=1` | no counters; stays on the setup hex and defends it; only Diplomacy cards and ambassador moves (turtle and free cities only also pass Clear, which pays Unity, and selling chips) |
 | Unity farm (028) | `unity_farm=1` | before anything else, buys ambassadors and lands them on bases and factories, which pay Unity when they produce |
+| rich-spend, Science rush (034) | `rich_spend=1`, `science_rush=1` | every spare credit on the rich action; drafts, keeps and plays Science first, for its discounts |
+| always-Expand, always-Consolidate, never-Remove, Science board (041) | `always_expand=1`, `always_consolidate=1`, `never_remove=1`, `science_board=1` | the growth option placing the most presence; the one placing none; never clears a corruption marker; the Science rush, board cards first |
 
 **Since 023 the gate runs at d2 only, 32 seeds a cell** (`experiments/archive/screen-023-dominance.json`
 with `--quick --games 32`, summarised by `scripts/cards/screen_023.py`): 022's d4 half
 could not pass while d4 is not winnable, and 16 seeds left gaps inside the noise. **Since
-028 it runs under the engine and the planner** (`experiments/screen-028-dominance.json`,
+028 it runs under the engine and the planner** (`experiments/archive/screen-028-dominance.json`,
 summarised by `scripts/cards/screen_028.py --gate`), each check against its own agent: the
-rules are judged by play that can plan, and a check is the same fixed rule in both.
+rules are judged by play that can plan, and a check is the same fixed rule in both. **The
+current gates** are `experiments/gate-034.json` and `experiments/gate-041.json`: planner only,
+d2, early-stopped, summarised by `scripts/cards/screen.py --gate`.
 
 ## Sanity checks (028)
 

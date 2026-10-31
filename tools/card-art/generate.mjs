@@ -5,19 +5,26 @@
 // (lib.mjs). Print-size PNGs go next to them in frames/; a web-size JPEG, the committed
 // template, to art/frames/r3/. A draw is raw: `npm run derive` only reads master.jpg, so
 // promoting one means copying it over the master.
-// Stops at the first usage-limit message.
-import { appendFile, copyFile, mkdir, readFile, readdir, rename } from 'node:fs/promises';
+// Stops at the first usage-limit message. Exits 1 if a draw failed or the limit left some
+// undrawn.
+import { appendFile, copyFile, mkdir, readFile, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import sharp from 'sharp';
 
-import { ART, ORIGINALS, TOOL, layout, readJson, runCodex } from './lib.mjs';
+import { ART, ORIGINALS, TOOL, layout, nextTry, readJson, runCodex } from './lib.mjs';
 
 const argv = process.argv.slice(2);
 const pool = Number(argv.find((a) => a.startsWith('--pool='))?.slice(7) ?? 3);
+if (!Number.isInteger(pool) || pool < 1) throw new Error('gen: --pool must be a whole number, 1 or more');
 const ids = argv.filter((a) => !a.startsWith('--'));
 const p = await readJson(path.join(TOOL, 'prompts.json'));
+for (const id of ids) {
+  const [dir, kind] = id.split('-');
+  if (!p.directions[dir]) throw new Error(`gen: ${id}: no direction ${dir}: nothing drawn`);
+  if (!p.kinds[kind]) throw new Error(`gen: ${id}: no kind ${kind}: nothing drawn`);
+}
 const l = await layout();
 const [W, H] = l.print_px;
 const origDir = path.join(ORIGINALS, 'card-frames-r3');
@@ -48,10 +55,9 @@ async function cut(src, id) {
 }
 
 let stop = false;
+let failed = 0;
 async function one(id) {
   const [dir, kind] = id.split('-');
-  if (!p.directions[dir]) throw new Error(`no direction ${dir}`);
-  if (!p.kinds[kind]) throw new Error(`no kind ${kind}`);
   const guide = path.join(ART, 'guides', `${kind}-t1-blocks.png`);
   let run = await runCodex(framePrompt(dir, kind), guide);
   let ref = !!run.image;
@@ -66,14 +72,12 @@ async function one(id) {
     console.error(`gen: usage limit: ${run.limit}`);
   }
   if (!run.image) {
+    failed++;
     console.error(`gen: ${id}: no image after ${run.seconds}s. ${run.message ?? ''}`);
     return;
   }
   const dest = path.join(origDir, `${id}.png`);
-  if (existsSync(dest)) {
-    const tries = (await readdir(origDir)).filter((f) => f.startsWith(`${id}.try`)).length;
-    await rename(dest, path.join(origDir, `${id}.try${tries + 1}.png`));
-  }
+  if (existsSync(dest)) await rename(dest, path.join(origDir, `${id}.try${await nextTry(origDir, id)}.png`));
   await copyFile(run.image, dest);
   const s = await cut(await readFile(dest), id);
   console.log(`gen: ${id}: ${s.w}×${s.h}, ${run.seconds}s, ref ${ref}, usage ${JSON.stringify(run.usage)}`);
@@ -85,3 +89,7 @@ await Promise.all(
     while (queue.length && !stop) await one(queue.shift());
   }),
 );
+if (failed || queue.length) {
+  process.exitCode = 1;
+  console.error(`gen: ${ids.length - failed - queue.length} of ${ids.length} drawn, ${failed} failed, ${queue.length} not started`);
+}

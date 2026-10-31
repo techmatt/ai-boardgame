@@ -454,13 +454,12 @@ impl Module for Threats {
     ) {
         let s = seat as usize;
         for (t, scope) in active(g) {
-            if !self.can_pay(w, g, s, scope) {
-                continue;
-            }
+            // 044: a seat that lost its presence there can't pay, but can take back.
+            let can_pay = self.can_pay(w, g, s, scope);
             for (r, need) in requirement(w, g, &t) {
                 let have = g.resource(s, r);
                 let left = need - paid(g, &t, r);
-                let most = have.min(left);
+                let most = if can_pay { have.min(left) } else { 0 };
                 let amounts: &[i64] = match most {
                     ..=0 => &[],
                     1 => &[1],

@@ -5,8 +5,8 @@
 // economy.income.*, cards.*) get a dedicated drawing, every other value, card group or
 // pile falls back to a generic chip so nothing goes unshown.
 
-import { aiBoard, content, type CardView, type Config, type PileView, type Value, type View } from './engine';
-import { ADVERSARY_COLOUR, escapeHtml, KINDS, strong } from './format';
+import { aiBoard, content, param, type CardView, type Config, type PileView, type Value, type View } from './engine';
+import { ADVERSARY_COLOUR, escapeHtml, extraCosts, KINDS, strong } from './format';
 
 const esc = escapeHtml;
 
@@ -38,7 +38,10 @@ export function valueChip(v: Value, scope: string, label = v.label, near = true)
 }
 
 export function cardChip(c: CardView, where: string, printed = false): string {
-  const cost = c.cost !== undefined ? ` <small title="cost">${c.cost}</small>` : '';
+  // 044: costs beyond credits sit in the bracket the printed chip drops, so "unaffordable"
+  // could have no visible reason. A card with no price showing (built, played) owes nothing.
+  const extra = c.cost !== undefined ? extraCosts(c.text).map((x) => ` <small title="also costs">+${esc(x)}</small>`).join('') : '';
+  const cost = (c.cost !== undefined ? ` <small title="cost">${c.cost}</small>` : '') + extra;
   const status = c.status && !['in slot', 'draft', 'drafted', 'built', 'slotted', 'resolved', 'done', 'ongoing'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
   // 024: a card repeats its rules text under its name, as Terraforming Mars' do.
   // The view's text starts with a bracketed line ("[building, tier 1, industry, +1 insight]
@@ -71,7 +74,7 @@ function tipsChip(t: Value | undefined, side: 'unity' | 'discord', name: string)
   return `<span class="tips ${side}" data-value="${esc(t.key)}" data-scope="global">${name} tips <b>${t.value}</b>${t.max !== undefined ? `<small> (next at ${t.max})</small>` : ''}</span>`;
 }
 
-export function statusHtml(v: View): string {
+export function statusHtml(v: View, config: Config): string {
   const g = v.globals;
   const parts: string[] = [];
   const acards: string[] = [];
@@ -103,12 +106,18 @@ export function statusHtml(v: View): string {
   const dd = pile(v, 'alignment.deck.discord');
   if (dd) {
     const danger = dd.count <= 1 ? ' danger' : '';
-    loss.push(`<span class="value${danger}" data-pile="${esc(dd.key)}"><span class="label">a Discord tip finds no card</span> <b>${dd.count}</b></span>`);
+    loss.push(`<span class="value${danger}" data-pile="${esc(dd.key)}" title="a Discord tip that finds no card loses the game"><span class="label">Discord deck runs out</span> <b>${dd.count}</b></span>`);
   }
   const deck = findValue(g, 'adversary.deck');
   if (deck) {
     const danger = deck.value <= 1 ? ' danger' : '';
     loss.push(`<span class="value${danger}" data-value="${deck.key}" data-scope="global"><span class="label">adversary cards run out</span> <b>${deck.value}</b><small> left</small></span>`);
+  }
+  // 044: the third locked loss: a seat's last presence, if this config has it.
+  const counts = v.seats.map((s) => s.values.find((x) => x.key === 'board.presence')?.value);
+  if (param(config, 'alignment', 'presence_loss') && counts.every((n) => n !== undefined) && counts.length) {
+    const least = Math.min(...(counts as number[]));
+    loss.push(`<span class="value${least <= 1 ? ' danger' : ''}" title="a seat with no presence on the board loses the game (early on, nothing destroys a last presence)"><span class="label">presence gone</span> <b>${least}</b></span>`);
   }
   // Unlabelled `vars` (source "engine") are folded under the piles: see `varsHtml`.
   // The clock's step is a name, not a count: "clock: war" (020: it read "war 2").
@@ -223,7 +232,11 @@ function progressBars(status: string): string {
 
 function threatCard(c: CardView, where: string): string {
   const effect = (c.text ?? '').replace(/\s*Counter:.*$/, '');
-  return `<div class="threat" data-card="${esc(c.id)}" data-where="${where}"><span class="tname"><b>${esc(c.name)}</b>${progressBars(c.status)}</span><span class="ttext">${esc(effect)}</span></div>`;
+  // 044: a waiting or jammed threat must look it, not only in the hover.
+  const waits = /Waits: /.test(c.text ?? '') ? '<span class="waits">waits</span>' : '';
+  const jam = (c.text ?? '').match(/Jammed: needs (\d+) less/);
+  const jammed = jam ? `<span class="jam">-${esc(jam[1])}</span>` : '';
+  return `<div class="threat${waits ? ' waiting' : ''}" data-card="${esc(c.id)}" data-where="${where}"><span class="tname"><b>${esc(c.name)}</b>${waits}${jammed}${progressBars(c.status)}</span><span class="ttext">${esc(effect)}</span></div>`;
 }
 
 /**
@@ -342,7 +355,8 @@ export function boardHtml(v: View, seatIndex: number): string {
   if (!b) return '';
   const tracks = b.tracks.map((t, ti) => {
     const steps = t.steps.map((st, i) => {
-      const cls = ['step', i < t.uncovered ? 'open' : 'covered', i === t.current ? 'current' : ''].filter(Boolean).join(' ');
+      // 044: with nothing uncovered no step is in effect (the second track at the start).
+      const cls = ['step', i < t.uncovered ? 'open' : 'covered', i === t.current && t.uncovered > 0 ? 'current' : ''].filter(Boolean).join(' ');
       const marks = (st.marks ?? []).map((m) => `<span class="mark m-${esc(m.key)}" title="${esc(m.doc ?? m.key)}">${esc(m.label)}</span>`).join('');
       return `<span class="${cls}" data-track="${seatIndex}:${ti}:${i}"><b>${st.value}</b>${marks}</span>`;
     }).join('');
@@ -358,7 +372,7 @@ export function trackStepDetails(v: View, ref: string): string | null {
   const tr = b?.tracks[t];
   const st = tr?.steps[i];
   if (!b || !tr || !st) return null;
-  const state = i === tr.current ? 'in effect' : i < tr.uncovered ? 'uncovered' : 'still covered';
+  const state = i === tr.current && tr.uncovered > 0 ? 'in effect' : i < tr.uncovered ? 'uncovered' : 'still covered';
   const marks = (st.marks ?? []).map((m) => `<br>${esc(m.label)}: ${esc(m.doc ?? m.key)}`).join('');
   return `<b>${esc(tr.label)}</b>, step ${i + 1} of ${tr.steps.length}: <b>${st.value}</b> (${state})${marks}<br>${tr.uncovered} uncovered · <code>${esc(b.key)}</code> · from ${esc(b.source)}`;
 }

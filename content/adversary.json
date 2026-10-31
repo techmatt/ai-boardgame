@@ -98,7 +98,7 @@
   "id": "adv_s2_fifth_column",
   "name": "Fifth Column",
   "stage": 2,
-  "text": "Arrivals: coastal cities. Clean cities corrupt at 1 fewer ambassador. Escalation: each military base gains an adversary ambassador when this round builds.",
+  "text": "Arrivals: coastal cities. Cities corrupt at 1 fewer ambassador. Escalation: each military base gains an adversary ambassador when this round builds.",
   "twists": [
    {
     "op": "arrivals",
@@ -217,7 +217,7 @@
   "id": "adv_s3_occupation",
   "name": "Occupation",
   "stage": 3,
-  "text": "Arrivals: research stations. Clean cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1; sway 1 toward Discord; each player destroys 2 presence of theirs; 2 Sway leaves the Unity bucket.",
+  "text": "Arrivals: research stations. Cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1; sway 1 toward Discord; each player destroys 2 presence of theirs; 2 Sway leaves the Unity bucket.",
   "twists": [
    {
     "op": "arrivals",

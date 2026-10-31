@@ -5,7 +5,7 @@
   "text": "The wide engine: mostly off the board. More building slots, strong credit income.",
   "innate": {
    "name": "Economies of scale",
-   "text": "Each building you play costs 1 credit less.",
+   "text": "Each building you play costs 1 credit less. Energy pays for buildings, 1 energy a credit.",
    "passives": [
     {
      "op": "building_discount",
@@ -241,7 +241,7 @@
   "text": "The board guardian: lives on the map. Few slots, energy income.",
   "innate": {
    "name": "Bulwark",
-   "text": "You may harden buildings (standard action, 1 energy a token).",
+   "text": "You may harden buildings (standard action, 1 energy a token). Energy pays for Security cards, 1 energy a credit.",
    "passives": [
     {
      "op": "harden_action"
@@ -363,7 +363,7 @@
     ]
    },
    {
-    "name": "Consolidate: gain 3 energy and 2 credits; harden 2 buildings in any one country",
+    "name": "Consolidate: gain 3 energy and 2 credits; harden 2 buildings in your reach, in one country",
     "effects": [
      {
       "op": "gain",

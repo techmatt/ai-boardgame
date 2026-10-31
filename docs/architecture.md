@@ -8,8 +8,9 @@ rules themselves are in [rules.md](rules.md).
 - **`aic-core`**: the rules. Pure and deterministic; no rules live anywhere else.
 - **`aic-sim`**: native CLI. Plays seeded games, compares configs, replay-checks
   everything. Agents live here, not in the core: the skill ladder (`agents/`, playing
-  through the public API on determinized copies, never peeking at hidden cards) and
-  the experiment harness (`experiment.rs`, `report.rs`) that measures play at graded
+  through the public API on determinized copies, except the `planner`, whose rollouts
+  play the real state with full information: [principles.md](principles.md)) and
+  the experiment harness (`experiment.rs`, `report/`) that measures play at graded
   skill. See the root README, *Agents* and *Experiments*.
 - **`aic-wasm`**: wasm-bindgen adapter, JSON strings in and out. No rules.
 - **`web/`**: the browser viewer (Vite + TypeScript) on `aic-wasm`. It draws the
@@ -90,12 +91,12 @@ variant. Abridged:
   "countries": 2,
   "modules": [
     { "module": "board", "variant": "corps", "params": { "start_corrupted": 1, "clock": [1, 2, 1, 2, 1, 3], ... } },
-    { "module": "adversary", "variant": "militarist", "params": { "difficulty": 0, "stage_cards": [4, 4, 3], ... } },
+    { "module": "adversary", "variant": "militarist", "params": { "difficulty": 0, "stage_cards": [4, 5, 2], ... } },
     { "module": "threats", "variant": "countries", "params": { "per_country": 1 } },
-    { "module": "alignment", "variant": "tug", "params": { "undecided_per_player": 3, "tip_per_player": 2, ... } },
+    { "module": "alignment", "variant": "tug", "params": { "undecided_per_player": 4, "tip_per_player": 2, ... } },
     { "module": "economy", "variant": "standard", "params": { ... } },
     { "module": "ai", "variant": "boards", "params": { "boards": [0, 1], "start_credits": 20 } },
-    { "module": "cards", "variant": "draft", "params": { "deal": 4, ... }, "cards": ["fab_line", ...] }
+    { "module": "cards", "variant": "draft", "params": { "deal": 4, ... }, "cards": ["telemetry_archive", ...] }
   ],
   "round": ["alignment.sway", "adversary.build", "adversary.spread", "adversary.corrupt",
             "board.march", "threats.deal", "adversary.reveal", "cards.tier", "cards.deal",
@@ -144,7 +145,7 @@ variant. Abridged:
     (`threats.variant=off`,
     `alignment.variant=off`, `cards.variant=off`): it keeps the module's phases and
     the parameters other modules read, and does nothing. See rules.md §9.
-  - `cards.<id>.cost=4`, `ais.*.presence.4.extra=2` (`<table>.<id>.<path>=<JSON>`, two
+  - `cards.<id>.cost=4`, `ais.*.presence.4.cost=2` (`<table>.<id>.<path>=<JSON>`, two
     dots or more): a **content overlay** entry, kept in the config's `content` list so
     a config still replays a game whole. `Rules::new` applies the list to the embedded
     files through `content::overlaid`, which runs `Content::parse`'s checks and keeps
@@ -204,7 +205,7 @@ A rule that depends on another module's *variant* reads `World::variant("<module
 places or removes adversary ambassadors goes through `adversary::place`, `remove`,
 `remove_piece`, `build_all`, `spread`, `corrupt_city` and `corrupt_station`, so the supply,
 cancellation and node-making hold everywhere; `build_all` places what
-`plan::build_plan` reads, the same plan the agents forecast with. Buildings and
+`plan::build_plan` reads. Buildings and
 presence are destroyed through `board::destroy_building` (except that corruption, sacrifice, Eviction and war's factory-hex hit call `board::lose_presence`, unabsorbed), which applies Shelter
 Order, a base's troop (adversary strikes), hardening, a player ambassador's defense and
 Civic Shelter, and sways the Discord. Presence lives in the board module
@@ -336,8 +337,8 @@ Content is data in `content/`, composed from code primitives:
 - **Adversary projects** (`projects.json`, 017): `stage` (1 cheap, 2 big), `cost` per
   player, `ongoing`, `text` and `effects` (ops, as on Alignment cards).
 - **AI boards** (`ais.json`): credit production, resource `discounts`, innate
-  passives, the presence track (`presence`: what each space uncovers, `extra` its added energy, `keep2` the tier-2
-  keep upgrade) and flat `income`, growth options (lists of ops), unique cards, a
+  passives, the two presence tracks (`presence` and `presence2`: for each space, `income` what it uncovers,
+  `cost` the energy a placement pays for it, `keep2` the tier-2 keep upgrade) and flat `income`, growth options (lists of ops), unique cards, a
   `start` building and `powers` (021: `{name, text, tags, cost, effects}`; `tags` may
   name `any`). Slots are a config list, `ai.slots`.
 - **Alignment cards** (`alignment.json`, the Unity and Discord decks): `side` (`unity`
@@ -366,7 +367,8 @@ threat or a Discord card prints it. Three kinds:
 - **Standing** ops (a building's `passives`, an AI's `innate`) are read by the rule they
   change, through `cards::passives`, while the card is in force.
 - **Twists** (an adversary card's `twists`) are read through `adversary::twists` while the
-  card is current; a `sway` there resolves at the reveal.
+  card is current; its `sway`, `each_destroy_presence` and `pull_unity` resolve once, in
+  `adversary.build`, when the card becomes this round's.
 
 `Op::slots` says which lists may print an op, and `Content::check` enforces it, because
 one enum can't. An op shared by threats and team cards takes its wording and tally from
@@ -397,10 +399,10 @@ country count (1–4), and the four printed country pieces. A placed piece cover
 - `Map::build` derives hexes in country-then-piece order, so `state.hexes[i]` is
   `map.hexes[i]`. It also derives neighbours (in `Dir::ALL` order), each country's hex
   list, and each hex's printed number (`i·4 + j + 1`) and kind (city, open, ocean) from
-  the country's piece (country *c* uses piece *c*). It then finds the fronts (land
-  borders; an ocean edge is not one) and puts a military base on each side of each
-  (`Map::fronts`, `Cell::facing`): bases depend on the layout, so they are derived, not
-  printed.
+  the country's piece (country *c* uses piece *c*). It then reads the fronts each layout
+  prints (`fronts` in `map.json`; pieces touching only at the centre are not fronts) and
+  puts a military base on each side of each (`Map::fronts`, `Cell::facing`): bases depend
+  on the layout, so they are derived, not printed.
 - Geometry is not in the state. UIs get it from `board(config)` in wasm.
 - Tests pin the layouts and check the piece constraints (3 cities, factories touching
   a city, ocean on the outer edge, a front for every country) in every layout.
@@ -463,8 +465,9 @@ In the baseline:
   bookkeeping: `adversary.peek`, `adversary.first_corruption`,
   `adversary.removed_troop.<seat>`.
 - `threats` adds each country's threat (`threats.on`, status = counter progress such as
-  `1/2 energy`; the text adds who paid what and any Jam Signals), or the shared row
-  pile, and the tier dealt next. Bookkeeping: `threats.paid.*`, `threats.jam.*`.
+  `1/2 credits`; the text adds who paid what, any jam and whether it waits), or the shared
+  row pile, and the tier dealt this round. Bookkeeping: `threats.paid.*`, `threats.jam.*`,
+  `threats.late.*`.
 - `alignment` adds the Undecided, both buckets (each against the size it tips at), both
   tip counts (against the next threshold), the bar level with its win condition, and
   corrupted cities against all cities; piles for both decks (counts only), each side's
@@ -478,7 +481,7 @@ In the baseline:
   with every step, keep-upgrade (`tier2` key) and resource marks, slots, the AI's unique
   cards and where they are, and its powers with their cost and status, `ready` or why
   not), and credit production. Bookkeeping: `ai.power_used.*`.
-- `board` shows its per-country flags (blackout, sabotage, shelter) and each country's
+- `board` shows its per-country flags (blackout, sabotage, shelter, embargo) and each country's
   megaproject (cubes by owner, against its size) as country values, the war round and
   fronts and the clock's step as globals, each seat's presence on the board and left
   on its track, and ambassadors on the board; it publishes every standard action with
@@ -491,7 +494,7 @@ In the baseline:
   `economy.insight_debt.*`); `cards` adds hand, buildings (`n/slots`; a stacked one's
   text names the cards splayed under it, status `stacked`), programs in play, draft
   hand and drafted cards (status: the keep price, `keep 1 insight`), tokens in each
-  token card's text, tags, next-building discount, Civic Shelter used, and the decks.
+  token card's text, tags, next-building discount, Aegis Dome Array used, and the decks.
   Bookkeeping: `cards.picked.*`, `cards.next_discount.*`, `cards.civic_used.*`,
   `cards.unpowered.*`, `cards.kept_round.*`, `cards.tokens.*`. Piles (021):
   `cards.built.<s>` (active buildings), `cards.under.<s>.<top>` (splayed under `top`,
@@ -546,7 +549,7 @@ differ.
     presence placed, nodes made, removed and at their peak per board
     (`adversary.nodes_peak.c<c>`), adversary compute made, factories built per side,
     destroyed and owned per side at the end (`board.factories_end.<side>`), chips
-    made, bought and spent, Alignment sway, tips (and their rounds, `alignment.tip_<side>.rNN`), cards
+    made, sold and spent, Alignment sway, tips (and their rounds, `alignment.tip_<side>.rNN`), cards
     resolved and antimatter actions, insight given and credit income.
 - **Outcome**: `won`, the `round` the game ended, a stable `reason` code for aggregation,
   and a human `detail`.

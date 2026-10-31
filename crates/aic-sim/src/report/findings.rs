@@ -250,11 +250,21 @@ fn comparison_findings(run: &Run) -> Vec<String> {
     for c in &run.spec.configs {
         for &d in &run.spec.difficulties {
             let mut top: Option<&CellSummary> = None;
+            // 044: a gate check stopped early can't be the top agent on its few seeds.
+            let most = sums
+                .iter()
+                .filter(|s| s.config == *c && s.variant == base && s.difficulty == d)
+                .map(|s| s.games)
+                .max()
+                .unwrap_or(0);
             for a in &order {
                 let l = a.label();
                 if let Some(s) = sums.iter().find(|s| {
                     s.config == *c && s.variant == base && s.difficulty == d && s.agent == l
                 }) {
+                    if 4 * s.games < 3 * most {
+                        continue;
+                    }
                     // Ties go to the later agent.
                     match top {
                         Some(t) if t.win_rate > s.win_rate => {}
