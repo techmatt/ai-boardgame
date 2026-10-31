@@ -251,7 +251,7 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
 impl Module for Adversary {
     fn setup(&self, g: &mut GameState, cx: &mut Cx) {
         let w = cx.world;
-        cx.set_key(g, SUPPLY.into(), start_supply(&w));
+        cx.set_key(g, SUPPLY, start_supply(&w));
         // Each country starts with a node on its (corrupted) research station.
         for c in 0..w.map.countries.len() {
             for &n in &w.content.map.countries[c].stations {
@@ -296,7 +296,7 @@ impl Module for Adversary {
 
     fn round_start(&self, g: &mut GameState, cx: &mut Cx) {
         for s in 0..g.seats.len() {
-            cx.set_key(g, removed_troop(s), 0);
+            cx.set_key(g, &removed_troop(s), 0);
         }
     }
 
@@ -316,7 +316,7 @@ impl Module for Adversary {
                 cx.move_card(g, &id, NEXT, CURRENT, true)
                     .expect("next card");
                 let c = card(&w, &id);
-                cx.set_key(g, STAGE.into(), c.stage as i64);
+                cx.set_key(g, STAGE, c.stage as i64);
                 cx.note(None, || {
                     format!("Adversary card: {} ({})", c.name, card_text(c))
                 });
@@ -359,7 +359,7 @@ impl Module for Adversary {
                     let cut = cut_key(h);
                     if g.var(&cut) > 0 {
                         // A hack cut it off (021): no compute this build.
-                        cx.set_key(g, cut, 0);
+                        cx.set_key(g, &cut, 0);
                         blocked += n;
                     } else if player_ambassador(g, h).is_some() {
                         blocked += n;
@@ -551,7 +551,7 @@ impl Module for Adversary {
 /// longer peek already running is kept.
 pub fn peek(g: &mut GameState, cx: &mut Cx, n: i64) {
     let cur = g.var(PEEK);
-    cx.set_key(g, PEEK.into(), cur.max(n));
+    cx.set_key(g, PEEK, cur.max(n));
 }
 
 /// Deals a new row of projects from the top of the project deck.
@@ -572,7 +572,7 @@ pub fn gain_compute(g: &mut GameState, cx: &mut Cx, n: i64) -> Res {
         return Ok(());
     }
     let w = cx.world;
-    cx.add_key(g, COMPUTE.into(), n);
+    cx.add_key(g, COMPUTE, n);
     cx.tally(g, "adversary.compute_made", n);
     cx.per_round(g, "adversary.compute", n);
     for _ in 0..n {
@@ -585,7 +585,7 @@ pub fn gain_compute(g: &mut GameState, cx: &mut Cx, n: i64) -> Res {
             cx.tally(g, "adversary.compute_lost", 1);
             continue;
         };
-        cx.add_key(g, project_key(&id).into(), 1);
+        cx.add_key(g, &project_key(&id), 1);
         cx.per_round(g, OPS, 1);
         if g.var(&project_key(&id)) >= project_cost(&w, g, &id) {
             resolve_project(g, cx, &id)?;
@@ -602,7 +602,7 @@ pub fn gain_compute(g: &mut GameState, cx: &mut Cx, n: i64) -> Res {
 fn resolve_project(g: &mut GameState, cx: &mut Cx, id: &str) -> Res {
     let w = cx.world;
     let p = project(&w, id);
-    cx.set_key(g, project_key(id).into(), 0);
+    cx.set_key(g, &project_key(id), 0);
     let to = if p.ongoing {
         PROJECTS_ONGOING
     } else {
@@ -622,7 +622,7 @@ fn resolve_project(g: &mut GameState, cx: &mut Cx, id: &str) -> Res {
     );
     cx.tally(g, &format!("adversary.project.{id}"), 1);
     if g.var(FIRST_PROJECT) == 0 {
-        cx.set_key(g, FIRST_PROJECT.into(), g.round as i64);
+        cx.set_key(g, FIRST_PROJECT, g.round as i64);
         cx.tally(g, "adversary.first_project_round", g.round as i64);
     }
     cx.note(None, || {
@@ -641,7 +641,7 @@ fn resolve_project(g: &mut GameState, cx: &mut Cx, id: &str) -> Res {
 pub fn drain_project(g: &mut GameState, cx: &mut Cx, id: &str, n: i64) {
     let k = n.min(g.var(&project_key(id))).max(0);
     if k > 0 {
-        cx.add_key(g, project_key(id).into(), -k);
+        cx.add_key(g, &project_key(id), -k);
         cx.tally(g, "adversary.compute_drained", k);
     }
 }
@@ -650,7 +650,7 @@ pub fn drain_project(g: &mut GameState, cx: &mut Cx, id: &str, n: i64) {
 /// new one.
 pub fn discard_project(g: &mut GameState, cx: &mut Cx, id: &str) {
     let w = cx.world;
-    cx.set_key(g, project_key(id).into(), 0);
+    cx.set_key(g, &project_key(id), 0);
     cx.move_card(g, id, PROJECTS, PROJECTS_DONE, false)
         .expect("visible project");
     cx.tally(g, "adversary.projects_discarded", 1);
@@ -669,7 +669,7 @@ fn reveal(g: &mut GameState, cx: &mut Cx) {
             .expect("top of the deck");
         let peek = g.var(PEEK);
         if peek > 0 {
-            cx.set_key(g, PEEK.into(), peek - 1);
+            cx.set_key(g, PEEK, peek - 1);
         }
     }
 }
@@ -697,7 +697,7 @@ pub fn place(g: &mut GameState, cx: &mut Cx, h: usize, n: i64) {
             cx.tally(g, "adversary.supply_short", n - k);
             return;
         }
-        cx.add_key(g, SUPPLY.into(), -1);
+        cx.add_key(g, SUPPLY, -1);
         cx.per_round(g, OPS, 1);
         arrive(g, cx, h, false);
     }
@@ -712,7 +712,7 @@ fn arrive(g: &mut GameState, cx: &mut Cx, h: usize, spreading: bool) {
     let w = cx.world;
     if let Some(s) = player_ambassador(g, h) {
         cx.add_tokens(g, h, &ambassador(s), -1);
-        cx.add_key(g, SUPPLY.into(), 1);
+        cx.add_key(g, SUPPLY, 1);
         cx.tally(g, "adversary.cancelled", 1);
         return;
     }
@@ -722,7 +722,7 @@ fn arrive(g: &mut GameState, cx: &mut Cx, h: usize, spreading: bool) {
         && g.tokens(h, NODE) == 0
     {
         remove(g, cx, h, 1);
-        cx.add_key(g, SUPPLY.into(), 1);
+        cx.add_key(g, SUPPLY, 1);
         cx.add_tokens(g, h, NODE, 1);
         cx.tally(g, "adversary.nodes_made", 1);
         cx.peak(g, "adversary.nodes_peak", node_count(g, None));
@@ -737,7 +737,7 @@ pub fn remove_node(g: &mut GameState, cx: &mut Cx, h: usize) {
     if g.tokens(h, NODE) > 0 {
         cx.add_tokens(g, h, NODE, -1);
         // A node formed here later is a new one: the hack cut this one (028).
-        cx.set_key(g, cut_key(h), 0);
+        cx.set_key(g, &cut_key(h), 0);
         cx.tally(g, "adversary.nodes_removed", 1);
         alignment::for_node_removed(g, cx);
     }
@@ -756,7 +756,7 @@ pub fn remove(g: &mut GameState, cx: &mut Cx, h: usize, n: i64) -> i64 {
     let k = n.min(g.tokens(h, ADV_AMBASSADOR)).max(0);
     if k > 0 {
         cx.add_tokens(g, h, ADV_AMBASSADOR, -k);
-        cx.add_key(g, SUPPLY.into(), k);
+        cx.add_key(g, SUPPLY, k);
     }
     k
 }
@@ -808,7 +808,7 @@ pub fn corrupt_city(g: &mut GameState, cx: &mut Cx, h: usize) {
     }
     cx.tally(g, "adversary.corruptions", 1);
     if g.round > 0 && g.var(FIRST_CORRUPTION) == 0 {
-        cx.set_key(g, FIRST_CORRUPTION.into(), g.round as i64);
+        cx.set_key(g, FIRST_CORRUPTION, g.round as i64);
         cx.tally(g, "adversary.first_corruption_round", g.round as i64);
     }
     cx.note(Some(h), || format!("{} is corrupted", hex_name(&w, h)));
@@ -1005,7 +1005,7 @@ pub fn remove_piece(g: &mut GameState, cx: &mut Cx, seat: Option<usize>, h: usiz
         cx.add_tokens(g, h, TROOP, -1);
         cx.tally(g, "adversary.troops_removed", 1);
         if let Some(s) = seat {
-            cx.set_key(g, removed_troop(s), 1);
+            cx.set_key(g, &removed_troop(s), 1);
         }
         alignment::for_troop_removed(g, cx, seat);
     } else {

@@ -90,7 +90,8 @@ fn lab(phases: &[&str]) -> (Rules, GameState) {
     lab_with(phases, &[])
 }
 
-/// `lab` with overrides on top of the lab config.
+/// `lab` with overrides on top of the lab config, whose params are not the
+/// baseline's (`hold_base` 0): a test of a tunable's value uses `baseline_with`.
 fn lab_with(phases: &[&str], sets: &[&str]) -> (Rules, GameState) {
     let mut round = phases.to_vec();
     round.push(ACTIONS);

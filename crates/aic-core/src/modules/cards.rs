@@ -285,7 +285,7 @@ pub fn add_tokens(g: &mut GameState, cx: &mut Cx, seat: usize, card: &str, n: i6
     if n == 0 {
         return;
     }
-    cx.add_key(g, k.into(), n);
+    cx.add_key(g, &k, n);
     if n > 0 {
         cx.tally(g, "cards.tokens_gained", n);
         cx.per_round(g, "cards.tokens_gained", n);
@@ -311,7 +311,7 @@ pub fn upkeep(g: &mut GameState, cx: &mut Cx, seat: usize) {
                 cx.add_resource(g, seat, *r, -n);
             }
         }
-        cx.set_key(g, unpowered(seat, &id).into(), (!ok) as i64);
+        cx.set_key(g, &unpowered(seat, &id), (!ok) as i64);
     }
     for p in passives(&w, g, seat) {
         if let Op::ConvertUpkeep {
@@ -692,8 +692,8 @@ pub fn sacrifice_for(g: &mut GameState, cx: &mut Cx, seat: usize, cost: &[(TagOr
         need.pay(&src.tags);
         given += src.tags.len() as i64;
         for (pile, card) in &src.cards {
-            cx.set_key(g, tokens_key(seat, card).into(), 0);
-            cx.set_key(g, unpowered(seat, card).into(), 0);
+            cx.set_key(g, &tokens_key(seat, card), 0);
+            cx.set_key(g, &unpowered(seat, card), 0);
             discard(g, cx, card, pile);
             cx.tally(g, "cards.sacrificed", 1);
         }
@@ -785,7 +785,7 @@ impl Cards {
             cx.per_round(g, "cards.insight_played", insight.1);
         }
         for (r, n) in &d.lowers {
-            cx.add_key(g, economy::production_key(seat, *r).into(), -n);
+            cx.add_key(g, &economy::production_key(seat, *r), -n);
         }
         if d.chips > 0 {
             cx.tally(g, "board.chips_spent", d.chips);
@@ -793,7 +793,7 @@ impl Cards {
         cx.count(g, &format!("played.{id}"), 1);
         cx.per_round(g, "cards.played", 1);
         if d.is_building() {
-            cx.set_key(g, next_discount(seat).into(), 0);
+            cx.set_key(g, &next_discount(seat), 0);
             if !d.slotless {
                 // A new slot while one is free (not for a replacement), or
                 // over one of your buildings: it splays down.
@@ -818,7 +818,7 @@ impl Cards {
                         cx.move_card(g, &c, &under(seat, &old), &under(seat, id), false)?;
                     }
                     cx.move_card(g, &old, &built(seat), &under(seat, id), false)?;
-                    cx.set_key(g, unpowered(seat, &old).into(), 0);
+                    cx.set_key(g, &unpowered(seat, &old), 0);
                     cx.tally(g, "cards.replaced", 1);
                     cx.per_round(g, "cards.replaced", 1);
                 }
@@ -876,9 +876,9 @@ impl Module for Cards {
             for id in g.seats[s].exhausted.clone() {
                 cx.refresh(g, s, &id);
             }
-            cx.set_key(g, next_discount(s).into(), 0);
-            cx.set_key(g, civic_used(s), 0);
-            cx.set_key(g, kept_key(s), 0);
+            cx.set_key(g, &next_discount(s), 0);
+            cx.set_key(g, &civic_used(s), 0);
+            cx.set_key(g, &kept_key(s), 0);
         }
     }
 
@@ -1035,7 +1035,7 @@ impl Module for Cards {
                     return Err("already took a card from this hand".into());
                 }
                 cx.move_card(g, card, &packet(s), &drafted(s), false)?;
-                cx.set_key(g, picked_key(s), 1);
+                cx.set_key(g, &picked_key(s), 1);
                 if all_picked(g) {
                     let n = g.seats.len();
                     let packets: Vec<Vec<Key>> =
@@ -1046,7 +1046,7 @@ impl Module for Cards {
                         cx.set_pile(g, &packet((p + step) % n), cards);
                     }
                     for p in 0..n {
-                        cx.set_key(g, picked_key(p), 0);
+                        cx.set_key(g, &picked_key(p), 0);
                     }
                     if (0..n).all(|p| g.pile(&packet(p)).is_empty()) {
                         for seat in g.seats.iter_mut() {
@@ -1075,7 +1075,7 @@ impl Module for Cards {
                         cx.tally(g, "cards.insight_bought", cr / self.insight_credits);
                     }
                 }
-                cx.add_key(g, kept_key(s), 1);
+                cx.add_key(g, &kept_key(s), 1);
                 cx.move_card(g, card, &drafted(s), &hand(s), false)?;
                 cx.count(g, &format!("kept.{card}"), 1);
                 cx.per_round(g, "cards.kept", 1);

@@ -2,8 +2,9 @@
 //! physical copy could hold: tokens on hexes, resources on seat boards,
 //! exhausted cards, a round and phase marker, numbered tracks.
 //! Two parts are not game components: `rng` (the dice) and `stats`
-//! (observation for the simulator; rules never read it). Geometry lives in
-//! [`crate::Map`].
+//! (observation: rules never read it, but the simulator and agents do, so
+//! rollouts can't drop it: `planner` keys off `stats.actions`, the heuristic
+//! reads `adversary.projects_resolved`). Geometry lives in [`crate::Map`].
 
 use std::sync::Arc;
 

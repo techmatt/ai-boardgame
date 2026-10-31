@@ -48,8 +48,8 @@ rules themselves are in [rules.md](rules.md).
   hold: tokens on hexes, resources on seat boards, exhausted cards, ordered card piles
   (decks, discards, hands, slots, building rows), a round and phase marker, numbered
   tracks and markers (`vars`). No hidden bookkeeping. If a module needs more than that,
-  the design needs a look first. `rng` (the dice) and `stats` (sim observation, never
-  read by rules) are not game components; `pending` (an open choice, below) is the step
+  the design needs a look first. `rng` (the dice) and `stats` (observation for the sim and
+  agents, never read by rules) are not game components; `pending` (an open choice, below) is the step
   the table is in the middle of.
 
 ## API

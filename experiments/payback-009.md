@@ -20,8 +20,8 @@ cells reproduce 008's games on those seeds exactly. The first 96 seeds are kinde
 Results: [`results/payback-009-singles`](results/payback-009-singles),
 [`results/payback-009-combos`](results/payback-009-combos),
 [`results/payback-009-content`](results/payback-009-content) (one directory per
-patch), [`results/payback-009-records`](results/payback-009-records). Every table row
-comes from `scripts/payback/summarize.py` over those directories.
+patch). The game records were deleted in 038 (they never replayed on later rules);
+[their README](results/payback-009-records/README.md) stays. Every table row comes from `scripts/payback/summarize.py` over those directories.
 
 ## Answer
 
@@ -40,6 +40,34 @@ at half cost (◆ `econ_half`). Neither is reachable by config.
 +11.8, p 0.002. The explanations below do not carry that weight: the tier-2 "agent
 artifact", insight being what binds the engine, the cause given for the keep cost's cliff
 and `pool_reduction` 6 landing on "about 70%" are **unverified hypotheses**, not findings.
+Corrections, checked against the data in 032; the text below is left as written:
+
+- **Cheaper tier 2:** "mostly Counter-intelligence" is false: 98 of 4,420 d0 plays (2%),
+  the top plays are the usual ones, and Purge Protocol plays are down (109 against about
+  235). The cause of the collapse is unknown, and greedy lost 9 points at d4 too; the
+  lever may be measured and bad.
+- **`overclock_cheap`** was a void test: the engine played it 1 and 0 times of 94 offers.
+  It shows agents don't value a lone insight building at any price, not that insight
+  income doesn't help. `insight_inc` works by riding on buildings bought for credits, so
+  its effect is real for these agents but its mechanism is inferred.
+- **"Why" section:** stated from 32 traces, with no test. `econ_noinsight`, the one test
+  of insight spending, did nothing.
+- **Unlock:** only 4 of 10 tier-2 cards need antimatter, and "misses the tier-1 opposition
+  cards" was never measured.
+- **Keep cost:** the Builder holds 12-16 credits after round 1, and agents then kept
+  nearly everything they drafted, so `keep_cost` 3's collapse probably measures agent
+  behaviour, and "next to a cliff" is overstated.
+- **Longer deck:** "builds for rounds it doesn't survive" is a guess.
+- **`pool_reduction` 6:** the 69.8 is on the first 96 seeds, where greedy wins 77; there
+  5 (79.2) is closer to today's rate. Greedy is not a non-building team under half cost:
+  it builds 0.8.
+- **Length:** the target is 8-10 rounds (`docs/principles.md`), not the 7-8 reported as a
+  pass; `pool_reduction` 6 takes the engine to 6.9.
+- **Statistics:** the "dose-response" is four points, each ±5, on seeds where base is
+  −6.2 against −2.5 over 240. The ranked table isn't strictly ranked (`fc4`, +4.2, sits
+  below two +2.1 rows) and has no multiple-comparison note for about 28 levers × 2
+  difficulties. On the 144 fresh seeds alone: `econ_half` + `insight_inc` d4 80.6 against
+  greedy 68.8, d0 97.2 / 95.1; `insight_inc` d4 74.3 / 66.7 (p 0.09); base 66.7 / 66.7.
 
 - Greedy builds no economy building under `insight_inc`, and 0.8 a game under the
   half-cost combination (cheap Solar Field). Its win rates stay at the base's, so the
@@ -202,8 +230,7 @@ Protector. Cheaper, bigger credit income does not pay back.
 
 ## Records worth a look
 
-In [`results/payback-009-records`](results/payback-009-records) (its README says
-how to replay each).
+The files named here were deleted in 038 (see *Results* above); what they showed stands.
 
 1. `PATCHED-econ_half+insight_inc-d4-engine-seed300038.json`, **patched-content build**
    (won't replay on main): the best combination.

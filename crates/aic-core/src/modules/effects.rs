@@ -572,10 +572,10 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
         Op::Sway { side, amount } => alignment::sway(g, cx, *side, *amount),
         Op::NextRoundInsight { amount } => economy::add_bonus_insight(g, cx, *amount),
         Op::NextBuildingDiscount { amount } => {
-            cx.add_key(g, cards::next_discount(seat).into(), *amount)
+            cx.add_key(g, &cards::next_discount(seat), *amount)
         }
         Op::Production { resource, amount } => {
-            cx.add_key(g, economy::production_key(seat, *resource).into(), *amount)
+            cx.add_key(g, &economy::production_key(seat, *resource), *amount)
         }
         Op::AddTokens { kind, amount } => {
             let ids = cards::token_cards(&w, g, seat, Some(*kind));
@@ -666,7 +666,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
             let prompt = format!("Seat {seat}: cut off the node in which hex?");
             if let Some(i) = cx.choose(seat, &prompt, opts)? {
-                cx.set_key(g, adversary::cut_key(hexes[i]), 1);
+                cx.set_key(g, &adversary::cut_key(hexes[i]), 1);
                 cx.tally(g, "effects.nodes_cut", 1);
             }
         }
@@ -753,7 +753,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
         Op::PullUnity { amount } => alignment::pull_unity(g, cx, *amount),
         Op::LoseInsight { amount } => {
             for s in ctx.seats(&w, g) {
-                cx.add_key(g, economy::insight_debt(s), *amount);
+                cx.add_key(g, &economy::insight_debt(s), *amount);
                 cx.tally(g, "effects.insight_lost", *amount);
             }
         }
@@ -764,7 +764,7 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
             // Threats execute after production and upkeep: the flag lasts through
             // the next round (cleanup counts it down), or it would never land (020).
             for c in scope_countries(&w, ctx.scope) {
-                cx.set_key(g, board::flag(*name, c), 2);
+                cx.set_key(g, &board::flag(*name, c), 2);
             }
         }
         Op::Requisition { resource, amount, cards: n } => {

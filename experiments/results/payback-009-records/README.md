@@ -1,5 +1,8 @@
 # 009 records: games where the engine decides the outcome
 
+**The records themselves were deleted in 038:** none replayed on current rules. This table
+is what they were. Git history has them (last at `ce0ed59`).
+
 All at the tuned baseline (rules r3), 2 countries. Why each is worth a look is in
 [`../../payback-009.md`](../../payback-009.md#records-worth-a-look).
 

@@ -61,7 +61,7 @@ pub fn insight_debt(seat: usize) -> String {
 
 /// Every player gains `n` more insight next round.
 pub fn add_bonus_insight(g: &mut GameState, cx: &mut Cx, n: i64) {
-    cx.add_key(g, BONUS_INSIGHT.into(), n);
+    cx.add_key(g, BONUS_INSIGHT, n);
 }
 
 #[derive(Debug)]
@@ -154,10 +154,10 @@ impl Module for Economy {
             let n = (income(&w, g, s)[Resource::Insight] + bonus - debt).max(0);
             cx.add_resource(g, s, Resource::Insight, n - have);
             if debt > 0 {
-                cx.set_key(g, insight_debt(s), 0);
+                cx.set_key(g, &insight_debt(s), 0);
             }
         }
-        cx.set_key(g, BONUS_INSIGHT.into(), 0);
+        cx.set_key(g, BONUS_INSIGHT, 0);
     }
 
     fn legal(&self, _phase: usize, g: &GameState, _w: &World, seat: u8, out: &mut Vec<Action>) {

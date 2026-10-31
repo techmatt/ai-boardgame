@@ -27,7 +27,7 @@ use rand_chacha::ChaCha8Rng;
 
 use super::eval::{Eval, Weights};
 use super::policy::{Forced, Policy};
-use super::search::{greedy_scores, pick, undoes, Greedy};
+use super::search::{greedy_scores, pick, Greedy, PhaseHistory};
 use crate::prof::{self, Part};
 
 /// The phase the planner searches.
@@ -71,8 +71,7 @@ pub struct Planner {
     line: Option<Line>,
     /// (round, alternatives tried in it).
     spent: (u32, usize),
-    /// This phase's own moves, as [`Greedy`] keeps them.
-    history: (u32, usize, Vec<Action>),
+    history: PhaseHistory,
 }
 
 /// Actions that are the same idea: the shortlist tries one of each. A threat
@@ -94,7 +93,7 @@ impl Planner {
             cfg,
             line: None,
             spent: (0, 0),
-            history: (0, 0, Vec::new()),
+            history: PhaseHistory::default(),
         }
     }
 
@@ -194,23 +193,17 @@ impl Agent for Planner {
         if legal.len() == 1 {
             return 0;
         }
-        if (self.history.0, self.history.1) != (state.round, state.phase) {
-            self.history = (state.round, state.phase, Vec::new());
-        }
+        self.history.enter(state);
         if self.spent.0 != state.round {
             self.spent = (state.round, 0);
         }
         let samples = self.cfg.samples;
         let mut scores = greedy_scores(rules, &self.ev, &mut self.rng, state, legal, samples, 1, self.cfg.choices);
-        for (i, a) in legal.iter().enumerate() {
-            if undoes(&self.history.2, a) {
-                scores[i] = f64::NEG_INFINITY;
-            }
-        }
+        self.history.mask(legal, &mut scores);
         let engine = pick(legal, &scores);
         let stop = state.round + self.cfg.horizon;
         let Some(mut best) = self.incumbent(rules, state, legal, stop) else {
-            self.history.2.push(legal[engine].clone());
+            self.history.push(&legal[engine]);
             return engine;
         };
         let phase = state.config.round.get(state.phase).map_or("", String::as_str);
@@ -241,7 +234,7 @@ impl Agent for Planner {
         let i = best.actions.get(best.next).and_then(|a| legal.iter().position(|b| b == a));
         self.line = Some(best);
         let i = i.unwrap_or(engine);
-        self.history.2.push(legal[i].clone());
+        self.history.push(&legal[i]);
         i
     }
 }

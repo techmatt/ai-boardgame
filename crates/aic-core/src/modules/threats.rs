@@ -178,7 +178,7 @@ fn deal(g: &mut GameState, cx: &mut Cx, tier: u8, to: &str) -> bool {
     cx.move_card(g, &id, &deck(tier), to, false).unwrap();
     cx.tally(g, "threats.dealt", 1);
     if after_counter(g) {
-        cx.set_key(g, late_key(&id), g.round as i64);
+        cx.set_key(g, &late_key(&id), g.round as i64);
     }
     true
 }
@@ -232,7 +232,7 @@ fn refund(g: &mut GameState, cx: &mut Cx, threat: &str) {
             let n = g.var(&k);
             if n > 0 {
                 cx.add_resource(g, s, *r, n);
-                cx.set_key(g, k, 0);
+                cx.set_key(g, &k, 0);
             }
         }
     }
@@ -241,8 +241,8 @@ fn refund(g: &mut GameState, cx: &mut Cx, threat: &str) {
 fn clear(g: &mut GameState, cx: &mut Cx, threat: &str, scope: Option<usize>) {
     let w = cx.world;
     let t = def(&w, threat);
-    cx.set_key(g, jam_key(threat), 0);
-    cx.set_key(g, late_key(threat), 0);
+    cx.set_key(g, &jam_key(threat), 0);
+    cx.set_key(g, &late_key(threat), 0);
     cx.move_card(g, threat, &pile_of(scope), &discard(t.tier), true)
         .expect("active threat");
 }
@@ -279,7 +279,7 @@ pub fn deal_extra(g: &mut GameState, cx: &mut Cx, n: i64) {
 
 /// Jam Signals: `threat` needs `n` less of each resource.
 pub fn jam(g: &mut GameState, cx: &mut Cx, threat: &str, n: i64) {
-    cx.add_key(g, jam_key(threat), n);
+    cx.add_key(g, &jam_key(threat), n);
     try_complete(g, cx, threat);
 }
 
@@ -308,7 +308,7 @@ pub fn try_complete(g: &mut GameState, cx: &mut Cx, threat: &str) -> bool {
                 cx.add_resource(g, p, *r, back);
                 excess -= back;
             }
-            cx.set_key(g, k, 0);
+            cx.set_key(g, &k, 0);
         }
     }
     clear(g, cx, threat, scope);
@@ -509,7 +509,7 @@ impl Module for Threats {
                     return Err("can't pay that much".into());
                 }
                 cx.add_resource(g, s, *resource, -amount);
-                cx.add_key(g, paid_key(threat, s, *resource), *amount);
+                cx.add_key(g, &paid_key(threat, s, *resource), *amount);
                 try_complete(g, cx, threat);
                 Ok(())
             }
@@ -521,7 +521,7 @@ impl Module for Threats {
                 if n == 0 {
                     return Err("nothing to withdraw".into());
                 }
-                cx.set_key(g, k, 0);
+                cx.set_key(g, &k, 0);
                 cx.add_resource(g, s, *resource, n);
                 Ok(())
             }

@@ -88,9 +88,9 @@ def pair(old, new, out, only):
                 b = timed(new, agent, games, c, threads) + timed(new, agent, games, c, threads)
                 r[f"old_{label}"], r[f"new_{label}"] = 120 * games / a, 120 * games / b
             rows[f"{agent} c{c}"] = r
-            print(f"{agent} c{c}: 1 thread {r['old_1']:.1f} to {r['new_1']:.1f} ({r['new_1'] / r['old_1']:.2f} ×), "
+            print(f"{agent} c{c}: 1 thread {r['old_1']:.1f} to {r['new_1']:.1f} ({r['new_1'] / r['old_1']:.2f} x), "
                   f"{cores} threads {r['old_all']:.1f} to {r['new_all']:.1f} "
-                  f"({r['new_all'] / r['old_all']:.2f} ×)", flush=True)
+                  f"({r['new_all'] / r['old_all']:.2f} x)", flush=True)
             if out:
                 with open(out, "w", encoding="utf-8") as f:
                     json.dump(rows, f, indent=1)
@@ -101,7 +101,7 @@ def compare(before, after):
         a = json.load(f)
     with open(after, encoding="utf-8") as f:
         b = json.load(f)
-    print("| agent | 1 thread before | after | × | all threads before | after | × |")
+    print("| agent | 1 thread before | after | x | all threads before | after | x |")
     print("|---|---|---|---|---|---|---|")
     for k in a:
         if k in b:
@@ -125,7 +125,7 @@ def check(sim, update):
         ratio = ms / base[agent]
         slow = ratio > TOLERANCE
         bad += slow
-        print(f"{agent}: {ms:.1f} ms/game, {ratio:.2f} × baseline{'  SLOWER' if slow else ''}")
+        print(f"{agent}: {ms:.1f} ms/game, {ratio:.2f} x baseline{'  SLOWER' if slow else ''}")
     return 1 if bad else 0
 
 

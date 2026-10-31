@@ -137,15 +137,46 @@ pub fn pick(legal: &[Action], scores: &[f64]) -> usize {
         .unwrap_or(0)
 }
 
+/// A team's own moves this phase: a move that undoes one of them is not
+/// offered, so a look-ahead cannot cycle.
+#[derive(Default)]
+pub(crate) struct PhaseHistory {
+    round: u32,
+    phase: usize,
+    actions: Vec<Action>,
+}
+
+impl PhaseHistory {
+    /// Starts over if `state` has left the phase; true if it did.
+    pub(crate) fn enter(&mut self, state: &GameState) -> bool {
+        let new = (self.round, self.phase) != (state.round, state.phase);
+        if new {
+            *self = PhaseHistory { round: state.round, phase: state.phase, actions: Vec::new() };
+        }
+        new
+    }
+
+    /// Rules out the actions of `legal` that undo a move of this phase.
+    pub(crate) fn mask(&self, legal: &[Action], scores: &mut [f64]) {
+        for (i, a) in legal.iter().enumerate() {
+            if undoes(&self.actions, a) {
+                scores[i] = f64::NEG_INFINITY;
+            }
+        }
+    }
+
+    pub(crate) fn push(&mut self, a: &Action) {
+        self.actions.push(a.clone());
+    }
+}
+
 pub struct Greedy {
     ev: Eval,
     rng: ChaCha8Rng,
     samples: usize,
     depth: usize,
     choices: usize,
-    /// This phase's own moves (round, phase, actions): a move that undoes
-    /// one of them is not offered, so a look-ahead cannot cycle.
-    history: (u32, usize, Vec<Action>),
+    history: PhaseHistory,
     /// When above 0: after a decision phase's first full scoring, each seat
     /// keeps only this many actions for the rest of the phase (the planner's
     /// rollouts, 028: a wide menu's tail rarely comes back).
@@ -162,7 +193,7 @@ impl Greedy {
             samples,
             depth,
             choices,
-            history: (0, 0, Vec::new()),
+            history: PhaseHistory::default(),
             prune: 0,
             dropped: None,
         }
@@ -216,18 +247,13 @@ impl Agent for Greedy {
         if legal.len() == 1 {
             return 0;
         }
-        if (self.history.0, self.history.1) != (state.round, state.phase) {
-            self.history = (state.round, state.phase, Vec::new());
+        if self.history.enter(state) {
             self.dropped = None;
         }
         let mut s = self.scores(rules, state, legal);
-        for (i, a) in legal.iter().enumerate() {
-            if undoes(&self.history.2, a) {
-                s[i] = f64::NEG_INFINITY;
-            }
-        }
+        self.history.mask(legal, &mut s);
         let i = pick(legal, &s);
-        self.history.2.push(legal[i].clone());
+        self.history.push(&legal[i]);
         i
     }
 }

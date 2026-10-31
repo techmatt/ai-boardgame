@@ -51,6 +51,12 @@ The standing contract for every executor working in this repo.
   is over 1.3 × `scripts/bench/speed_baseline.json`. On a busy machine a failure proves
   nothing: run `speed.py pair OLD NEW --only engine` instead, which holds under load. A
   slowdown you mean to keep: say why in the report and `--update` the baseline.
+- **Compare a lever with base on the same seeds, and confirm on fresh ones.** Pooling new
+  seeds with the seeds that picked a winner is not confirmation: report the fresh seeds
+  alone.
+- **Write scripts with Write, not a Bash heredoc:** heredocs holding Python fail here. This
+  box's other traps (6 cores, `wmic`/`tasklist` hangs, kill limits) are in the README's
+  *This machine*.
 - **Times are local, 12-hour clock** (2:45pm), in reports, docs and progress lines.
 - **Background any step that takes more than ~30 seconds** (builds, tests, servers),
   and wait on the real process — the `cargo`/`node`/test binary — never on a

@@ -425,24 +425,24 @@ impl<'a> Cx<'a> {
     /// Sets any module's track by its full key (shared rules code acting
     /// for another module, such as a card setting a country's
     /// `board.shelter` flag).
-    pub fn set_key(&mut self, g: &mut GameState, key: String, v: i64) {
+    pub fn set_key(&mut self, g: &mut GameState, key: &str, v: i64) {
         let old = if v == 0 {
-            g.vars.remove(key.as_str()).unwrap_or(0)
+            g.vars.remove(key).unwrap_or(0)
         } else {
-            g.vars.insert((&key).into(), v).unwrap_or(0)
+            g.vars.insert(key.into(), v).unwrap_or(0)
         };
         if old == v {
             return;
         }
         self.emit(|| Event::VarChanged {
-            key,
+            key: key.to_string(),
             delta: v - old,
             total: v,
         });
     }
 
-    pub fn add_key(&mut self, g: &mut GameState, key: String, delta: i64) {
-        let v = g.var(&key) + delta;
+    pub fn add_key(&mut self, g: &mut GameState, key: &str, delta: i64) {
+        let v = g.var(key) + delta;
         self.set_key(g, key, v);
     }
 

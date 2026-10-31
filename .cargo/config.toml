@@ -1,5 +1,7 @@
 # Test lanes (README "Build and test"): `cargo test --workspace` runs the fast lane;
 # `cargo test-all` runs everything, the slow lane's #[ignore]d tests included.
+# Arguments after an alias go to the test binary: `cargo test-all -j N` fails in a second
+# with "Unrecognized option: 'j'", which reads as a pass. `--test-threads=N` works.
 [alias]
 test-all = "test --workspace -- --include-ignored"
 test-slow = "test --workspace -- --ignored"

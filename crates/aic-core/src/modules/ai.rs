@@ -160,7 +160,7 @@ impl Module for Ai {
         let w = cx.world;
         for s in 0..g.seats.len() {
             for k in 0..board(&w, s).powers.len() {
-                cx.set_key(g, power_used(s, k), 0);
+                cx.set_key(g, &power_used(s, k), 0);
             }
         }
     }
@@ -204,7 +204,7 @@ impl Module for Ai {
             for (r, n) in &p.cost {
                 cx.add_resource(g, s, *r, -n);
             }
-            cx.set_key(g, power_used(s, k), 1);
+            cx.set_key(g, &power_used(s, k), 1);
             cards::sacrifice_for(g, cx, s, &p.tags)?;
             cx.count(g, &format!("power.{}.{k}", board(&w, s).id), 1);
             cx.tally(g, "ai.powers_used", 1);

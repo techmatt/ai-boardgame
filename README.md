@@ -30,7 +30,7 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
 | `crates/aic-core` | The rules engine. No I/O, no clock, seeded per-purpose RNG streams in the state, serde state, exact replay. `Rules::new(config)` then `new_game` / `legal_actions_into` / `apply_mut`, plus the convenient free functions `new_game`, `legal_actions`, `apply`. |
 | `crates/aic-core/src/modules/` | One file per rules area (`board`, `adversary`, `threats`, `alignment`, `economy`, `ai`, `cards`), shared code (`common`, `effects`), read-only forecasts for agents and clients (`plan`: the adversary's next build), the registry in `mod.rs`. |
 | `crates/aic-sim` | Native CLI: seeded games over a seed range, one config or two side by side, with every game replay-checked; the agent skill ladder (`agents/`) and the experiment harness (`experiment.rs`, `report.rs`). |
-| `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history and does not replay. `archive/`: specs of past revisions (since 028 every spec not tied to the current one) and those the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
+| `experiments/` | Experiment specs, and `results/<name>/`: committed cycle reports. Game records are kept only where they still replay (`screen-014-board/records/`); `payback-009-records/` is r3 history that did not replay: 038 deleted the records and kept its README. `archive/`: specs of past revisions (since 028 every spec not tied to the current one) and those the binary refuses today. [`history.md`](experiments/history.md): past sweeps, recipes and timings. |
 | `crates/aic-wasm` | wasm-bindgen bindings, JSON strings in and out. |
 | `content/` | Data embedded at compile time: `map.json` (piece shape, layouts for 1–4 countries, the four printed country pieces with their cities, ocean, setup buildings and megaproject), `cards.json`, `threats.json`, `adversary.json`, `ais.json`, `alignment.json` (the Unity and Discord decks), all built from code primitives. |
 | `configs/` | Game configs: modules, variants, every parameter. `baseline.json` is the 016 board with 017's projects and 023's 150-card set, r16 (2 countries, difficulty 0; 018 calibrated it, 019, 021, 022, 023, 024 and 027 recalibrated it on quick screens: every number still a candidate); `shared_row.json` differs only in the threat variant (and name): it is derived, so after editing the baseline run `python scripts/configs/shared_row.py`; a core test fails until you do. Other country counts and difficulties: `--set countries=N`, `--set adversary.difficulty=N`. Off-variants (rules.md §9): `--set threats.variant=off`, `alignment.variant=off`, `cards.variant=off`. Alignment's options (rules.md §5): `alignment.variant=still`, `alignment.momentum_every=2`, `alignment.antimatter_discord=0`. Optional modules switch off whole (016 trimmed `requires`): `--set threats=off`, `cards=off`, `economy=off`. (021 removed the `cards.variant=free_keep` opt-in: keeps cost insight.) The 013 configs (`v0_untuned`, `clusters`, `assets`) went with the old board. |
@@ -271,8 +271,11 @@ search-agent games, the greedy experiment grid, and more seeds of the replay che
 whose first seed runs in the fast lane. `test-all` and `test-slow` are cargo aliases
 (`.cargo/config.toml`) for `cargo test --workspace -- --include-ignored` and
 `-- --ignored`; one slow test runs with `cargo test -p aic-sim -- --ignored <name>`.
-Anything after an alias goes to the test binary: `cargo test-all -j 3` stops in a second
-with "Unrecognized option: 'j'". A new test that takes more than about a second goes in the slow lane, ideally with a
+Anything after an alias goes to the test binary: `cargo test-all -j 3` stops in about a
+second with "Unrecognized option: 'j'", which reads as a very fast pass if you only see
+the background task end, so check the exit code. To cap build jobs use `cargo test
+--workspace -j 3 -- --include-ignored`; `cargo test-all --test-threads=3` caps test
+threads. A new test that takes more than about a second goes in the slow lane, ideally with a
 cheaper fast-lane twin (fewer seeds, fewer actions). Times measured on this 12-thread
 machine with nothing else heavy running (lanes remeasured in 025); the first build of the test profile takes about 40 s.
 
@@ -300,8 +303,21 @@ still r15). The revision is recorded with every sim result, so old and new resul
 never mixed up. The exception is that rename: records from before 026 are r15 too and no
 longer load (`board.factory_hardware: not a parameter`).
 
-Git Bash on this machine mangles backslashes inside heredocs, even with a quoted
-delimiter. Write scripts with the editor, not with `cat <<'EOF'`.
+**This machine.**
+
+- 6 cores, 12 threads: 12 workers give about 6 × one, so never read "12 threads" as 12 ×
+  in an estimate.
+- Check processes with PowerShell `Get-Process` or `Get-CimInstance`. `wmic` and `tasklist`
+  hang for minutes under load, and a script guard on one stalls silently.
+- Timing has no warning of other load: another session's test suite can take half the
+  cores. `speed.py pair` holds under it; two separate runs don't compare.
+- In a Bash background call `timeout` is the kill limit (default 10 minutes), and a waiter
+  killed at it can leave `bash.exe.stackdump`. Git Bash loops overrun their `timeout` when
+  every thread is busy.
+- Windows can't replace a running exe: copy it to `out/` (git-ignored) to run one build
+  while rebuilding another. Never to `%TEMP%`.
+- Bash heredocs holding Python fail here (triple quotes, and backslashes get mangled even
+  with a quoted delimiter). Write scripts with the editor, not with `cat <<'EOF'`.
 
 ## Simulator
 
@@ -593,13 +609,13 @@ experiments/archive/screen-019-troops.json --quick --out out/screen-019` (**~2 m
 threads with the tuned r10, 107–129 s; 211 s for r10 before tuning, whose games ran to
 the deck's end), then `python scripts/board/screen_019.py out/screen-019`: per cell the win
 rate, rounds and the purge's blockers left; then the troops (built, march steps, moves,
-strikes, destructions by target, absorbed, presence lost and placed back from the
-destroyed pile), nodes (made, removed, peak; the rounds that ended with only nodes blocking the
+strikes, destructions by target, absorbed, presence lost), nodes (made, removed, peak; the rounds that ended with only nodes blocking the
 purge) and the strategy-health gate with a pass line per cell (the gate is defined in the
 script's docstring). Counters new in 019: `board.troop_steps`, `.troop_moves`,
 `.troop_strikes`, `.troop_destroyed.<presence|station|factory>`, `.troop_absorbed`,
-`.presence_from_reserve`, `adversary.nodes_peak`, `alignment.purge_blocked_by_nodes`
-(017's `board.troop_advances`, `.advance_strikes`, `.advance_destroyed` are gone).
+`adversary.nodes_peak`, `alignment.purge_blocked_by_nodes` (017's `board.troop_advances`,
+`.advance_strikes`, `.advance_destroyed` are gone, and 034 removed the reserve's
+`.presence_from_reserve`, so the script no longer reads it).
 Variant sweeps: an experiment file with several `variants`, each a list of `--set`
 overrides (lists comma-separated, `alignment.unity_ease=1,1,2`), as in
 `experiments/results/screen-019-troops/tuning.md`. Committed in
@@ -650,7 +666,7 @@ per-round counters are shared until written (`crates/aic-core/src/key.rs`, *No h
 leaks* in docs/architecture.md). `aic-sim` uses **mimalloc** (on 12 threads Windows'
 heap serialized the clones), and searches call `Rules::apply_to` (one state copy, not
 two). Legal-action generation is 0.1% of a run: caching it buys nothing. The box has 12
-threads on 6 cores: 12 workers give about 6 × one, and that is the ceiling.
+threads on 6 cores: 12 workers give about 6 × one, and that is the ceiling (*This machine*).
 
 To see the split: every run prints it (`time: ...` on stderr, and in the report's
 *Timing*); `cargo build --release -p aic-sim --features profile` adds the search's own
@@ -669,6 +685,10 @@ Thread time a game at d2, r17 (030), old and new binaries under the same load, f
 | engine c3 | 10.1 s | 4.50 s | 2.25 |
 | planner c2 | 22.2 s | 11.9 s | 1.87 |
 | planner c3 | 77.7 s | 33.6 s | 2.32 |
+
+The legacy `rollout` tier does a full beam search per decision: 92 s a game at c2, 373 s
+at c3 (r17, one thread), so its `speed.py table` rows take 4-15 min each, and its
+`same_play.py` trace cells 3-5 min each.
 
 Random is 2.4 × at c2, on 1 thread and on 12 (`speed.py pair`). Compare two binaries with
 `pair`, not two `table` runs: a test suite elsewhere on the box halved a whole table.
@@ -693,9 +713,26 @@ a stopped run has every cell's first seeds.
 
 **Fast by default (`--quick`).** Until the rules are close to final, scoping runs use
 shallow agents and short runs (`docs/principles.md`): `--quick` keeps only shallow agents
-(random, greedy and engine at their defaults; beam, rollout, `samples`/`depth` > 1 and
-`engine:width` > 0 are dropped, with a note), caps seeds at 16 per cell unless
+(random, greedy and engine at their defaults, and the planner; beam, rollout,
+`samples`/`depth` > 1 and `engine:width` > 0 are dropped). The only sign is one stderr
+line (`--quick: dropped deep-search agents ...`), and the report's cells just lack them, so
+an `engine:samples=2` you meant to compare is easy to lose. It caps seeds at 16 per cell unless
 `--games` is given, and turns the probes off unless `--winprob`/`--closeness` is given.
+
+Agent parameters come in two kinds: search settings go bare, heuristic weights need the
+`w.` prefix (`engine:samples=2`, `engine:w.packet_keep=0.5`). An unprefixed weight is an
+error, not a no-op.
+
+`cards.csv` is split by agent and difficulty only: all variants of a spec pool their card
+plays, so run one spec per variant if you need per-lever card numbers.
+
+Don't read an agent's keeps as a human's. Up to r3 (007, 009) agents kept nearly every
+drafted card, so a keep-priced lever measured the agent; 022 and 034 made them
+keep-aware, and at r19 greedy, engine and planner keep 58-69% (d0, d2, 8 seeds a cell). It
+is still their plan, not a table's.
+
+`experiment` refuses a spec if its config names a parameter the binary lacks, so
+re-measuring older rules with their binary needs a saved copy of that revision's config.
 
 An experiment is configs × variants × difficulties × agents over a seed range, played
 on every core (one game at a time per worker, results sorted, so nothing depends on the

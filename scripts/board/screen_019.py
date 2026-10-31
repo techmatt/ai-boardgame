@@ -1,8 +1,8 @@
 """Troop and node screen summary (019, rules r10): one row per cell with the
 win rate, rounds, how games ended and what was left on the board at the end
 (the purge's blockers); then per game the adversary troops (built, steps,
-moves, strikes, destructions by target, absorbed), presence lost to troops
-and placed back from the reserve; nodes made, removed and their peak, and
+moves, strikes, destructions by target, absorbed), presence lost to troops;
+nodes made, removed and their peak, and
 the rounds that ended with only nodes blocking the purge; then the
 strategy-health gate (presence, factories, chips, nodes removed, cards,
 tier-2 node removal) with a pass/fail line per cell.
@@ -16,8 +16,8 @@ The gate (019): in every greedy and engine cell, per game on average,
 presence placed >= 5, player factories built >= 1, chips made >= 1, cards
 played >= 5 (018's gate); and in the engine cells at d0, some node removed
 (the tier-2 removal is reachable and used: removal is meant to be rare, so
-the bar is above zero, not one a game) and some presence placed back from the
-reserve (troops bite and players recover).
+the bar is above zero, not one a game). 019 also required presence placed back
+from the reserve; 034 removed the reserve and its counter.
 """
 import collections
 import os
@@ -52,11 +52,11 @@ def main(d, short):
     print()
     print('Adversary troops and nodes, per game (means over the cell): troops built (factories, projects); '
           'march steps / moves / strikes; destroyed presence / station / factory; strikes absorbed; '
-          'presence lost to troops / placed back from the reserve; nodes made / removed / peak on the board; '
+          'presence lost to troops; nodes made / removed / peak on the board; '
           'rounds ending with only nodes blocking the purge, and the share of games with one.')
     print()
     print('| variant | d | agent | troops built | steps / moves / strikes | destroyed P / S / F | absorbed '
-          '| presence lost / replaced | nodes made / removed / peak | only-nodes rounds (games %) |')
+          '| presence lost | nodes made / removed / peak | only-nodes rounds (games %) |')
     print('|---|---|---|---|---|---|---|---|---|---|')
     for cell in sorted(games):
         gs, c = games[cell], cells[cell]
@@ -68,7 +68,7 @@ def main(d, short):
               f"| {m('board.troop_steps'):.1f} / {m('board.troop_moves'):.1f} / {m('board.troop_strikes'):.1f} "
               f"| {m('board.troop_destroyed.presence'):.1f} / {m('board.troop_destroyed.station'):.1f} / "
               f"{m('board.troop_destroyed.factory'):.1f} | {m('board.troop_absorbed'):.1f} "
-              f"| {m('board.troop_destroyed.presence'):.1f} / {m('board.presence_from_reserve'):.1f} "
+              f"| {m('board.troop_destroyed.presence'):.1f} "
               f"| {m('adversary.nodes_made'):.1f} / {m('adversary.nodes_removed'):.1f} / {m('adversary.nodes_peak'):.1f} "
               f"| {m('alignment.purge_blocked_by_nodes'):.1f} ({blocked:.0f}%) |")
     print()
@@ -89,7 +89,7 @@ def main(d, short):
             ok = (m('board.presence_placed') >= 5 and m('board.factories_built.player') >= 1
                   and m('board.chips_made') >= 1 and cards >= 5)
             if c['agent'] == 'engine' and c['difficulty'] == 0:
-                ok = ok and m('adversary.nodes_removed') > 0 and m('board.presence_from_reserve') > 0
+                ok = ok and m('adversary.nodes_removed') > 0
             gate = 'pass' if ok else 'FAIL'
             if not ok:
                 fails.append(f"{c['variant']} d{c['difficulty']} {c['agent']}")

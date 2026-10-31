@@ -22,12 +22,13 @@ seeds = 4,992 games, **46 min** alone on 12 threads) and
 `experiments/payback-009-combos.json` (both refused today, archived). Levers that config
 can't reach (card costs and income, tier-2 costs, the AI tracks) run as **content
 patches** built into separate binaries from a copy of the repo under `out/`. Committed
-content is never touched. The scripts are r3's and not checked against r6:
+content is never touched. The scripts are r3's, and 028 removed `scripts/payback/` (last at
+`8624980^`); the content-lever specs are in `archive/payback-009-content/`:
 
 ```sh
 python scripts/payback/patch_content.py --list                      # the patches
 bash scripts/payback/build_patches.sh insight_inc econ_half+insight_inc   # -> out/patch-bin/<patch>.exe, ~1 min each
-bash scripts/payback/run_content.sh insight_inc insight_inc:insight_inc+keep0  # <binary>:<spec> in experiments/payback-009-content/
+bash scripts/payback/run_content.sh insight_inc insight_inc:insight_inc+keep0  # <binary>:<spec> in experiments/archive/payback-009-content/
 python scripts/payback/summarize.py out/payback-009-singles out/payback-009-content/*/ --picks 20
 ```
 

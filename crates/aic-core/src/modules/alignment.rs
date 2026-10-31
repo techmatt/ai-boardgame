@@ -136,7 +136,7 @@ pub fn take_free_purchase(g: &mut GameState, cx: &mut Cx) -> bool {
     if free <= 0 {
         return false;
     }
-    cx.set_key(g, FREE_LEFT.into(), free - 1);
+    cx.set_key(g, FREE_LEFT, free - 1);
     true
 }
 
@@ -222,13 +222,13 @@ pub fn sway(g: &mut GameState, cx: &mut Cx, side: Side, n: i64) {
     let mut moved = 0;
     for _ in 0..n {
         if g.var(UNDECIDED) > 0 {
-            cx.add_key(g, UNDECIDED.into(), -1);
+            cx.add_key(g, UNDECIDED, -1);
         } else if tug && g.var(bucket(side.other())) > 0 {
-            cx.add_key(g, bucket(side.other()).into(), -1);
+            cx.add_key(g, bucket(side.other()), -1);
         } else {
             continue;
         }
-        cx.add_key(g, bucket(side).into(), 1);
+        cx.add_key(g, bucket(side), 1);
         moved += 1;
     }
     if moved > 0 {
@@ -279,20 +279,20 @@ fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
 /// insight: `Content::check` holds it to those).
 pub fn add_team_income(g: &mut GameState, cx: &mut Cx, resource: Resource, n: i64) {
     let key = if resource == Resource::Insight { INSIGHT_BONUS } else { INCOME_BONUS };
-    cx.add_key(g, key.into(), n);
+    cx.add_key(g, key, n);
 }
 
 /// The next `n` card purchases are free.
 pub fn add_free_purchases(g: &mut GameState, cx: &mut Cx, n: i64) {
-    cx.add_key(g, FREE_LEFT.into(), n);
+    cx.add_key(g, FREE_LEFT, n);
 }
 
 /// Up to `n` Sway leaves the Unity bucket for the Undecided (027).
 pub fn pull_unity(g: &mut GameState, cx: &mut Cx, n: i64) {
     let k = n.min(g.var(bucket(Side::Unity))).max(0);
     if k > 0 {
-        cx.add_key(g, bucket(Side::Unity).into(), -k);
-        cx.add_key(g, UNDECIDED.into(), k);
+        cx.add_key(g, bucket(Side::Unity), -k);
+        cx.add_key(g, UNDECIDED, k);
         cx.tally(g, "alignment.unity_pulled", k);
     }
 }
@@ -368,9 +368,9 @@ impl Alignment {
         cx.note(None, || format!("The {} bucket tips", side.name()));
         let before = g.var(tips_key(side));
         let back = g.var(bucket(side));
-        cx.set_key(g, bucket(side).into(), 0);
-        cx.add_key(g, UNDECIDED.into(), back);
-        cx.set_key(g, tips_key(side).into(), before + 1);
+        cx.set_key(g, bucket(side), 0);
+        cx.add_key(g, UNDECIDED, back);
+        cx.set_key(g, tips_key(side), before + 1);
         cx.tally(g, &format!("alignment.tips_{}", side.name()), 1);
         cx.tally(g, &format!("alignment.tip_{}.r{round:02}", side.name()), 1);
         let Some((id, from)) = self.draw(g, &w, side, before) else {
@@ -414,10 +414,10 @@ impl Module for Alignment {
     fn setup(&self, g: &mut GameState, cx: &mut Cx) {
         let w = cx.world;
         let start = w.int("alignment.undecided_per_player") * g.seats.len() as i64;
-        cx.set_key(g, UNDECIDED.into(), start);
+        cx.set_key(g, UNDECIDED, start);
         for side in [Side::Unity, Side::Discord] {
-            cx.set_key(g, bucket(side).into(), 0);
-            cx.set_key(g, tips_key(side).into(), 0);
+            cx.set_key(g, bucket(side), 0);
+            cx.set_key(g, tips_key(side), 0);
             for tier in [1u8, 2] {
                 let mut ids: Vec<Key> = w
                     .content
@@ -444,14 +444,14 @@ impl Module for Alignment {
         // Difficulty 4: the removed Discord cards count as tips made, so every
         // printed step is still reached before the deck ends (034).
         if adversary::level(&w, 4) {
-            cx.set_key(g, tips_key(Side::Discord).into(), w.int("adversary.discord_removed"));
+            cx.set_key(g, tips_key(Side::Discord), w.int("adversary.discord_removed"));
         }
     }
 
     fn round_start(&self, g: &mut GameState, cx: &mut Cx) {
         for s in 0..g.seats.len() {
             if g.var(&used_key(s)) != 0 {
-                cx.set_key(g, used_key(s), 0);
+                cx.set_key(g, &used_key(s), 0);
             }
         }
     }
@@ -488,7 +488,7 @@ impl Module for Alignment {
         {
             return Err(Halt::Illegal("no antimatter action left this round".into()));
         }
-        cx.add_key(g, used_key(s), 1);
+        cx.add_key(g, &used_key(s), 1);
         cx.add_resource(g, s, Resource::Antimatter, 1);
         sway(g, cx, Side::Discord, n);
         cx.count(g, "antimatter_actions", 1);

@@ -595,9 +595,9 @@ mod tests {
     }
 
     // Slow lane: whole games, one test per agent so they run side by side
-    // (014 board, 015 timings, each run alone: beam ~18 s, rollout ~10 s,
-    // engine ~3 s, greedy ~1 s; the beam's cost is in the action phase's wide
-    // menus).
+    // (014 board, 015 timings, each run alone: beam ~18 s, engine ~3 s, greedy
+    // ~1 s; the beam's cost is in the action phase's wide menus. `rollout` does
+    // a full beam search per decision: ~92 s a game at c2, ~373 s at c3, r17, 030.)
     #[test]
     #[ignore = "slow lane: a whole search-agent game"]
     fn greedy_replays_and_repeats() {

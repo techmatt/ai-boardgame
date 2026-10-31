@@ -108,7 +108,7 @@ pub fn flagged(g: &GameState, f: RoundFlag, country: usize) -> bool {
 
 /// Shelters country `c`'s buildings for the rest of the round.
 pub fn shelter(g: &mut GameState, cx: &mut Cx, country: usize) {
-    cx.set_key(g, flag(RoundFlag::Shelter, country), 1);
+    cx.set_key(g, &flag(RoundFlag::Shelter, country), 1);
 }
 
 /// Cubes on country `c`'s megaproject: `None` for the adversary's.
@@ -326,9 +326,9 @@ pub fn place_presence_paying(g: &mut GameState, cx: &mut Cx, seat: usize, pay: S
         StepPay::Credits => cx.add_resource(g, seat, Resource::Credits, -extra * w.int("board.energy_credits")),
     }
     if second {
-        cx.add_key(g, track2_key(seat).into(), 1);
+        cx.add_key(g, &track2_key(seat), 1);
     } else {
-        cx.add_key(g, track_key(seat).into(), 1);
+        cx.add_key(g, &track_key(seat), 1);
     }
     cx.add_tokens(g, hexes[j], &presence(seat), 1);
     cx.tally(g, "board.presence_placed", 1);
@@ -499,7 +499,7 @@ fn std_resolve(
             // The base price and the rise; the step's extra follows the track.
             let rise = g.var(&rich_key(s)) * w.int("board.presence_rise");
             cx.add_resource(g, s, Resource::Credits, -rise);
-            cx.add_key(g, rich_key(s).into(), 1);
+            cx.add_key(g, &rich_key(s), 1);
             place_presence_paying(g, cx, s, StepPay::Credits)?;
         }
         StandardAction::Energy => cx.add_resource(g, s, Resource::Energy, 1),
@@ -843,7 +843,7 @@ fn civic_shelter(g: &mut GameState, cx: &mut Cx, country: usize) -> bool {
             && has_presence_in(&w, g, s, country)
             && cards::has_passive(&w, g, s, |p| matches!(p, Op::CivicShelter))
         {
-            cx.set_key(g, cards::civic_used(s), 1);
+            cx.set_key(g, &cards::civic_used(s), 1);
             return true;
         }
     }
@@ -1373,7 +1373,7 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             }
             continue;
         }
-        cx.add_key(g, project_key(c, to).into(), cubes);
+        cx.add_key(g, &project_key(c, to), cubes);
         complete_project(g, cx, c);
     }
     // An adversary ambassador on a presence (with no other piece to divert)
@@ -1397,7 +1397,7 @@ fn produce(g: &mut GameState, cx: &mut Cx) -> Res {
             continue;
         }
         adversary::remove(g, cx, h, 1);
-        cx.add_key(g, economy::insight_debt(s), 1);
+        cx.add_key(g, &economy::insight_debt(s), 1);
         cx.tally(g, "board.presence_drained", 1);
         adversary::gain_compute(g, cx, 1)?;
     }
@@ -1418,12 +1418,12 @@ fn complete_project(g: &mut GameState, cx: &mut Cx, c: usize) {
     }
     for (s, &n) in mine.iter().enumerate() {
         cx.add_resource(g, s, Resource::Credits, n * w.int("board.project_credits"));
-        cx.set_key(g, project_key(c, Some(s)).into(), 0);
+        cx.set_key(g, &project_key(c, Some(s)), 0);
     }
     let per = w.int("board.project_discord_per");
     alignment::sway(g, cx, Side::Discord, adv / per);
-    cx.set_key(g, project_key(c, None).into(), 0);
-    cx.set_key(g, project_done(c).into(), 1);
+    cx.set_key(g, &project_key(c, None), 0);
+    cx.set_key(g, &project_done(c), 1);
     cx.tally(g, "board.projects_completed", 1);
     cx.note(None, || format!("{} completes", p.name));
 }
@@ -1453,7 +1453,7 @@ impl Module for Board {
             let c = home_country(&w, s);
             let n = w.content.map.countries[c].presence;
             cx.add_tokens(g, w.map.numbered(c, n), &presence(s), 1);
-            cx.set_key(g, track_key(s).into(), 1);
+            cx.set_key(g, &track_key(s), 1);
             cx.add_resource(g, s, Resource::Ambassadors, w.int("board.start_ambassadors"));
         }
     }
@@ -1528,7 +1528,7 @@ impl Module for Board {
 
     fn round_start(&self, g: &mut GameState, cx: &mut Cx) {
         for s in 0..g.seats.len() {
-            cx.set_key(g, rich_key(s).into(), 0);
+            cx.set_key(g, &rich_key(s), 0);
         }
     }
 
@@ -1547,7 +1547,7 @@ impl Module for Board {
                         let k = flag(f, c);
                         let v = g.var(&k);
                         if v > 0 {
-                            cx.set_key(g, k, v - 1);
+                            cx.set_key(g, &k, v - 1);
                         }
                     }
                 }
