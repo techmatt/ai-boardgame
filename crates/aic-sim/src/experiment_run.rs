@@ -8,7 +8,7 @@ use std::time::Instant;
 use crate::agents::AgentSpec;
 use crate::cli::{die, Options};
 use crate::report::file_stem;
-use crate::{experiment, prof, report};
+use crate::{experiment, gate, prof, report};
 
 /// `aic-sim experiment`: plays the grid and writes the cycle report.
 /// Returns the exit code: 1 if any game failed its replay check.
@@ -259,8 +259,13 @@ fn write_reports(
     let sums = report::summarize(cells, games);
     let groups = report::groups(cells, &sums, games);
     let cards = report::card_table(cells, games);
+    // A gate's stopped checks are finished, not missing.
+    let gate = spec.gate.as_ref().map(|g| gate::evaluate(g, spec, cells, games));
+    let planned = gate.as_ref().map_or(planned, |g| g.planned());
     let h2h = report::head_to_head(cells, games);
     let variants = report::variant_diffs(spec, cells, games);
+    let pairs = report::agent_pairs(cells, games);
+    let fresh = report::fresh_confirmation(spec, cells, games);
     let records = report::save_records(dir, spec, cells, games, &sums)
         .map_err(|e| format!("cannot write records: {e}"))?;
     let run = report::Run {
@@ -272,6 +277,8 @@ fn write_reports(
         cards: &cards,
         head_to_head: &h2h,
         variant_diffs: &variants,
+        agent_pairs: &pairs,
+        fresh_confirmation: &fresh,
         top_agent: report::top_agent(cells, &sums),
         records: &records,
         wall_s,
@@ -279,6 +286,7 @@ fn write_reports(
         out_dir: dir,
         planned,
         resumed,
+        gate: gate.as_ref(),
     };
     // report.md last: once it is there, so is the rest of its set.
     for (name, body) in [

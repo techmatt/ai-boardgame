@@ -21,7 +21,8 @@ options:
   --games N         games per config (default 200)
   --seed S          first seed (default 0); seeds S..S+N
   --set K=V         override for every config: countries=N, <module>.<param>=V,
-                    <module>.variant=NAME; V is 3 or 1,2,3 (repeatable)
+                    <module>.variant=NAME; V is 3 or 1,2,3; or a content overlay,
+                    <table>.<id>.<path>=JSON, as cards.<id>.cost=4 (repeatable)
   --set-a K=V       override for config A only (repeatable)
   --set-b K=V       override for config B only (repeatable)
   --agent SPEC      the team agent: random (default), greedy, beam, rollout, engine,

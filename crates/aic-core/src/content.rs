@@ -7,8 +7,8 @@
 //! change; a new card, threat, adversary card, AI board or Alignment card
 //! that only combines existing ops is a data change.
 
-use std::collections::BTreeSet;
-use std::sync::OnceLock;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -554,6 +554,9 @@ impl Content {
                     c.id
                 ));
             }
+            if c.slotless && !crate::face::prints_an_effect(c) {
+                return Err(format!("{what}: a slotless card needs an effect passive"));
+            }
             if !c.text.is_empty() {
                 return Err(format!("{what}: card text is generated from its ops, not written"));
             }
@@ -865,8 +868,117 @@ pub fn content() -> &'static Content {
     C.get_or_init(|| Content::parse(FILES).expect("embedded content is valid"))
 }
 
+/// The tables an overlay reaches, each with its index in [`FILES`]. The map
+/// stays out: its pieces have no ids, and a layout is not a number to sweep.
+const OVERLAY_TABLES: [(&str, usize); 6] = [
+    ("cards", 1),
+    ("threats", 2),
+    ("adversary", 3),
+    ("ais", 4),
+    ("alignment", 5),
+    ("projects", 6),
+];
+
+/// `<table>.<id>.<path>`: a content overlay key, not a `<module>.<param>`.
+pub fn is_overlay_key(key: &str) -> bool {
+    let mut parts = key.split('.');
+    let table = parts.next().unwrap_or("");
+    OVERLAY_TABLES.iter().any(|(t, _)| *t == table) && parts.count() >= 2
+}
+
+/// One overlay entry applied to the parsed content files. `path` walks
+/// object fields and list indexes (`effects.0.amount`, `presence.4.extra`);
+/// the last step may add a field the JSON left at its default, and parsing
+/// rejects one the schema doesn't have. `id` may be `*`: every row of the
+/// table. The value is JSON, or a bare word taken as a string.
+fn apply_entry(files: &mut [serde_json::Value], entry: &str) -> Result<(), String> {
+    use serde_json::Value;
+    let fail = |why: String| format!("content overlay {entry:?}: {why}");
+    let (key, value) = entry
+        .split_once('=')
+        .ok_or_else(|| fail("expected <table>.<id>.<path>=<value>".into()))?;
+    if !is_overlay_key(key.trim()) {
+        return Err(fail("expected <table>.<id>.<path>=<value>".into()));
+    }
+    let mut parts = key.trim().split('.');
+    let (table, id) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+    let path: Vec<&str> = parts.collect();
+    if path[0] == "id" {
+        return Err(fail("an id can't be overlaid".into()));
+    }
+    let value = value.trim();
+    let value: Value =
+        serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_string()));
+    let ix = OVERLAY_TABLES.iter().find(|(t, _)| *t == table).map_or(0, |t| t.1);
+    let rows = files[ix].as_array_mut().ok_or_else(|| fail("not a list".into()))?;
+    let mut hit = false;
+    for row in rows {
+        if id != "*" && row.get("id").and_then(Value::as_str) != Some(id) {
+            continue;
+        }
+        hit = true;
+        let (last, walk) = path.split_last().expect("is_overlay_key: a path");
+        let mut at = &mut *row;
+        for step in walk {
+            at = match at {
+                Value::Array(a) => step.parse::<usize>().ok().and_then(|i| a.get_mut(i)),
+                Value::Object(o) => o.get_mut(*step),
+                _ => None,
+            }
+            .ok_or_else(|| fail(format!("no {step:?} on the way")))?;
+        }
+        match at {
+            Value::Array(a) => {
+                let slot = last.parse::<usize>().ok().and_then(|i| a.get_mut(i));
+                *slot.ok_or_else(|| fail(format!("no list entry {last:?}")))? = value.clone();
+            }
+            Value::Object(o) => {
+                o.insert(last.to_string(), value.clone());
+            }
+            _ => return Err(fail(format!("{last:?} is inside a plain value"))),
+        }
+    }
+    if !hit {
+        return Err(fail(format!("no id {id:?} in {table}")));
+    }
+    Ok(())
+}
+
+/// The content with `entries` applied, and its hash. Parsed through
+/// [`Content::parse`], so an overlay meets every check content does and card
+/// text follows the new ops. `Rules` hold content for the life of the
+/// process, so each distinct overlay is built once and kept: bounded by the
+/// experiment, and invisible to the rules (same entries, same content).
+pub fn overlaid(entries: &[String]) -> Result<(&'static Content, &'static str), String> {
+    static BASE_HASH: OnceLock<String> = OnceLock::new();
+    type Built = (&'static Content, &'static str);
+    static BUILT: Mutex<BTreeMap<Vec<String>, Built>> = Mutex::new(BTreeMap::new());
+    let base = BASE_HASH.get_or_init(content_hash).as_str();
+    if entries.is_empty() {
+        return Ok((content(), base));
+    }
+    if let Some(b) = BUILT.lock().expect("overlay lock").get(entries) {
+        return Ok(*b);
+    }
+    let mut files: Vec<serde_json::Value> = FILES
+        .iter()
+        .map(|f| serde_json::from_str(f).expect("embedded content is JSON"))
+        .collect();
+    for e in entries {
+        apply_entry(&mut files, e)?;
+    }
+    let text: Vec<String> = files.iter().map(ToString::to_string).collect();
+    let refs: [&str; 7] = std::array::from_fn(|i| text[i].as_str());
+    let c = Content::parse(refs).map_err(|e| format!("content overlay {entries:?}: {e}"))?;
+    let hash = format!("{:016x}", fnv1a64(format!("{base}\0{}", entries.join("\0")).as_bytes()));
+    let b: Built = (Box::leak(Box::new(c)), Box::leak(hash.into_boxed_str()));
+    // Two threads may build one overlay; both copies are the same content.
+    Ok(*BUILT.lock().expect("overlay lock").entry(entries.to_vec()).or_insert(b))
+}
+
 /// Hash of the embedded content files, recorded with every result so a
-/// content edit is never mistaken for the same experiment.
+/// content edit is never mistaken for the same experiment. A config with an
+/// overlay plays other content: `Rules::content_hash` names it.
 pub fn content_hash() -> String {
     let mut bytes = Vec::new();
     for f in FILES {

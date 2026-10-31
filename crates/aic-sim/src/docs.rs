@@ -6,15 +6,20 @@
 //! whole (the ledger's checks fail the run); `web/card/faces.json`, every
 //! card's face from its ops (`aic_core::face`), too. `--check` changes
 //! nothing and exits 1 if anything is stale, or if `rules.md` backticks a
-//! `module.param` that isn't a tunable. The fast test lane runs the check.
+//! `module.param` or bare `snake_case` name that isn't a tunable. The fast
+//! test lane runs the check. A block is a pure function of `Rules` or
+//! `Content`, so a test can show it moves with its source.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::process::exit;
 
 use aic_core::config::ParamValue;
-use aic_core::content::{content, Cost, Op, Resource};
+use aic_core::content::{content, AiBoard, Content, Cost, Op, Resource, Uncover};
 use aic_core::face::card_face;
+use aic_core::modules::adversary;
+use aic_core::rules::Tunable;
+use aic_core::vocab::DiscountOn;
 use aic_core::Rules;
 
 use crate::cli::{die, load, rules, Options};
@@ -335,6 +340,541 @@ fn tunables_block(r: &Rules) -> String {
     table(&["Parameter", "Baseline", "Range", "What it does"], rows)
 }
 
+/// The baseline's tunable `key` (`module.param`).
+fn tunable(r: &Rules, key: &str) -> Tunable {
+    r.tunables()
+        .into_iter()
+        .find(|t| t.key == key)
+        .unwrap_or_else(|| die(&format!("docs: no tunable {key}")))
+}
+
+fn int(r: &Rules, key: &str) -> i64 {
+    match tunable(r, key).value {
+        ParamValue::Int(n) => n,
+        ParamValue::List(_) => die(&format!("docs: {key} is a list")),
+    }
+}
+
+fn list(r: &Rules, key: &str) -> Vec<i64> {
+    match tunable(r, key).value {
+        ParamValue::Int(n) => vec![n],
+        ParamValue::List(l) => l,
+    }
+}
+
+/// A tunable as the tables print it: `` `hold_base` 3 ``, or with its module
+/// where the bare name says little (`` `alignment.node` 2 ``).
+fn tick(r: &Rules, key: &str) -> String {
+    let name = key.split_once('.').map_or(key, |(_, p)| p);
+    let shown = if name.contains('_') && name != "free_city" { name } else { key };
+    format!("`{shown}` {}", value(&tunable(r, key).value))
+}
+
+/// `+1 credit, +2 chips`. `Resource::amount` keeps "credits" plural, as content
+/// text does; a track space reads better singular.
+fn gains(c: &[Cost]) -> String {
+    let parts: Vec<String> = c
+        .iter()
+        .map(|(r, n)| match (r, n) {
+            (Resource::Credits, 1) => "+1 credit".to_string(),
+            _ => format!("+{}", r.amount(*n)),
+        })
+        .collect();
+    parts.join(", ")
+}
+
+/// `Industry`, for a tag's lower-case name.
+fn title(s: &str) -> String {
+    let mut c = s.chars();
+    c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+}
+
+fn numbers(l: &[u8]) -> String {
+    if l.is_empty() {
+        return "—".to_string();
+    }
+    let l: Vec<String> = l.iter().map(|n| n.to_string()).collect();
+    l.join(", ")
+}
+
+/// The printed country pieces.
+fn countries_block(c: &Content) -> String {
+    let rows = c
+        .map
+        .countries
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            vec![
+                i.to_string(),
+                p.name.clone(),
+                numbers(&p.cities),
+                numbers(&p.ocean),
+                numbers(&p.stations),
+                format!("{} ({})", numbers(&p.industry), numbers(&p.factories)),
+                p.presence.to_string(),
+                format!("{}, {} cubes: {}", p.project.name, p.project.cubes, costs(&p.project.benefit)),
+            ]
+        })
+        .collect();
+    table(
+        &[
+            "#",
+            "Name",
+            "Cities (corrupted first)",
+            "Ocean",
+            "Station (node)",
+            "Industrial zones (setup factories)",
+            "Starting presence",
+            "Megaproject (benefit per owned station)",
+        ],
+        rows,
+    )
+}
+
+/// Cards of each stage a game dealt at `difficulty` holds: the engine's own
+/// deal, read back, so this can't drift from the rule (the rounds a game can
+/// last are the cards dealt).
+fn dealt(r: &Rules, difficulty: i64) -> [usize; 3] {
+    let mut config = (*r.config).clone();
+    config
+        .apply_override(&format!("adversary.difficulty={difficulty}"))
+        .unwrap_or_else(|e| die(&format!("docs: {e}")));
+    let level = Rules::new(&config).unwrap_or_else(|e| die(&format!("docs: difficulty {difficulty}: {e}")));
+    let g = level.new_game(1);
+    let mut out = [0; 3];
+    for pile in [adversary::DECK, adversary::NEXT, adversary::CURRENT, adversary::DISCARD] {
+        for id in g.pile(pile) {
+            let card = content().adversary.iter().find(|c| c.id == id.as_ref());
+            let stage = card.unwrap_or_else(|| die("docs: an adversary card not in content")).stage;
+            out[stage as usize - 1] += 1;
+        }
+    }
+    out
+}
+
+/// The round cap and the adversary deck's shape at each difficulty.
+fn round_cap_block(r: &Rules) -> String {
+    let d = tunable(r, "adversary.difficulty");
+    let rows = (d.min..=d.max)
+        .map(|level| {
+            let n = dealt(r, level);
+            vec![
+                level.to_string(),
+                n[0].to_string(),
+                n[1].to_string(),
+                n[2].to_string(),
+                (n[0] + 1).to_string(),
+                n.iter().sum::<usize>().to_string(),
+            ]
+        })
+        .collect();
+    table(
+        &["Difficulty", "Stage I cards", "Stage II", "Stage III", "Stage II from round", "Round cap"],
+        rows,
+    )
+}
+
+/// What each difficulty level adds.
+fn difficulty_block(r: &Rules) -> String {
+    let t = |keys: &[&str]| {
+        let k: Vec<String> = keys.iter().map(|k| tick(r, k)).collect();
+        k.join(", ")
+    };
+    let rows: [(&str, String); 5] = [
+        ("Base rules", String::new()),
+        (
+            "Extra threats each round in all, countries in turn",
+            t(&["adversary.extra_threats", "adversary.counter_bonus", "adversary.counter_bonus_all"]),
+        ),
+        (
+            "Stage-I cards removed: stage II (escalation, tier-2 threats) sooner, and a shorter round cap (the table above)",
+            t(&["adversary.stage1_removed"]),
+        ),
+        ("Larger builds: each corrupted city gains more", t(&["adversary.build_bonus"])),
+        (
+            "A still shorter Discord deck (027: was a smaller supply, which does nothing now it is a cap): the removed cards count as tips already made, so every printed step still acts (034); tier-2 threats sooner; optionally more corrupted cities per country at setup",
+            t(&["adversary.discord_removed", "adversary.tier2_early", "adversary.extra_corrupted"]),
+        ),
+    ];
+    let rows = rows
+        .into_iter()
+        .enumerate()
+        .map(|(i, (adds, keys))| vec![i.to_string(), adds.to_string(), keys])
+        .collect();
+    table(&["Level", "Adds", "Tunable"], rows)
+}
+
+/// `(board, its slots)`: slots are per seat in `ai.boards` order; a board no
+/// seat plays has none.
+fn board_slots(r: &Rules, board: usize) -> String {
+    let slots = list(r, "ai.slots");
+    list(r, "ai.boards")
+        .iter()
+        .position(|b| *b == board as i64)
+        .map_or(String::new(), |seat| slots[seat % slots.len()].to_string())
+}
+
+/// `Foundry Core (Industry): +1 credit`.
+fn start_building(c: &Content, b: &AiBoard) -> String {
+    let Some(id) = &b.start else {
+        return String::new();
+    };
+    let Some(card) = c.cards.iter().find(|d| d.id == *id) else {
+        die(&format!("docs: no card {id}"))
+    };
+    let tags: Vec<String> = card.tags.iter().map(|t| title(t.name())).collect();
+    let income: Vec<Cost> = card
+        .passives
+        .iter()
+        .filter_map(|p| match p {
+            Op::Income { resource, amount } => Some((*resource, *amount)),
+            _ => None,
+        })
+        .collect();
+    format!("{} ({}): {}", card.name, tags.join(", "), gains(&income))
+}
+
+/// What each AI board prints before its tracks.
+fn boards_block(r: &Rules, c: &Content) -> String {
+    let rows = c
+        .ais
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let mut printed = vec![(Resource::Credits, b.credits)];
+            printed.extend(b.income.iter().copied());
+            vec![
+                b.name.clone(),
+                costs(&printed),
+                start_building(c, b),
+                board_slots(r, i),
+                b.presence.len().to_string(),
+                b.presence2.len().to_string(),
+                (b.presence.len() + b.presence2.len()).to_string(),
+                b.unity.to_string(),
+            ]
+        })
+        .collect();
+    table(
+        &[
+            "Board",
+            "Printed income",
+            "Starting building",
+            "Slots",
+            "Track tokens",
+            "Second track",
+            "Tokens in all",
+            "Unity a round",
+        ],
+        rows,
+    )
+}
+
+/// Each board's innate, discount, growth and unique cards.
+fn board_details_block(c: &Content) -> String {
+    let name = |id: &String| {
+        c.cards
+            .iter()
+            .find(|d| d.id == *id)
+            .map_or_else(|| die(&format!("docs: no card {id}")), |d| d.name.clone())
+    };
+    let rows = c
+        .ais
+        .iter()
+        .map(|b| {
+            let discounts: Vec<String> = b
+                .discounts
+                .iter()
+                .map(|d| match d.tag {
+                    DiscountOn::Building => format!("{} on buildings {}:1", d.resource, d.rate),
+                    DiscountOn::Tag(t) => format!("{} on {} cards {}:1", d.resource, title(t.name()), d.rate),
+                })
+                .collect();
+            let growth: Vec<String> = b.growth.iter().map(|g| g.name.clone()).collect();
+            let cards: Vec<String> = b.cards.iter().map(name).collect();
+            vec![
+                b.name.clone(),
+                format!("*{}*: {}", b.innate.name, b.innate.text),
+                discounts.join(", "),
+                growth.join("; "),
+                cards.join(", "),
+            ]
+        })
+        .collect();
+    table(&["Board", "Innate", "Discount", "Growth options", "Unique cards"], rows)
+}
+
+/// One space of a presence track.
+fn space(u: &Uncover) -> String {
+    let mut parts = vec![gains(&u.income)];
+    if u.keep2 {
+        parts.push("**keep upgrade**".to_string());
+    }
+    let mut out = parts.join(", ");
+    if u.extra != 0 {
+        out.push_str(&format!(" (extra {})", u.extra));
+    }
+    out
+}
+
+/// A presence track of every board, space by space. `first` labels space 1.
+fn track_block(boards: &[AiBoard], track: fn(&AiBoard) -> &[Uncover], first: &str) -> String {
+    let spaces = boards.iter().map(|b| track(b).len()).max().unwrap_or(0);
+    let rows = (0..spaces)
+        .map(|i| {
+            let label = if i == 0 { first.to_string() } else { (i + 1).to_string() };
+            let mut row = vec![label];
+            row.extend(boards.iter().map(|b| track(b).get(i).map_or(String::new(), space)));
+            row
+        })
+        .collect();
+    let mut head = vec!["Space"];
+    head.extend(boards.iter().map(|b| b.name.as_str()));
+    table(&head, rows)
+}
+
+fn presence_track_block(c: &Content) -> String {
+    track_block(&c.ais, |b| &b.presence, "1 (on the board at setup)")
+}
+
+fn presence_track2_block(c: &Content) -> String {
+    track_block(&c.ais, |b| &b.presence2, "1")
+}
+
+fn powers_block(c: &Content) -> String {
+    let mut rows = Vec::new();
+    for b in &c.ais {
+        for p in &b.powers {
+            let mut cost: Vec<String> = p.tags.iter().map(|(t, n)| format!("{n} {}", title(&t.to_string()).replace("Any", "any"))).collect();
+            cost.extend(p.cost.iter().map(|(r, n)| r.amount(*n)));
+            rows.push(vec![b.name.clone(), p.name.clone(), cost.join(" + "), p.text.clone()]);
+        }
+    }
+    table(&["Board", "Power", "Cost", "Effect"], rows)
+}
+
+/// The standard actions and projects, with their prices.
+fn standard_actions_block(r: &Rules) -> String {
+    let t = |key: &str| tick(r, key);
+    let rows: Vec<[String; 3]> = vec![
+        [
+            "Place presence".to_string(),
+            format!("{}, plus the step's printed extra (§7)", t("board.presence_energy")),
+            "the next token off your track (uncovering its space) on a land hex next to your presence, with no corruption marker, 1 presence per hex (**locked**)".to_string(),
+        ],
+        [
+            "Build a research station".to_string(),
+            format!("{} + {} chips", t("board.build_energy"), t("board.station_chips")),
+            "on an open hex in reach that is not an industrial zone; it is yours (your cube)".to_string(),
+        ],
+        [
+            "Remove an adversary ambassador".to_string(),
+            t("board.remove_energy"),
+            "in reach; with none on the hex, a corruption marker (034)".to_string(),
+        ],
+        [
+            "Move a player ambassador".to_string(),
+            t("board.move_energy"),
+            "from your supply or the board onto a piece in reach (not the hex it comes from, 020)".to_string(),
+        ],
+        [
+            "Gain a player ambassador".to_string(),
+            t("board.ambassador_credits"),
+            "into your supply; a standard project too".to_string(),
+        ],
+        [
+            "Align a clean city".to_string(),
+            format!("{} + 1 ambassador", t("board.align_energy")),
+            "in reach, with a site claim: your cube on it".to_string(),
+        ],
+        [
+            "Harden a building (Protector only)".to_string(),
+            format!("{} energy a token", t("board.harden_energy")),
+            "a player-owned station or factory in reach that is not corrupted, one a troop can strike (022: any building, the adversary's too)".to_string(),
+        ],
+        [
+            "Sell chips".to_string(),
+            "1 chip".to_string(),
+            format!("gain {} (021: replaces buying chips)", t("board.chips_credits")),
+        ],
+        [
+            "Sell a card".to_string(),
+            format!("gain {}", t("board.sell_credits")),
+            "from your hand".to_string(),
+        ],
+        [
+            "The rich action (`presence_buy`, 034)".to_string(),
+            format!(
+                "{} credits, + {} for each earlier use by you this round, + {} a step of the track's printed extra",
+                t("board.presence_credits"),
+                t("board.presence_rise"),
+                t("board.energy_credits")
+            ),
+            format!(
+                "from stage {} (`presence_stage`): as Place presence, no energy. Worse per token than Place presence, worth it only with spare credits (024: a cheap project from round 1)",
+                int(r, "board.presence_stage")
+            ),
+        ],
+        [
+            "Project: harden (`harden_buy`)".to_string(),
+            format!("{} credits", t("board.harden_credits")),
+            "any player: a hardening token on a player-owned station or factory in reach".to_string(),
+        ],
+        [
+            "Project: buy energy (`energy`)".to_string(),
+            format!("{} credits", t("board.energy_credits")),
+            "gain 1 energy".to_string(),
+        ],
+        [
+            "Project: drain (`drain`)".to_string(),
+            format!("{} credits", t("board.drain_credits")),
+            format!("remove up to {} compute from one visible adversary project", t("board.drain_amount")),
+        ],
+    ];
+    table(&["Action", "Cost", "What"], rows.into_iter().map(|r| r.to_vec()).collect())
+}
+
+/// Where Sway comes from, with the amounts.
+fn sway_sources_block(r: &Rules) -> String {
+    let t = |key: &str| tick(r, key);
+    let rows: Vec<[String; 3]> = vec![
+        [
+            "Unity".to_string(),
+            "a player ambassador on a producing base / factory".to_string(),
+            format!("{} / {}", t("board.base_unity"), t("board.factory_unity")),
+        ],
+        ["Unity".to_string(), "removing an adversary troop".to_string(), t("alignment.troop")],
+        [
+            "Unity".to_string(),
+            "freeing a corrupted city (§2; or a tier-2 ultimate)".to_string(),
+            t("alignment.free_city"),
+        ],
+        ["Unity".to_string(), "removing a node".to_string(), t("alignment.node")],
+        [
+            "Unity".to_string(),
+            "cards (Peace Dividend, Planetary Referendum, Martial Cordon), AI boards, Unity cards".to_string(),
+            "card text".to_string(),
+        ],
+        [
+            "Discord".to_string(),
+            "energy diverted (a corrupted city, an ambassador on a city)".to_string(),
+            format!(
+                "{} per unit of a corrupted city's, {} of an ambassador's",
+                t("board.divert_discord"),
+                t("board.ambassador_discord")
+            ),
+        ],
+        ["Discord".to_string(), "an adversary ambassador on a producing base".to_string(), t("board.base_discord")],
+        [
+            "Discord".to_string(),
+            "a building destroyed in war (not by an adversary troop; 018)".to_string(),
+            t("board.destruction_discord"),
+        ],
+        [
+            "Discord".to_string(),
+            "adversary cubes on a completed megaproject".to_string(),
+            format!("1 per {}", t("board.project_discord_per")),
+        ],
+        [
+            "Discord".to_string(),
+            "an uncountered threat, the antimatter action, twists, Discord cards, adversary projects".to_string(),
+            format!("{}, {}, card text", t("alignment.threat_discord"), t("alignment.antimatter_discord")),
+        ],
+        [
+            "Discord".to_string(),
+            "the adversary at the start of every round".to_string(),
+            t("alignment.adversary_discord"),
+        ],
+    ];
+    table(&["Toward", "From", "Amount"], rows.into_iter().map(|r| r.to_vec()).collect())
+}
+
+/// What stops counting against the purge at each `unity_ease` threshold.
+fn purge_ease_block(r: &Rules) -> String {
+    const STEPS: [(&str, &str); 3] = [
+        ("first", "adversary ambassadors stop counting"),
+        ("second", "adversary troops stop counting"),
+        ("third", "**nodes** stop counting (019, candidate: with node removal rare, Unity buys the win)"),
+    ];
+    let mut out = String::new();
+    for (tips, (which, what)) in list(r, "alignment.unity_ease").iter().zip(STEPS) {
+        out.push_str(&format!("- {which} threshold ({tips} Unity tips): {what};\n"));
+    }
+    out.push_str("- corrupted cities always count.\n");
+    out
+}
+
+/// The opening paragraph for new players.
+fn new_players_block(r: &Rules) -> String {
+    let c = content();
+    let n = |key: &str| value(&tunable(r, key).value);
+    let slots = list(r, "ai.slots");
+    let range = |l: &[i64]| {
+        let (lo, hi) = (l.iter().min().copied().unwrap_or(0), l.iter().max().copied().unwrap_or(0));
+        if lo == hi {
+            lo.to_string()
+        } else {
+            format!("{lo}-{hi}")
+        }
+    };
+    let insight: Vec<i64> = c.cards.iter().map(|d| d.insight).collect();
+    format!(
+        "**For new players.** In the first round you are dealt {} cards and keep {} free (more \
+         at {} credits each). From then on, each round you build a hand of {} cards one at a time, \
+         choosing for each whether it comes from the cheaper tier-1 deck or the stronger tier-2 \
+         deck; you take one card and pass the rest to your neighbour until the hands are gone, then \
+         pay insight to keep what you drafted ({} for tier 1, {} for tier 2). Insight is this round's \
+         attention: what you don't spend is lost. Playing a card costs its credits and {} insight, \
+         from the same insight as keeps. Buildings go into your AI board's {} slots; once they are \
+         full, a new building goes on top of an old one, which stops working but keeps its tags. \
+         Programs stay in front of you; events are used and discarded. Every card in front of you \
+         shows tags (Science, Industry, Cyber, Power, Diplomacy, Security): they unlock some cards, \
+         and once a round you can sacrifice cards with the right tags to use your AI board's power.\n",
+        n("cards.opening_deal"),
+        n("cards.opening_free"),
+        n("cards.opening_keep_credits"),
+        n("cards.deal"),
+        n("cards.keep_tier1"),
+        n("cards.keep_tier2"),
+        range(&insight),
+        range(&slots),
+    )
+}
+
+/// How the game ends, for new players.
+fn game_end_block(r: &Rules) -> String {
+    let ease = list(r, "alignment.unity_ease");
+    let easing = match ease.as_slice() {
+        [_, a, b, ..] => format!(
+            "{a} Unity tips and the purge asks only for no nodes and no corrupted cities; {b} and it \
+             asks only for no corrupted cities."
+        ),
+        [.., a] => format!("{a} Unity tips and the purge asks only for no nodes and no corrupted cities."),
+        [] => String::new(),
+    };
+    format!(
+        "**How the game ends, for new players.** You win by purging the board or by drawing the last \
+         Unity card. Pressure comes every round: the face-up adversary card names a kind of site, \
+         and every such site gains an adversary ambassador, so you always know where the next wave \
+         lands. Ambassadors pile up, pairs become nodes, {} on a city corrupt it, and corrupted \
+         cities and uncountered threats push the Alignment track toward Discord. Each time the track \
+         tips, a Discord card hurts you, and the Discord deck is small: when a tip finds it empty, \
+         you lose. Pushing back works the same way in your favour. Mass your ambassadors on a \
+         corrupted city to free it, which sways toward Unity, and each Unity tip brings a good card. \
+         The Unity deck is small too: a game deals only {}, and drawing the last wins at once. \
+         {easing} You also lose if any player has no presence left on the board. \
+         Threats, war, corruption and late adversary and Discord cards destroy it, a token at a time, and \
+         a lost token leaves the game and marks its hex, so you can't act from there any more; its income \
+         stays. In stage I your last one is safe. The adversary deck is a round cap too, {} rounds at most, \
+         though games rarely reach it. So there are three different pressures: the Discord deck (politics), \
+         your presence (the board) and the cap.\n",
+        int(r, "adversary.corrupt_at"),
+        list(r, "alignment.unity_cards").iter().sum::<i64>(),
+        dealt(r, 0).iter().sum::<usize>(),
+    )
+}
+
 fn snake(s: &str) -> String {
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
@@ -519,8 +1059,29 @@ fn fill(text: &str, block: &dyn Fn(&str) -> Option<String>) -> String {
 /// Dotted names rules.md may print that are counters, not tunables or phases.
 const COUNTERS: [&str; 1] = ["threats.short"];
 
+/// Bare `snake_case` names rules.md may print that are no tunable: op and
+/// action names, content fields, and retired parameters in its history.
+const NOT_TUNABLES: [&str; 16] = [
+    "cash_out",
+    "clear_city",
+    "free_city_at",
+    "free_keep",
+    "gain_per_tokens",
+    "harden_buy",
+    "legal_actions",
+    "move_ambassadors",
+    "move_one",
+    "node_energy",
+    "per_round",
+    "presence_buy",
+    "purge_round",
+    "shared_row",
+    "spread_ambassadors",
+    "unity_win",
+];
+
 /// Backticked `module.name` words in `text` that are no tunable, phase or
-/// counter of the baseline.
+/// counter of the baseline, and bare `snake_case` words that are no tunable.
 fn unknown_params(text: &str, r: &Rules) -> Vec<String> {
     let mut known: Vec<String> = r.tunables().into_iter().map(|t| t.key).collect();
     let modules: Vec<String> = known
@@ -542,6 +1103,12 @@ fn unknown_params(text: &str, r: &Rules) -> Vec<String> {
             if modules.iter().any(|x| x == m) && word && !known.iter().any(|k| k == tick) {
                 out.push(tick.to_string());
             }
+        } else if tick.contains('_')
+            && tick.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit())
+            && !NOT_TUNABLES.contains(&tick)
+            && !known.iter().any(|k| k.split_once('.').is_some_and(|(_, p)| p == tick))
+        {
+            out.push(tick.to_string());
         }
     }
     out.sort();
@@ -559,6 +1126,19 @@ pub fn run(o: &Options) {
         "alignment" => Some(alignment_block()),
         "projects" => Some(projects_block()),
         "tunables" => Some(tunables_block(&r)),
+        "countries" => Some(countries_block(content())),
+        "round_cap" => Some(round_cap_block(&r)),
+        "difficulty" => Some(difficulty_block(&r)),
+        "boards" => Some(boards_block(&r, content())),
+        "board_details" => Some(board_details_block(content())),
+        "presence_track" => Some(presence_track_block(content())),
+        "presence_track2" => Some(presence_track2_block(content())),
+        "powers" => Some(powers_block(content())),
+        "standard_actions" => Some(standard_actions_block(&r)),
+        "sway_sources" => Some(sway_sources_block(&r)),
+        "purge_ease" => Some(purge_ease_block(&r)),
+        "new_players" => Some(new_players_block(&r)),
+        "game_end" => Some(game_end_block(&r)),
         _ => None,
     };
     let old = fs::read_to_string(RULES_MD).unwrap_or_else(|e| die(&format!("{RULES_MD}: {e}")));
@@ -610,5 +1190,96 @@ pub fn run(o: &Options) {
     }
     if harms != old_harms {
         fs::write(HARMS_MD, harms).unwrap_or_else(|e| die(&format!("{HARMS_MD}: {e}")));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aic_core::Config;
+
+    const BASELINE_JSON: &str = include_str!("../../../configs/baseline.json");
+
+    fn baseline(overrides: &[&str]) -> Rules {
+        let mut c = Config::from_json(BASELINE_JSON).unwrap();
+        for o in overrides {
+            c.apply_override(o).unwrap();
+        }
+        Rules::new(&c).unwrap()
+    }
+
+    /// A row of `block` whose first cell is `first`, as its cells.
+    fn row(block: &str, first: &str) -> Vec<String> {
+        let line = block
+            .lines()
+            .find(|l| l.starts_with(&format!("| {first} |")))
+            .unwrap_or_else(|| panic!("no row {first} in {block}"));
+        line.trim_matches('|').split(" | ").map(|c| c.trim().to_string()).collect()
+    }
+
+    #[test]
+    fn the_round_cap_comes_from_the_engines_deal() {
+        let base = round_cap_block(&baseline(&[]));
+        // At the baseline: 4, 5, 2 cards, less the stage-I card difficulty 2 removes.
+        assert_eq!(row(&base, "0"), ["0", "4", "5", "2", "5", "11"]);
+        assert_eq!(row(&base, "2"), ["2", "3", "5", "2", "4", "10"]);
+        let shorter = round_cap_block(&baseline(&["adversary.stage_cards=4,4,2"]));
+        assert_eq!(row(&shorter, "0")[5], "10");
+        let harsher = round_cap_block(&baseline(&["adversary.stage1_removed=2"]));
+        assert_eq!(row(&base, "1")[5], row(&harsher, "1")[5], "difficulty 1 removes nothing");
+        assert_eq!(row(&harsher, "2")[5], "9");
+    }
+
+    /// Every block that reads a config moves with it.
+    #[test]
+    fn a_config_change_changes_its_block() {
+        let base = baseline(&[]);
+        let blocks: [(&str, fn(&Rules) -> String); 8] = [
+            ("adversary.build_bonus=2", difficulty_block),
+            ("board.remove_energy=3", standard_actions_block),
+            ("board.base_unity=3", sway_sources_block),
+            ("alignment.unity_ease=1,3,5", purge_ease_block),
+            ("cards.keep_tier2=4", new_players_block),
+            ("adversary.corrupt_at=7", game_end_block),
+            ("adversary.stage_cards=3,5,2", round_cap_block),
+            ("ai.slots=5,3", |r| boards_block(r, content())),
+        ];
+        for (o, block) in blocks {
+            assert_ne!(block(&base), block(&baseline(&[o])), "{o}");
+        }
+    }
+
+    /// Every block that reads content moves with it.
+    #[test]
+    fn a_content_change_changes_its_block() {
+        let base = content();
+        let mut c = base.clone();
+        c.ais[0].presence[1].income[0].1 += 1;
+        c.ais[1].presence2[2].extra += 1;
+        c.ais[1].powers[0].tags[0].1 += 1;
+        c.ais[0].growth[0].name = "Something else".to_string();
+        c.map.countries[0].project.cubes += 1;
+        assert_ne!(presence_track_block(base), presence_track_block(&c));
+        assert_ne!(presence_track2_block(base), presence_track2_block(&c));
+        assert_ne!(powers_block(base), powers_block(&c));
+        assert_ne!(board_details_block(base), board_details_block(&c));
+        assert_ne!(countries_block(base), countries_block(&c));
+    }
+
+    #[test]
+    fn check_flags_a_bare_name_that_is_no_tunable() {
+        let r = baseline(&[]);
+        assert!(unknown_params("`hold_base`, `presence_buy`", &r).is_empty());
+        assert_eq!(unknown_params("`hold_bass`", &r), ["hold_bass"]);
+    }
+
+    #[test]
+    fn a_track_space_prints_income_upgrade_and_extra() {
+        let u = Uncover {
+            income: vec![(Resource::Credits, 2), (Resource::Chips, 1)],
+            keep2: true,
+            extra: 3,
+        };
+        assert_eq!(space(&u), "+2 credits, +1 chip, **keep upgrade** (extra 3)");
     }
 }

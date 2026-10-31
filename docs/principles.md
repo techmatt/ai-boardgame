@@ -100,6 +100,8 @@ The strategy-health gate runs them beside the engine at d0, d2 and d4
 - **When one doesn't lose:** the check names a rule or price that makes thinking
   unnecessary. Fix it when the fix is a number or a content change; otherwise report
   the structural cause.
+- **Early stopping (040):** a spec's `gate` stops a check once its verdict is decided at
+  the stated noise (README, *Gate early-stopping*); a check that stays close runs to the cap.
 - **The list grows:** a new mechanic adds the obvious fixed policy for it.
 
 | Check (since) | Spec | Policy |

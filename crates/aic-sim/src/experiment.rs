@@ -45,6 +45,9 @@ pub struct Spec {
     pub first_seed: u64,
     /// Seeds per cell: `first_seed .. first_seed + games`.
     pub games: u64,
+    /// The seeds that picked a winner: the report confirms on the rest alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_seeds: Option<SelectionSeeds>,
     #[serde(default = "default_max_actions")]
     pub max_actions: usize,
     #[serde(default)]
@@ -54,6 +57,10 @@ pub struct Spec {
     /// Records saved per category (close losses, lock-ins, surprises).
     #[serde(default = "default_records")]
     pub records: usize,
+    /// Dominance-gate early stopping (`crate::gate`); `games` is then each
+    /// check's cap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<crate::gate::Gate>,
 }
 
 impl Spec {
@@ -79,6 +86,21 @@ mod seed_string {
             N::N(n) => Ok(n),
             N::S(s) => s.parse().map_err(serde::de::Error::custom),
         }
+    }
+}
+
+/// `first .. first + games`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectionSeeds {
+    #[serde(with = "seed_string")]
+    pub first: u64,
+    pub games: u64,
+}
+
+impl SelectionSeeds {
+    pub fn contains(&self, seed: u64) -> bool {
+        seed >= self.first && seed - self.first < self.games
     }
 }
 
@@ -230,6 +252,9 @@ pub fn cells(spec: &Spec) -> Result<Vec<Cell>, String> {
     if !spec.closeness.gap.is_finite() || spec.closeness.gap < 0.0 {
         return Err("closeness.gap must be a number >= 0".into());
     }
+    if spec.gate.as_ref().is_some_and(|g| !g.z.is_finite() || g.z <= 0.0) {
+        return Err("gate.z must be above 0".into());
+    }
     let mut out = Vec::new();
     for path in &spec.configs {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -257,6 +282,9 @@ pub fn cells(spec: &Spec) -> Result<Vec<Cell>, String> {
                 }
             }
         }
+    }
+    if spec.gate.is_some() {
+        crate::gate::check_spec(&out)?;
     }
     Ok(out)
 }
@@ -660,6 +688,7 @@ fn ms_since(t: Instant) -> f64 {
 /// tier first within a seed: a run stopped early has every cell's first
 /// seeds, not some cells whole and others missing. Sort the results by cell
 /// then seed ([`sort`]) and nothing depends on the thread count or order.
+/// With a `gate`, the same but seed block by seed block ([`crate::gate`]).
 pub fn run(
     spec: &Spec,
     cells: &[Cell],
@@ -667,18 +696,49 @@ pub fn run(
     results: &Mutex<Vec<GameResult>>,
     on_game: &(dyn Fn(&GameResult, usize, usize) + Sync),
 ) {
-    let have: std::collections::BTreeSet<(usize, u64)> = results
-        .lock()
-        .expect("results lock")
-        .iter()
-        .map(|r| (r.cell, r.seed))
-        .collect();
     let total = spec.total_games(cells);
+    let have = |results: &Mutex<Vec<GameResult>>| -> std::collections::BTreeSet<(usize, u64)> {
+        let out = results.lock().expect("results lock");
+        out.iter().map(|r| (r.cell, r.seed)).collect()
+    };
+    if let Some(gate) = &spec.gate {
+        for (from, to) in gate.blocks(spec.games) {
+            let (live, order) = {
+                let out = results.lock().expect("results lock");
+                let state = crate::gate::evaluate(gate, spec, cells, &out);
+                (state.live_at(from), state.order(cells, &out))
+            };
+            if live.is_empty() {
+                break;
+            }
+            let done = have(results);
+            let mut jobs: Vec<(usize, u64)> = (from..to)
+                .flat_map(|k| live.iter().map(move |&c| (c, spec.first_seed + k)))
+                .filter(|j| !done.contains(j))
+                .collect();
+            jobs.sort_by_key(|&(c, seed)| (seed, order[c]));
+            play_jobs(spec, cells, &jobs, threads, total, results, on_game);
+        }
+        return;
+    }
+    let done = have(results);
     let mut jobs: Vec<(usize, u64)> = (0..spec.games)
         .flat_map(|k| (0..cells.len()).map(move |c| (c, spec.first_seed + k)))
-        .filter(|j| !have.contains(j))
+        .filter(|j| !done.contains(j))
         .collect();
     jobs.sort_by_key(|&(c, seed)| (seed, std::cmp::Reverse(cells[c].agent.tier())));
+    play_jobs(spec, cells, &jobs, threads, total, results, on_game);
+}
+
+fn play_jobs(
+    spec: &Spec,
+    cells: &[Cell],
+    jobs: &[(usize, u64)],
+    threads: usize,
+    total: usize,
+    results: &Mutex<Vec<GameResult>>,
+    on_game: &(dyn Fn(&GameResult, usize, usize) + Sync),
+) {
     let next = AtomicUsize::new(0);
     std::thread::scope(|s| {
         for _ in 0..threads.max(1) {

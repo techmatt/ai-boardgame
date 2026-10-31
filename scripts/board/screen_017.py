@@ -1,4 +1,6 @@
-"""Adversary projects / Discord pressure screen summary (017, rules r8): per
+"""Kept for the docs that cite it (docs/qa-findings.md, screen-017-projects/projects.md, screen-018-calibration/); new work: scripts/cards/screen.py.
+
+Adversary projects / Discord pressure screen summary (017, rules r8): per
 cell, win rate, rounds, tips and how games ended; then per game, as means
 over the cell's games: projects resolved (cheap, big), adversary compute made
 and blocked (a player ambassador on a node), Discord and Unity tips, troop

@@ -511,6 +511,12 @@ enum Standing {
     Effect(Vec<Part>, String),
 }
 
+/// A card with a passive the face prints as an effect: what a slotless
+/// card's "takes no slot" note hangs on (`Content::check`).
+pub(crate) fn prints_an_effect(c: &CardDef) -> bool {
+    c.passives.iter().any(|op| matches!(standing(op), Standing::Effect(..)))
+}
+
 /// What one standing op prints.
 fn standing(op: &Op) -> Standing {
     let income = |parts: Vec<Part>, say: String| Standing::Income(parts, say);

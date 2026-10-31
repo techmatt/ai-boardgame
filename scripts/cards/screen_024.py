@@ -1,4 +1,6 @@
-"""The scarier-adversary screen summary (024, rules r15).
+"""Kept for the docs that cite it (screen-024-adversary/adversary.md); new work: scripts/cards/screen.py.
+
+The scarier-adversary screen summary (024, rules r15).
 
     python scripts/cards/screen_024.py CARDS_DIR [DOMINANCE_DIR] [--before BEFORE_DIR]
     python scripts/cards/screen_024.py --brief DIR ...

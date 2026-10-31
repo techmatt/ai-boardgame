@@ -24,6 +24,7 @@ mod invariants;
 mod map;
 mod march;
 mod ops;
+mod overlay;
 mod plan;
 mod production;
 mod projects;

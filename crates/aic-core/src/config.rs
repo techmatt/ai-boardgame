@@ -23,6 +23,12 @@ pub struct Config {
     /// every module's phases in module order, then phase-declaration order.
     #[serde(default)]
     pub round: Vec<String>,
+    /// The content overlay: `<table>.<id>.<path>=<JSON>` entries, applied in
+    /// order to the embedded content files (see [`crate::content::overlaid`]).
+    /// Part of the config, so a record replays with the content it ran and
+    /// the config hash names it. An experiment lever, not a rules option.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,11 +171,30 @@ impl Config {
     ///   name): switches variant and drops the parameters the new variant
     ///   does not take, so only its new parameters need setting
     /// - `<module>=off`: removes the module and its phases from the round
+    /// - `<table>.<id>.<path>=<JSON>` (two dots or more, so never a parameter):
+    ///   a content overlay entry, as `cards.factory.cost=4`, replacing any
+    ///   entry of the same key; an empty value drops the entry
     pub fn apply_override(&mut self, spec: &str) -> Result<(), String> {
         let (key, value) = spec
             .split_once('=')
             .ok_or_else(|| format!("override {spec:?}: expected key=value"))?;
         let (key, value) = (key.trim(), value.trim());
+        if crate::content::is_overlay_key(key) {
+            let entry = format!("{key}={value}");
+            let at = self
+                .content
+                .iter()
+                .position(|e| e.split_once('=').is_some_and(|(k, _)| k == key));
+            match (at, value.is_empty()) {
+                (Some(i), true) => {
+                    self.content.remove(i);
+                }
+                (Some(i), false) => self.content[i] = entry,
+                (None, true) => {}
+                (None, false) => self.content.push(entry),
+            }
+            return Ok(());
+        }
         if key == "countries" {
             self.countries = value
                 .parse()
@@ -278,6 +303,9 @@ impl Config {
         }
         if self.round != other.round {
             out.push(format!("round: {:?} -> {:?}", self.round, other.round));
+        }
+        if self.content != other.content {
+            out.push(format!("content: {:?} -> {:?}", self.content, other.content));
         }
         out
     }

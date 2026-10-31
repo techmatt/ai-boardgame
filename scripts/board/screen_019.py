@@ -1,4 +1,6 @@
-"""Troop and node screen summary (019, rules r10): one row per cell with the
+"""Kept for the docs that cite it (docs/qa-findings.md, screen-019-troops/tuning.md); new work: scripts/cards/screen.py.
+
+Troop and node screen summary (019, rules r10): one row per cell with the
 win rate, rounds, how games ended and what was left on the board at the end
 (the purge's blockers); then per game the adversary troops (built, steps,
 moves, strikes, destructions by target, absorbed), presence lost to troops;

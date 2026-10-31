@@ -10,8 +10,9 @@ and a wasm build for a JS front end sit on top of the core, and neither holds an
   from content and `web/card/faces.json` by `python scripts/cards/cards_doc.py`, after `aic-sim docs` (a fast-lane test fails if it is stale);
   the pricing reasoning is [docs/card-pricing.md](docs/card-pricing.md).
 - [docs/rules.md](docs/rules.md): the rules as implemented, at `RULES_REVISION`, with
-  every default and deviation. Its threat, adversary, Alignment, project and tunable
-  tables are generated (`aic-sim docs`).
+  every default and deviation. Its tables of content and tunables (threats, adversary,
+  Alignment, projects, country pieces, round cap, difficulty, AI boards and presence tracks,
+  powers, standard actions, Sway sources, tunables) are generated (`aic-sim docs`).
 - [docs/rules-history.md](docs/rules-history.md): what each revision changed and whether
   each rule is locked or a candidate.
 - [docs/ops.md](docs/ops.md): every op content can print and how often it is printed,
@@ -56,8 +57,14 @@ Current:
 - `wasm-smoke.mjs`: plays one game through the wasm package in Node. `wasm-parity.mjs`
   (020): replays aic-sim records of every variant in wasm.
 - `configs/shared_row.py`: regenerates `configs/shared_row.json` from the baseline.
-- `cards/cards_doc.py`: regenerates `docs/cards.md`. `cards/screen_034.py`: the r19 screen summary (failure mix, tokens left, harm shares) and gate. `cards/screen_028.py`: the r17
-  screen summary and gate, each check against its own agent; `cards/screen_027.py`: the r16 ones; `cards/screen_024.py`: the r15 ones; `screen_023.py` and `screen_022.py` still read r15.
+- `cards/cards_doc.py`: regenerates `docs/cards.md`.
+- `cards/screen.py`: the screen summary: a table of named columns over experiment outputs
+  (`--columns a,b,c`, `--preset 034|028|018|016`, `--sources`, `--list`) and `--gate DIR`,
+  each check against its own agent, with games per check when `results.json` has a `gate`
+  key. `screens.py` holds what it shares with the kept scripts below.
+- Kept for the results docs that cite them, each saying so at its top: `cards/screen_034.py`
+  (a shim for `screen.py --preset 034`), `cards/screen_028.py` (r17), `cards/screen_027.py`
+  (r16), `cards/screen_024.py` (r15); `screen_023.py` and `screen_022.py` still read r15.
 - `board/screen_summary.py` (014), `alignment/screen_summary.py` (013): screen summaries
   whose counters still exist.
 - `bench/same_results.py` (012): compares two experiment outputs. `--map OLD=NEW` (026)
@@ -73,12 +80,19 @@ Current:
   and after. `table SIM --out FILE` is one binary's rates (`rollout` alone takes ~20 min;
   `--only "planner c2"` for a row, and both keep the file's other rows). `check SIM` is
   the standing check (about a minute, on a quiet machine): fails at 1.3 ×
-  `scripts/bench/speed_baseline.json`, `--update` to move the baseline.
+  `scripts/bench/speed_baseline.json`, `--update` to move the baseline. It fails on main
+  since r19 (planner over 3 ×, engine 1.3 ×): 034's tag discounts made `eval` about 2 × dearer
+  a call, a real cost, so the baseline stays until that is fixed (040).
+- `bench/per_decision.py OLD_ROOT NEW_ROOT` (040): rounds, decisions and ms per game and per
+  decision on the same seeds, for telling longer games from a slower agent.
+  `bench/gate_stop_rate.py`: how often the gate's early stop flips a verdict.
 - `tune/` (007-008): `sweep.py`, `log_table.py`, `engine_sweep.py`.
 
 Historical, kept for the record and not expected to run on current rules:
-`board/screen_016.py` to `screen_019.py`, `cards/screen_021.py` (they read counters and
-cards that are gone and print zeros, not errors). See
+`board/screen_017.py`, `screen_019.py`, `cards/screen_021.py` (they read counters and
+cards that are gone and print zeros, not errors). Deleted, nothing under `docs/` or
+`experiments/` cited them: `board/screen_016.py`, `screen_018.py` (`--preset 016`, `018`
+cover what survives). See
 [experiments/history.md](experiments/history.md).
 
 ## Viewer
@@ -489,6 +503,35 @@ $S experiment experiments/archive/screen-014-board.json --quick     # scoping: s
 $S experiment experiments/archive/screen-014-board.json --quick --resume  # continue a stopped run: the same flags (--quick, --out, --games, --seed) as it started with
 ```
 
+**Content levers run on one binary (040).** A variant's `set` (or `--set`) takes a content
+overlay, `<table>.<id>.<path>=<JSON>`: tables `cards`, `threats`, `adversary`, `ais`,
+`alignment`, `projects`; `*` for every id; a path through fields and list indexes.
+`cards.telemetry_archive.cost=3`, `cards.turnkey_factory.effects=[]`,
+`cards.turnkey_factory.passives.0.amount=2`, `ais.*.presence.4.extra=2`,
+`threats.<id>.counter=[["credits",3]]`. It goes through the same parsing and checks as
+`content/`, so a typo or an illegal op is an error naming the entry. The overlay lands in
+the config (`content`), so the config hash, `content_hash` and every saved record name
+it and `aic-sim replay` needs nothing else. `experiments/overlay-card-cost.json` is a
+worked sweep. The map is out of reach. Only player-card text is generated, so a threat's,
+project's, adversary or Alignment card's text keeps its printed numbers, and the viewer
+reads the printed content (`wasm.content()`): faces, adversary rows and power labels of
+an overlaid record show the printed values, though the game plays the overlay.
+
+**Gate early-stopping (040).** A spec with `"gate": {"z": 2.0, "min_games": 8, "every": 4}`
+treats `planner:<check>` as a check of `planner` in the same variant and difficulty, and
+`games` as each check's cap. Seeds go in blocks (8, then 4 at a time); after each block a
+check stops if its gap clears `z` standard errors (sign test) or the seeds left can't turn
+its sign back at that noise; an agent runs until its last check stops. The verdict is the
+gap's sign, as in the old `--gate` tables. Decisions come only from finished blocks, so
+the games played don't depend on threads or timing, and `--resume` rebuilds them from
+`games.jsonl`. `report.md`'s *Gate* section and `results.json`'s `gate` give each check's
+games, why it stopped, and the game time against an estimate at the cap. Measured: `python
+scripts/bench/gate_stop_rate.py [z]` simulates the rule; at `z` 2 a level check stops early
+about half the time and about 1% of runs get the sign the cap wouldn't. `experiments/gate-034.json`
+is the 034 gate this way: **872 of 1,728 games, 4.2 h of game time against 7.1 h at the cap and
+5.5 h for 034's hand-cut plan, 1h 4m on 4 below-normal threads**, every verdict the same
+(`experiments/results/gate-034-earlystop/gate.md`).
+
 **Tuning sweeps** (`scripts/tune/`, from the repo root): `sweep.py` runs `aic-sim run --json`
 once per variant and agent and prints one row each (win %, rounds, adversary operations,
 corruptions and buildings destroyed per game, how games ended), appending every result
@@ -524,7 +567,7 @@ and standard actions by kind. Committed with the report and records in
 
 **Clocks screen and gate (034, r19)**: `experiments/screen-034.json` (planner, d2, `c2`, `c3`) and
 `experiments/screen-034-dominance.json` (028's checks, `rich_spend` and `science_rush`, under the
-planner), with `--quick --games 32`, then `python scripts/cards/screen_034.py DIR` and `--gate DIR`.
+planner), with `--quick --games 32`, then `python scripts/cards/screen.py DIR --preset 034` and `screen.py --gate DIR`.
 `--quick` drops an agent with `samples` above 1: leave it off for those. A run needs its own binary
 and config copied aside (`out/`) if you rebuild while it runs. Results and timings:
 `experiments/results/screen-034-clocks/clocks.md`. At r19 the gate took 45 min for 1,024 planner games on a shared 12-thread machine. The 028 specs are in `experiments/archive/`. `experiments/screen-028-draft.json` is the drafting sanity check. Results and
@@ -628,8 +671,8 @@ overrides (lists comma-separated, `alignment.unity_ease=1,1,2`), as in
 × d0–d4 × random, greedy, engine; 480 games): `aic-sim experiment
 experiments/archive/screen-018-calibration.json --quick --out out/screen-018` (**~3 min** wall on
 12 threads: r9 games run longer, 6–12 rounds, and c3 engine games go the full 11),
-then `python scripts/board/screen_018.py out/screen-018`: per cell the win rate,
-rounds, what was left on the board at the end (corrupted cities, nodes, troops: the
+then `python scripts/cards/screen.py out/screen-018 --preset 018` (the columns whose
+counters survive; 018's own script is gone): per cell the win rate, rounds, what was left on the board at the end (corrupted cities, nodes, troops: the
 purge's blockers), tips and ends, then the strategy-health gate per game (presence,
 factories per side and owned at the end, chips made and spent, nodes made and
 removed, compute blocked by a player ambassador on a node, Security Patch, cities
@@ -650,10 +693,10 @@ Python script printing an en dash to a redirected stdout writes cp1252, not UTF-
 **Presence screen (016, r7)**, `experiments/archive/screen-016-presence.json` (the same cells
 as 014's): `aic-sim experiment experiments/archive/screen-016-presence.json --quick` (128 games,
 **20 s** wall on 12 threads; d0 engine at 3 countries is the slowest cell, ~5 s a
-game per worker), then `python scripts/board/screen_016.py DIR`: per cell the win rate,
-rounds, tips and ends, then per game presence placed, node peaks per board, nodes made
-and removed, factories built, destroyed and owned per side, chips made, bought and
-spent, adversary compute made, and standard actions by kind. Committed in
+game per worker), then `python scripts/cards/screen.py DIR --preset 016` (the columns
+whose counters survive; 016's own script is gone): per cell the win rate, rounds, tips
+and ends, then per game presence placed, nodes made and removed, factories built, destroyed and owned per side, chips made, bought and
+spent. Committed in
 `experiments/results/screen-016-presence/` (`presence.md`).
 
 **Specs the binary refuses today** (the rules or configs they name are gone) are in
@@ -726,8 +769,7 @@ Agent parameters come in two kinds: search settings go bare, heuristic weights n
 `w.` prefix (`engine:samples=2`, `engine:w.packet_keep=0.5`). An unprefixed weight is an
 error, not a no-op.
 
-`cards.csv` is split by agent and difficulty only: all variants of a spec pool their card
-plays, so run one spec per variant if you need per-lever card numbers.
+`cards.csv` is split by agent, variant, config and difficulty (columns `agent,variant,config,difficulty,card,...`), so per-lever card numbers no longer need a spec per variant. The card table in `report.md` and `results.json` still pools per agent.
 
 Don't read an agent's keeps as a human's. Up to r3 (007, 009) agents kept nearly every
 drafted card, so a keep-priced lever measured the agent; 022 and 034 made them
@@ -749,6 +791,7 @@ thread count; every game is replay-checked). The spec (`experiments/*.json`):
 | `difficulties` | `[0]` | `adversary.difficulty` levels. |
 | `agents` | | Agent specs, weakest first. |
 | `games`, `first_seed` | `first_seed` 0 | Seeds per cell. `--games`/`--seed` override. |
+| `selection_seeds` | none | `{"first": N, "games": M}`: the seeds that picked a winner. Adds the report's *Fresh-seed confirmation*. Part of the spec, so `--resume` refuses a stream started without it. |
 | `max_actions` | `5000` | Per-game cap (`timeout`). |
 | `winprob` | `{"games": 0, "rollouts": 8, "agent": "greedy"}` | **Off unless set.** Win probability by round: for the first `games` seeds of each cell, `rollouts` playouts by `agent` from a guess of the table at the start of each round. `--winprob N` sets `games`. |
 | `closeness` | `{"every": 0, "gap": 2.0}` | **Off unless set** (011; it was on, every 1). Probe every n-th real choice: 1-ply greedy scores of every option; close when the best two are within `gap` heuristic points (about credits). `--closeness N` sets `every`. |
@@ -772,11 +815,21 @@ is always kept, first, so the comparisons still have their reference). The repor
 The output directory (`--out`, default `out/experiments/<name>/`) holds `report.md` (the
 cycle report: findings, then the tables), `results.json` (`aic-experiment/2`: the
 spec, every cell's and group's measures, the card table, the records), `games.csv` (one
-row per game) and `cards.csv` (per agent, difficulty and card), and `records/`, plus
+row per game; `economy_buildings_standing` follows `buildings_standing`) and `cards.csv`
+(per agent, variant, config, difficulty and card), and `records/`, plus
 `games.jsonl` (`aic-games/2`, written as the games finish; see *Results as they go*).
 Format 2 (016) renamed `margin.points` to `margin.unity_tips` (the `games.csv` column
 too) and made each card's counts an object (`offered`, `drafted`, `kept`, `played`,
 `pick_sum`, `drawn`) instead of a 6-number array; a format-1 stream can't be resumed.
+
+`results.json` and `report.md` also carry **agents paired, per variant** (`agent_pairs`,
+*Agents paired, per variant*; none with a single agent): per config × variant × difficulty, A against B on
+the same seeds with the paired standard error and sign test. `x:...` pairs with `x` if
+listed; a bare agent with the next bare agent listed. With `selection_seeds`, **fresh-seed
+confirmation** (`fresh_confirmation`, *Fresh-seed confirmation*): each variant against the
+base on the seeds outside `selection_seeds` alone, the selection seeds' result beside it,
+never pooled; it says so if no fresh seed has been played. `first_seed`/`games` must reach
+past the selection range for any to exist.
 
 **Measures** (all read from the public state or the actions, so the engine records
 nothing extra):
@@ -793,6 +846,9 @@ nothing extra):
   (every dealt card is drafted by someone, so how early it goes is the signal), kept per
   offer, played per card gained (kept or drawn; per game for unique AI cards, which
   start in hand).
+- **Economy buildings standing**: per game at the end, buildings with a passive `income`,
+  `income_per_tag` or `income_if_tags` (27 of 56 at r19), by the base content even for a
+  variant that overlays it. Token stores and `convert_upkeep` alone don't count.
 - **Build variety**: distinct end-of-game builds (each seat's AI and buildings) and the
   mean Jaccard distance between two games' building sets, over all games and over wins.
 - **Win probability by round** from the playouts; checkpoints that are uncertain

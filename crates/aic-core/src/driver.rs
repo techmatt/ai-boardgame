@@ -5,7 +5,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::action::Action;
-use crate::content::content_hash;
 use crate::rules::Rules;
 use crate::state::{GameState, Outcome, Stats};
 
@@ -74,7 +73,7 @@ pub fn play(
     let record = GameRecord {
         seed,
         config_hash: rules.config_hash.clone(),
-        content_hash: content_hash(),
+        content_hash: rules.content_hash.to_string(),
         engine_version: crate::VERSION.to_string(),
         rules_revision: crate::RULES_REVISION,
         decisions: actions.len() as u32,

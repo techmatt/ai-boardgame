@@ -1,4 +1,6 @@
-"""The endgame screen summary (027, rules r16).
+"""Kept for the docs that cite it (screen-027-endgame/endgame.md); new work: scripts/cards/screen.py.
+
+The endgame screen summary (027, rules r16).
 
     python scripts/cards/screen_027.py DIR [DIR ...]
     python scripts/cards/screen_027.py --gate DIR [DIR ...]

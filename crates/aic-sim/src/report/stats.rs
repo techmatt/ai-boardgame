@@ -5,6 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
+use aic_core::content::{CardDef, Content};
+use aic_core::op::Op;
+
 use crate::agents::AgentSpec;
 use crate::experiment::{CardCounts, Cell, GameResult, Spec};
 
@@ -14,6 +17,8 @@ pub struct CellSummary {
     pub config: String,
     pub config_name: String,
     pub config_hash: String,
+    /// The content this cell played, overlay applied.
+    pub content_hash: String,
     pub variant: String,
     pub difficulty: i64,
     pub agent: String,
@@ -78,6 +83,8 @@ pub struct CellSummary {
     pub buildings_played_per_game: f64,
     pub tier2_played_per_game: f64,
     pub buildings_standing_per_game: f64,
+    /// Of those, the ones that make income (see [`is_economy_building`]).
+    pub economy_buildings_standing_per_game: f64,
     pub wins_2plus_buildings_played: Option<f64>,
     pub wins_2plus_buildings_standing: Option<f64>,
     pub ms_per_game: f64,
@@ -151,10 +158,35 @@ pub(super) fn standing(sig: &str) -> usize {
         .sum()
 }
 
+/// An economy building prints standing income: a passive that pays a resource
+/// every round while it stands, flat, per tag or if-tags. Not `Op::Production`
+/// (an instant: the gain outlives the building, so losing it costs nothing),
+/// not `ConvertUpkeep` (it trades, it adds nothing), not a building that only
+/// stores tokens.
+fn is_economy_building(d: &CardDef) -> bool {
+    d.is_building()
+        && d.passives.iter().any(|o| {
+            matches!(
+                o,
+                Op::Income { .. } | Op::IncomePerTag { .. } | Op::IncomeIfTags { .. }
+            )
+        })
+}
+
+/// Economy buildings standing at the end, over every seat (copies counted),
+/// by the content the game played.
+pub(super) fn economy_standing(sig: &str, content: &Content) -> usize {
+    sig.split('|')
+        .filter_map(|seat| seat.split_once(':'))
+        .flat_map(|(_, b)| b.split('+'))
+        .filter_map(|id| content.card_index(id))
+        .filter(|&i| is_economy_building(&content.cards[i]))
+        .count()
+}
+
 /// One game's plays: [cards, buildings (any tier, AI uniques too), tier-2
 /// cards], from the per-card counts and the content's tier and kind.
-pub fn plays(g: &GameResult) -> [u32; 3] {
-    let content = aic_core::content();
+pub fn plays(g: &GameResult, content: &Content) -> [u32; 3] {
     let mut out = [0u32; 3];
     for (id, n) in &g.cards {
         if n.played == 0 {
@@ -210,14 +242,19 @@ fn sign_test(x: usize, y: usize) -> f64 {
 }
 
 fn paired(games: &[GameResult], a: usize, b: usize) -> Paired {
-    let bs: BTreeMap<u64, &GameResult> = games
-        .iter()
+    paired_on(games, a, b, |_| true)
+}
+
+/// [`paired`] over only the seeds `keep` lets through.
+fn paired_on(games: &[GameResult], a: usize, b: usize, keep: impl Fn(u64) -> bool) -> Paired {
+    let kept = || games.iter().filter(|g| keep(g.seed));
+    let bs: BTreeMap<u64, &GameResult> = kept()
         .filter(|g| g.cell == b)
         .map(|g| (g.seed, g))
         .collect();
     let (mut n, mut both, mut oa, mut ob, mut neither) = (0usize, 0, 0, 0, 0);
     let (mut ra, mut rb) = (0.0, 0.0);
-    for ga in games.iter().filter(|g| g.cell == a) {
+    for ga in kept().filter(|g| g.cell == a) {
         let Some(gb) = bs.get(&ga.seed) else { continue };
         n += 1;
         ra += ga.rounds as f64;
@@ -286,10 +323,12 @@ fn find_cell(cells: &[Cell], config: &str, variant: &str, d: i64, agent: &str) -
 
 /// Each agent's measured strength: its win rate at the highest difficulty
 /// on the base variant (the first; mean over configs). An agent with no
-/// game there yet (a partial report) is left out, not scored 0.
+/// game there yet (a partial report) is left out, not scored 0, and so is a
+/// gate's check stopped well short: its few seeds aren't the others' seeds.
 fn strength(cells: &[Cell], sums: &[CellSummary]) -> Vec<(String, f64)> {
     let hi = cells.iter().map(|c| c.difficulty).max();
     let base = cells.first().map(|c| &c.variant);
+    let most = sums.iter().map(|s| s.games).max().unwrap_or(0);
     agent_order(cells)
         .iter()
         .filter_map(|a| {
@@ -298,6 +337,7 @@ fn strength(cells: &[Cell], sums: &[CellSummary]) -> Vec<(String, f64)> {
                 sums.iter()
                     .filter(|s| Some(s.difficulty) == hi && s.agent == l)
                     .filter(|s| Some(&s.variant) == base && s.games > 0)
+                    .filter(|s| 4 * s.games >= 3 * most)
                     .map(|s| s.win_rate),
             )?;
             Some((l, p))
@@ -383,6 +423,101 @@ pub fn head_to_head(cells: &[Cell], games: &[GameResult]) -> Vec<HeadToHead> {
             greedy: gl.clone(),
             verdict: verdict(&p),
             paired: p,
+        });
+    }
+    out
+}
+
+/// Two agents of one cell group on the same seeds.
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentPair {
+    pub config: String,
+    pub variant: String,
+    pub difficulty: i64,
+    pub a: String,
+    pub b: String,
+    /// `a`'s numbers against `b`'s.
+    pub paired: Paired,
+}
+
+/// The agent `labels[i]` is measured against: `x:...` against `x` if listed;
+/// `x` against the next bare agent in the list (the next ladder rung).
+fn reference(labels: &[String], i: usize) -> Option<&String> {
+    let bare = |l: &&String| !l.contains(':');
+    match labels[i].split_once(':') {
+        Some((x, _)) => labels.iter().find(|l| *l == x),
+        None => labels[i + 1..].iter().find(bare),
+    }
+}
+
+/// Each agent against its [`reference`], per config × variant × difficulty,
+/// on the seeds both have played.
+pub fn agent_pairs(cells: &[Cell], games: &[GameResult]) -> Vec<AgentPair> {
+    let labels: Vec<String> = agent_order(cells).iter().map(|a| a.label()).collect();
+    let mut out = Vec::new();
+    for (i, c) in cells.iter().enumerate() {
+        let a = c.agent.label();
+        let Some(k) = labels.iter().position(|l| *l == a) else {
+            continue;
+        };
+        let Some(b) = reference(&labels, k) else {
+            continue;
+        };
+        let Some(j) = find_cell(cells, &c.config_path, &c.variant, c.difficulty, b) else {
+            continue;
+        };
+        let p = paired(games, i, j);
+        if p.games > 0 {
+            out.push(AgentPair {
+                config: c.config_path.clone(),
+                variant: c.variant.clone(),
+                difficulty: c.difficulty,
+                a,
+                b: b.clone(),
+                paired: p,
+            });
+        }
+    }
+    out
+}
+
+/// A variant against the base with fresh seeds and selection seeds apart:
+/// `a` = the variant, `b` = the base. Never pooled.
+#[derive(Debug, Clone, Serialize)]
+pub struct FreshRow {
+    pub config: String,
+    pub base: String,
+    pub variant: String,
+    pub difficulty: i64,
+    pub agent: String,
+    pub fresh: Paired,
+    pub selection: Paired,
+}
+
+/// Every variant after the base against the base, per config, difficulty and
+/// agent, split by the spec's `selection_seeds`. Empty without that field.
+pub fn fresh_confirmation(spec: &Spec, cells: &[Cell], games: &[GameResult]) -> Vec<FreshRow> {
+    let (Some(sel), Some(base)) = (&spec.selection_seeds, spec.variants.first()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (i, c) in cells
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.variant != base.name)
+    {
+        let l = c.agent.label();
+        let Some(j) = find_cell(cells, &c.config_path, &base.name, c.difficulty, &l) else {
+            continue;
+        };
+        out.push(FreshRow {
+            config: c.config_path.clone(),
+            base: base.name.clone(),
+            variant: c.variant.clone(),
+            difficulty: c.difficulty,
+            agent: l,
+            fresh: paired_on(games, i, j, |s| !sel.contains(s)),
+            selection: paired_on(games, i, j, |s| sel.contains(s)),
         });
     }
     out
@@ -539,13 +674,14 @@ pub fn summarize(cells: &[Cell], games: &[GameResult]) -> Vec<CellSummary> {
             let sigs: Vec<&str> = gs.iter().map(|g| g.build.as_str()).collect();
             let win_sigs: Vec<&str> = won.iter().map(|g| g.build.as_str()).collect();
             let ms: f64 = gs.iter().map(|g| g.ms).sum();
-            let played: Vec<[u32; 3]> = gs.iter().map(|g| plays(g)).collect();
+            let played: Vec<[u32; 3]> = gs.iter().map(|g| plays(g, c.rules.world().content)).collect();
             let per_game = |k: usize| played.iter().map(|p| p[k] as f64).sum::<f64>() / n;
             CellSummary {
                 cell: ci,
                 config: c.config_path.clone(),
                 config_name: c.rules.config.name.clone(),
                 config_hash: c.rules.config_hash.clone(),
+                content_hash: c.rules.content_hash.to_string(),
                 variant: c.variant.clone(),
                 difficulty: c.difficulty,
                 agent: c.agent.label(),
@@ -614,6 +750,11 @@ pub fn summarize(cells: &[Cell], games: &[GameResult]) -> Vec<CellSummary> {
                 buildings_standing_per_game: gs
                     .iter()
                     .map(|g| standing(&g.build) as f64)
+                    .sum::<f64>()
+                    / n,
+                economy_buildings_standing_per_game: gs
+                    .iter()
+                    .map(|g| economy_standing(&g.build, c.rules.world().content) as f64)
                     .sum::<f64>()
                     / n,
                 wins_2plus_buildings_played: mean(
@@ -710,7 +851,8 @@ pub fn groups(cells: &[Cell], sums: &[CellSummary], games: &[GameResult]) -> Vec
             let ordered =
                 |v: &[(String, f64)]| best_per_tier(v).windows(2).all(|w| w[1] >= w[0] - 1e-9);
             // Rows are seeds: only those every agent of the group has
-            // played (all of them, unless the report is partial).
+            // played (all of them, unless the report is partial or a gate
+            // stopped a check: then the earliest stop's seeds).
             let common = idx
                 .iter()
                 .map(|&i| {
@@ -786,6 +928,121 @@ pub fn time_split(games: &[GameResult]) -> Vec<(&'static str, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::experiment::{cells, play_one, SelectionSeeds, Variant};
+
+    /// A grid of `agents` × `variants` on the baseline, and a game template
+    /// (one real random game) to stamp results out of.
+    fn grid(agents: &[&str], variants: &[&str]) -> (Spec, Vec<Cell>, GameResult) {
+        let config = format!("{}/../../configs/baseline.json", env!("CARGO_MANIFEST_DIR"));
+        let spec: Spec = serde_json::from_value(serde_json::json!({
+            "name": "t", "configs": [config], "agents": agents, "games": 8,
+            "variants": variants.iter().map(|v| Variant { name: v.to_string(), set: vec![] })
+                .collect::<Vec<_>>(),
+        }))
+        .unwrap();
+        let cs = cells(&spec).unwrap();
+        let one = cells(&Spec {
+            agents: vec!["random".into()],
+            ..spec.clone()
+        })
+        .unwrap();
+        let template = play_one(&spec, &one, 0, 0);
+        (spec, cs, template)
+    }
+
+    fn game(t: &GameResult, cell: usize, seed: u64, won: bool) -> GameResult {
+        GameResult {
+            cell,
+            seed,
+            won,
+            ..t.clone()
+        }
+    }
+
+    #[test]
+    fn a_check_pairs_with_its_agent_and_a_rung_with_the_next() {
+        let l: Vec<String> = ["greedy", "engine:keep_all=1", "engine", "planner:x=1", "rollout"]
+            .map(String::from)
+            .to_vec();
+        let at = |i| reference(&l, i).map(String::as_str);
+        assert_eq!(at(0), Some("engine"));
+        assert_eq!(at(1), Some("engine"));
+        assert_eq!(at(2), Some("rollout"));
+        assert_eq!(at(3), None, "planner is not listed");
+        assert_eq!(at(4), None, "the last rung");
+    }
+
+    #[test]
+    fn agent_pairs_are_per_variant_and_paired_on_seeds() {
+        let (_, cs, t) = grid(&["random", "greedy"], &["base", "v"]);
+        // Cells: base random, base greedy, v random, v greedy.
+        let games = vec![
+            game(&t, 0, 1, true),
+            game(&t, 1, 1, false),
+            game(&t, 0, 2, true),
+            game(&t, 1, 2, true),
+            // Only one side has played seed 3: no pair.
+            game(&t, 0, 3, true),
+            game(&t, 2, 1, false),
+            game(&t, 3, 1, true),
+        ];
+        let p = agent_pairs(&cs, &games);
+        assert_eq!(p.len(), 2);
+        assert_eq!((p[0].a.as_str(), p[0].b.as_str()), ("random", "greedy"));
+        assert_eq!(p[0].variant, "base");
+        assert_eq!(p[0].paired.games, 2);
+        assert_eq!((p[0].paired.both, p[0].paired.only_a), (1, 1));
+        assert_eq!(p[0].paired.diff, 0.5);
+        assert_eq!(p[1].variant, "v");
+        assert_eq!(p[1].paired.only_b, 1);
+        // One agent: nothing to pair.
+        let (_, one, t) = grid(&["random"], &["base"]);
+        assert!(agent_pairs(&one, &[game(&t, 0, 1, true)]).is_empty());
+    }
+
+    #[test]
+    fn fresh_seeds_are_never_pooled_with_selection() {
+        let (mut spec, cs, t) = grid(&["random"], &["base", "v"]);
+        let mut games = Vec::new();
+        for seed in 0..6 {
+            games.push(game(&t, 0, seed, false));
+            // The variant wins every selection seed and no fresh one.
+            games.push(game(&t, 1, seed, seed < 4));
+        }
+        assert!(fresh_confirmation(&spec, &cs, &games).is_empty());
+        spec.selection_seeds = Some(SelectionSeeds { first: 0, games: 4 });
+        let r = fresh_confirmation(&spec, &cs, &games);
+        assert_eq!(r.len(), 1);
+        assert_eq!((r[0].selection.games, r[0].selection.only_a), (4, 4));
+        assert_eq!((r[0].fresh.games, r[0].fresh.only_a), (2, 0));
+        // No game outside the selection seeds yet.
+        games.retain(|g| g.seed < 4);
+        let r = fresh_confirmation(&spec, &cs, &games);
+        assert_eq!(r[0].fresh.games, 0);
+    }
+
+    #[test]
+    fn selection_seeds_stay_out_of_an_old_header() {
+        let (spec, _, _) = grid(&["random"], &["base"]);
+        let json = serde_json::to_string(&spec).unwrap();
+        assert!(!json.contains("selection_seeds"));
+        let mut with = serde_json::to_value(&spec).unwrap();
+        with["selection_seeds"] = serde_json::json!({"first": "10", "games": 4});
+        let back: Spec = serde_json::from_value(with).unwrap();
+        let s = back.selection_seeds.unwrap();
+        assert!(!s.contains(9) && s.contains(10) && s.contains(13) && !s.contains(14));
+    }
+
+    #[test]
+    fn economy_buildings_print_income() {
+        // Income, income per tag; a slots-only and a token building.
+        let sig = "a:turnkey_factory+citation_engine+modular_expansion|b:telemetry_archive+";
+        assert_eq!(standing(sig), 4);
+        let c = aic_core::content();
+        assert_eq!(economy_standing(sig, c), 2);
+        assert_eq!(economy_standing("a:|b:", c), 0);
+        assert_eq!(economy_standing("a:not_a_card", c), 0);
+    }
 
     #[test]
     fn sign_test_is_exact() {

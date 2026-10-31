@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::action::Action;
 use crate::config::Config;
-use crate::content::content_hash;
 use crate::rules::Rules;
 use crate::state::{GameState, Outcome};
 
@@ -62,7 +61,7 @@ impl SavedGame {
             config: (*rules.config).clone(),
             seed,
             config_hash: rules.config_hash.clone(),
-            content_hash: content_hash(),
+            content_hash: rules.content_hash.to_string(),
             engine_version: crate::VERSION.to_string(),
             rules_revision: crate::RULES_REVISION,
             outcome: last.outcome.clone(),
@@ -157,7 +156,7 @@ impl SavedGame {
             &self.rules_revision_str(),
             &crate::RULES_REVISION.to_string(),
         );
-        differs("content hash", &self.content_hash, &content_hash());
+        differs("content hash", &self.content_hash, rules.content_hash);
         differs("config hash", &self.config_hash, &rules.config_hash);
         differs(
             "final state fingerprint",

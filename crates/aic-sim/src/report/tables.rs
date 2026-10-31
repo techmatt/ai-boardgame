@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 
 use aic_core::content_hash;
 
-use super::stats::{plays, standing};
+use super::stats::{economy_standing, plays, standing};
 use super::Run;
 use crate::experiment::{CardCounts, Cell, GameResult};
 
@@ -17,17 +17,17 @@ fn q(s: &str) -> String {
 
 pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
     let mut s = String::from(
-        "config,variant,difficulty,agent,seed,won,reason,rounds,decisions,options,forced,probed,close,gap_mean,deck_left,supply_left,supply_start,cities_corrupted_end,cities_aligned_end,blockers,level,unity_tips,adversary_ops,adversary_ops_max,setup_ops,gives,pays,withdraws,threats_dealt,threats_countered,corruptions,first_corruption_round,std_actions,war_destroyed,cards_played,buildings_played,tier2_played,buildings_standing,build,winprob,ms,replay_ok\n",
+        "config,variant,difficulty,agent,seed,won,reason,rounds,decisions,options,forced,probed,close,gap_mean,deck_left,supply_left,supply_start,cities_corrupted_end,cities_aligned_end,blockers,level,unity_tips,adversary_ops,adversary_ops_max,setup_ops,gives,pays,withdraws,threats_dealt,threats_countered,corruptions,first_corruption_round,std_actions,war_destroyed,cards_played,buildings_played,tier2_played,buildings_standing,economy_buildings_standing,build,winprob,ms,replay_ok\n",
     );
     for g in games {
         let c = &cells[g.cell];
         let ops: u32 = g.adversary_ops.iter().sum();
         let wp: Vec<String> = g.winprob.iter().map(|p| format!("{p:.3}")).collect();
         let cnt = |k: &str| g.counters.get(k).copied().unwrap_or(0);
-        let pl = plays(g);
+        let pl = plays(g, c.rules.world().content);
         let _ = writeln!(
             s,
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.1},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.1},{}",
             q(&c.config_path),
             q(&c.variant),
             c.difficulty,
@@ -66,6 +66,7 @@ pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
             pl[1],
             pl[2],
             standing(&g.build),
+            economy_standing(&g.build, c.rules.world().content),
             q(&g.build),
             wp.join(";"),
             g.ms,
@@ -76,21 +77,31 @@ pub fn games_csv(cells: &[Cell], games: &[GameResult]) -> String {
 }
 
 pub fn cards_csv(cells: &[Cell], games: &[GameResult]) -> String {
-    let mut per: BTreeMap<(String, i64, String), CardCounts> = BTreeMap::new();
+    type Key = (String, String, String, i64, String);
+    let mut per: BTreeMap<Key, CardCounts> = BTreeMap::new();
     for g in games {
         let c = &cells[g.cell];
         for (card, n) in &g.cards {
-            *per.entry((c.agent.label(), c.difficulty, card.clone()))
-                .or_default() += *n;
+            let key = (
+                c.agent.label(),
+                c.variant.clone(),
+                c.config_path.clone(),
+                c.difficulty,
+                card.clone(),
+            );
+            *per.entry(key).or_default() += *n;
         }
     }
-    let mut s =
-        String::from("agent,difficulty,card,offered,drafted,kept,played,pick_position_sum,drawn\n");
-    for ((a, d, card), n) in per {
+    let mut s = String::from(
+        "agent,variant,config,difficulty,card,offered,drafted,kept,played,pick_position_sum,drawn\n",
+    );
+    for ((a, v, cfg, d, card), n) in per {
         let _ = writeln!(
             s,
-            "{},{d},{card},{},{},{},{},{},{}",
+            "{},{},{},{d},{card},{},{},{},{},{},{}",
             q(&a),
+            q(&v),
+            q(&cfg),
             n.offered,
             n.drafted,
             n.kept,
@@ -139,10 +150,13 @@ pub fn results_json(run: &Run) -> String {
         "groups": run.groups,
         "top_agent": run.top_agent.as_ref().map(|(a, d)| serde_json::json!({"agent": a, "difficulty": d})),
         "head_to_head": run.head_to_head,
+        "agent_pairs": run.agent_pairs,
         "variants": vds,
+        "fresh_confirmation": run.fresh_confirmation,
         "removals": removals,
         "cards": run.cards,
         "records": run.records,
+        "gate": run.gate,
     });
     serde_json::to_string_pretty(&v).expect("results serialize")
 }

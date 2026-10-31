@@ -144,6 +144,16 @@ variant. Abridged:
     (`threats.variant=off`,
     `alignment.variant=off`, `cards.variant=off`): it keeps the module's phases and
     the parameters other modules read, and does nothing. See rules.md §9.
+  - `cards.<id>.cost=4`, `ais.*.presence.4.extra=2` (`<table>.<id>.<path>=<JSON>`, two
+    dots or more): a **content overlay** entry, kept in the config's `content` list so
+    a config still replays a game whole. `Rules::new` applies the list to the embedded
+    files through `content::overlaid`, which runs `Content::parse`'s checks and keeps
+    each distinct overlay for the process's life (`Rules` hold `&'static Content`).
+    `Rules::content_hash` is the overlaid hash; `aic_core::content_hash()` the embedded
+    one. An empty overlay serializes to nothing, so configs without one hash as before.
+    It is an experiment lever: a lever that wins moves into `content/`. Card text follows
+    an overlay; written text (threats, projects, adversary, Alignment) and the web
+    client's `wasm.content()` don't.
 - **`aic-sim show <config>`** prints the resolved config, its hash and every tunable,
   with its range.
 
@@ -366,10 +376,17 @@ a shared-row threat one place on the whole board).
 ### Generated docs
 
 `aic-sim docs` rewrites the blocks between `<!-- generated: NAME -->` markers in
-[rules.md](rules.md) (threats, adversary deck, Alignment cards, projects, tunables) and
-all of [ops.md](ops.md); `python scripts/cards/cards_doc.py` writes [cards.md](cards.md).
-A fast-lane test fails if any is stale, or if rules.md names a `module.param` that doesn't
-exist. Change the source, not the table.
+[rules.md](rules.md) (threats, adversary deck, Alignment cards, projects, tunables; the
+country pieces, the round cap per difficulty, the difficulty levers, the AI boards, presence
+tracks and powers, standard actions, Sway sources, the purge thresholds and the two
+new-player paragraphs) and all of [ops.md](ops.md); `python scripts/cards/cards_doc.py` writes [cards.md](cards.md).
+A fast-lane test fails if any is stale, or if rules.md names a `module.param` or a bare
+`snake_case` tunable that doesn't exist (`NOT_TUNABLES` lists the op names and retired
+parameters it may also print). Change the source, not the table. A block is a pure function of `Rules` or `Content`
+in `crates/aic-sim/src/docs.rs`, named in `run`; its unit tests there check it moves with
+its source. The round cap is read from a game the engine dealt at each difficulty. Elsewhere
+rules.md names a tunable in backticks rather than repeat its value: history rows and
+calibration paragraphs keep the numbers of their day.
 
 ## Map
 

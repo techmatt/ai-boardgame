@@ -1,4 +1,6 @@
-"""Insight-cost and dominance screen summary (022, rules r13).
+"""Kept for the docs that cite it (docs/principles.md, screen-022-insight/insight.md); new work: scripts/cards/screen.py.
+
+Insight-cost and dominance screen summary (022, rules r13).
 
     python scripts/cards/screen_022.py CARDS_DIR [DOMINANCE_DIR]
 

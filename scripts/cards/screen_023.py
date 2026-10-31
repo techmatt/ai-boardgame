@@ -1,4 +1,6 @@
-"""The card-set screen summary (023, rules r14).
+"""Kept for the docs that cite it (docs/principles.md, screen-023-cards/cards.md); new work: scripts/cards/screen.py.
+
+The card-set screen summary (023, rules r14).
 
     python scripts/cards/screen_023.py CARDS_DIR [DOMINANCE_DIR]
 

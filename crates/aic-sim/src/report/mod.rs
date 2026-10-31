@@ -22,8 +22,9 @@ use crate::experiment::{CardCounts, Cell, GameResult, Spec};
 pub use markdown::markdown;
 pub use records::{file_stem, prune_records, save_records, write_whole, SavedRecord};
 pub use stats::{
-    card_table, groups, head_to_head, summarize, time_split, top_agent, variant_diffs, CellSummary,
-    GroupSummary, HeadToHead, VariantDiff,
+    agent_pairs, card_table, fresh_confirmation, groups, head_to_head, summarize, time_split,
+    top_agent, variant_diffs, AgentPair, CellSummary, FreshRow, GroupSummary, HeadToHead,
+    VariantDiff,
 };
 pub use tables::{cards_csv, games_csv, results_json};
 
@@ -38,6 +39,9 @@ pub struct Run<'a> {
     pub cards: &'a BTreeMap<String, BTreeMap<String, CardCounts>>,
     pub head_to_head: &'a [HeadToHead],
     pub variant_diffs: &'a [VariantDiff],
+    pub agent_pairs: &'a [AgentPair],
+    /// Empty unless the spec names `selection_seeds`.
+    pub fresh_confirmation: &'a [FreshRow],
     /// The strongest agent, and the difficulty that says so.
     pub top_agent: Option<(String, i64)>,
     pub records: &'a [SavedRecord],
@@ -49,4 +53,6 @@ pub struct Run<'a> {
     pub planned: usize,
     /// Of `games`, those read back from an earlier run (`--resume`).
     pub resumed: usize,
+    /// The dominance gate, for a spec with one.
+    pub gate: Option<&'a crate::gate::GateState>,
 }

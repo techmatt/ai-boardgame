@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::action::Action;
 use crate::config::{Config, ModuleConfig, ParamValue};
-use crate::content::{content, Content};
+use crate::content::{overlaid, Content};
 use crate::event::Event;
 use crate::hash::fnv1a64;
 use crate::key::{FastMap, Key, Table};
@@ -30,6 +30,8 @@ pub struct Rules {
     /// Every game's state shares it.
     pub config: Arc<Config>,
     pub config_hash: String,
+    /// Of the content these rules play: the embedded files, overlay applied.
+    pub content_hash: &'static str,
     pub map: Map,
     pub round: Vec<PhaseRef>,
     content: &'static Content,
@@ -78,7 +80,7 @@ struct Instance {
 
 impl Rules {
     pub fn new(config: &Config) -> Result<Rules, String> {
-        let content = content();
+        let (content, content_hash) = overlaid(&config.content)?;
         let map = Map::build(content, config.countries)?;
 
         let mut resolved = config.clone();
@@ -227,6 +229,7 @@ impl Rules {
         Ok(Rules {
             config: Arc::new(resolved),
             config_hash,
+            content_hash,
             map,
             round,
             content,

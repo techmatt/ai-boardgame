@@ -1,4 +1,6 @@
-"""Card and resource screen summary (021, rules r12): one row per cell with the
+"""Kept for the docs that cite it (screen-021-cards/cards.md); new work: scripts/cards/screen.py.
+
+Card and resource screen summary (021, rules r12): one row per cell with the
 win rate, rounds and how games ended; then per game the card economy (cards
 kept and played, hand size, insight and credits left unspent, powers used and
 tags sacrificed, building replacements, tokens gained and spent), the same by

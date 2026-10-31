@@ -1,4 +1,5 @@
-"""The rollout-agent screen summary (028, rules r17).
+"""Kept for the docs that cite it (docs/principles.md, screen-028-rollout/rollout.md); new work: screen.py.
+The rollout-agent screen summary (028, rules r17).
 
     python scripts/cards/screen_028.py DIR [DIR ...]
     python scripts/cards/screen_028.py --gate DIR [DIR ...]
@@ -11,25 +12,12 @@ and the presence lost by source over all cells.
 `planner:...` check against `planner` (win % points, ± one standard error).
 """
 import collections
-import math
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 import screens as s  # noqa: E402
-
-
-def hist(rounds):
-    c = collections.Counter(rounds)
-    return ' '.join(f'{r}:{c[r]}' for r in sorted(c)) or '–'
-
-
-def mean(xs):
-    return sum(xs) / len(xs) if xs else 0.0
-
-
-def count(g, k):
-    return g['counters'].get(k, 0)
+from screens import avg as mean, cnt as count, gate, hist, sources  # noqa: E402
 
 
 def table(cells, games):
@@ -50,36 +38,6 @@ def table(cells, games):
               f"| {mean([count(g, 'board.presence_lost') for g in wins]):.1f} / {mean([count(g, 'board.presence_lost') for g in losses]):.1f} "
               f"| {mean([count(g, 'board.cities_freed') for g in gs]):.1f} "
               f"| {mean([count(g, 'board.bases_united') for g in gs]):.1f} |")
-
-
-def sources(games):
-    tot = collections.Counter()
-    for gs in games.values():
-        for g in gs:
-            for k, v in g['counters'].items():
-                if k.startswith('board.presence_lost.') and not k.split('.')[-1].startswith('r'):
-                    tot[k.split('.')[-1]] += v
-    n = sum(tot.values()) or 1
-    print('Presence lost by source: ' + ', '.join(f'{k} {v} ({100 * v / n:.0f}%)' for k, v in tot.most_common()))
-
-
-def gate(cells, games):
-    print('| variant | check | win % | gap to its agent |')
-    print('|---|---|---|---|')
-    by = collections.defaultdict(dict)
-    for cell, gs in games.items():
-        c = cells[cell]
-        by[(c['variant'], c['difficulty'])][c['agent']] = gs
-    for (v, d), agents in sorted(by.items()):
-        for a, gs in sorted(agents.items()):
-            base = agents.get(a.split(':')[0])
-            if not base:
-                continue
-            p = sum(g['won'] for g in base) / len(base)
-            q = sum(g['won'] for g in gs) / len(gs)
-            se = math.sqrt(p * (1 - p) / len(base) + q * (1 - q) / len(gs))
-            flag = '' if p - q > 0 or ':' not in a else ' X'
-            print(f'| {v} d{d} | {a} | {100 * q:.0f} | {100 * (p - q):+.0f} ±{100 * se:.0f}{flag} |')
 
 
 if __name__ == '__main__':

@@ -8,13 +8,13 @@ mod cli;
 mod docs;
 mod experiment;
 mod experiment_run;
+mod gate;
 mod prof;
 mod report;
 mod sweep;
 
 use std::process::exit;
 
-use aic_core::content_hash;
 use cli::{load, parse_args, rules, Options};
 
 /// The search clones game states by the hundred thousand, and the system
@@ -51,7 +51,7 @@ fn show(o: &Options) {
     println!(
         "config hash {}  content hash {}  rules revision {}",
         r.config_hash,
-        content_hash(),
+        r.content_hash,
         aic_core::RULES_REVISION
     );
     println!("{}", r.config.to_json_pretty());
