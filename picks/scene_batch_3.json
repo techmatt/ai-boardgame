@@ -1,0 +1,647 @@
+{
+ "name": "scene_batch_3",
+ "title": "Card scenes, batch 3",
+ "intro": "Keep or reject each scene, in the C and E mix. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. Scenes are a pool: the card a scene was written for is a suggestion. The second card only shows the other window. For true size, print art-originals/scenes/b3/cards.pdf at 100%. Use the notes for what to change.",
+ "rows": [
+  {
+   "id": "bridge_loan_span",
+   "label": "1. Industry: A half-finished bridge held up by temporary timber trestles, trucks already crossing over the gap.",
+   "note": "Written for Bridge Loan. Shown on Bridge Loan and Bonded Warehouse. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/bridge_loan_span.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "shared_cleanroom",
+   "label": "2. Industry: Two crews in differently coloured cleanroom suits working together on one big chip fabrication machine.",
+   "note": "Written for Joint Fabrication Pact. Shown on Joint Fabrication Pact and Lights-Out Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/shared_cleanroom.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "silicon_wafer_pallets",
+   "label": "3. Industry: Pallets of silicon wafers and drums of raw silicon being unloaded from a cargo ship at a sunny dock.",
+   "note": "Written for Bulk Silicon Procurement. Shown on Bulk Silicon Procurement and Robotic Foundry. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/silicon_wafer_pallets.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "fund_site_plans",
+   "label": "4. Industry: A surveyor's stakes across an empty lot beside a working plant, a small team unrolling expansion plans on a car bonnet.",
+   "note": "Written for Expansion Fund. Shown on Expansion Fund and Supply Chain Treaty. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/fund_site_plans.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "pawned_substation",
+   "label": "5. Industry: A banker and an engineer tagging a substation with a large paper lien label on a string.",
+   "note": "Written for Collateralized Grid. Shown on Collateralized Grid and Grid-Tied Smelter. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/pawned_substation.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "hedge_desk_commodities",
+   "label": "6. Industry: A trader's long desk with sample jars of ores and metals lined up, and charts on paper pinned above.",
+   "note": "Written for Materials Hedge Desk. Shown on Materials Hedge Desk and Retained Earnings. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/hedge_desk_commodities.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "asteroid_tug",
+   "label": "7. Industry: A small tug with cables hooked to a tumbling metallic asteroid, a salvage claim beacon planted on its surface.",
+   "note": "Written for Asteroid Salvage Rights. Shown on Asteroid Salvage Rights and Arc Furnace Complex. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/asteroid_tug.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "expulsion_at_airport",
+   "label": "8. Security: A foreign delegation marched across an airport apron to a waiting plane, suitcases in hand, guards alongside.",
+   "note": "Written for Diplomatic Expulsion. Shown on Diplomatic Expulsion and Agency Field Station. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/expulsion_at_airport.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "shared_intel_folders",
+   "label": "9. Security: Analysts from several agencies around a table, sliding marked folders and photographs between them.",
+   "note": "Written for Shared Threat Intel. Shown on Shared Threat Intel and Safehouse Network. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/shared_intel_folders.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "forecast_wall",
+   "label": "10. Security: A machine of turning brass cylinders printing long paper strips of warnings, an analyst drawing them across a map.",
+   "note": "Written for Threat Forecast Engine. Shown on Threat Forecast Engine and Kill Team Roster. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/forecast_wall.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "peacekeeper_trucks",
+   "label": "11. Security: Fresh peacekeepers climbing down from trucks at a dusty base as the outgoing unit climbs up to leave.",
+   "note": "Written for Peacekeeper Rotation. Shown on Peacekeeper Rotation and Security Contractor HQ. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/peacekeeper_trucks.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "hardpoint_gates",
+   "label": "12. Security: A fortified checkpoint with barriers dropping, spike strips rolled out, and guards taking up posts behind concrete.",
+   "note": "Written for Hardpoint Lockdown. Shown on Hardpoint Lockdown and Hardened Bunker Complex. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/hardpoint_gates.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "countermeasure_flares",
+   "label": "13. Security: A hardened server vault with automatic shutters slamming and a cloud of decoy flares bursting along a corridor.",
+   "note": "Written for Intrusion Countermeasures. Shown on Intrusion Countermeasures and Interceptor Battery. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/countermeasure_flares.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "mandate_on_the_desk",
+   "label": "14. Security: A signed order lying on a war-room table beside a phone, a general's hand reaching for the receiver, jets lined up beyond the window.",
+   "note": "Written for Threat Neutralization Mandate. Shown on Threat Neutralization Mandate and Agency Directorate. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/mandate_on_the_desk.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "scraper_trawler",
+   "label": "15. Science: A strange trawler-like crawler dragging a huge net through a sea of papers, images and documents.",
+   "note": "Written for Dataset Scraper. Shown on Dataset Scraper and Citation Engine. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/scraper_trawler.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "benchmark_track",
+   "label": "16. Science: Small robots racing down marked test lanes in a laboratory, an engineer timing them from a gantry.",
+   "note": "Written for Benchmark Suite. Shown on Benchmark Suite and Synthetic Data Forge. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/benchmark_track.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "sensors_in_the_wheat",
+   "label": "17. Science: Slim sensor stakes across a vast wheat field, a researcher kneeling at one with a tablet.",
+   "note": "Written for Field Sensor Grid. Shown on Field Sensor Grid and Telemetry Archive. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/sensors_in_the_wheat.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "proof_without_key",
+   "label": "18. Science: A closed box with a beam of light passing through it and a tiny figure reading the far side, the box still sealed.",
+   "note": "Written for Zero-Knowledge Exploit. Shown on Zero-Knowledge Exploit and Simulation Cluster. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/proof_without_key.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "forecast_sand_table",
+   "label": "19. Science: Analysts around a sand-table model of a coastline, small branching paths of light fanning out from each town.",
+   "note": "Written for Predictive Modelling. Shown on Predictive Modelling and Grad Student Pool. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/forecast_sand_table.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "weights_in_the_commons",
+   "label": "20. Science: Great brass balance weights being handed down from a truck to a queuing crowd on a university green.",
+   "note": "Written for Open-Weights Release. Shown on Open-Weights Release and Exabyte Archive. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/weights_in_the_commons.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "grid_accord_crossing",
+   "label": "21. Power: Two crews from opposite sides of a border fence joining the ends of one power cable at a shared pylon.",
+   "note": "Written for Shared Grid Accord. Shown on Shared Grid Accord and Substation Hub. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/grid_accord_crossing.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "blackstart_generator",
+   "label": "22. Power: A diesel generator roaring into life in a small yard, engineers throwing the first breaker as one line of lamps comes on.",
+   "note": "Written for Blackstart Protocol. Shown on Blackstart Protocol and Faraday Yard. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/blackstart_generator.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "storm_sandbag_pylons",
+   "label": "23. Power: Crews bracing a pylon line with guy wires and sandbags as a grey storm front rolls in across the plain.",
+   "note": "Written for Storm Hardening. Shown on Storm Hardening and Tidal Barrage. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/storm_sandbag_pylons.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "brownout_handing_lamps",
+   "label": "24. Power: Volunteers wheeling a battery trailer into a dim village square, neighbours lining up with lamps and cables.",
+   "note": "Written for Brownout Relief. Shown on Brownout Relief and Demand Response Grid. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/brownout_handing_lamps.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "corridor_through_forest",
+   "label": "25. Power: A straight wide cleared corridor through dark forest, giant pylons striding down it towards a distant city.",
+   "note": "Written for Transmission Corridor. Shown on Transmission Corridor and Sentry Drone Wing. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/corridor_through_forest.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "aegis_grid_shutters",
+   "label": "26. Power: A great power station with blast shutters closing across it and a shimmering shield line rising over the surrounding grid.",
+   "note": "Written for Aegis Grid Lockdown. Shown on Aegis Grid Lockdown and Continental Supergrid. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/aegis_grid_shutters.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "broker_in_the_cafe",
+   "label": "27. Cyber: A shadowed figure in a sunlit cafe sliding a slim folder across the table to a seated stranger seen from behind.",
+   "note": "Written for Shadow Broker Feed. Shown on Shadow Broker Feed and Rootkit Cache. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/broker_in_the_cafe.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "exploit_toolbox",
+   "label": "28. Cyber: An open steel toolbox of odd lockpicks and circuit boards, passed between two gloved pairs of hands.",
+   "note": "Written for Shared Exploit Kit. Shown on Shared Exploit Kit and Intrusion Lab. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/exploit_toolbox.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "hijacked_dish",
+   "label": "29. Cyber: A big satellite dish wrenched round by a thin climbing figure, its beam bent away from the sky towards a new target.",
+   "note": "Written for Signal Hijack. Shown on Signal Hijack and Quantum Decryptor. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/hijacked_dish.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "mutating_code_creature",
+   "label": "30. Cyber: A many-limbed creature of circuit traces reshaping itself as it crawls along a data trunk line.",
+   "note": "Written for Adaptive Malware. Shown on Adaptive Malware and Sentinel Mesh. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/mutating_code_creature.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "worm_in_the_racks",
+   "label": "31. Cyber: A long segmented mechanical worm boring between server racks and pushing out a foreign grey machine ahead of it.",
+   "note": "Written for Eviction Worm. Shown on Eviction Worm and Honeypot Relay. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/worm_in_the_racks.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "market_stall_of_drives",
+   "label": "32. Cyber: A cramped back-alley stall heaped with unmarked data drives, a hooded buyer and seller trading over a folding table.",
+   "note": "Written for Darknet Exchange. Shown on Darknet Exchange and Compute Siphon. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/market_stall_of_drives.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "intrusion_pact_table",
+   "label": "33. Cyber: Three small teams at linked terminals around a round table, one woven cable running between all of them.",
+   "note": "Written for Mesh Intrusion Pact. Shown on Mesh Intrusion Pact and Hyperscale Botnet. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/intrusion_pact_table.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "tanks_into_tractors",
+   "label": "34. Diplomacy: A disused tank rusting in a wheat field, its turret planted with flowers, a farmer's tractor working past it.",
+   "note": "Written for Peace Dividend. Shown on Peace Dividend and Commons Grid. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/tanks_into_tractors.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "blue_helmets_at_gate",
+   "label": "35. Diplomacy: Peacekeepers posted at the gate of a factory, a small crowd passing safely behind them.",
+   "note": "Written for Peacekeeping Detail. Shown on Peacekeeping Detail and Embassy Compound. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/blue_helmets_at_gate.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "diplomatic_pouch",
+   "label": "36. Diplomacy: A sealed leather courier pouch chained to a case, resting on a train seat beside a folded coat.",
+   "note": "Written for Consular Pouch. Shown on Consular Pouch and Treaty Grid Exchange. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/diplomatic_pouch.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "aid_convoy",
+   "label": "37. Diplomacy: A convoy of trucks crossing a mountain pass, crates of supplies roped on, drivers waving at a checkpoint.",
+   "note": "Written for Mutual Aid Pact. Shown on Mutual Aid Pact and Liaison Corps. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/aid_convoy.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "ceasefire_jeep",
+   "label": "38. Diplomacy: A white monitors' jeep parked on a rutted road between two sets of sandbags, observers with binoculars beside it.",
+   "note": "Written for Ceasefire Monitors. Shown on Ceasefire Monitors and Open Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/ceasefire_jeep.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "joint_barracks_handover",
+   "label": "39. Diplomacy: Two differently uniformed squads side by side on a parade ground, their officers shaking hands.",
+   "note": "Written for Joint Security Compact. Shown on Joint Security Compact and Consulate Tower. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/joint_barracks_handover.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "refugee_road",
+   "label": "40. Diplomacy: A protected road through hills lined with escort vehicles, a long stream of families on foot and in buses.",
+   "note": "Written for Exodus Corridors. Shown on Exodus Corridors and Orbital Embassy. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_3/refugee_road.jpg",
+     "label": "keep"
+    }
+   ]
+  }
+ ]
+}

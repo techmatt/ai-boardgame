@@ -241,7 +241,8 @@ browser; `npm ci` first):
   a binding. `scenes.json` at 036 has the three styles of the round 2 test. Round 1 (035): 12 draws at 3 at once, 30–55 s each, about
   2.5 min, 3% of the 5-hour window. Round 2 (036): 39–76 s each, about 3 min for 12, 24 draws in all. Batch 1 (037):
   27 draws, 32–73 s each, about 7 min for 24, 7% of the window. Batch 2 (039): 40 draws at
-  3 at once, 31–82 s each, about 10 min, 10% of the window, none refused. A style
+  3 at once, 31–82 s each, about 10 min, 10% of the window, none refused. Batch 3 (043):
+  40 draws at 3 at once, 30–77 s each, about 11 min, 10% of the window, none refused. A style
   line alone came back as detailed concept art; the `emphasis` line (never a
   photograph or 3D render, and what to do instead) is what pushes a draw towards illustration.
   "Near-future setting" alone gave a historical foundry and village: the preamble now
@@ -255,6 +256,16 @@ browser; `npm ci` first):
   drawn are the row ids in `picks/scene_batch_<n>.json`. Passes the scene to
   `renderCard`'s `artUrl`, which centre-crops it to the window `fit` measured: 53.3×33.2 mm
   for program and event, 53.3×25.3 mm for buildings, so a building shows the middle 76%.
+- **Choosing a batch** (40 scenes, the rule behind batches 1–3). Leave out scenes already
+  drawn and any group whose content awaits a redesign (adversary, Discord, Unity, all
+  drawn already). Judge a scene by the card it was written for. Tier-0 starters first, all
+  drawn by batch 2; then one tier-2 scene per tag, the cheapest; the rest tier 1. Within a
+  tier, cheapest first: cost, then insight, then order in the pool. Split the 40 across the
+  six tags so their drawn totals stay level, ties going to the tag with the most left
+  undrawn. Each scene's first card is its own; the second fills the other art window (one
+  program or event, one building), from the same tag and tier frame where one is free, and
+  no card appears twice in a batch. After batch 3: industry and security 17 drawn, the
+  other tags 16, 60 left (34 tier 1, 26 tier 2).
 
 - **Numbers (2026-10-30, 026):** asking for 69:94 with a same-shape guide returns
   1075×1464, the right shape already, so the crop takes at most a pixel. 44–71 s an image,
