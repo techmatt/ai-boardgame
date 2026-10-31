@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use super::markdown::{p_value, pct, pts};
-use super::stats::{agent_order, mean, CellSummary, HeadToHead, VariantDiff};
+use super::stats::{
+    agent_order, mean, stopped_short, CellSummary, GroupSummary, HeadToHead, VariantDiff,
+};
 use super::Run;
 use crate::experiment::CardCounts;
 
@@ -76,33 +78,20 @@ pub(super) fn findings(run: &Run) -> Vec<String> {
     }
     if ds.len() > 1 {
         // Mean over the configs and variants played at each difficulty.
-        let gap = |d: i64| {
-            mean(
-                run.groups
-                    .iter()
-                    .filter(|g| g.difficulty == d)
-                    .map(|g| g.skill_gap),
-            )
-            .unwrap_or(0.0)
+        let gap = |d: i64, of: fn(&GroupSummary) -> f64| {
+            mean(run.groups.iter().filter(|g| g.difficulty == d).map(of)).unwrap_or(0.0)
         };
-        let gap_r = |d: i64| {
-            mean(
-                run.groups
-                    .iter()
-                    .filter(|g| g.difficulty == d)
-                    .map(|g| g.skill_gap_survival),
-            )
-            .unwrap_or(0.0)
-        };
+        let win = |g: &GroupSummary| g.skill_gap;
+        let survival = |g: &GroupSummary| g.skill_gap_survival;
         // Say when it blends several configs or variants (020: unlabelled).
         let slices = run.groups.iter().filter(|g| g.difficulty == lo).count();
         let over = if slices > 1 { format!(" (mean over {slices} configs/variants)") } else { String::new() };
         f.push(format!(
             "Skill gap from difficulty {lo} to {hi}{over}: {:+.0} → {:+.0} pts win rate, {:+.2} → {:+.2} survival (target: widens with difficulty).",
-            100.0 * gap(lo),
-            100.0 * gap(hi),
-            gap_r(lo),
-            gap_r(hi)
+            100.0 * gap(lo, win),
+            100.0 * gap(hi, win),
+            gap(lo, survival),
+            gap(hi, survival)
         ));
     }
     let tops: Vec<&CellSummary> = sums.iter().filter(|s| strongest(s)).collect();
@@ -139,10 +128,9 @@ pub(super) fn findings(run: &Run) -> Vec<String> {
         .max()
         .unwrap_or(0);
     f.push(format!("Adversary operations: {ops:.1} per round on average across cells, at most {ops_max} in one round (target: low)."));
-    let probed: Vec<&CellSummary> = sums.iter().filter(|s| strongest(s)).collect();
     if run.spec.closeness.every > 0 {
-        let close = mean(probed.iter().map(|s| s.close_share)).unwrap_or(0.0);
-        let forced = mean(probed.iter().map(|s| s.forced_share)).unwrap_or(0.0);
+        let close = mean(tops.iter().map(|s| s.close_share)).unwrap_or(0.0);
+        let forced = mean(tops.iter().map(|s| s.forced_share)).unwrap_or(0.0);
         f.push(format!(
             "Decisions (strongest agent): {} forced, {} of real choices close (best two within {} points).",
             pct(forced),
@@ -262,7 +250,7 @@ fn comparison_findings(run: &Run) -> Vec<String> {
                 if let Some(s) = sums.iter().find(|s| {
                     s.config == *c && s.variant == base && s.difficulty == d && s.agent == l
                 }) {
-                    if 4 * s.games < 3 * most {
+                    if stopped_short(s.games, most) {
                         continue;
                     }
                     // Ties go to the later agent.
@@ -357,62 +345,51 @@ fn comparison_findings(run: &Run) -> Vec<String> {
         }
     }
     // Variants: each against the base for the top agent at each difficulty.
-    let vds = run.variant_diffs;
-    if !vds.is_empty() {
-        let who = run.top_agent.clone().map(|(a, _)| a);
-        for c in &run.spec.configs {
-            for &d in &run.spec.difficulties {
-                let Some(a) = &who else { continue };
-                let parts: Vec<String> = vds
-                    .iter()
-                    .filter(|v| v.config == *c && v.difficulty == d && v.agent == *a)
-                    .map(|v| {
-                        let p = &v.paired;
-                        let s = format!("{} {}", v.variant, pts(p.diff, p.diff_se));
-                        if p.sign_p < 0.05 {
-                            format!("**{s}**")
-                        } else {
-                            s
-                        }
+    if let Some((a, _)) = &run.top_agent {
+        f.extend(per_slice(run, a, |v| {
+            let p = &v.paired;
+            Some(format!("{} {}", v.variant, pts(p.diff, p.diff_se)))
+        }, |d, at, parts| {
+            format!("Variants against the base ({base}) at difficulty {d}{at}, {a}, win rate difference in pts (bold: sign test p < 0.05): {parts}.")
+        }));
+        f.extend(per_slice(run, a, |v| {
+            let p = &v.paired;
+            (!v.off.is_empty()).then(|| format!("{} {}", v.off.join(" + "), pts(-p.diff, p.diff_se)))
+        }, |d, at, parts| {
+            format!("What a module is worth (base win rate minus with it off) at difficulty {d}{at}, {a}: {parts} pts.")
+        }));
+    }
+    f
+}
+
+/// One line per config and difficulty where `part` gives agent `a` something:
+/// each variant diff's `part` (bold when the sign test clears p < 0.05), joined
+/// and put in a sentence by `line`, given the difficulty and where it was played.
+fn per_slice(
+    run: &Run,
+    a: &str,
+    part: impl Fn(&VariantDiff) -> Option<String>,
+    line: impl Fn(i64, &str, &str) -> String,
+) -> Vec<String> {
+    let mut f = Vec::new();
+    for c in &run.spec.configs {
+        for &d in &run.spec.difficulties {
+            let parts: Vec<String> = run
+                .variant_diffs
+                .iter()
+                .filter(|v| v.config == *c && v.difficulty == d && v.agent == a)
+                .filter_map(|v| {
+                    let s = part(v)?;
+                    Some(if v.paired.sign_p < 0.05 {
+                        format!("**{s}**")
+                    } else {
+                        s
                     })
-                    .collect();
-                if parts.is_empty() {
-                    continue;
-                }
-                f.push(format!(
-                    "Variants against the base ({base}) at difficulty {d}{}, {a}, win rate difference in pts (bold: sign test p < 0.05): {}.",
-                    if multi_c { format!(" ({c})") } else { String::new() },
-                    parts.join("; ")
-                ));
-            }
-        }
-        let offs: Vec<&VariantDiff> = vds.iter().filter(|v| !v.off.is_empty()).collect();
-        if !offs.is_empty() {
-            for c in &run.spec.configs {
-                for &d in &run.spec.difficulties {
-                    let Some(a) = &who else { continue };
-                    let parts: Vec<String> = offs
-                        .iter()
-                        .filter(|v| v.config == *c && v.difficulty == d && v.agent == *a)
-                        .map(|v| {
-                            let p = &v.paired;
-                            let s = format!("{} {}", v.off.join(" + "), pts(-p.diff, p.diff_se));
-                            if p.sign_p < 0.05 {
-                                format!("**{s}**")
-                            } else {
-                                s
-                            }
-                        })
-                        .collect();
-                    if parts.is_empty() {
-                        continue;
-                    }
-                    f.push(format!(
-                        "What a module is worth (base win rate minus with it off) at difficulty {d}{}, {a}: {} pts.",
-                        if multi_c { format!(" ({c})") } else { String::new() },
-                        parts.join("; ")
-                    ));
-                }
+                })
+                .collect();
+            if !parts.is_empty() {
+                let at = if run.spec.configs.len() > 1 { format!(" ({c})") } else { String::new() };
+                f.push(line(d, &at, &parts.join("; ")));
             }
         }
     }

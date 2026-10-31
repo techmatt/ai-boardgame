@@ -216,6 +216,19 @@ fn off_switches_and_degenerate_values() {
     assert!(e.contains("it has: board"), "{e}");
 }
 
+#[test]
+fn stage_cards_are_checked_at_what_the_difficulty_deals() {
+    let printed = baseline();
+    let rules = Rules::new(&printed).unwrap();
+    let have = rules.world().content.adversary.iter().filter(|c| c.stage == 3).count() as i64;
+    let ok = baseline_with(&[&format!("adversary.stage_cards=4,5,{have}")]);
+    assert!(Rules::new(&ok).is_ok(), "difficulty 0 adds no stage-III card");
+    let over = baseline_with(&[&format!("adversary.stage_cards=4,5,{have}"), "adversary.difficulty=2"]);
+    assert!(Rules::new(&over).is_err(), "difficulty 2 adds one");
+    let empty = baseline_with(&["adversary.stage_cards=1,1,0", "adversary.stage1_removed=1", "adversary.stage2_removed=1", "adversary.stage3_added=0", "adversary.difficulty=3"]);
+    assert!(Rules::new(&empty).is_err(), "nothing left to deal");
+}
+
 
 /// 022 (D14): a parameter value that is not an integer or a list of them is
 /// reported with its key and the value, not serde's untagged-enum message.

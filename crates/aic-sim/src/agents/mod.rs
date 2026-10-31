@@ -2,9 +2,9 @@
 //! with hands and drafts open (as at a table where the team talks it
 //! through), and makes the "players choose" decisions too. Agents play
 //! through the public API only (`Rules::legal_actions_into`, `apply_mut`,
-//! reading the state) and see only what the printed game shows: before any
-//! search they hide the decks' order and the dice behind a guess of their
-//! own ([`determinize`]).
+//! reading the state) and, but for the planner, see only what the printed
+//! game shows: before any search they hide the decks' order and the dice
+//! behind a guess of their own ([`determinize`]).
 //!
 //! Each agent has its own RNG, seeded from the game seed on a stream no
 //! engine purpose uses, so a game still replays from seed + actions and
@@ -117,7 +117,7 @@ pub struct AgentSpec {
 /// A budget parameter: name, default, what it controls.
 pub type Param = (&'static str, f64, &'static str);
 
-/// A tier's own parameters, then the ones `greedy` and `engine` share (022):
+/// A tier's own parameters, then the ones `greedy`, `engine` and `planner` share (022):
 /// keeping by plan, and the dominance checks' forced behaviours.
 macro_rules! with_policy_params {
     ($($own:expr),* $(,)?) => {
@@ -366,8 +366,9 @@ impl AgentSpec {
 
     /// A shallow agent: one action at a time on one guess (random, greedy
     /// and engine at their defaults), not a beam, rollouts, more guesses or
-    /// a deeper look-ahead. The scoping runs' agents (`--quick`): deep
-    /// search waits until the rules are close to final.
+    /// a deeper look-ahead; and the planner, whatever its budget. The scoping
+    /// runs' agents (`--quick`): deep search waits until the rules are close
+    /// to final.
     pub fn shallow(&self) -> bool {
         match self.kind.as_str() {
             "random" => true,

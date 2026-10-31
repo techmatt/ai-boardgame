@@ -75,7 +75,7 @@ The free functions `new_game(&config, seed)`, `legal_actions(&state)` and
   a panic is an `unreachable` trap).
 
 `driver::play(&rules, seed, &mut agent, max_actions)` plays a whole game with an
-`Agent` (one team agent for every seat) and returns `(final GameState, GameRecord)`.
+`Agent` (one team agent for every seat) and returns `(final GameState, PlayedGame)`.
 `driver::replay` rebuilds a game from its seed and actions.
 
 ## Config
@@ -128,7 +128,7 @@ variant. Abridged:
   - if `round` is empty, it defaults to every module's phases in module order.
 - **Config hash**: `Rules::config_hash` is a 64-bit FNV-1a hash of the *resolved*
   config's JSON (round filled in, lists normalized, `name` excluded). Every
-  `GameRecord` and every sim result also carries the content hash, the engine version
+  `PlayedGame` and every sim result also carries the content hash, the engine version
   and `RULES_REVISION`, so a content or rules change is never mistaken for the same
   experiment. Lists are hashed as written: `[1,2,3]` and `[1,2,3,3]` play the same
   schedule but hash differently.
@@ -169,13 +169,14 @@ way of doing it. The difference matters for tuning:
 | Another way of doing the mechanic | **variant**: code, selected by config |
 | A new mechanic | **module**: code, added to the config |
 | A card, threat, adversary card, AI board or country piece made of existing primitives | **content**: data only (`content/`) |
-| A new effect primitive or selector | code: an [`Op`] variant in `op.rs` with its `slots`, and its arm in `modules/effects.rs` (a standing or twist op: the rule that reads it) |
+| A new effect primitive or selector | code: an [`Op`] variant in `op.rs` with its `slots`, and its arm in `effects::run` (`modules/effects/mod.rs`, a long body in a topic file there; a standing or twist op: the rule that reads it) |
 | A new kind of player action | code (`Action`); a structural change |
 
 The modules are `board` (014: pieces, production, war, ambassadors, standard actions),
 `adversary` (014: deck, build, spread, corrupt), `threats`, `alignment` (013), `economy`,
-`ai` and `cards` (`crates/aic-core/src/modules/`); `common.rs` (board queries, token
-names, reach) and `effects.rs` (what every instant [`Op`] does) are shared code;
+`ai` and `cards` (`crates/aic-core/src/modules/`; `board`, `cards` and `effects` are
+directories, a `mod.rs` and one file a topic); `common.rs` (board queries, token
+names, reach) and `effects/` (what every instant [`Op`] does) are shared code;
 `plan.rs` holds read-only forecasts of rules steps for agents and clients
 (`plan::next_build`, the adversary's next build off the face-up card). Rules
 areas lean on each other, so modules call each other's public functions (a card's
@@ -206,9 +207,9 @@ places or removes adversary ambassadors goes through `adversary::place`, `remove
 `remove_piece`, `build_all`, `spread`, `corrupt_city` and `corrupt_station`, so the supply,
 cancellation and node-making hold everywhere; `build_all` places what
 `plan::build_plan` reads. Buildings and
-presence are destroyed through `board::destroy_building` (except that corruption, sacrifice, Eviction and war's factory-hex hit call `board::lose_presence`, unabsorbed), which applies Shelter
+presence are destroyed through `board::destroy_piece` (except that corruption, sacrifice, Eviction and war's factory-hex hit call `board::lose_presence`, unabsorbed), which applies Shelter
 Order, a base's troop (adversary strikes), hardening, a player ambassador's defense and
-Civic Shelter, and sways the Discord. Presence lives in the board module
+Aegis Dome Array (`Op::CivicShelter`), and sways the Discord. Presence lives in the board module
 (`board::place_presence`, `board::track_taken`); AI boards read their track through
 it.
 
@@ -347,7 +348,8 @@ Content is data in `content/`, composed from code primitives:
   Cards are one-shot; there is no `ongoing` field.
 - **Country pieces** (`map.json`, `countries`): cities, the order cities start
   corrupted in (`corrupted`), ocean, setup buildings (research stations, factories),
-  the starting presence spot (`presence`), and the corp's megaproject card.
+  the starting presence spot (`presence`), the printed industrial zones (`industry`), and the
+  corp's megaproject card.
 
 Ids are unique across all content, and actions refer to content by id, so reordering a
 file does not break action logs. Tags, resources and token types are Rust enums
@@ -380,8 +382,11 @@ a shared-row threat one place on the whole board).
 `aic-sim docs` rewrites the blocks between `<!-- generated: NAME -->` markers in
 [rules.md](rules.md) (threats, adversary deck, Alignment cards, projects, tunables; the
 country pieces, the round cap per difficulty, the difficulty levers, the AI boards, presence
-tracks and powers, standard actions, Sway sources, the purge thresholds and the two
-new-player paragraphs) and all of [ops.md](ops.md); `python scripts/cards/cards_doc.py` writes [cards.md](cards.md).
+tracks and powers, standard actions, Sway sources, the purge thresholds, the two
+new-player paragraphs and the game's end), all of [ops.md](ops.md) and [harms.md](harms.md),
+and `web/card/faces.json`; `python scripts/cards/cards_doc.py`, which reads the faces, writes
+[cards.md](cards.md). `aic-sim docs` also fails on a broken harm distribution check
+(`harm_failures`).
 A fast-lane test fails if any is stale, or if rules.md names a `module.param` or a bare
 `snake_case` tunable that doesn't exist (`NOT_TUNABLES` lists the op names and retired
 parameters it may also print). Change the source, not the table. A block is a pure function of `Rules` or `Content`
@@ -415,11 +420,13 @@ web viewer draws only these:
 
 | Part | Holds | Filled by the engine |
 |---|---|---|
-| `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `number`, `kind` (`city`, `base`, `open`, `ocean`), `facing` (a base's rival country), `tokens` (`{kind, count}`) | every token stack on every hex |
+| `hexes[i]` | `hex` `[q, r]`, `country`, `piece_pos`, `neighbours`, `number`, `kind` (`city`, `base`, `open`, `ocean`), `industrial` (a printed industrial zone), `facing` (a base's rival country), `tokens` (`{kind, count}`) | every token stack on every hex |
 | `countries[c]` | `name` (the printed piece's, `content/map.json`), `seat`, `colour`, `hexes`, `values`, `cards` (card groups, such as its threat) | `name`; `tokens.<kind>` totals over the country |
 | `seats[s]` | `passed`, `values`, `cards` (card groups), `board` (a player board, or `null`) | `resource.<name>` per resource; exhausted cards no module shows, as group `engine.exhausted` |
 | `globals` | `values` of the whole game | every `vars` track no module declares bookkeeping, by its key |
 | `piles` | `{key, label, owner, count, visible}` | none: modules add them |
+| `standard` | `{act, energy, credits, chips, doc}`: the standard actions with their costs | none: modules add them |
+| `arrows` | `{kind, from, to, count, rounds, doc}`: where pieces are heading | none: modules add them |
 | `choice` | `{seat, prompt}` of the open choice | when `pending` is set |
 | `round`, `phase`, `round_order`, `outcome` | where the game is | always |
 
@@ -450,6 +457,8 @@ derive:
 - `out.country_cards(country, key, label, cards)`: a card group on a country.
 - `out.pile(key, label, owner, count, visible)`: an ordered pile.
 - `out.board(seat, key, board)`: the seat's player board (above).
+- `out.standard(act, energy, credits, chips, doc)`: a standard action and its cost.
+- `out.arrow(kind, from, to, count, rounds, doc)`: a piece's heading, an arrow between hexes.
 - `out.bookkeeping(&[keys])`: declares `vars` that are the module's bookkeeping, not
   tracks of the whole game: per-seat, per-country or per-card markers. A key ending in
   `.` is a prefix (`"threats.paid."`), any other an exact key. Their generic `globals`
@@ -463,7 +472,7 @@ In the baseline:
 - `adversary` adds its deck as piles (`deck` with any peeked cards, `next` face up,
   `current`, `discard`) and the ambassador supply, stage and difficulty. Its
   bookkeeping: `adversary.peek`, `adversary.first_corruption`,
-  `adversary.removed_troop.<seat>`.
+  `adversary.removed_troop.<seat>`, `adversary.cut.*`.
 - `threats` adds each country's threat (`threats.on`, status = counter progress such as
   `1/2 credits`; the text adds who paid what, any jam and whether it waits), or the shared
   row pile, and the tier dealt this round. Bookkeeping: `threats.paid.*`, `threats.jam.*`,
@@ -477,7 +486,7 @@ In the baseline:
   `n/cost compute`), `adversary.projects_ongoing`, `adversary.projects_done` and
   `adversary.project_deck` (count only). Bookkeeping: `adversary.project.*` (each
   visible project's compute), `adversary.first_project`.
-- `ai` adds each seat's board (`ai.board`: name, text, innate rule, the presence track
+- `ai` adds each seat's board (`ai.board`: name, text, innate rule, the two presence tracks
   with every step, keep-upgrade (`tier2` key) and resource marks, slots, the AI's unique
   cards and where they are, and its powers with their cost and status, `ready` or why
   not), and credit production. Bookkeeping: `ai.power_used.*`.
@@ -553,10 +562,10 @@ differ.
     resolved and antimatter actions, insight given and credit income.
 - **Outcome**: `won`, the `round` the game ended, a stable `reason` code for aggregation,
   and a human `detail`.
-- **Decisions** (`driver::play` → `GameRecord`): each applied action is one decision.
+- **Decisions** (`driver::play` → `PlayedGame`): each applied action is one decision.
   `options_total`, `forced` (exactly one legal action) and `max_options` count the legal
   actions offered across all seats, passes included.
-- **Identity**: every `GameRecord` carries `config_hash`, `content_hash`, the engine
+- **Identity**: every `PlayedGame` carries `config_hash`, `content_hash`, the engine
   version, `rules_revision` and the final state's fingerprint.
 
 The sim aggregates all of these. It averages every counter per game, without needing to
@@ -568,7 +577,7 @@ Left out on purpose until something needs them:
 
 - **`Event` is a closed enum**, and there are no interception hooks between modules
   (such as "before a building is destroyed"); modules call each other's functions
-  instead (Civic Shelter is checked inside `board::destroy_building`).
+  instead (Aegis Dome Array, `Op::CivicShelter`, is checked inside `board::destroy_piece`).
 - **Timed-out games** (the action cap) still count toward the round statistics.
   They're visible as `ended: timeout`.
 - **Old saved states**: `GameState` has no schema version (only `Stats`, `piles` and

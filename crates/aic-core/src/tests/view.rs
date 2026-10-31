@@ -77,8 +77,8 @@ fn the_view_shows_the_board_the_fronts_the_projects_and_the_next_card() {
                 .unwrap_or_else(|| panic!("{k} missing"))
         };
         let p = value("board.project");
-        assert_eq!(p.max, Some(piece(c).project.cubes));
-        assert!(p.label.contains(&piece(c).project.name));
+        assert_eq!(p.max, Some(piece(c).megaproject.cubes));
+        assert!(p.label.contains(&piece(c).megaproject.name));
         assert_eq!(
             value("board.project.adversary").value,
             g.var(&board::project_key(c, None))

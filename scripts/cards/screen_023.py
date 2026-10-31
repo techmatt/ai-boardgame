@@ -110,7 +110,7 @@ def card_table(d, cards):
           'drafted, so it can pass 100%); play % = played / kept.\n')
     print('| card | tier | tags | drafted | kept | keep % | played | play % |')
     print('|---|---|---|---|---|---|---|---|')
-    key = lambda r: (s22_tag(r[1]), r[1]['tier'], r[1]['name'])
+    key = lambda r: (tag_order(r[1]), r[1]['tier'], r[1]['name'])
     for cid, c, off, dr, kept, pl in sorted(rows, key=key):
         print(f"| {c['name']} | {c['tier']} | {', '.join(c['tags'])} | {dr} | {kept} | "
               f"{100 * kept / dr if dr else 0:.0f} | {pl} | {100 * pl / kept if kept else 0:.0f} |")
@@ -126,7 +126,7 @@ def card_table(d, cards):
           f' times kept): {", ".join(sorted(must)) or "none"}.')
 
 
-def s22_tag(c):
+def tag_order(c):
     return TAGS.index(c['tags'][0]) if c['tags'] else 9
 
 

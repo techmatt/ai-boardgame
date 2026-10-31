@@ -16,28 +16,7 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| die(&format!("{path}: {e}")));
     let mut spec: experiment::Spec =
         serde_json::from_str(&text).unwrap_or_else(|e| die(&format!("{path}: {e}")));
-    if o.given.contains("--games") {
-        spec.games = o.games;
-    }
-    if o.given.contains("--seed") {
-        spec.first_seed = o.seed;
-    }
-    if o.given.contains("--max-actions") {
-        spec.max_actions = o.max_actions;
-    }
-    if let Some(n) = o.winprob {
-        spec.winprob.games = n;
-    }
-    if let Some(n) = o.closeness {
-        spec.closeness.every = n;
-    }
-    if let Some(keep) = &o.variants {
-        experiment::keep_variants(&mut spec, keep)
-            .unwrap_or_else(|e| die(&format!("--variants: {e}")));
-    }
-    if o.quick {
-        quick(&mut spec, o);
-    }
+    apply_flags(&mut spec, o);
     let cells = experiment::cells(&spec).unwrap_or_else(|e| die(&format!("{path}: {e}")));
     let dir = o
         .out
@@ -138,6 +117,43 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
         games.len(),
         records
     );
+    print_cells(&sums);
+    let bad = games.iter().filter(|g| !g.replay_ok).count();
+    if bad > 0 {
+        eprintln!("REPLAY MISMATCH in {bad} game(s)");
+        return 1;
+    }
+    0
+}
+
+/// What the command line overrides in the spec.
+fn apply_flags(spec: &mut experiment::Spec, o: &Options) {
+    if o.given.contains("--games") {
+        spec.games = o.games;
+    }
+    if o.given.contains("--seed") {
+        spec.first_seed = o.seed;
+    }
+    if o.given.contains("--max-actions") {
+        spec.max_actions = o.max_actions;
+    }
+    if let Some(n) = o.winprob {
+        spec.winprob.games = n;
+    }
+    if let Some(n) = o.closeness {
+        spec.closeness.every = n;
+    }
+    if let Some(keep) = &o.variants {
+        experiment::keep_variants(spec, keep)
+            .unwrap_or_else(|e| die(&format!("--variants: {e}")));
+    }
+    if o.quick {
+        quick(spec, o);
+    }
+}
+
+/// The console table: one line per cell.
+fn print_cells(sums: &[report::CellSummary]) {
     // Name the config and variant when there are several (020: a spec with two
     // variants printed every cell twice, indistinguishable).
     let configs: std::collections::BTreeSet<&str> = sums.iter().map(|s| s.config_name.as_str()).collect();
@@ -153,7 +169,7 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
         c
     };
     let width = sums.iter().map(|s| cell(s).len()).max().unwrap_or(0);
-    for s in &sums {
+    for s in sums {
         let cell = format!("{:width$}", cell(s));
         println!(
             "  {cell}d{} {:24} win {:5.1}%  rounds {:5.2}  agent {:8.1} ms/game",
@@ -164,12 +180,6 @@ pub fn run_experiment(path: &str, o: &Options) -> i32 {
             s.agent_ms_per_game
         );
     }
-    let bad = games.iter().filter(|g| !g.replay_ok).count();
-    if bad > 0 {
-        eprintln!("REPLAY MISMATCH in {bad} game(s)");
-        return 1;
-    }
-    0
 }
 
 /// `--quick`: the scoping run. Shallow agents only (deep search is kept for

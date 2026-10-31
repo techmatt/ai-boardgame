@@ -192,7 +192,7 @@ export async function load(): Promise<void> {
 
 const snapshot = (json: string): Snapshot => ({ json, state: JSON.parse(json) });
 
-function step(o: wasm.Outcome): Step {
+function step(o: wasm.Applied): Step {
   try {
     return { snap: snapshot(o.state), events: JSON.parse(o.events) };
   } finally {

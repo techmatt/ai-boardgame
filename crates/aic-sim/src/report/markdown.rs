@@ -1,12 +1,13 @@
 //! `report.md`: the run, the findings, then the tables, the timing and the
 //! saved records.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use aic_core::content_hash;
 
 use super::findings::findings;
+use super::records::CATEGORIES;
 use super::stats::{agent_order, time_split, CellSummary, Paired};
 use super::{Run, SavedRecord};
 
@@ -32,27 +33,106 @@ fn opt(x: Option<f64>, digits: usize) -> String {
     x.map_or("–".into(), |v| format!("{v:.digits$}"))
 }
 
-/// Short cell label for tables.
-fn short(c: &CellSummary, multi_config: bool, multi_variant: bool) -> String {
-    let mut s = String::new();
-    if multi_config {
-        s.push_str(&c.config_name);
-        s.push(' ');
+/// One report being written: its run, and whether cells need their config
+/// or variant named.
+struct Md<'a> {
+    run: &'a Run<'a>,
+    multi_c: bool,
+    multi_v: bool,
+}
+
+impl Md<'_> {
+    /// `c ` with several configs.
+    fn cfg(&self, c: &str) -> String {
+        if self.multi_c {
+            format!("{c} ")
+        } else {
+            String::new()
+        }
     }
-    if multi_variant {
-        s.push_str(&c.variant);
-        s.push(' ');
+
+    /// `config variant `, each only if there are several.
+    fn prefix(&self, config: &str, variant: &str) -> String {
+        let v = if self.multi_v {
+            format!("{variant} ")
+        } else {
+            String::new()
+        };
+        format!("{}{v}", self.cfg(config))
     }
-    format!("{s}d{} {}", c.difficulty, c.agent)
+
+    /// Short cell label for tables.
+    fn short(&self, c: &CellSummary) -> String {
+        let mut s = String::new();
+        if self.multi_c {
+            s.push_str(&c.config_name);
+            s.push(' ');
+        }
+        if self.multi_v {
+            s.push_str(&c.variant);
+            s.push(' ');
+        }
+        format!("{s}d{} {}", c.difficulty, c.agent)
+    }
+}
+
+/// A pair's seeds: `both / only a / only b / neither`.
+fn paired_cells(p: &Paired) -> String {
+    format!("{} / {} / {} / {}", p.both, p.only_a, p.only_b, p.neither)
+}
+
+/// `wins with 2+ buildings played (standing)`.
+fn wins_2plus(s: &CellSummary) -> String {
+    match (s.wins_2plus_buildings_played, s.wins_2plus_buildings_standing) {
+        (Some(a), Some(b)) => format!("{} ({})", pct(a), pct(b)),
+        _ => "–".into(),
+    }
+}
+
+/// A cell's strategy-health numbers, joined by `sep` with `last` before the wins.
+fn health_row(s: &CellSummary, sep: &str, last: &str) -> String {
+    format!(
+        "{:.2}{sep}{:.2}{sep}{:.1}{sep}{:.2}{last}{}",
+        s.buildings_played_per_game,
+        s.tier2_played_per_game,
+        s.cards_played_per_game,
+        s.economy_buildings_standing_per_game,
+        wins_2plus(s)
+    )
 }
 
 pub fn markdown(run: &Run) -> String {
-    let spec = run.spec;
-    let sums = run.sums;
-    let multi_c = spec.configs.len() > 1;
-    let multi_v = spec.variants.len() > 1;
+    let md = Md {
+        run,
+        multi_c: run.spec.configs.len() > 1,
+        multi_v: run.spec.variants.len() > 1,
+    };
     let mut m = String::new();
     let w = &mut m;
+    header(&md, w);
+    measures(&md, w);
+    findings_and_gate(&md, w);
+    win_table(&md, w);
+    head_to_head(&md, w);
+    agent_pairs(&md, w);
+    variant_diffs(&md, w);
+    fresh_confirmation(&md, w);
+    removals(&md, w);
+    game_length(&md, w);
+    decisions(&md, w);
+    win_probability(&md, w);
+    luck(&md, w);
+    build_variety(&md, w);
+    strategy_health(&md, w);
+    card_rates(&md, w);
+    timing(&md, w);
+    saved_records(&md, w);
+    m
+}
+
+fn header(md: &Md, w: &mut String) {
+    let run = md.run;
+    let spec = md.run.spec;
     let _ = writeln!(w, "# Cycle report: {}\n", spec.name);
     if run.games.len() < run.planned {
         let _ = writeln!(
@@ -87,6 +167,11 @@ pub fn markdown(run: &Run) -> String {
             run.resumed
         );
     }
+}
+
+fn measures(md: &Md, w: &mut String) {
+    let spec = md.run.spec;
+    let sums = md.run.sums;
     let _ = writeln!(w, "- Configs: {}", spec.configs.join(", "));
     let vs: Vec<String> = spec
         .variants
@@ -100,12 +185,13 @@ pub fn markdown(run: &Run) -> String {
         })
         .collect();
     let _ = writeln!(w, "- Variants: {}", vs.join("; "));
-    let mut overlays: Vec<String> = sums
-        .iter()
-        .filter(|s| s.content_hash != content_hash())
-        .map(|s| format!("{} {}", s.variant, s.content_hash))
-        .collect();
-    overlays.dedup();
+    let mut overlays: Vec<String> = Vec::new();
+    for s in sums.iter().filter(|s| s.content_hash != content_hash()) {
+        let o = format!("{} {}", s.variant, s.content_hash);
+        if !overlays.contains(&o) {
+            overlays.push(o);
+        }
+    }
     if !overlays.is_empty() {
         let _ = writeln!(w, "- Overlaid content: {}", overlays.join("; "));
     }
@@ -152,7 +238,10 @@ pub fn markdown(run: &Run) -> String {
             format!("**{bad} game(s) failed to replay**")
         }
     );
+}
 
+fn findings_and_gate(md: &Md, w: &mut String) {
+    let run = md.run;
     // Findings first: what a reader needs before the tables.
     let _ = writeln!(w, "## Findings\n");
     for f in findings(run) {
@@ -162,22 +251,17 @@ pub fn markdown(run: &Run) -> String {
     if let Some(g) = run.gate {
         let _ = write!(w, "{}", g.markdown());
     }
+}
 
+fn win_table(md: &Md, w: &mut String) {
+    let run = md.run;
+    let sums = md.run.sums;
     let _ = writeln!(w, "\n## Win rate by skill tier × difficulty\n");
     let _ = writeln!(w, "Win % ± standard error, then mean survival (rounds reached; a win counts its rounds plus the adversary cards left plus 2). Skill gap: the top ladder tier's win rate minus the bottom tier's, each tier by its best agent (survival in brackets); the top tier is not always the strongest agent.\n");
     for g in run.groups {
         let mut head = format!(
-            "| {}{}difficulty {} |",
-            if multi_c {
-                format!("{} ", g.config)
-            } else {
-                String::new()
-            },
-            if multi_v {
-                format!("{} ", g.variant)
-            } else {
-                String::new()
-            },
+            "| {}difficulty {} |",
+            md.prefix(&g.config, &g.variant),
             g.difficulty
         );
         let mut sep = String::from("|---|");
@@ -209,21 +293,10 @@ pub fn markdown(run: &Run) -> String {
             g.skill_gap_survival
         );
     }
+}
 
-    let cfg = |c: &str| {
-        if multi_c {
-            format!("{c} ")
-        } else {
-            String::new()
-        }
-    };
-    let var = |v: &str| {
-        if multi_v {
-            format!("{v} ")
-        } else {
-            String::new()
-        }
-    };
+fn head_to_head(md: &Md, w: &mut String) {
+    let run = md.run;
     let h2h = run.head_to_head;
     if let Some(first) = h2h.first() {
         let _ = writeln!(w, "## Head to head against greedy\n");
@@ -234,18 +307,14 @@ pub fn markdown(run: &Run) -> String {
             let p = &h.paired;
             let _ = writeln!(
                 w,
-                "| {}{}d{} {} | {} | {:.1} | {:.1} | {} / {} / {} / {} | {} | {} | {} |",
-                cfg(&h.config),
-                var(&h.variant),
+                "| {}d{} {} | {} | {:.1} | {:.1} | {} | {} | {} | {} |",
+                md.prefix(&h.config, &h.variant),
                 h.difficulty,
                 h.agent,
                 p.games,
                 100.0 * p.a_win_rate,
                 100.0 * p.b_win_rate,
-                p.both,
-                p.only_a,
-                p.only_b,
-                p.neither,
+                paired_cells(p),
                 pts(p.diff, p.diff_se),
                 p_value(p.sign_p),
                 h.verdict
@@ -253,6 +322,10 @@ pub fn markdown(run: &Run) -> String {
         }
         let _ = writeln!(w);
     }
+}
+
+fn agent_pairs(md: &Md, w: &mut String) {
+    let run = md.run;
     if !run.agent_pairs.is_empty() {
         let _ = writeln!(w, "## Agents paired, per variant\n");
         let _ = writeln!(w, "A against B on the same seeds. An agent labelled `x:...` is a check against `x`; a bare agent is paired with the next bare agent listed. A minus B: the win-rate difference ± the standard error of the per-seed difference; p: exact two-sided sign test on the seeds only one of them won.\n");
@@ -262,8 +335,8 @@ pub fn markdown(run: &Run) -> String {
             let p = &x.paired;
             let _ = writeln!(
                 w,
-                "| {}{} | {} | {} | {} | {} | {:.1} | {:.1} | {} / {} / {} / {} | {} | {} |",
-                cfg(&x.config),
+                "| {}{} | {} | {} | {} | {} | {:.1} | {:.1} | {} | {} | {} |",
+                md.cfg(&x.config),
                 x.variant,
                 x.difficulty,
                 x.a,
@@ -271,16 +344,17 @@ pub fn markdown(run: &Run) -> String {
                 p.games,
                 100.0 * p.a_win_rate,
                 100.0 * p.b_win_rate,
-                p.both,
-                p.only_a,
-                p.only_b,
-                p.neither,
+                paired_cells(p),
                 pts(p.diff, p.diff_se),
                 p_value(p.sign_p)
             );
         }
         let _ = writeln!(w);
     }
+}
+
+fn variant_diffs(md: &Md, w: &mut String) {
+    let run = md.run;
     let vds = run.variant_diffs;
     if let Some(first) = vds.first() {
         let _ = writeln!(w, "## Variants against the base\n");
@@ -295,7 +369,7 @@ pub fn markdown(run: &Run) -> String {
             let _ = writeln!(
                 w,
                 "| {}{} | {} | {} | {:.1} → {:.1} | {} | {} | {:.2} → {:.2} |",
-                cfg(&v.config),
+                md.cfg(&v.config),
                 v.variant,
                 v.difficulty,
                 v.agent,
@@ -309,6 +383,11 @@ pub fn markdown(run: &Run) -> String {
         }
         let _ = writeln!(w);
     }
+}
+
+fn fresh_confirmation(md: &Md, w: &mut String) {
+    let run = md.run;
+    let spec = md.run.spec;
     if let Some(sel) = &spec.selection_seeds {
         let _ = writeln!(w, "## Fresh-seed confirmation\n");
         let fresh = run.fresh_confirmation;
@@ -339,7 +418,7 @@ pub fn markdown(run: &Run) -> String {
                 let _ = writeln!(
                     w,
                     "| {}{} | {} | {} | {} | {} |",
-                    cfg(&f.config),
+                    md.cfg(&f.config),
                     f.variant,
                     f.difficulty,
                     f.agent,
@@ -350,6 +429,10 @@ pub fn markdown(run: &Run) -> String {
             let _ = writeln!(w);
         }
     }
+}
+
+fn removals(md: &Md, w: &mut String) {
+    let vds = md.run.variant_diffs;
     if vds.iter().any(|v| !v.off.is_empty()) {
         let _ = writeln!(w, "## Removing a module\n");
         let _ = writeln!(w, "What a module is worth: the base's win rate minus the win rate with the module switched off, on the same seeds, ± the standard error of the per-seed difference. Positive: the module helps the players; negative: it holds them back.\n");
@@ -363,7 +446,7 @@ pub fn markdown(run: &Run) -> String {
             let _ = writeln!(
                 w,
                 "| {}{} ({}) | {} | {} | {:.1} | {:.1} | {} | {} |",
-                cfg(&v.config),
+                md.cfg(&v.config),
                 v.off.join(" + "),
                 v.variant,
                 v.difficulty,
@@ -376,7 +459,10 @@ pub fn markdown(run: &Run) -> String {
         }
         let _ = writeln!(w);
     }
+}
 
+fn game_length(md: &Md, w: &mut String) {
+    let sums = md.run.sums;
     let _ = writeln!(w, "## Game length, margin and end\n");
     let _ = writeln!(w, "| cell | rounds (sd, min..max) | ended by | win margin: deck left / supply left | loss distance: pieces over bar / level | supply left | cities corrupted / aligned at end |");
     let _ = writeln!(w, "|---|---|---|---|---|---|---|");
@@ -385,7 +471,7 @@ pub fn markdown(run: &Run) -> String {
         let _ = writeln!(
             w,
             "| {} | {:.2} ({:.2}, {}..{}) | {} | {} / {} | {} / {} | {:.2} | {:.2} / {:.2} |",
-            short(s, multi_c, multi_v),
+            md.short(s),
             s.rounds_mean,
             s.rounds_sd,
             s.rounds_min,
@@ -400,7 +486,11 @@ pub fn markdown(run: &Run) -> String {
             s.cities_aligned_mean
         );
     }
+}
 
+fn decisions(md: &Md, w: &mut String) {
+    let spec = md.run.spec;
+    let sums = md.run.sums;
     let _ = writeln!(
         w,
         "\n## Decisions, adversary operations, help and counters\n"
@@ -411,7 +501,7 @@ pub fn markdown(run: &Run) -> String {
         let _ = writeln!(
             w,
             "| {} | {:.1} | {:.2} | {} | {} | {} | {:.2} ({}) | {:.2} | {:.2} | {:.2} | {:.2} / {:.2} ({}) |",
-            short(s, multi_c, multi_v),
+            md.short(s),
             s.decisions_mean,
             s.options_per_decision,
             pct(s.forced_share),
@@ -427,7 +517,11 @@ pub fn markdown(run: &Run) -> String {
             pct(s.countered_share)
         );
     }
+}
 
+fn win_probability(md: &Md, w: &mut String) {
+    let spec = md.run.spec;
+    let sums = md.run.sums;
     if spec.winprob.games > 0 {
         let _ = writeln!(w, "\n## Win probability by round\n");
         let _ = writeln!(w, "Mean estimated win probability at the start of each round (games still running in brackets). Uncertain: checkpoints with 0.1 < p < 0.9. Early lock-in: games whose result was already decided (p ≤ 0.05 for a loss, ≥ 0.95 for a win, to the end) by round 2.\n");
@@ -446,7 +540,7 @@ pub fn markdown(run: &Run) -> String {
         for s in sums {
             let mut row = format!(
                 "| {} | {} | {} |",
-                short(s, multi_c, multi_v),
+                md.short(s),
                 s.uncertain_share.map_or("–".into(), pct),
                 s.early_lock_in_share.map_or("–".into(), pct)
             );
@@ -461,7 +555,10 @@ pub fn markdown(run: &Run) -> String {
             let _ = writeln!(w, "{row}");
         }
     }
+}
 
+fn luck(md: &Md, w: &mut String) {
+    let run = md.run;
     let _ = writeln!(w, "\n## Luck share\n");
     let _ = writeln!(w, "Two-way split of outcome variance over seeds × agents: the seed's share (luck), the agent's share (skill) and the rest (interaction, and the agents' own randomness). On win/loss, and on survival (rounds reached; a win counts its rounds plus the adversary cards left plus 2, so it ranks above any loss), useful while nothing wins.\n");
     let _ = writeln!(
@@ -477,23 +574,17 @@ pub fn markdown(run: &Run) -> String {
         };
         let _ = writeln!(
             w,
-            "| {}{}d{} | {} | {} |",
-            if multi_c {
-                format!("{} ", g.config)
-            } else {
-                String::new()
-            },
-            if multi_v {
-                format!("{} ", g.variant)
-            } else {
-                String::new()
-            },
+            "| {}d{} | {} | {} |",
+            md.prefix(&g.config, &g.variant),
             g.difficulty,
             f(g.luck_win),
             f(g.luck_survival)
         );
     }
+}
 
+fn build_variety(md: &Md, w: &mut String) {
+    let sums = md.run.sums;
     let _ = writeln!(w, "\n## Build variety\n");
     let _ = writeln!(w, "Distinct end-of-game builds (each seat's AI and buildings) and the mean Jaccard distance between two games' building sets (0 = always the same, 1 = nothing shared). Among wins where there are any.\n");
     let _ = writeln!(w, "| cell | distinct builds (all) | distance (all) | distinct builds (wins) | distance (wins) |");
@@ -502,7 +593,7 @@ pub fn markdown(run: &Run) -> String {
         let _ = writeln!(
             w,
             "| {} | {} of {} | {:.2} | {} of {} | {} |",
-            short(s, multi_c, multi_v),
+            md.short(s),
             s.distinct_builds,
             s.games,
             s.build_distance,
@@ -511,7 +602,12 @@ pub fn markdown(run: &Run) -> String {
             opt(s.build_distance_wins, 2)
         );
     }
+}
 
+fn strategy_health(md: &Md, w: &mut String) {
+    let run = md.run;
+    let spec = md.run.spec;
+    let sums = md.run.sums;
     let _ = writeln!(w, "\n## Strategy health\n");
     let _ = writeln!(w, "Per game, over the whole team: buildings played (any tier, AI unique buildings too), tier-2 cards played (buildings and programs), all cards played, economy buildings (printing standing income) standing at the end; then the share of wins with 2 or more buildings played, and in brackets with 2 or more buildings standing at the end.\n");
     let order = agent_order(run.cells);
@@ -522,13 +618,6 @@ pub fn markdown(run: &Run) -> String {
             gkeys.push(k);
         }
     }
-    let wins2 = |s: &CellSummary| match (
-        s.wins_2plus_buildings_played,
-        s.wins_2plus_buildings_standing,
-    ) {
-        (Some(a), Some(b)) => format!("{} ({})", pct(a), pct(b)),
-        _ => "–".into(),
-    };
     for &d in &spec.difficulties {
         let cell_of = |a: &str, k: &(String, String)| {
             sums.iter()
@@ -540,15 +629,7 @@ pub fn markdown(run: &Run) -> String {
             for a in &order {
                 let l = a.label();
                 if let Some(s) = cell_of(&l, &gkeys[0]) {
-                    let _ = writeln!(
-                        w,
-                        "| {l} | {:.2} | {:.2} | {:.1} | {:.2} | {} |",
-                        s.buildings_played_per_game,
-                        s.tier2_played_per_game,
-                        s.cards_played_per_game,
-                        s.economy_buildings_standing_per_game,
-                        wins2(s)
-                    );
+                    let _ = writeln!(w, "| {l} | {} |", health_row(s, " | ", " | "));
                 }
             }
         } else {
@@ -557,7 +638,7 @@ pub fn markdown(run: &Run) -> String {
             );
             let mut sep = String::from("|---|");
             for (c, v) in &gkeys {
-                let _ = write!(head, " {}{} |", cfg(c), v);
+                let _ = write!(head, " {}{} |", md.cfg(c), v);
                 sep.push_str("---|");
             }
             let _ = writeln!(w, "{head}\n{sep}");
@@ -567,15 +648,7 @@ pub fn markdown(run: &Run) -> String {
                 for k in &gkeys {
                     match cell_of(&l, k) {
                         Some(s) => {
-                            let _ = write!(
-                                row,
-                                " {:.2} / {:.2} / {:.1} / {:.2}, {} |",
-                                s.buildings_played_per_game,
-                                s.tier2_played_per_game,
-                                s.cards_played_per_game,
-                                s.economy_buildings_standing_per_game,
-                                wins2(s)
-                            );
+                            let _ = write!(row, " {} |", health_row(s, " / ", ", "));
                         }
                         None => row.push_str(" |"),
                     }
@@ -585,7 +658,10 @@ pub fn markdown(run: &Run) -> String {
         }
         let _ = writeln!(w);
     }
+}
 
+fn card_rates(md: &Md, w: &mut String) {
+    let run = md.run;
     let _ = writeln!(w, "## Pick and play rates per card\n");
     let _ = writeln!(w, "Over all cells of each agent. Offered: in a draft packet (each round's deal). Every dealt card is drafted by someone (packets pass until empty), so pick is the mean pick position, 1 = a seat's first pick of the round (lower = wanted sooner). Keep: kept (bought) per offer. Play: played per card gained (kept or drawn; unique AI cards start in hand, so their plays are per game). Per variant, config and difficulty in `cards.csv`.\n");
     let labels: Vec<&String> = run.cards.keys().collect();
@@ -604,15 +680,15 @@ pub fn markdown(run: &Run) -> String {
     }
     let _ = writeln!(w, "{head}\n{sep}");
     let all_cards: BTreeSet<&String> = run.cards.values().flat_map(|t| t.keys()).collect();
+    let cell_labels: Vec<String> = run.cells.iter().map(|c| c.agent.label()).collect();
+    let mut games_by_label: BTreeMap<&str, usize> = BTreeMap::new();
+    for g in run.games {
+        *games_by_label.entry(&cell_labels[g.cell]).or_default() += 1;
+    }
     for card in all_cards {
         let mut row = format!("| {card} |");
         for l in &order {
-            let games_of = run
-                .games
-                .iter()
-                .filter(|g| run.cells[g.cell].agent.label() == **l)
-                .count()
-                .max(1);
+            let games_of = games_by_label.get(l.as_str()).copied().unwrap_or(0).max(1);
             let n = run.cards[*l].get(card).copied().unwrap_or_default();
             let r = |a: u32, b: u32| {
                 if b == 0 {
@@ -643,7 +719,11 @@ pub fn markdown(run: &Run) -> String {
         }
         let _ = writeln!(w, "{row}");
     }
+}
 
+fn timing(md: &Md, w: &mut String) {
+    let run = md.run;
+    let sums = md.run.sums;
     let _ = writeln!(w, "\n## Timing\n");
     let _ = writeln!(w, "Per game on one thread ({} threads ran at once, so a lone run is somewhat faster). Agent: the agent's own decisions. Probes: closeness scoring and win-probability playouts. Total: everything, rules and replay check included.\n", run.threads);
     let _ = writeln!(
@@ -655,7 +735,7 @@ pub fn markdown(run: &Run) -> String {
         let _ = writeln!(
             w,
             "| {} | {:.1} | {:.3} | {:.1} | {:.1} |",
-            short(s, multi_c, multi_v),
+            md.short(s),
             s.agent_ms_per_game,
             s.agent_ms_per_decision,
             s.probe_ms_per_game,
@@ -671,14 +751,16 @@ pub fn markdown(run: &Run) -> String {
         "\nWhere the games' time went (summed over workers): {}. Apply: the chosen actions and the measures' bookkeeping; legal: generating the legal actions; setup: building the game and the agent.",
         split.join(", ")
     );
+}
 
+fn saved_records(md: &Md, w: &mut String) {
+    let run = md.run;
     let _ = writeln!(w, "\n## Saved records\n");
     if run.records.is_empty() {
         let _ = writeln!(w, "None matched.");
     } else {
         let _ = writeln!(w, "Open in the viewer (*Open record…* or drop the file), or check with `aic-sim replay`.\n");
-        let cats = ["close-loss", "early-lock-in", "surprising-win"];
-        for cat in cats {
+        for cat in CATEGORIES {
             let rs: Vec<&SavedRecord> = run.records.iter().filter(|r| r.category == cat).collect();
             let _ = writeln!(
                 w,
@@ -695,5 +777,4 @@ pub fn markdown(run: &Run) -> String {
             let _ = writeln!(w);
         }
     }
-    m
 }

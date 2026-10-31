@@ -8,7 +8,7 @@ import path from 'node:path';
 
 import sharp from 'sharp';
 
-import { ART, CARD, ORIGINALS, TOOL, readJson, runCodex } from './lib.mjs';
+import { ART, CARD, IMAGE_PREAMBLE, ORIGINALS, TOOL, readJson, runCodex } from './lib.mjs';
 
 const p = await readJson(path.join(TOOL, 'prompts.json'));
 const origDir = path.join(ORIGINALS, 'card-frames-r3');
@@ -17,7 +17,7 @@ await mkdir(origDir, { recursive: true });
 
 if (process.argv.includes('--draw')) {
   const run = await runCodex(
-    ['Use your built-in image_gen tool ($imagegen) exactly once to generate the image below.', 'Do not read any files, run any commands, or try to save the image anywhere: just generate it, then stop.', 'Image shape: landscape, 3:2.', '', p.containers].join('\n'),
+    [...IMAGE_PREAMBLE, 'Image shape: landscape, 3:2.', '', p.containers].join('\n'),
     path.join(ART, 'frames', 'r3', 'master.jpg'),
   );
   if (!run.image) throw new Error(`containers: no image. ${run.limit ?? run.message ?? ''}`);

@@ -23,7 +23,8 @@ import time
 
 CONFIG = "configs/baseline.json"
 SEED = "1000"
-# Agent, then games on one thread and on every thread. Enough to fill 10-60 s each.
+# Agent, then games on one thread and on every thread. Enough to fill 10-60 s each;
+# rollout takes minutes, see the README.
 TABLE = [
     ("random", 400, 4000),
     ("greedy", 16, 200),
@@ -46,55 +47,60 @@ def timed(sim, agent, games, countries, threads):
     return time.perf_counter() - t
 
 
-def table(sim, out, only):
-    """Saves after each row, into what `out` already holds, so a stopped run keeps its rows."""
-    rows = {}
-    if out and os.path.exists(out):
-        with open(out, encoding="utf-8") as f:
-            rows = json.load(f)
-    cores = os.cpu_count()
+def rows_to_run(only, cores):
+    """Each (agent, countries, games on one thread, games on every thread) `only` lets through."""
     for agent, one, many in TABLE:
         for c in (2, 3):
             if only and agent not in only and f"{agent} c{c}" not in only:
                 continue
             # Three countries take about three times as long: fewer games, a like wait.
-            n1, nn = max(1, one * 2 // c // (c - 1)), max(cores, many * 2 // c // (c - 1))
-            s1 = timed(sim, agent, n1, c, 1)
-            sn = timed(sim, agent, nn, c, cores)
-            rows[f"{agent} c{c}"] = {"gpm_1": 60 * n1 / s1, "gpm_all": 60 * nn / sn, "games_1": n1, "games_all": nn}
-            print(f"{agent} c{c}: {60 * n1 / s1:.1f} games/min on 1 thread ({n1} in {s1:.1f} s), "
-                  f"{60 * nn / sn:.1f} on {cores} ({nn} in {sn:.1f} s)", flush=True)
-            if out:
-                with open(out, "w", encoding="utf-8") as f:
-                    json.dump(rows, f, indent=1)
+            yield agent, c, max(1, one * 2 // c // (c - 1)), max(cores, many * 2 // c // (c - 1))
+
+
+def saved(out):
+    """The rows `out` already holds."""
+    if out and os.path.exists(out):
+        with open(out, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def save(out, rows):
+    if out:
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump(rows, f, indent=1)
+
+
+def table(sim, out, only):
+    """Saves after each row, into what `out` already holds, so a stopped run keeps its rows."""
+    rows = saved(out)
+    cores = os.cpu_count()
+    for agent, c, n1, nn in rows_to_run(only, cores):
+        s1 = timed(sim, agent, n1, c, 1)
+        sn = timed(sim, agent, nn, c, cores)
+        rows[f"{agent} c{c}"] = {"gpm_1": 60 * n1 / s1, "gpm_all": 60 * nn / sn, "games_1": n1, "games_all": nn}
+        print(f"{agent} c{c}: {60 * n1 / s1:.1f} games/min on 1 thread ({n1} in {s1:.1f} s), "
+              f"{60 * nn / sn:.1f} on {cores} ({nn} in {sn:.1f} s)", flush=True)
+        save(out, rows)
 
 
 def pair(old, new, out, only):
     """Each row on both binaries in turn, old-new-new-old, so both see the same machine: a
     busy box moves the rates but not the ratio. Saves after each row, as `table`."""
-    rows = {}
-    if out and os.path.exists(out):
-        with open(out, encoding="utf-8") as f:
-            rows = json.load(f)
+    rows = saved(out)
     cores = os.cpu_count()
-    for agent, one, many in TABLE:
-        for c in (2, 3):
-            if only and agent not in only and f"{agent} c{c}" not in only:
-                continue
-            n1, nn = max(1, one * 2 // c // (c - 1)), max(cores, many * 2 // c // (c - 1))
-            r = {}
-            for label, games, threads in (("1", n1, 1), ("all", nn, cores)):
-                first = timed(old, agent, games, c, threads)
-                b = timed(new, agent, games, c, threads) + timed(new, agent, games, c, threads)
-                a = first + timed(old, agent, games, c, threads)
-                r[f"old_{label}"], r[f"new_{label}"] = 120 * games / a, 120 * games / b
-            rows[f"{agent} c{c}"] = r
-            print(f"{agent} c{c}: 1 thread {r['old_1']:.1f} to {r['new_1']:.1f} ({r['new_1'] / r['old_1']:.2f} x), "
-                  f"{cores} threads {r['old_all']:.1f} to {r['new_all']:.1f} "
-                  f"({r['new_all'] / r['old_all']:.2f} x)", flush=True)
-            if out:
-                with open(out, "w", encoding="utf-8") as f:
-                    json.dump(rows, f, indent=1)
+    for agent, c, n1, nn in rows_to_run(only, cores):
+        r = {}
+        for label, games, threads in (("1", n1, 1), ("all", nn, cores)):
+            first = timed(old, agent, games, c, threads)
+            b = timed(new, agent, games, c, threads) + timed(new, agent, games, c, threads)
+            a = first + timed(old, agent, games, c, threads)
+            r[f"old_{label}"], r[f"new_{label}"] = 120 * games / a, 120 * games / b
+        rows[f"{agent} c{c}"] = r
+        print(f"{agent} c{c}: 1 thread {r['old_1']:.1f} to {r['new_1']:.1f} ({r['new_1'] / r['old_1']:.2f} x), "
+              f"{cores} threads {r['old_all']:.1f} to {r['new_all']:.1f} "
+              f"({r['new_all'] / r['old_all']:.2f} x)", flush=True)
+        save(out, rows)
 
 
 def compare(before, after):
@@ -132,13 +138,11 @@ def check(sim, update):
 
 if __name__ == "__main__":
     argv = sys.argv[1:]
+    out = argv[argv.index("--out") + 1] if "--out" in argv else None
+    only = [argv[i + 1] for i, a in enumerate(argv) if a == "--only"]
     if argv[:1] == ["table"] and len(argv) >= 2:
-        out = argv[argv.index("--out") + 1] if "--out" in argv else None
-        only = [argv[i + 1] for i, a in enumerate(argv) if a == "--only"]
         table(argv[1], out, only)
     elif argv[:1] == ["pair"] and len(argv) >= 3:
-        out = argv[argv.index("--out") + 1] if "--out" in argv else None
-        only = [argv[i + 1] for i, a in enumerate(argv) if a == "--only"]
         pair(argv[1], argv[2], out, only)
     elif argv[:1] == ["compare"] and len(argv) == 3:
         compare(argv[1], argv[2])

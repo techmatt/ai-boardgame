@@ -18,10 +18,10 @@ mod ambassadors;
 mod cards;
 mod config;
 mod determinism;
+mod face;
 mod factories;
 mod freeing;
 mod growth;
-mod hunt044;
 mod invariants;
 mod map;
 mod march;
@@ -42,6 +42,15 @@ const SHARED_ROW: &str = include_str!("../../../../configs/shared_row.json");
 
 /// The action phase of the baseline round.
 const ACTIONS: &str = "cards.play+threats.counter+economy.give+alignment.act+board.act+ai.power";
+
+/// The baseline playing only the action phase, after setup.
+fn action_only(sets: &[&str]) -> (Rules, GameState) {
+    let mut c = baseline_with(sets);
+    c.round = vec![ACTIONS.into()];
+    let rules = Rules::new(&c).unwrap();
+    let g = rules.new_game(4);
+    (rules, g)
+}
 
 fn baseline() -> Config {
     Config::from_json(BASELINE).unwrap()

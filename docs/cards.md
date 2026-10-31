@@ -5,7 +5,7 @@ edit by hand. Rules revision 22. Every card is a **candidate**. Sorted by
 primary tag (the first printed tag), then tier, then name; the AI-unique cards
 (tier 0) close the list. Costs: credits (cr), energy (en), chips (ch),
 antimatter (am), income lowered for the rest of the game, the tags a card needs on
-your buildings, and the tag of the building a replacement is built over. Insight is
+your cards in play, and the tag of the building a replacement is built over. Insight is
 the insight to play it; keeping a drafted card costs 1 insight (tier 1) or 3 (tier 2)
 on top. A card marked *(not in deck)* is in the content but not in the baseline
 config's card list.

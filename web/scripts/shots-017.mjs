@@ -5,9 +5,8 @@
 //   viewer-projects-r<n>.png  a later round (4+), a project part-filled and at least one resolved
 // Drives the page with cdp.mjs (headless Edge or Chrome, no extra packages).
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { openPage } from './cdp.mjs';
+import { mkdirSync } from 'node:fs';
+import { newGame, openPage, shotTo } from './cdp.mjs';
 
 const url = process.env.AIC_URL ?? 'http://localhost:5173/';
 const outDir = process.env.AIC_SHOTS;
@@ -16,10 +15,7 @@ mkdirSync(outDir, { recursive: true });
 
 const page = await openPage();
 const { send, js, until } = page;
-async function shot(name) {
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
-  writeFileSync(join(outDir, `${name}.png`), await page.shot());
-}
+const shot = (name) => shotTo(page, outDir, name);
 
 // What the project row shows now: each visible project's fill, the resolved count, the board size.
 const STATE = `(() => {
@@ -44,9 +40,7 @@ try {
   await send('Page.navigate', { url });
   await until('window.aic && window.aic.view', 'the viewer to start', 30000);
   for (let seed = 1; seed <= 30 && !(saved.r2 && saved.late); seed++) {
-    await js(`(() => { document.getElementById('config').value = 'baseline.json'; document.getElementById('seed').value = '${seed}';
-                        document.getElementById('new-form').requestSubmit(); })()`);
-    await until(`window.aic.timeline.last === 0 && window.aic.timeline.seed === '${seed}'`, `the seed-${seed} game`, 30000);
+    await newGame(page, 'baseline.json', seed);
     for (let i = 0; i < 2000; i++) {
       const s = await js(STATE);
       if (s.outcome) { console.log(`seed ${seed}: ended in round ${s.round}, ${s.resolved} resolved`); break; }

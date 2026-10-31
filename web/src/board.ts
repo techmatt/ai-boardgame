@@ -188,6 +188,50 @@ function pennant(x: number, y: number, colour: string): SVGElement {
   return g;
 }
 
+/** Each front's two bases (country a's facing b, b's facing a), linked across it. */
+function frontLinks(view: View, pts: number[][]): SVGElement[] {
+  const links: SVGElement[] = [];
+  view.hexes.forEach((h, i) => {
+    if (h.kind !== 'base' || h.facing === undefined || h.facing < h.country) return;
+    const j = view.hexes.findIndex((o) => o.kind === 'base' && o.country === h.facing && o.facing === h.country);
+    if (j < 0) return;
+    const [[ax, ay], [bx, by]] = [pts[i], pts[j]];
+    links.push(el('line', { x1: f(ax), y1: f(ay), x2: f(bx), y2: f(by), class: 'front-link', 'data-front': `${h.country}-${h.facing}` }));
+  });
+  return links;
+}
+
+/**
+ * Each adversary troop's next target (019): a dashed arrow from the troop to the
+ * piece it is heading for, solid red when it strikes in the next adversary phase.
+ */
+function arrowLayer(view: View, pts: number[][]): SVGElement {
+  const layer = el('g', { class: 'arrows' });
+  for (const a of view.arrows ?? []) {
+    // From the troop (low on its hex, where the adversary's row sits) toward the
+    // target's centre, stopping short of it; the head follows the drawn shaft.
+    const [ax, ay] = [pts[a.from][0], pts[a.from][1] + 0.3];
+    const [bx, by] = pts[a.to];
+    const len = Math.hypot(bx - ax, by - ay);
+    const g = el('g', { class: `arrow ${a.kind}${a.rounds <= 1 ? ' soon' : ''}`, 'data-from': a.from, 'data-to': a.to });
+    layer.append(g);
+    if (len < 0.8) {
+      // A target on the troop's own hex: a ring round the hex instead of an arrow.
+      g.append(el('circle', { cx: f(bx), cy: f(by), r: 0.78, fill: 'none' }), el('title', {}, contentIds(a.doc)));
+      continue;
+    }
+    const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
+    const [sx, sy] = [ax + ux * 0.25, ay + uy * 0.25];
+    const [ex, ey] = [bx - ux * 0.45, by - uy * 0.45];
+    g.append(el('line', { x1: f(sx), y1: f(sy), x2: f(ex), y2: f(ey) }));
+    const [px, py] = [-uy, ux];
+    const head = `M${f(ex + ux * 0.2)},${f(ey + uy * 0.2)} L${f(ex + px * 0.12)},${f(ey + py * 0.12)} L${f(ex - px * 0.12)},${f(ey - py * 0.12)} Z`;
+    g.append(el('path', { d: head }));
+    g.append(el('title', {}, contentIds(a.doc)));
+  }
+  return layer;
+}
+
 export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
   svg.replaceChildren();
   if (!view.hexes.length) return;
@@ -216,7 +260,6 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
   view.hexes.forEach((h, i) => {
     const [x, y] = pts[i];
     const key = hexKey(h.hex);
-    const country = view.countries[h.country];
     const cls = ['hex', `k-${h.kind}`];
     if (marks.targets.has(key)) cls.push('target');
     if (marks.changed.has(key)) cls.push('changed');
@@ -233,7 +276,7 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
 
     // A band in the country's colour along every edge that leaves the country; a land
     // edge into another country's land is a front, drawn over it.
-    const band = strong(country?.colour || '#888888');
+    const band = countryColour(h.country);
     EDGE.forEach(([dq, dr], k) => {
       const n = at.get(`${h.hex[0] + dq},${h.hex[1] + dr}`);
       if (n && n.country === h.country) return;
@@ -255,14 +298,7 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
     drawTokens(tokenLayer, h, x, y, { seat: seatColour, country: band });
   });
 
-  // Each front's two bases (country a's facing b, b's facing a), linked across it.
-  view.hexes.forEach((h, i) => {
-    if (h.kind !== 'base' || h.facing === undefined || h.facing < h.country) return;
-    const j = view.hexes.findIndex((o) => o.kind === 'base' && o.country === h.facing && o.facing === h.country);
-    if (j < 0) return;
-    const [[ax, ay], [bx, by]] = [pts[i], pts[j]];
-    frontLayer.append(el('line', { x1: f(ax), y1: f(ay), x2: f(bx), y2: f(by), class: 'front-link', 'data-front': `${h.country}-${h.facing}` }));
-  });
+  frontLayer.append(...frontLinks(view, pts));
 
   // Country labels at each piece's centre, under the tokens and not catching the mouse.
   for (const c of view.countries) {
@@ -279,33 +315,5 @@ export function renderBoard(svg: SVGSVGElement, view: View, marks: Marks) {
     labelLayer.append(g);
   }
 
-  // Each adversary troop's next target (019): a dashed arrow from the troop to the
-  // piece it is heading for, solid red when it strikes in the next adversary phase.
-  const arrowLayer = el('g', { class: 'arrows' });
-  for (const a of view.arrows ?? []) {
-    // From the troop (low on its hex, where the adversary's row sits) toward the
-    // target's centre, stopping short of it; the head follows the drawn shaft.
-    const [ax, ay] = [pts[a.from][0], pts[a.from][1] + 0.3];
-    const [bx, by] = pts[a.to];
-    const len = Math.hypot(bx - ax, by - ay);
-    if (len < 0.8) {
-      // A target on the troop's own hex: a ring round the hex instead of an arrow.
-      const g = el('g', { class: `arrow ${a.kind}${a.rounds <= 1 ? ' soon' : ''}`, 'data-from': a.from, 'data-to': a.to });
-      g.append(el('circle', { cx: f(bx), cy: f(by), r: 0.78, fill: 'none' }), el('title', {}, contentIds(a.doc)));
-      arrowLayer.append(g);
-      continue;
-    }
-    const [ux, uy] = [(bx - ax) / len, (by - ay) / len];
-    const [sx, sy] = [ax + ux * 0.25, ay + uy * 0.25];
-    const [ex, ey] = [bx - ux * 0.45, by - uy * 0.45];
-    const g = el('g', { class: `arrow ${a.kind}${a.rounds <= 1 ? ' soon' : ''}`, 'data-from': a.from, 'data-to': a.to });
-    g.append(el('line', { x1: f(sx), y1: f(sy), x2: f(ex), y2: f(ey) }));
-    const [px, py] = [-uy, ux];
-    const head = `M${f(ex + ux * 0.2)},${f(ey + uy * 0.2)} L${f(ex + px * 0.12)},${f(ey + py * 0.12)} L${f(ex - px * 0.12)},${f(ey - py * 0.12)} Z`;
-    g.append(el('path', { d: head }));
-    g.append(el('title', {}, contentIds(a.doc)));
-    arrowLayer.append(g);
-  }
-
-  svg.append(hexLayer, labelLayer, borderLayer, frontLayer, tokenLayer, arrowLayer, markLayer);
+  svg.append(hexLayer, labelLayer, borderLayer, frontLayer, tokenLayer, arrowLayer(view, pts), markLayer);
 }

@@ -7,17 +7,15 @@
 // promoting one means copying it over the master.
 // Stops at the first usage-limit message. Exits 1 if a draw failed or the limit left some
 // undrawn.
-import { appendFile, copyFile, mkdir, readFile, rename } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import sharp from 'sharp';
 
-import { ART, ORIGINALS, TOOL, layout, nextTry, readJson, runCodex } from './lib.mjs';
+import { ART, FRAMES, IMAGE_PREAMBLE, ORIGINALS, TOOL, drawAll, layout, parsePool, readJson, runCodex } from './lib.mjs';
 
 const argv = process.argv.slice(2);
-const pool = Number(argv.find((a) => a.startsWith('--pool='))?.slice(7) ?? 3);
-if (!Number.isInteger(pool) || pool < 1) throw new Error('gen: --pool must be a whole number, 1 or more');
+const pool = parsePool(argv, 'gen');
 const ids = argv.filter((a) => !a.startsWith('--'));
 const p = await readJson(path.join(TOOL, 'prompts.json'));
 for (const id of ids) {
@@ -29,14 +27,13 @@ const l = await layout();
 const [W, H] = l.print_px;
 const origDir = path.join(ORIGINALS, 'card-frames-r3');
 const printDir = path.join(ORIGINALS, 'card-frames-r3', 'frames');
-const webDir = path.join(ART, 'frames', 'r3');
+const webDir = FRAMES;
 await mkdir(printDir, { recursive: true });
 await mkdir(webDir, { recursive: true });
 
-export const framePrompt = (dir, kind) =>
+const framePrompt = (dir, kind) =>
   [
-    'Use your built-in image_gen tool ($imagegen) exactly once to generate the image below.',
-    'Do not read any files, run any commands, or try to save the image anywhere: just generate it, then stop.',
+    ...IMAGE_PREAMBLE,
     'Image shape: portrait, width to height 69:94, the attached guide\'s shape.',
     '',
     p.frame.replace('{top}', kind === 'building' ? p.top : '').replace('{kind}', p.kinds[kind].colour) + p.directions[dir].style,
@@ -54,42 +51,22 @@ async function cut(src, id) {
   return { w: m.width, h: m.height };
 }
 
-let stop = false;
-let failed = 0;
-async function one(id) {
-  const [dir, kind] = id.split('-');
-  const guide = path.join(ART, 'guides', `${kind}-t1-blocks.png`);
-  let run = await runCodex(framePrompt(dir, kind), guide);
-  let ref = !!run.image;
-  if (!run.image && !run.limit) {
-    console.error(`gen: ${id}: no image with the guide (${run.message ?? '?'}); retrying with text alone`);
-    run = await runCodex(framePrompt(dir, kind));
-    ref = false;
-  }
-  await appendFile(path.join(origDir, 'log.jsonl'), `${JSON.stringify({ id, at: new Date().toISOString(), ref, seconds: run.seconds, thread: run.thread, limit: run.limit, usage: run.usage, message: run.image ? undefined : run.message })}\n`);
-  if (run.limit) {
-    stop = true;
-    console.error(`gen: usage limit: ${run.limit}`);
-  }
-  if (!run.image) {
-    failed++;
-    console.error(`gen: ${id}: no image after ${run.seconds}s. ${run.message ?? ''}`);
-    return;
-  }
-  const dest = path.join(origDir, `${id}.png`);
-  if (existsSync(dest)) await rename(dest, path.join(origDir, `${id}.try${await nextTry(origDir, id)}.png`));
-  await copyFile(run.image, dest);
-  const s = await cut(await readFile(dest), id);
-  console.log(`gen: ${id}: ${s.w}×${s.h}, ${run.seconds}s, ref ${ref}, usage ${JSON.stringify(run.usage)}`);
-}
-
-const queue = [...ids];
-await Promise.all(
-  Array.from({ length: pool }, async () => {
-    while (queue.length && !stop) await one(queue.shift());
-  }),
-);
-if (failed || queue.length) {
-  process.exitCode = 1;
-  console.error(`gen: ${ids.length - failed - queue.length} of ${ids.length} drawn, ${failed} failed, ${queue.length} not started`);
-}
+await drawAll(ids, pool, 'gen', {
+  dir: origDir,
+  async draw(id) {
+    const [dir, kind] = id.split('-');
+    const guide = path.join(ART, 'guides', `${kind}-t1-blocks.png`);
+    let run = await runCodex(framePrompt(dir, kind), guide);
+    let ref = !!run.image;
+    if (!run.image && !run.limit) {
+      console.error(`gen: ${id}: no image with the guide (${run.message ?? '?'}); retrying with text alone`);
+      run = await runCodex(framePrompt(dir, kind));
+      ref = false;
+    }
+    return { run, ref };
+  },
+  async kept(id, dest, run, { ref }) {
+    const s = await cut(await readFile(dest), id);
+    console.log(`gen: ${id}: ${s.w}×${s.h}, ${run.seconds}s, ref ${ref}, usage ${JSON.stringify(run.usage)}`);
+  },
+});

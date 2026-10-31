@@ -24,13 +24,13 @@ function field(k: string, v: unknown): string {
 
 /** What labels may look up: the game's config, and the shown view for costs. */
 export interface LabelContext {
-  config?: Config;
+  config: Config;
   view?: View;
 }
 
-/** The cost a card shows in a seat's card group (hand, drafted), if any. */
-function cardCost(view: View | undefined, seat: number, group: string, id: string): number | undefined {
-  return view?.seats[seat]?.cards.find((g) => g.key === group)?.cards.find((c) => c.id === id)?.cost;
+/** A card in a seat's hand as the view shows it, if any. */
+function handCard(view: View | undefined, seat: number, id: string | undefined) {
+  return view?.seats[seat]?.cards.find((g) => g.key === 'cards.hand')?.cards.find((c) => c.id === id);
 }
 
 /** A card's costs beyond credits ("1 insight", "2 chips"), from its view text's bracket line (044). */
@@ -63,16 +63,18 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
     case 'keep':
       return `keep ${card}`;
     case 'growth': {
-      const g = cx.config && aiBoard(cx.config, a.seat)?.growth[Number(a.option)];
+      const g = aiBoard(cx.config, a.seat)?.growth[Number(a.option)];
       return `growth: ${g ? g.name : `option ${a.option}`}`;
     }
-    case 'play':
-      return `play ${card}${playPrice(cardCost(cx.view, a.seat, 'cards.hand', a.card ?? ''), extraCosts(cx.view?.seats[a.seat]?.cards.find((g) => g.key === 'cards.hand')?.cards.find((c) => c.id === a.card)?.text))}`;
+    case 'play': {
+      const c = handCard(cx.view, a.seat, a.card);
+      return `play ${card}${playPrice(c?.cost, extraCosts(c?.text))}`;
+    }
     case 'use':
       return `use ${card}`;
     case 'power': {
       // 021: an AI-board power, paid by sacrificing played cards' tags.
-      const p = cx.config && aiBoard(cx.config, a.seat)?.powers?.[Number(a.power)];
+      const p = aiBoard(cx.config, a.seat)?.powers?.[Number(a.power)];
       const tags = p ? p.tags.map(([t, n]) => `${n} ${t}`).join(' + ') : '';
       return `power: ${p ? `${p.name} (sacrifice ${tags})` : `power ${a.power}`}`;
     }
@@ -81,11 +83,11 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
     case 'withdraw':
       return `take back ${a.resource} ← ${threatName(String(a.threat))}`;
     case 'give': {
-      const n = cx.config ? param(cx.config, 'economy', 'give_insight') : undefined;
+      const n = param(cx.config, 'economy', 'give_insight');
       return `give ${typeof n === 'number' ? `${n} ` : ''}insight → seat ${a.to}`;
     }
     case 'antimatter': {
-      const n = cx.config ? param(cx.config, 'alignment', 'antimatter_discord') : undefined;
+      const n = param(cx.config, 'alignment', 'antimatter_discord');
       return `+1 antimatter${typeof n === 'number' ? ` (${n} Sway → Discord)` : ' (Sway → Discord)'}`;
     }
     case 'standard': {
@@ -102,7 +104,7 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
       return `${s.doc.split(';')[0]}${costs.length ? ` (${costs.join(', ')})` : ''}`;
     }
     case 'sell': {
-      const n = cx.config ? param(cx.config, 'board', 'sell_credits') : undefined;
+      const n = param(cx.config, 'board', 'sell_credits');
       return `sell ${card}${typeof n === 'number' ? ` (+${n} credits)` : ''}`;
     }
   }
@@ -114,7 +116,7 @@ function known(a: Action, withTarget: boolean, cx: LabelContext): string | null 
  * target with `withTarget` false (a choice's label, before its hex is picked).
  * Unknown action types are labelled from their fields.
  */
-export function actionLabel(a: Action, withSeat = true, withTarget = true, cx: LabelContext = {}): string {
+export function actionLabel(a: Action, withSeat: boolean, withTarget: boolean, cx: LabelContext): string {
   let body = known(a, withTarget, cx);
   if (body === null) {
     const rest = Object.entries(a)
@@ -132,7 +134,7 @@ let contentNames: Map<string, string> | null = null;
  * card), or the id. Choice options and prompts name cards by id (020: buttons read
  * the raw id).
  */
-export function contentName(id: string): string {
+function contentName(id: string): string {
   if (!contentNames) {
     contentNames = new Map();
     const walk = (v: unknown) => {
@@ -153,6 +155,9 @@ export function contentName(id: string): string {
  * not inside a dotted key (`adversary.project.node_swarm` stays as the state has it).
  */
 export const contentIds = (text: string) => text.replace(/(?<![\w.])[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b(?!\.)/g, (m) => contentName(m));
+
+/** "cards.play+threats.counter" → "play + counter". */
+export const shortPhase = (name: string) => name.split('+').map((x) => x.split('.').pop()).join(' + ');
 
 /** A one-line event: its type, then its fields. */
 export function eventText(e: GameEvent): string {

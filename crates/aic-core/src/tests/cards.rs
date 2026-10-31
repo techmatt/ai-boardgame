@@ -1,7 +1,8 @@
 use super::alignment::give;
 use super::projects::row;
 use super::*;
-use crate::modules::{adversary, threats};
+use crate::content::{CountryRule, DamageAt, Op};
+use crate::modules::{adversary, effects, threats};
 
 #[test]
 fn the_ais_spend_their_resource_as_credits_on_cards() {
@@ -296,40 +297,51 @@ fn the_023_primitives_draw_drain_all_count_and_cash_out() {
     assert!(effects::feasible(&w, &g, 0, &gate));
 }
 
-fn face_of(id: &str) -> crate::face::Face {
-    crate::face::card_face(content().cards.iter().find(|c| c.id == id).expect("a card"))
+#[test]
+fn a_card_that_only_hardens_or_moves_needs_a_target_but_one_that_also_gains_does_not() {
+    let (rules, g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let harden = Op::Harden { count: 2, in_country: CountryRule::PresenceCountry };
+    let moves = Op::MoveOne { range: 2 };
+    assert!(!effects::feasible(&w, &g, 0, std::slice::from_ref(&harden)), "no building, no presence");
+    assert!(!effects::feasible(&w, &g, 0, std::slice::from_ref(&moves)), "no ambassador");
+    assert!(!effects::feasible(&w, &g, 0, &[harden.clone(), moves.clone()]));
+    // Either one acting is enough: Peacekeeping Detail with an ambassador to move.
+    let mut with_one = g.clone();
+    let c = rules.map.numbered(0, piece(0).presence);
+    let far = rules.map.numbered(0, piece(0).corrupted[0]);
+    put(&mut with_one, c, crate::modules::common::ambassador(0), 1);
+    put(&mut with_one, far, presence(1), 1);
+    assert!(effects::feasible(&w, &with_one, 0, &[harden.clone(), Op::MoveOne { range: 20 }]));
+    let gain = Op::Gain { resource: Resource::Credits, amount: 1 };
+    assert!(effects::feasible(&w, &g, 0, &[gain, moves]), "a card that also gains is worth playing");
 }
 
 #[test]
-fn a_face_opens_with_its_boxes_word() {
-    let f = face_of("telemetry_archive");
-    assert_eq!(f.top_text, "Each round, 1 Dataset on this card. Action: pay 2 Datasets from this card, get 1 insight.");
-    assert_eq!(f.text, "");
-    let f = face_of("orbital_embassy");
-    assert_eq!(f.top_text, "Each round, 4 credits and 1 insight.");
-    assert_eq!(f.text, "Pay 2 chips and 1 antimatter. Gain 2 ambassadors.");
+fn a_small_removal_has_no_target_on_a_hex_holding_only_a_troop() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let a = rules.map.numbered(0, piece(0).presence);
+    put(&mut g, a, presence(0), 1);
+    put(&mut g, a, TROOP, 1);
+    let one = [Op::Damage { amount: 1, at: DamageAt::Reach }];
+    assert!(!effects::feasible(&w, &g, 0, &one), "a troop is worth troop_health");
+    let two = [Op::Damage { amount: w.int("adversary.troop_health"), at: DamageAt::Reach }];
+    assert!(effects::feasible(&w, &g, 0, &two));
+    put(&mut g, a, ADV_AMBASSADOR, 1);
+    assert!(effects::feasible(&w, &g, 0, &one));
 }
 
 #[test]
-fn a_bare_arrow_is_a_free_action() {
-    let f = face_of("exabyte_archive");
-    assert!(f.top_text.contains("Action: once a round, get 1 credit per 2 Datasets on your active"), "{}", f.top_text);
-}
-
-#[test]
-fn income_below_the_art_raises_or_lowers_the_track() {
-    let f = face_of("antiproton_offtake_deal");
-    assert_eq!(f.top_text, "");
-    assert_eq!(f.text, "Pay 3 energy. Lower your credit income by 1. Raise your antimatter income by 1.");
-}
-
-#[test]
-fn only_buildings_print_above_the_art() {
-    for c in &content().cards {
-        let f = crate::face::card_face(c);
-        assert!(c.is_building() || f.top.is_empty(), "{} prints above the art", c.id);
-        assert!(!c.text.is_empty() && c.text == f.full_text(), "{}", c.id);
-    }
+fn a_cash_in_counts_the_tokens_the_same_card_adds_first() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let kind = TokenKind::Capital;
+    let holder = w.content.cards.iter().find(|c| c.tokens.as_ref().is_some_and(|t| t.kind == kind)).unwrap();
+    g.piles.insert(crate::modules::cards::built(0).into(), vec![holder.id.as_str().into()].into());
+    let cash = Op::CashOut { kind, resource: Resource::Credits, max: 0 };
+    assert!(!effects::feasible(&w, &g, 0, std::slice::from_ref(&cash)), "nothing to cash in");
+    assert!(effects::feasible(&w, &g, 0, &[Op::AddTokens { kind, amount: 2 }, cash]));
 }
 
 #[test]
@@ -352,4 +364,57 @@ fn only_a_building_keeps_an_action() {
     let bld = c.cards.iter_mut().find(|d| d.id == "telemetry_archive").expect("a card");
     bld.kind = crate::content::CardKind::Program;
     assert!(c.check().unwrap_err().contains("only a building"));
+}
+
+#[test]
+fn science_tags_discount_insight_to_a_floor_of_one() {
+    use crate::modules::cards;
+    let (rules, mut g) = lab_with(&[], &["cards.science_every=2"]);
+    let w = rules.world();
+    let two = w.content.cards.iter().find(|c| c.insight == 2).unwrap();
+    let one = w.content.cards.iter().find(|c| c.insight == 1).unwrap();
+    assert_eq!(cards::play_insight(&w, &g, 0, two), 2);
+    let science: Vec<_> = w.content.cards.iter().filter(|c| c.tags.iter().filter(|t| **t == crate::content::Tag::Science).count() == 1 && c.tier == 1).take(4).map(|c| crate::key::Key::new(&c.id)).collect();
+    g.piles.insert(cards::played(0).into(), std::sync::Arc::new(science));
+    assert_eq!(cards::play_insight(&w, &g, 0, two), 1, "4 tags: 2 off, stopped at the floor");
+    assert_eq!(cards::play_insight(&w, &g, 0, one), 1, "1 stays 1");
+}
+
+#[test]
+fn industry_tags_discount_buildings_to_a_floor_of_one() {
+    use crate::modules::cards;
+    let (rules, mut g) = lab_with(&[], &["cards.industry_every=2"]);
+    let w = rules.world();
+    let d = w.content.cards.iter().find(|c| c.is_building() && c.cost >= 3 && c.tier == 1).unwrap();
+    let before = cards::play_cost(&w, &g, 1, d);
+    let industry: Vec<_> = w.content.cards.iter().filter(|c| c.tags.iter().filter(|t| **t == crate::content::Tag::Industry).count() == 1 && c.tier == 1 && !c.is_building()).take(2).map(|c| crate::key::Key::new(&c.id)).collect();
+    g.piles.insert(cards::played(1).into(), std::sync::Arc::new(industry));
+    assert_eq!(cards::play_cost(&w, &g, 1, d), before - 1);
+    g.vars.insert(cards::next_discount(1).into(), 99);
+    assert_eq!(cards::play_cost(&w, &g, 1, d), 1, "the floor");
+}
+
+/// 042: what the heuristic reads must be what the rules charge.
+#[test]
+fn prices_worked_out_once_match_each_cards_own() {
+    use crate::content::{Resource, TAGS};
+    use crate::modules::cards;
+    let (rules, mut g) = lab_with(&[], &["cards.science_every=2", "cards.industry_every=2"]);
+    let w = rules.world();
+    let tagged: Vec<_> = w.content.cards.iter().filter(|c| !c.tags.is_empty()).take(12).map(|c| crate::key::Key::new(&c.id)).collect();
+    for held in [0, 4, tagged.len()] {
+        g.piles.insert(cards::played(0).into(), std::sync::Arc::new(tagged[..held].to_vec()));
+        g.seats[0].resources.insert(Resource::Energy, 3);
+        let p = cards::prices(&w, &g, 0);
+        for d in &w.content.cards {
+            assert_eq!(p.insight(d), cards::play_insight(&w, &g, 0, d), "{}", d.id);
+            assert_eq!(p.credits(d), cards::play_cost(&w, &g, 0, d), "{}", d.id);
+            assert_eq!(cards::discount_room_at(&w, &g, 0, d, &p), cards::discount_room(&w, &g, 0, d), "{}", d.id);
+        }
+        let counts = cards::tag_counts(&w, &g, 0);
+        for t in TAGS {
+            let by_hand: usize = cards::in_play(&g, 0).iter().map(|id| cards::def(&w, id).tags.iter().filter(|x| **x == t).count()).sum();
+            assert_eq!(counts[t as usize], by_hand as i64);
+        }
+    }
 }

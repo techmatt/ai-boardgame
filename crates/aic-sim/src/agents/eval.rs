@@ -80,7 +80,8 @@ pub struct Weights {
     pub project: f64,
     /// Each player presence on the board (reach, site claims, a share of
     /// city energy; its track income is counted as income).
-    pub data_centre: f64,
+    /// Was `data_centre` (still accepted, see [`RENAMED`]).
+    pub presence: f64,
     /// Each node on the board (a cost: adversary compute, contests presence,
     /// blocks the purge).
     pub node: f64,
@@ -190,7 +191,11 @@ pub struct Weights {
 }
 
 /// Weights renamed since experiments named them: (former name, name).
-const RENAMED: [(&str, &str); 2] = [("opp_rate", "unity_rate_start"), ("hardware", "chips")];
+const RENAMED: [(&str, &str); 3] = [
+    ("opp_rate", "unity_rate_start"),
+    ("hardware", "chips"),
+    ("data_centre", "presence"),
+];
 
 /// A drafted card's keep price in credits (its tier's insight at
 /// `INSIGHT_COST`), for valuing the draft packet (023).
@@ -230,7 +235,7 @@ impl Default for Weights {
             level: 10.0,
             // 017: chosen by hand, not swept.
             project: 30.0,
-            data_centre: 4.0,
+            presence: 4.0,
             // 022 (020's D9): a node is permanent since 019; at 6 agents made
             // nodes answering the spread when an equal free option existed.
             node: 25.0,
@@ -330,12 +335,6 @@ impl Weights {
     }
 }
 
-/// What the next adversary build and corrupt steps will do, as the face-up
-/// card shows: the corrupt threshold.
-struct Forecast {
-    corrupt_at: i64,
-}
-
 /// A [`Weights`] bound to one game's rules, with the parameters it reads
 /// cached. Cheap to clone (030): each of a planner's rollouts has its own.
 #[derive(Clone)]
@@ -384,8 +383,8 @@ impl Eval {
         w.credits * n.min(cap) + w.credit_idle * (n - cap).max(0.0)
     }
 
-    /// The next build and corrupt steps, read off the face-up card (public).
-    fn forecast(&self, rules: &Rules, g: &GameState) -> Forecast {
+    /// The next corrupt step's threshold, read off the face-up card (public).
+    fn corrupt_threshold(&self, rules: &Rules, g: &GameState) -> i64 {
         let world = rules.world();
         let content = world.content;
         // Between this round's build and reveal the face-up slot is empty: until
@@ -414,9 +413,7 @@ impl Eval {
                     })
                     .sum()
             });
-        Forecast {
-            corrupt_at: (self.corrupt_at - sooner).max(1),
-        }
+        (self.corrupt_at - sooner).max(1)
     }
 
     /// Each seat's reach as a bit per hex (a board has at most 4 × 16 hexes),
@@ -449,7 +446,7 @@ impl Eval {
             };
         }
         let world = rules.world();
-        let fc = self.forecast(rules, g);
+        let corrupt_at = self.corrupt_threshold(rules, g);
         let mut v = 0.0;
         let mut corrupted = 0i64;
         let mut reach = 0i64;
@@ -487,7 +484,7 @@ impl Eval {
                     }
                     // 034: a corruption marker counts toward corrupting.
                     let toward = adv + g.tokens(h, common::MARKER);
-                    let p = (toward as f64 / fc.corrupt_at as f64).min(1.0);
+                    let p = (toward as f64 / corrupt_at as f64).min(1.0);
                     v -= w.corrupted * w.pressure * p * p;
                 }
             }
@@ -527,7 +524,7 @@ impl Eval {
                 v += w.shield;
             }
             if held {
-                v += w.data_centre;
+                v += w.presence;
             }
             for s in 0..self.seats {
                 v += w.ambassador_board * g.tokens(h, &common::ambassador(s)) as f64;
@@ -877,16 +874,8 @@ impl Eval {
             v += w.horizon * w.production * left * w.energy * prod[s] as f64;
             for id in g.pile(&cards::built(s)) {
                 let d = cards::def(&world, id);
-                let pays = d.passives.iter().any(|p| {
-                    matches!(
-                        p,
-                        Op::Income { .. }
-                            | Op::IncomePerTag { .. }
-                            | Op::IncomeIfTags { .. }
-                    )
-                });
                 v += w.built + w.built_cost * Self::cost(d);
-                if !pays {
+                if !d.pays_income() {
                     v += w.ability * left;
                 }
             }
@@ -983,5 +972,7 @@ mod tests {
         assert_eq!(w.unity_rate_start, 1.5);
         assert!(w.set("unity_rate_start", 0.5));
         assert_eq!(w.unity_rate_start, 0.5);
+        assert!(w.set("data_centre", 2.5));
+        assert_eq!(w.presence, 2.5);
     }
 }

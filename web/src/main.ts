@@ -4,18 +4,20 @@
 
 import { renderBoard } from './board';
 import {
-  aiBoard, checkRecord, legalActions, load, recordText, resolveConfig, rulesRevision, version, view as engineView,
-  type Action, type CardView, type GameEvent, type View,
+  checkRecord, legalActions, load, recordText, resolveConfig, rulesRevision, version, view as engineView,
+  type Action, type View,
 } from './engine';
 import {
-  actionLabel, choiceKey, contentIds, escapeHtml, eventText, hexKey, hexesIn, isHex, kindName, strong, tokenColour, tokenName,
+  actionLabel, choiceKey, contentIds, escapeHtml, hexKey, hexesIn, isHex, shortPhase, strong,
   type LabelContext,
 } from './format';
+import { details } from './hover';
+import { logEntry } from './log';
 import {
-  boardDetails, countriesHtml, countryName, legendHtml, pilesHtml, pipelineHtml, seatCardsHtml, seatValuesHtml,
-  statusHtml, trackStepDetails, varsHtml,
+  countriesHtml, countryName, legendHtml, pilesHtml, pipelineHtml, seatCardsHtml, seatValuesHtml,
+  statusHtml, varsHtml,
 } from './panels';
-import { Timeline, parseSeed, randomSeed, readRecord, storageGet, storageSet } from './session';
+import { Timeline, parseSeed, randomSeed, readRecord, revisionNote, storageGet, storageSet } from './session';
 import './style.css';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -61,7 +63,7 @@ const CONFIGS: Record<string, string> = Object.fromEntries(
 let tl: Timeline;
 let shown: View;
 let legal: Action[] = [];
-/** The choice (actions differing only in target hex) waiting for a hex click. */
+/** The choice (actions differing only in target hex) waiting for a hex click; set by `render`. */
 let armed: { seat: number; key: string } | null = null;
 let autoplay: number | null = null;
 let activeTab = 'log';
@@ -85,13 +87,23 @@ function guard(f: () => void) {
 
 // ---------- sessions ----------
 
+/** Saves the session and draws it. */
+function commit() {
+  tl.save();
+  render();
+}
+
+/** Asked before acting at an earlier step; false if the player backs out. */
+function confirmDropLater(): boolean {
+  const later = tl.last - tl.cursor;
+  return later <= 0 || confirm(`Acting here drops the ${later} later action(s). Go on?`);
+}
+
 function setTimeline(t: Timeline) {
   stopAutoplay();
   tl = t;
-  armed = null;
   showError(t.replayError);
-  tl.save();
-  render();
+  commit();
 }
 
 function newGame(file: string, seed: string) {
@@ -111,14 +123,11 @@ function loadRecordText(text: string, file: string) {
   if (warn.length && !t.replayError) showError(`record loaded with warnings: ${warn.join('; ')}`);
   // A record that stops replaying: say first if it is from another rules revision (020:
   // only the rejected action showed).
-  else if (t.replayError && rec.rules_revision && rec.rules_revision !== rulesRevision)
-    showError(`this record is from rules revision ${rec.rules_revision} and this engine plays revision ${rulesRevision}: ${t.replayError}`);
+  else if (t.replayError && revisionNote(rec)) showError(`${revisionNote(rec)}${t.replayError}`);
 }
 
 function act(a: Action) {
-  const later = tl.last - tl.cursor;
-  if (later > 0 && !confirm(`Acting here drops the ${later} later action(s). Go on?`)) return;
-  armed = null;
+  if (!confirmDropLater()) return;
   // Acting from a focused action button (the keyboard): keep focus in that seat's
   // buttons across the re-render (020: it fell back to the page body every time).
   const fromButton = !!(document.activeElement as Element | null)?.closest?.('#seats .actions');
@@ -126,8 +135,7 @@ function act(a: Action) {
     tl.act(a);
     showError(null);
   });
-  tl.save();
-  render();
+  commit();
   if (fromButton) {
     const next = (ui.seats.querySelector(`.seat[data-seat="${a.seat}"] .actions button`) ?? ui.seats.querySelector('.actions button')) as HTMLElement | null;
     next?.focus();
@@ -137,9 +145,7 @@ function act(a: Action) {
 function seek(i: number) {
   if (!tl) return; // still loading
   tl.seek(i);
-  armed = null;
-  tl.save();
-  render();
+  commit();
 }
 
 // ---------- rendering ----------
@@ -148,12 +154,9 @@ function render() {
   const f = tl.frame;
   shown = engineView(f.snap);
   legal = legalActions(f.snap);
-  if (armed && !legal.some((a) => a.seat === armed!.seat && choiceKey(a) === armed!.key)) armed = null;
   // An open choice answered by picking a hex arms that pick at once.
-  if (!armed && shown.choice) {
-    const pick = legal.find((a) => a.seat === shown.choice!.seat && a.type === 'choose' && isHex(a.target));
-    if (pick) armed = { seat: pick.seat, key: choiceKey(pick) };
-  }
+  const pick = legal.find((a) => a.seat === shown.choice?.seat && a.type === 'choose' && isHex(a.target));
+  armed = pick ? { seat: pick.seat, key: choiceKey(pick) } : null;
 
   const src = tl.source;
   const cfgName = f.snap.state.config.name || 'config';
@@ -178,7 +181,7 @@ function render() {
   renderPrompt(targets.size);
   ui.status.innerHTML = statusHtml(shown, f.snap.state.config);
   ui.pipeline.innerHTML = pipelineHtml(shown);
-  ui.countries.innerHTML = countriesHtml(shown, f.snap.state.config);
+  ui.countries.innerHTML = countriesHtml(shown);
   renderSeats();
   renderPiles();
   renderLog();
@@ -186,14 +189,11 @@ function render() {
   renderTab();
 }
 
-/** "cards.play+threats.counter" → "play + counter". */
-const shortPhase = (name: string) => name.split('+').map((x) => x.split('.').pop()).join(' + ');
-
 /** Who the game waits for, and the open choice's question, above the board. */
 function renderPrompt(targets: number) {
   const v = shown;
   const seatName = (s: number) => {
-    const ai = v.seats[s]?.board?.name ?? aiBoard(tl.frame.snap.state.config, s)?.name;
+    const ai = v.seats[s]?.board?.name;
     return `Seat ${s}${ai ? ` (${escapeHtml(ai)})` : ''}`;
   };
   ui.prompt.className = '';
@@ -233,7 +233,6 @@ function renderPhase() {
 
 function renderSeats() {
   const v = shown;
-  const config = tl.frame.snap.state.config;
   ui.seats.innerHTML = '';
   for (const seat of v.seats) {
     const country = v.countries[seat.country];
@@ -245,9 +244,7 @@ function renderSeats() {
     box.dataset.seat = String(seat.index);
     box.style.setProperty('--tint', strong(country?.colour ?? '#cccccc'));
     const status = v.outcome ? '' : choosing ? 'deciding' : mine.length ? 'to act' : seat.passed ? 'passed' : waiting ? 'waiting' : '';
-    // The board the engine shows for this seat; content's board by config as a fallback.
-    const fallback = aiBoard(config, seat.index);
-    const ai = seat.board ?? (fallback && { name: fallback.name, text: fallback.text, innate: fallback.innate });
+    const ai = seat.board;
     box.innerHTML = `
       <h3><span class="swatch"></span>Seat ${seat.index}${ai ? ` · <span class="board-name" data-board-seat="${seat.index}">${escapeHtml(ai.name)}</span>` : ''} <small title="country ${seat.country}">${escapeHtml(countryName(v, seat.country))}</small><span class="status">${status}</span></h3>
       ${ai?.innate ? `<div class="innate" title="${escapeHtml(ai.text ?? '')}"><b>${escapeHtml(ai.innate.name)}:</b> ${escapeHtml(ai.innate.text ?? '')}</div>` : ''}
@@ -323,21 +320,18 @@ function actionButtons(mine: Action[]): HTMLElement {
 }
 
 /** Button order: answers and decisions first, standard actions, threat counters and gifts next, selling a card and pass last. */
-const TYPE_ORDER = ['choose', 'growth', 'tier', 'draft', 'keep', 'play', 'use', 'draw', 'standard', 'pay', 'withdraw', 'give', 'antimatter', 'sell'];
+const TYPE_ORDER = ['choose', 'growth', 'tier', 'draft', 'keep', 'play', 'use', 'standard', 'pay', 'withdraw', 'give', 'antimatter', 'sell'];
 const typeRank = (t: string) => (t === 'pass' ? 99 : TYPE_ORDER.indexOf(t) < 0 ? 50 : TYPE_ORDER.indexOf(t));
 
 function passAll() {
-  const later = tl.last - tl.cursor;
-  if (later > 0 && !confirm(`Acting here drops the ${later} later action(s). Go on?`)) return;
+  if (!confirmDropLater()) return;
   guard(() => {
     for (const s of shown.phase?.waiting ?? []) {
       const p = legalActions(tl.frame.snap).find((a) => a.seat === s && a.type === 'pass');
       if (p) tl.act(p);
     }
   });
-  armed = null;
-  tl.save();
-  render();
+  commit();
 }
 
 function renderPiles() {
@@ -349,49 +343,6 @@ function renderPiles() {
 
 /** The timeline and frames whose entries the log shows (see `renderLog`). */
 let logBuilt: { tl: Timeline; frames: unknown[] } | null = null;
-
-const evItem = (e: GameEvent) => {
-  const hs = hexesIn(e).map(hexKey).join(' ');
-  return `<li class="ev ${escapeHtml(e.type)}"${hs ? ` data-hexes="${hs}"` : ''}>${escapeHtml(eventText(e))}</li>`;
-};
-
-/**
- * A step's events by phase (022, D7): the engine marks each phase it enters with a
- * `phase_started` event and each new round with `round_started`; the events before the
- * first mark belong to the phase the action was taken in (`before`, the step's phase).
- */
-function phaseGroups(events: GameEvent[], before: string): { label: string; round: boolean; events: GameEvent[] }[] {
-  const groups = [{ label: before, round: false, events: [] as GameEvent[] }];
-  for (const e of events) {
-    if (e.type === 'phase_started') groups.push({ label: shortPhase(String(e.phase)), round: false, events: [] });
-    else if (e.type === 'round_started') groups.push({ label: `Round ${e.round}`, round: true, events: [] });
-    else groups[groups.length - 1].events.push(e);
-  }
-  if (!groups[0].events.length) groups.shift();
-  return groups;
-}
-
-function logEntry(f: Timeline['frames'][number], i: number, prev: Timeline['frames'][number] | undefined): string {
-  const head = f.action ? `#${i} ${escapeHtml(actionLabel(f.action, true, true, { config: f.snap.state.config }))}` : '#0 setup';
-  const hexes = [...(f.action ? hexesIn(f.action) : []), ...f.events.flatMap(hexesIn)].map(hexKey);
-  const ps = prev?.snap.state;
-  const before = ps ? shortPhase(ps.config.round[ps.phase] ?? 'setup') : 'setup';
-  const groups = phaseGroups(f.events, before);
-  let body: string;
-  // A step that stays in one phase lists its events as they are; one that runs through
-  // phases (the adversary's turn after the last pass) gets a folded group per phase,
-  // whose heading outlines the hexes that phase changed when hovered.
-  if (groups.length <= 1) body = f.events.length ? `<ul>${f.events.map(evItem).join('')}</ul>` : '';
-  else {
-    body = groups.map((g) => {
-      if (!g.events.length) return `<div class="pgroup empty${g.round ? ' round' : ''}">${escapeHtml(g.label)}</div>`;
-      const hs = [...new Set(g.events.flatMap(hexesIn).map(hexKey))].join(' ');
-      const n = g.events.length;
-      return `<details class="pgroup${g.round ? ' round' : ''}"${hs ? ` data-hexes="${hs}"` : ''}><summary>${escapeHtml(g.label)} <small>${n} event${n === 1 ? '' : 's'}${hs ? ` · ${hs.split(' ').length} hex${hs.split(' ').length === 1 ? '' : 'es'}` : ''}</small></summary><ul>${g.events.map(evItem).join('')}</ul></details>`;
-    }).join('');
-  }
-  return `<div class="entry" data-step="${i}" data-hexes="${[...new Set(hexes)].join(' ')}"><div class="head">${head}</div>${body}</div>`;
-}
 
 /**
  * The log keeps the entries of the frames it already shows and only adds or drops
@@ -449,61 +400,6 @@ function renderTab() {
 
 // ---------- hover details ----------
 
-function details(t: HTMLElement | SVGElement): string | null {
-  const d = (t as HTMLElement).dataset;
-  if (d.token !== undefined && d.hex) {
-    const h = shown.hexes.find((x) => hexKey(x.hex) === d.hex);
-    const tok = h?.tokens.find((x) => x.kind === d.token);
-    return `<b>${escapeHtml(tokenName(d.token))}</b> × ${tok?.count ?? 0}<br><code>${escapeHtml(d.token)}</code> on ${escapeHtml(countryName(shown, h?.country ?? -1))} #${h?.number} (${escapeHtml(kindName(h?.kind ?? ''))}, hex ${d.hex})`;
-  }
-  if (d.hex && d.index !== undefined) {
-    const h = shown.hexes[Number(d.index)];
-    // A seat's piece in its seat's colour, as the board draws it (020: grey).
-    const dot = (k: string) => {
-      const seat = /:(\d+)$/.exec(k)?.[1];
-      const c = seat !== undefined ? shown.countries[shown.seats[Number(seat)]?.country ?? -1]?.colour : undefined;
-      return c ? strong(c) : tokenColour(k);
-    };
-    const toks = h.tokens.map((x) => `<span class="dot" style="background:${dot(x.kind)}"></span>${escapeHtml(tokenName(x.kind))} × ${x.count}`).join('<br>') || 'no tokens';
-    const here = legal.filter((a) => isHex(a.target) && hexKey(a.target) === d.hex).map((a) => escapeHtml(actionLabel(a, true, true, labels())));
-    const facing = h.facing !== undefined ? ` · <b>front</b> facing ${escapeHtml(countryName(shown, h.facing))}` : '';
-    const arrows = (shown.arrows ?? []).filter((a) => a.from === h.index || a.to === h.index).map((a) => escapeHtml(contentIds(a.doc)));
-    return `<b>${escapeHtml(countryName(shown, h.country))} #${h.number}</b> · ${escapeHtml(kindName(h.kind))}${facing}<br>hex ${d.hex} · index ${h.index} · piece position ${h.piece_pos.join(',')} · ${h.neighbours.length} neighbours<hr>${toks}${arrows.length ? `<hr>${arrows.join('<br>')}` : ''}${here.length ? `<hr>legal here:<br>${here.join('<br>')}` : ''}`;
-  }
-  if (d.pile) {
-    const p = shown.piles.find((x) => x.key === d.pile);
-    if (!p || d.card) return null;
-    return `<b>${escapeHtml(p.label)}</b>: ${p.count} card${p.count === 1 ? '' : 's'}<br><code>${escapeHtml(p.key)}</code> · from ${escapeHtml(p.source)}${p.visible.length ? `<hr>${p.visible.map((c) => `${escapeHtml(c.name)}${c.text ? ` <small>${escapeHtml(c.text)}</small>` : ''}`).join('<br>')}` : ''}`;
-  }
-  if (d.value) {
-    const [scope, idx] = (d.scope ?? 'global').split(':');
-    const list = scope === 'seat' ? shown.seats[Number(idx)].values : scope === 'country' ? shown.countries[Number(idx)].values : shown.globals;
-    const v = list.find((x) => x.key === d.value);
-    // A resource another seat has but this one never held (drawn as 0 since 020).
-    if (!v && d.value.startsWith('resource.')) return `<b>${escapeHtml(d.value.slice('resource.'.length).replace(/_/g, ' '))}</b>: 0<br><code>${escapeHtml(d.value)}</code> · ${scope}${idx ? ` ${idx}` : ''} (none yet)`;
-    if (!v) return null;
-    return `<b>${escapeHtml(v.label)}</b>: ${v.value}${v.max !== undefined ? ` / ${v.max}` : ''}<br><code>${escapeHtml(v.key)}</code> · ${scope}${idx ? ` ${idx}` : ''} · from ${escapeHtml(v.source)}${v.doc ? `<br>${escapeHtml(v.doc)}` : ''}`;
-  }
-  if (d.card) {
-    // The same card id can sit with several seats, each with its own status: look
-    // in the place the chip was drawn from.
-    const [kind, a, ...rest] = (d.where ?? '').split(':');
-    const key = rest.join(':');
-    const pool: (CardView | null)[] =
-      kind === 'seat' ? shown.seats[Number(a)]?.cards.find((g) => g.key === key)?.cards ?? []
-      : kind === 'country' ? shown.countries[Number(a)]?.cards.find((g) => g.key === key)?.cards ?? []
-      : kind === 'pile' ? shown.piles.find((p) => p.key === [a, ...rest].join(':'))?.visible ?? []
-      : [];
-    const c = pool.find((x) => x?.id === d.card);
-    if (!c) return null;
-    return `<b>${escapeHtml(c.name)}</b> <code>${escapeHtml(c.id)}</code>${c.cost !== undefined ? ` · cost ${c.cost}` : ''}<br>${escapeHtml(c.status)}${c.text ? `<br>${escapeHtml(c.text)}` : ''}<br><small>${escapeHtml(d.where ?? '')}</small>`;
-  }
-  if (d.track) return trackStepDetails(shown, d.track);
-  if (d.boardSeat !== undefined) return boardDetails(shown, Number(d.boardSeat));
-  if (d.action) return `<code>${escapeHtml(d.action)}</code>`;
-  return null;
-}
-
 function highlight(hexes: string[]) {
   ui.board.querySelectorAll('.hex.hl').forEach((e) => e.classList.remove('hl'));
   for (const h of hexes) ui.board.querySelector(`.hex[data-hex="${h}"]`)?.classList.add('hl');
@@ -511,7 +407,7 @@ function highlight(hexes: string[]) {
 
 document.addEventListener('mousemove', (e) => {
   const target = (e.target as Element).closest?.('[data-token],[data-hex][data-index],[data-value],[data-card],[data-pile],[data-track],[data-board-seat],[data-action]') as HTMLElement | null;
-  const html = target ? details(target) : null;
+  const html = target ? details(target, shown, legal, labels()) : null;
   const hl = (e.target as Element).closest?.('[data-hexes]') as HTMLElement | null;
   highlight(hl?.dataset.hexes ? hl.dataset.hexes.split(' ').filter(Boolean) : []);
   if (!html) {
@@ -569,9 +465,7 @@ $('random-seed').onclick = () => {
 $('undo').onclick = () => {
   if (!tl) return;
   tl.undo();
-  armed = null;
-  tl.save();
-  render();
+  commit();
 };
 
 /** One uniformly random legal action at the last step; false once the game is over. */
@@ -585,12 +479,10 @@ function randomAction(): boolean {
 
 function randomly(times: number) {
   if (!tl) return;
-  armed = null;
   guard(() => {
     for (let i = 0; i < times && randomAction(); i++);
   });
-  tl.save();
-  render();
+  commit();
 }
 
 $('random-action').onclick = () => randomly(1);
@@ -735,24 +627,27 @@ $('record-close').onclick = () => ui.recordDialog.close();
 $('record-load').onclick = () => {
   try {
     loadRecordText(ui.recordText.value, 'pasted record');
-    ui.recordDialog.close();
   } catch (e) {
     ui.recordMsg.textContent = e instanceof Error ? e.message : String(e);
   }
 };
 
+/** Loads a chosen or dropped file. An unreadable one (a folder, a locked file) says so (020: nothing happened). */
+function openFile(f: File) {
+  void f.text().then((t) => guard(() => loadRecordText(t, f.name)), (e) => showError(`could not read ${f.name}: ${e}`));
+}
+
 $('open-record').onclick = () => ui.recordFile.click();
-ui.recordFile.onchange = async () => {
+ui.recordFile.onchange = () => {
   const f = ui.recordFile.files?.[0];
-  if (f) guard(() => void f.text().then((t) => guard(() => loadRecordText(t, f.name)), (e) => showError(`could not read ${f.name}: ${e}`)));
+  if (f) openFile(f);
   ui.recordFile.value = '';
 };
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => {
   e.preventDefault();
   const f = e.dataTransfer?.files?.[0];
-  // An unreadable drop (a folder, a locked file) says so (020: nothing happened).
-  if (f) void f.text().then((t) => guard(() => loadRecordText(t, f.name)), (e) => showError(`could not read ${f.name}: ${e}`));
+  if (f) openFile(f);
 });
 
 // ---------- start ----------
@@ -805,7 +700,7 @@ async function main() {
 
 main().catch((e) => showError(`failed to start: ${e instanceof Error ? e.stack : e}`));
 
-// For scripts/e2e.mjs, scripts/sweep.mjs and the console. The helpers go through the
+// For the scripts in scripts/ (e2e, sweep, odd, shots) and the console. The helpers go through the
 // same paths as the buttons (render included); `play` takes a config's text, so a script
 // can start a game on any override of a config file.
 Object.assign(window, {

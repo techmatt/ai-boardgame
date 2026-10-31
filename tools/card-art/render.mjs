@@ -6,45 +6,26 @@
 // zone, a panel overflows or a requirement plate reaches the tags. `--pdf` also writes
 // out/cards/<variant>.pdf at true size and, with no variants named, all-cards.pdf (every
 // real card at true size, 9 to an A4 page) and splay.pdf.
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-import { ART, CARD, OUT, REPO, TOOL, layout, openPage, readJson } from './lib.mjs';
+import { CARD, FRAMES, MM, OUT, REPO, SHEET_CSS, TOOL, cardPage, frameOf, frameUrl, layout, readJson } from './lib.mjs';
 import { inset, renderCard } from '../../web/card/card.js';
 import { icon, stacked, tagMedallion } from '../../web/card/icons.js';
 
 const argv = process.argv.slice(2);
 const pdf = argv.includes('--pdf');
 const named = argv.filter((a) => !a.startsWith('--'));
-const framesDir = path.join(ART, 'frames', 'r3');
 const samples = await readJson(path.join(TOOL, 'samples.json'));
 const ids = named.length ? named : Object.keys(samples.variants);
 const l = inset(await layout());
-const fits = await readJson(path.join(framesDir, 'fit.json'));
+const fits = await readJson(path.join(FRAMES, 'fit.json'));
 const cards = Object.fromEntries((await readJson(path.join(REPO, 'content', 'cards.json'))).map((c) => [c.id, c]));
 const faces = await readJson(path.join(CARD, 'faces.json'));
 const faced = (id) => ({ ...cards[id], ...faces[id] });
-const frameOf = (card) => `${card.kind}-t${card.tier >= 2 ? 2 : 1}`;
-const frameUrl = (v) => pathToFileURL(path.join(framesDir, `${v}.jpg`)).href;
 await mkdir(OUT, { recursive: true });
 
-const MM = 96 / 25.4;
-const scale = l.print_px[0] / (l.bleed_mm[0] * MM);
-const { page, close } = await openPage(Math.ceil(l.bleed_mm[0] * MM), Math.ceil(l.bleed_mm[1] * MM));
-const browser = page.context().browser();
-const ctx = await browser.newContext({ viewport: { width: 700, height: 900 }, deviceScaleFactor: scale });
-const p = await ctx.newPage();
-
-// A file: page so the relative font and container urls in card.css resolve.
-const stub = path.join(CARD, 'card.css');
-await p.goto(pathToFileURL(stub).href.replace('card.css', 'layout.json'));
-const css = await readFile(stub, 'utf8');
-const base = pathToFileURL(CARD + path.sep).href;
-const show = async (body, extra = '') => {
-  await p.setContent(`<!doctype html><html><head><base href="${base}"><style>body{margin:0}${css}${extra}</style></head><body>${body}</body></html>`, { waitUntil: 'load' });
-  await p.evaluate(() => document.fonts.ready);
-};
+const { p, show, clip, close } = await cardPage(l, 700, 900);
 
 const inspect = () =>
   p.evaluate(({ safe, mm }) => {
@@ -79,7 +60,6 @@ const report = (id, check) => {
   failed++;
   console.error(`render: ${id}: ${check.join('; ')}`);
 };
-const clip = { x: 0, y: 0, width: l.bleed_mm[0] * MM, height: l.bleed_mm[1] * MM };
 
 for (const id of ids) {
   const card = faced(samples.variants[id]);
@@ -117,7 +97,7 @@ if (!named.length) {
     const body = pages
       .map((row) => `<section class="sheet-page">${row.map((c) => renderCard(faced(c.id), l, frameUrl(frameOf(c)), fits[frameOf(c)])).join('')}</section>`)
       .join('');
-    await show(body, '@page{size:210mm 297mm;margin:0}.sheet-page{width:207mm;height:282mm;padding:7.500mm 1.500mm;display:grid;grid-template-columns:repeat(3,69mm);grid-auto-rows:94mm;break-after:page}');
+    await show(body, SHEET_CSS);
     await p.pdf({ path: path.join(OUT, 'all-cards.pdf'), printBackground: true, preferCSSPageSize: true });
     console.log(`render: all-cards.pdf, ${all.length} cards on ${pages.length} pages`);
   }

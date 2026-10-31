@@ -161,9 +161,9 @@ impl GateState {
         }
         let mut by: Vec<usize> = (0..cells.len()).collect();
         by.sort_by(|&a, &b| {
-            let agent = |c: &usize| !self.agents.contains(c);
-            agent(&a)
-                .cmp(&agent(&b))
+            let is_check = |c: &usize| !self.agents.contains(c);
+            is_check(&a)
+                .cmp(&is_check(&b))
                 .then(score[b].total_cmp(&score[a]))
                 .then(a.cmp(&b))
         });
@@ -265,6 +265,85 @@ pub fn check_spec(cells: &[Cell]) -> Result<(), String> {
     Ok(())
 }
 
+/// A check's decision, block by block over the seeds both have played in
+/// full: why it stops, and the look it stops at.
+fn decide(
+    gate: &Gate,
+    agent: &BTreeMap<u64, bool>,
+    check: &BTreeMap<u64, bool>,
+    looks: &[u64],
+    cap: u64,
+) -> Option<(Decided, u64)> {
+    let full = |m: &BTreeMap<u64, bool>, n: u64| (0..n).all(|k| m.contains_key(&k));
+    let (mut oa, mut oc, mut n) = (0u64, 0u64, 0u64);
+    for &look in looks {
+        if !full(check, look) || !full(agent, look) {
+            break;
+        }
+        while n < look {
+            match (agent[&n], check[&n]) {
+                (true, false) => oa += 1,
+                (false, true) => oc += 1,
+                _ => {}
+            }
+            n += 1;
+        }
+        if look >= gate.min_games && look < cap {
+            if let Some(d) = gate.decided(oa as i64 - oc as i64, oa + oc, n, cap) {
+                return Some((d, look));
+            }
+        }
+    }
+    None
+}
+
+/// The table's row for check `c` against its agent `a`, passed as `(a, c)`.
+/// Rows read every seed both played, finished block or not.
+fn check_row(
+    cells: &[Cell],
+    (a, c): (usize, usize),
+    won: &[BTreeMap<u64, bool>],
+    ms: &[f64],
+    cap: u64,
+    stop: Option<(Decided, u64)>,
+) -> CheckRow {
+    let seeds: Vec<u64> = won[c].keys().filter(|k| won[a].contains_key(k)).copied().collect();
+    let m = seeds.len() as u64;
+    let wins = |x: usize| seeds.iter().filter(|k| won[x][k]).count() as f64;
+    let nf = m.max(1) as f64;
+    let (p, q) = (wins(a) / nf, wins(c) / nf);
+    let (oa, oc) = seeds.iter().fold((0u64, 0u64), |(x, y), k| match (won[a][k], won[c][k]) {
+        (true, false) => (x + 1, y),
+        (false, true) => (x, y + 1),
+        _ => (x, y),
+    });
+    let gap = p - q;
+    let var = ((oa + oc) as f64 - nf * gap * gap) / (nf - 1.0).max(1.0);
+    CheckRow {
+        config: cells[c].config_path.clone(),
+        variant: cells[c].variant.clone(),
+        difficulty: cells[c].difficulty,
+        check: cells[c].agent.label(),
+        agent: cells[a].agent.label(),
+        cell: c,
+        agent_cell: a,
+        games: m,
+        cap,
+        stopped_at: stop.map(|(_, look)| look),
+        decided: stop.map(|(d, _)| d),
+        agent_win_rate: p,
+        check_win_rate: q,
+        only_agent: oa,
+        only_check: oc,
+        gap,
+        se: ((p * (1.0 - p) + q * (1.0 - q)) / nf).sqrt(),
+        paired_se: (var.max(0.0) / nf).sqrt(),
+        loses: gap > 0.0,
+        ms: ms[c],
+        ms_at_cap: ms[c] / nf * cap as f64,
+    }
+}
+
 /// Every decision so far, rebuilt from `games`.
 pub fn evaluate(gate: &Gate, spec: &Spec, cells: &[Cell], games: &[GameResult]) -> GateState {
     let cap = spec.games;
@@ -283,65 +362,11 @@ pub fn evaluate(gate: &Gate, spec: &Spec, cells: &[Cell], games: &[GameResult]) 
         let Some(a) = agent_of(cells, c) else { continue };
         agents.insert(a);
         checks_of.entry(a).or_default().push(c);
-        let full = |m: &BTreeMap<u64, bool>, n: u64| (0..n).all(|k| m.contains_key(&k));
-        let mut decided = None;
-        let (mut oa, mut oc, mut n) = (0u64, 0u64, 0u64);
-        for &look in &looks {
-            if !full(&won[c], look) || !full(&won[a], look) {
-                break;
-            }
-            while n < look {
-                match (won[a][&n], won[c][&n]) {
-                    (true, false) => oa += 1,
-                    (false, true) => oc += 1,
-                    _ => {}
-                }
-                n += 1;
-            }
-            if look >= gate.min_games && look < cap {
-                decided = gate.decided(oa as i64 - oc as i64, oa + oc, n, cap);
-                if decided.is_some() {
-                    plays[c] = look;
-                    break;
-                }
-            }
+        let stop = decide(gate, &won[a], &won[c], &looks, cap);
+        if let Some((_, look)) = stop {
+            plays[c] = look;
         }
-        // Rows read every seed both played, finished block or not.
-        let seeds: Vec<u64> = won[c].keys().filter(|k| won[a].contains_key(k)).copied().collect();
-        let m = seeds.len() as u64;
-        let wins = |x: usize| seeds.iter().filter(|k| won[x][k]).count() as f64;
-        let nf = m.max(1) as f64;
-        let (p, q) = (wins(a) / nf, wins(c) / nf);
-        let (oa, oc) = seeds.iter().fold((0u64, 0u64), |(x, y), k| match (won[a][k], won[c][k]) {
-            (true, false) => (x + 1, y),
-            (false, true) => (x, y + 1),
-            _ => (x, y),
-        });
-        let gap = p - q;
-        let var = ((oa + oc) as f64 - nf * gap * gap) / (nf - 1.0).max(1.0);
-        rows.push(CheckRow {
-            config: cells[c].config_path.clone(),
-            variant: cells[c].variant.clone(),
-            difficulty: cells[c].difficulty,
-            check: cells[c].agent.label(),
-            agent: cells[a].agent.label(),
-            cell: c,
-            agent_cell: a,
-            games: m,
-            cap,
-            stopped_at: decided.map(|_| plays[c]),
-            decided,
-            agent_win_rate: p,
-            check_win_rate: q,
-            only_agent: oa,
-            only_check: oc,
-            gap,
-            se: ((p * (1.0 - p) + q * (1.0 - q)) / nf).sqrt(),
-            paired_se: (var.max(0.0) / nf).sqrt(),
-            loses: gap > 0.0,
-            ms: ms[c],
-            ms_at_cap: ms[c] / nf * cap as f64,
-        });
+        rows.push(check_row(cells, (a, c), &won, &ms, cap, stop));
     }
     // An agent plays as far as its last check.
     for (&a, checks) in &checks_of {

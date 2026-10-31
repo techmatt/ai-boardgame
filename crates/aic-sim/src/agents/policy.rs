@@ -1,6 +1,6 @@
 //! Keeping by plan, and the forced behaviours of the dominance checks (022).
 //!
-//! [`Policy`] wraps a greedy or engine agent. At keep time it sketches the
+//! [`Policy`] wraps a greedy, engine or planner agent. At keep time it sketches the
 //! seat's next rounds ([`plan_keeps`]) and keeps a drafted card only if the
 //! card lands in that plan and the plan is worth more with it than without
 //! it (the keep's insight would otherwise pay for plays this round). The
@@ -66,10 +66,11 @@ pub struct Forced {
     /// Exploit check (027): no counter paid and no card that counters a threat.
     pub ignore_threats: bool,
     /// Exploit check (027): stay on the setup hex and defend it: no presence,
-    /// only the remove, ambassador and hardening standard actions.
+    /// only the remove, clear, ambassador, hardening and chips standard actions.
     pub turtle: bool,
     /// Exploit check (027): only free cities: Diplomacy cards, the ambassador,
-    /// move and remove standard actions, no counters, no presence, no powers.
+    /// move, remove, clear and chips standard actions, no counters, no presence,
+    /// no powers.
     pub free_only: bool,
     /// Exploit check (028): farm the Unity deck. Every seat buys ambassadors
     /// and lands them on bases and factories, each worth Unity when it produces,

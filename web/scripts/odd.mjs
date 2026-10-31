@@ -72,7 +72,7 @@ const scenario = async (name, f) => {
 const key = (k, extra = '') => `document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true ${extra} }))`;
 /** Plays random actions until a choice is up, or `max` of them. */
 const toChoice = (max = 400) => page.js(`(() => { for (let i = 0; i < ${max}; i++) { const v = window.aic.view; if (v.outcome) return false; if (v.choice && window.aic.legal.length > 1) return true; const l = window.aic.legal; const np = l.filter((a) => a.type !== 'pass'); const p = np.length ? np : l; window.aic.act(p[(i * 7919) % p.length]); } return false; })()`);
-const record = () => page.js(`(document.getElementById('record').click(), new Promise((r) => setTimeout(() => { const t = document.getElementById('record-text') ?? document.querySelector('dialog textarea'); r(t ? t.value : ''); }, 50)))`);
+const record = () => page.js(`(document.getElementById('record').click(), new Promise((r) => setTimeout(() => { r(document.getElementById('record-text').value); }, 50)))`);
 
 try {
   await scenario('mash-keys', async () => {
@@ -83,7 +83,7 @@ try {
         await page.js(`(${key(k, k === 'z' ? ', ctrlKey: true' : '')}, true)`);
       }
       // Space may have left autoplay running: stop it before checking.
-      await page.js("(/pause|stop/i.test(document.getElementById('play').textContent) && document.getElementById('play').click(), true)");
+      await page.js("(/pause/i.test(document.getElementById('play').textContent) && document.getElementById('play').click(), true)");
       await general('mash-keys');
     }
   });

@@ -51,7 +51,7 @@ counter (2-3 credits: it still has to be answered, or it hits next round); a mov
 | Open-Weights Release (T2) | 6 cr + 2 insight, gifts, draw 2, +1 insight | 4 cr + 1 insight, clear 2, shield 2, give 2 insight | the keep (3 insight) is most of the price; about 11 for about 18 when markers stand |
 | Adversarial Inference Sweep (T2) | 7 cr + 2 insight, needs 1 Cyber, drain all 1, draw 2 | 5 cr + 1 insight, drain all 1, 2 threats wait, draw 1 | a swing round's worth of counters put off; the draw shrinks to pay for it |
 
-The two tier-2 prices come from the screen (`experiments/screen-041-science2.json`): at 6 and 7 credits
+The two tier-2 prices come from the screen (`experiments/archive/screen-041-science2.json`): at 6 and 7 credits
 the planner kept them a third of the time and played one in eight dealt. Agents draft tier 2 three
 picks in four, so tier-2 Science is the part of the tag they see most (046: Develop's draws now reach
 the tier-1 deck too).
@@ -174,8 +174,7 @@ Prices below are 023's reasoning; where 024 changed a card, the list above wins.
   built in 023) or cash them out at a growing rate (`cash_out`: 1 + 2 + ... + n).
 - **New primitives (023):** `draw` (Science's card draw, tier-1 deck, no keep paid),
   `drain_all` (Cyber's "every project −X"), `gain_per_tokens`, `cash_out`. Not built,
-  so not on any card: a keep discount (Science approximates it with
-  `next_round_insight`), turning an adversary ambassador, permanent extra reach,
+  so not on any card: a keep discount, turning an adversary ambassador, permanent extra reach,
   presence on any hex, spending an ambassador as a cost.
 
 The per-tag reasoning below was written with the cards, one designer per tag, and
@@ -201,7 +200,7 @@ Tier 2 lands in rounds 5-8, so it pays back in 2-4 rounds or not at all:
 - **Data Licensing Deal** (0 cr, 1 insight): one-shot cash-out of a Dataset pile, up to 8 credits + 2 insight, kept tokens. Cheap because its value is entirely what you already built; the tier-2 keep (3 insight) is its real price.
 - **Ultimates carry antimatter (1 each)**: Recursive Self-Improvement (10 cr, -1 credit income, +2 insight production, draw 3) and Foundation Model Campus (15 cr, 2 chips, needs 3 Science: +2 insight income, +1 credit per Science tag max 6, draw 2). From round 6 each must return ~10 insight-equivalents in 3 rounds to beat their keep + play cost, hence numbers above any tier-1 rate.
 - **Adversarial Inference Sweep** (7 cr, 2 insight): drain_all 1 is a Cyber primitive borrowed at half strength; the draw 2 is the Science half.
-- No keep-discount primitive exists; Predictive Modelling and Open-Weights Release approximate one with `next_round_insight` 1 (every player).
+- No keep-discount primitive exists. Predictive Modelling and Open-Weights Release approximated one with `next_round_insight` 1 (every player) until 041 changed them (*041's changes*, above); no card prints it now.
 
 ## Industry
 

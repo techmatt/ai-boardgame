@@ -7,7 +7,7 @@
 // draw, scene over cards, in art-originals/picks/<picker>/. Reads and writes the originals
 // folder (lib.mjs). Stops, before any work, if that folder isn't reachable or a draw is
 // missing.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,7 +15,7 @@ import { pathToFileURL } from 'node:url';
 
 import sharp from 'sharp';
 
-import { ART, CARD, REPO, TOOL, layout, openPage, pickerOriginals, readJson } from './lib.mjs';
+import { CARD, FRAMES, REPO, SHEET_CSS, TOOL, cardPage, frameOf, frameUrl, layout, pickerOriginals, readJson } from './lib.mjs';
 import { inset, renderCard } from '../../web/card/card.js';
 
 os.setPriority(os.constants.priority.PRIORITY_BELOW_NORMAL);
@@ -32,12 +32,9 @@ await mkdir(path.join(dir, 'cards'), { recursive: true });
 await mkdir(images, { recursive: true });
 
 const l = inset(await layout());
-const framesDir = path.join(ART, 'frames', 'r3');
-const fits = await readJson(path.join(framesDir, 'fit.json'));
+const fits = await readJson(path.join(FRAMES, 'fit.json'));
 const cards = Object.fromEntries((await readJson(path.join(REPO, 'content', 'cards.json'))).map((c) => [c.id, c]));
 const faces = await readJson(path.join(CARD, 'faces.json'));
-const frameOf = (card) => `${card.kind}-t${card.tier >= 2 ? 2 : 1}`;
-const frameUrl = (v) => pathToFileURL(path.join(framesDir, `${v}.jpg`)).href;
 
 // The tier-1 program window, every draw's one shape.
 const [wx0, wy0, wx1, wy1] = fits['program-t1'].art;
@@ -51,20 +48,7 @@ async function cut(id) {
   return { width: cw, height: ch };
 }
 
-const MM = 96 / 25.4;
-const scale = l.print_px[0] / (l.bleed_mm[0] * MM);
-const { page, close } = await openPage(800, 600);
-const ctx = await page.context().browser().newContext({ viewport: { width: 800, height: 1000 }, deviceScaleFactor: scale });
-const p = await ctx.newPage();
-const stub = path.join(CARD, 'card.css');
-await p.goto(pathToFileURL(stub).href.replace('card.css', 'layout.json'));
-const css = await readFile(stub, 'utf8');
-const base = pathToFileURL(CARD + path.sep).href;
-const show = async (body, extra = '') => {
-  await p.setContent(`<!doctype html><html><head><base href="${base}"><style>body{margin:0}${css}${extra}</style></head><body>${body}</body></html>`, { waitUntil: 'load' });
-  await p.evaluate(() => document.fonts.ready);
-};
-const clip = { x: 0, y: 0, width: l.bleed_mm[0] * MM, height: l.bleed_mm[1] * MM };
+const { p, show, clip, close } = await cardPage(l, 800, 1000);
 const face = (cardId, id) => {
   const card = { ...cards[cardId], ...faces[cardId] };
   const frame = frameOf(card);
@@ -116,7 +100,7 @@ const sheets = [];
 for (let i = 0; i < all.length; i += 9) sheets.push(all.slice(i, i + 9));
 await show(
   sheets.map((row) => `<section class="sheet-page">${row.join('')}</section>`).join(''),
-  '@page{size:210mm 297mm;margin:0}.sheet-page{width:207mm;height:282mm;padding:7.500mm 1.500mm;display:grid;grid-template-columns:repeat(3,69mm);grid-auto-rows:94mm;break-after:page}',
+  SHEET_CSS,
 );
 await p.pdf({ path: path.join(dir, 'cards.pdf'), printBackground: true, preferCSSPageSize: true });
 await close();

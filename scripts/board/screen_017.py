@@ -14,12 +14,11 @@ these).
 Reads DIR/games.jsonl and DIR/results.json (cell labels) as written by
 `aic-sim experiment`. Prints markdown.
 """
-import collections
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from screens import checked_cnt, load, mean  # noqa: E402
+from screens import checked_cnt, ends_text, load, mean  # noqa: E402
 
 
 def main(d):
@@ -33,11 +32,10 @@ def main(d):
         gs, c = games[cell], cells[cell]
         n = len(gs)
         won = sum(g['won'] for g in gs)
-        ends = collections.Counter(('win ' if g['won'] else 'loss ') + g['reason'] for g in gs)
         print(f"| {cell} | {c['variant']} | {c['difficulty']} | {c['agent']} | {n} | {100 * won / n:.0f} "
               f"| {mean(gs, lambda g: g['rounds']):.1f} | {mean(gs, lambda g: cnt(g, 'alignment.tips_unity')):.2f} "
               f"| {mean(gs, lambda g: cnt(g, 'alignment.tips_discord')):.2f} "
-              f"| {', '.join(f'{k} {v}' for k, v in ends.most_common())} |")
+              f"| {ends_text(gs)} |")
     print()
     print('Per game (means over the cell): projects resolved cheap / big; adversary compute made / blocked; '
           'Discord / Unity tips; games with a Unity tip; troop advances (moves) / advance strikes / their '

@@ -6,7 +6,11 @@ summary; a script one folder down puts scripts/ on `sys.path` to import this.
 import collections
 import json
 import math
+import re
 import sys
+
+# A per-round counter's suffix (`.r07`).
+ROUND = re.compile(r'\.r\d\d$')
 
 
 def load(d):
@@ -50,6 +54,17 @@ def hist(rounds):
     return ' '.join(f'{r}:{c[r]}' for r in sorted(c)) or '–'
 
 
+def ends_text(gs):
+    """`win purge 12, loss presence 3`: how the games ended, commonest first."""
+    e = collections.Counter(('win ' if g['won'] else 'loss ') + g['reason'] for g in gs)
+    return ', '.join(f'{k} {v}' for k, v in e.most_common())
+
+
+def seats(c):
+    """A cell's seats, from its variant's name: the c3 variants are three, everything else two."""
+    return 3 if c['variant'].startswith('c3') else 2
+
+
 def checked_cnt(games):
     """`cnt` for a script on older rules: a key in no game warns once on stderr, since
     it may be a counter that is gone and its 0 would pass for a measurement."""
@@ -70,23 +85,16 @@ def sources(games):
     for gs in games.values():
         for g in gs:
             for k, v in g['counters'].items():
-                if k.startswith('board.presence_lost.') and not k.split('.')[-1].startswith('r'):
+                if k.startswith('board.presence_lost.'):
                     tot[k.split('.')[-1]] += v
     n = sum(tot.values()) or 1
     print('Presence lost by source: ' + ', '.join(f'{k} {v} ({100 * v / n:.0f}%)' for k, v in tot.most_common()))
 
 
 def gate_games(rows):
-    """Games per check from results.json's "gate" rows, by (variant, difficulty, check).
-    A row names its check `check`, or `agent` in a hand-made table; a row without a count
-    gives nothing."""
-    out = {}
-    for r in rows:
-        check = r.get('check', r.get('agent'))
-        n = r.get('games', r.get('n'))
-        if check is not None and n is not None:
-            out[(r.get('config'), r.get('variant'), r.get('difficulty'), check)] = n
-    return out
+    """Games per check from results.json's "gate" rows, by (config, variant, difficulty,
+    check)."""
+    return {(r.get('config'), r.get('variant'), r.get('difficulty'), r['check']): r['games'] for r in rows}
 
 
 def gate(cells, games, rows=None):

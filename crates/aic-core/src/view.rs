@@ -284,6 +284,15 @@ pub struct ViewOut<'a> {
 }
 
 impl ViewOut<'_> {
+    fn group(&self, key: &str, label: &str, cards: Vec<CardView>) -> CardGroup {
+        CardGroup {
+            key: format!("{}.{key}", self.module),
+            label: label.to_string(),
+            source: self.module.to_string(),
+            cards,
+        }
+    }
+
     fn value(&self, key: &str, label: &str, value: i64, max: Option<i64>, doc: &str) -> Value {
         Value {
             key: format!("{}.{key}", self.module),
@@ -353,22 +362,12 @@ impl ViewOut<'_> {
 
     /// A card group on a country (say, the threat on it).
     pub fn country_cards(&mut self, country: usize, key: &str, label: &str, cards: Vec<CardView>) {
-        let group = CardGroup {
-            key: format!("{}.{key}", self.module),
-            label: label.to_string(),
-            source: self.module.to_string(),
-            cards,
-        };
+        let group = self.group(key, label, cards);
         self.view.countries[country].cards.push(group);
     }
 
     pub fn cards(&mut self, seat: usize, key: &str, label: &str, cards: Vec<CardView>) {
-        let group = CardGroup {
-            key: format!("{}.{key}", self.module),
-            label: label.to_string(),
-            source: self.module.to_string(),
-            cards,
-        };
+        let group = self.group(key, label, cards);
         self.view.seats[seat].cards.push(group);
     }
 
@@ -529,7 +528,7 @@ pub(crate) fn generic(rules: &crate::Rules, g: &GameState) -> View {
                 .map(|(k, &n)| {
                     engine(
                         format!("resource.{k}"),
-                        &k.name().replace('_', " "),
+                        k.name(),
                         n,
                         "on this seat's board",
                     )
@@ -598,7 +597,7 @@ pub(crate) fn finish(view: &mut View, g: &GameState, content: &Content) {
             .filter(|id| !shown(id))
             .map(|id| CardView {
                 id: id.to_string(),
-                name: content.name_of(id).unwrap_or(id).to_string(),
+                name: content.card_index(id).map_or(id.as_str(), |i| &content.cards[i].name).to_string(),
                 text: String::new(),
                 status: "used".to_string(),
                 cost: None,

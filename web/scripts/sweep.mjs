@@ -8,7 +8,7 @@
 //   AIC_SIM       aic-sim binary (default ../target/release/aic-sim[.exe])
 //   AIC_SWEEP_OUT output folder (default web/sweep-out/, git-ignored)
 //   AIC_SWEEP_SEEDS games per case and mode (default 3; --quick 1)
-// For each case, aic-sim plays greedy games and saves them as records; the sweep then
+// For each case, aic-sim plays games (greedy, or the case's agent) and saves them as records; the sweep then
 // watches each record step by step (realistic games: wins, purges, late rounds) and
 // plays as many fresh games of the same resolved config by picking legal actions at
 // random through the page's own `act` (choices, hex picks, passes, undo). Exit code 1
@@ -194,7 +194,7 @@ const PAGE_LIB = String.raw`(() => {
         if (PLACEHOLDER.test(t)) add('placeholder', label(el));
         // #source names the config file and the config's own name (shared_row): not a raw id.
         // (No backticks in here: this code sits inside a template string.)
-        if (!el.closest('code, pre, #data, small.id, #source') && RAW_ID.test(t)) add('raw-id', label(el) + ' (' + t.match(RAW_ID)[0] + ')');
+        if (!el.closest('code, pre, #data, #source') && RAW_ID.test(t)) add('raw-id', label(el) + ' (' + t.match(RAW_ID)[0] + ')');
         // The engine's hex names (C1 #13) are shown with the country's name (020).
         if (!el.closest('code, pre, #data') && /\bC\d+ #\d+/.test(t)) add('raw-id', label(el) + ' (engine hex name)');
       }

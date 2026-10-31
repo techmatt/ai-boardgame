@@ -2,15 +2,8 @@ use super::*;
 use crate::modules::common::{presence, NODE};
 use crate::modules::{adversary, alignment};
 
-/// The baseline playing only the action phase, after setup (no build yet).
-fn action_only(sets: &[&str]) -> (Rules, GameState) {
-    let mut c = baseline_with(sets);
-    c.apply_override("alignment.unity_ease=1,1,2").unwrap();
-    c.round = vec![ACTIONS.into()];
-    let rules = Rules::new(&c).unwrap();
-    let g = rules.new_game(4);
-    (rules, g)
-}
+/// This file's Unity tips come at 1, 1 and 2 cards.
+const EASE: &str = "alignment.unity_ease=1,1,2";
 
 /// Gives 1 insight from seat 0 to seat 1: an action, so the end checks run.
 pub(super) fn give(rules: &Rules, g: &mut GameState) {
@@ -30,7 +23,7 @@ fn uncorrupt_cities(rules: &Rules, g: &mut GameState) {
 
 #[test]
 fn a_full_unity_bucket_tips_a_card_and_lowers_the_bar() {
-    let (rules, mut g) = action_only(&[]);
+    let (rules, mut g) = action_only(&[EASE]);
     let m = &rules.map;
     // One Unity tip made, the bucket full (2 a player, 2 players); no city
     // corrupted but adversary ambassadors about. The next card is Civil
@@ -91,7 +84,7 @@ fn the_board_clear_win_and_the_bar_easing() {
         (2, 1, 1, Some(NODE), true),
     ];
     for &(tips, rule, stage, piece_left, wins) in cases {
-        let (rules, mut g) = action_only(&[&format!("alignment.clear_win_stage={rule}")]);
+        let (rules, mut g) = action_only(&[EASE, &format!("alignment.clear_win_stage={rule}")]);
         uncorrupt_cities(&rules, &mut g);
         g.vars.insert(STAGE.into(), stage);
         g.vars.insert("alignment.unity_tips".into(), tips);
@@ -130,7 +123,7 @@ fn the_board_clear_win_and_the_bar_easing() {
 #[test]
 fn the_antimatter_action_and_the_empty_undecided() {
     for (variant, from_unity) in [("tug", true), ("still", false)] {
-        let (rules, mut g) = action_only(&[&format!("alignment.variant={variant}")]);
+        let (rules, mut g) = action_only(&[EASE, &format!("alignment.variant={variant}")]);
         g.vars.insert("alignment.undecided".into(), 0);
         g.vars.insert("alignment.unity".into(), 2);
         g.vars.insert("alignment.discord".into(), 0);
@@ -164,7 +157,7 @@ fn the_antimatter_action_and_the_empty_undecided() {
 /// down to 1 per player.
 #[test]
 fn discord_tips_do_not_escalate_and_momentum_shrinks_buckets() {
-    let (rules, mut g) = action_only(&[]);
+    let (rules, mut g) = action_only(&[EASE]);
     g.vars.insert("alignment.discord_tips".into(), 1);
     fill_bucket(&rules, &mut g, Side::Discord);
     give(&rules, &mut g);

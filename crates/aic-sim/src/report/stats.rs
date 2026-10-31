@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 
 use aic_core::content::{CardDef, Content};
-use aic_core::op::Op;
 
 use crate::agents::AgentSpec;
 use crate::experiment::{CardCounts, Cell, GameResult, Spec};
@@ -158,19 +157,12 @@ pub(super) fn standing(sig: &str) -> usize {
         .sum()
 }
 
-/// An economy building prints standing income: a passive that pays a resource
-/// every round while it stands, flat, per tag or if-tags. Not `Op::Production`
-/// (an instant: the gain outlives the building, so losing it costs nothing),
-/// not `ConvertUpkeep` (it trades, it adds nothing), not a building that only
-/// stores tokens.
+/// An economy building prints standing income ([`CardDef::pays_income`]). Not
+/// `Op::Production` (an instant: the gain outlives the building, so losing it
+/// costs nothing), not `ConvertUpkeep` (it trades, it adds nothing), not a
+/// building that only stores tokens.
 fn is_economy_building(d: &CardDef) -> bool {
-    d.is_building()
-        && d.passives.iter().any(|o| {
-            matches!(
-                o,
-                Op::Income { .. } | Op::IncomePerTag { .. } | Op::IncomeIfTags { .. }
-            )
-        })
+    d.is_building() && d.pays_income()
 }
 
 /// Economy buildings standing at the end, over every seat (copies counted),
@@ -321,14 +313,25 @@ fn find_cell(cells: &[Cell], config: &str, variant: &str, d: i64, agent: &str) -
     })
 }
 
+/// Whether a cell of `games` stopped well short of its slice's `most`: a
+/// gate's check, whose few seeds aren't the others' seeds.
+pub(super) fn stopped_short(games: usize, most: usize) -> bool {
+    4 * games < 3 * most
+}
+
 /// Each agent's measured strength: its win rate at the highest difficulty
 /// on the base variant (the first; mean over configs). An agent with no
 /// game there yet (a partial report) is left out, not scored 0, and so is a
-/// gate's check stopped well short: its few seeds aren't the others' seeds.
+/// gate's check [`stopped_short`] within that slice.
 fn strength(cells: &[Cell], sums: &[CellSummary]) -> Vec<(String, f64)> {
     let hi = cells.iter().map(|c| c.difficulty).max();
     let base = cells.first().map(|c| &c.variant);
-    let most = sums.iter().map(|s| s.games).max().unwrap_or(0);
+    let most = sums
+        .iter()
+        .filter(|s| Some(s.difficulty) == hi && Some(&s.variant) == base)
+        .map(|s| s.games)
+        .max()
+        .unwrap_or(0);
     agent_order(cells)
         .iter()
         .filter_map(|a| {
@@ -337,7 +340,7 @@ fn strength(cells: &[Cell], sums: &[CellSummary]) -> Vec<(String, f64)> {
                 sums.iter()
                     .filter(|s| Some(s.difficulty) == hi && s.agent == l)
                     .filter(|s| Some(&s.variant) == base && s.games > 0)
-                    .filter(|s| 4 * s.games >= 3 * most)
+                    .filter(|s| !stopped_short(s.games, most))
                     .map(|s| s.win_rate),
             )?;
             Some((l, p))
@@ -837,7 +840,7 @@ pub fn groups(cells: &[Cell], sums: &[CellSummary], games: &[GameResult]) -> Vec
             // 044: a gate check stopped on a few seeds doesn't lead a tier (as
             // `strength` leaves it out): its rate is of other seeds than the rest.
             let most = idx.iter().map(|&i| sums[i].games).max().unwrap_or(0);
-            let short: Vec<bool> = idx.iter().map(|&i| 4 * sums[i].games < 3 * most).collect();
+            let short: Vec<bool> = idx.iter().map(|&i| stopped_short(sums[i].games, most)).collect();
             let best_per_tier = |v: &[(String, f64)]| -> Vec<f64> {
                 let mut out: Vec<(usize, f64)> = Vec::new();
                 for (k, (_, x)) in v.iter().enumerate() {

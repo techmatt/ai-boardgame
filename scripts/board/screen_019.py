@@ -21,12 +21,11 @@ played >= 5 (018's gate); and in the engine cells at d0, some node removed
 the bar is above zero, not one a game). 019 also required presence placed back
 from the reserve; 034 removed the reserve and its counter.
 """
-import collections
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from screens import checked_cnt, load, mean  # noqa: E402
+from screens import checked_cnt, ends_text, load, mean  # noqa: E402
 
 
 def main(d, short):
@@ -41,14 +40,13 @@ def main(d, short):
         gs, c = games[cell], cells[cell]
         n = len(gs)
         won = sum(g['won'] for g in gs)
-        ends = collections.Counter(('win ' if g['won'] else 'loss ') + g['reason'] for g in gs)
         print(f"| {c['variant']} | {c['difficulty']} | {c['agent']} | {n} | {100 * won / n:.0f} "
               f"| {mean(gs, lambda g: g['rounds']):.1f} "
               f"| {mean(gs, lambda g: mar(g, 'cities_corrupted_end')):.1f} / "
               f"{mean(gs, lambda g: mar(g, 'nodes_end')):.1f} / {mean(gs, lambda g: mar(g, 'troops_end')):.1f} "
               f"| {mean(gs, lambda g: cnt(g, 'alignment.tips_unity')):.1f} / "
               f"{mean(gs, lambda g: cnt(g, 'alignment.tips_discord')):.1f} "
-              f"| {', '.join(f'{k} {v}' for k, v in ends.most_common())} |")
+              f"| {ends_text(gs)} |")
     if short:
         return
     print()

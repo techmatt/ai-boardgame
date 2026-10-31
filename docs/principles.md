@@ -28,9 +28,9 @@ The standards every module and every rules change is judged against.
 played should sit near credit income ÷ insight income: about 11 credits ÷ 5 insight ≈ 2,
 and tier-1 cards average about 3 credits with tier 2 about 9.
 
-- **Credits are the outlier.** 20 to start, 10 / 9 a round from each AI board plus a
-  starting building's +1, plus the presence track and Unity income (Grassroots Funding,
-  New Deal +2 each): a player sees about 140 credits over an 11-round game before cards,
+- **Credits are the outlier.** 20 to start, 10 / 9 a round from each AI board plus the
+  Builder's Foundry Core +1, plus the presence track and Unity income (Grassroots Funding,
+  New Deal +2 each): a player sees about 120 to 140 credits over an 11-round game before cards,
   so totals do reach the hundreds. Card costs run 0–25 (Orbital Mass Driver 25, Arcology
   Foundry and Dyson Swarm Tranche 16): within "about 50", but the income is not "produce
   1".
@@ -90,13 +90,13 @@ the one-step heuristic wins far less (19% against 59%, c2 d2): it drafts by prin
 
 > Balance should require thought, not an obvious heuristic dominating.
 
-Each check is a fixed, simple policy: mostly the engine agent with one behaviour
-forced (`engine:<check>=1` in an experiment spec; `crates/aic-sim/src/agents/policy.rs`).
-The strategy-health gate runs them beside the engine at d0, d2 and d4
-(`experiments/archive/screen-022-dominance.json`, summarised by `scripts/cards/screen_022.py`).
+Each check is a fixed, simple policy: the planner with one behaviour forced
+(`planner:<check>=1` in an experiment spec; `crates/aic-sim/src/agents/policy.rs`). The
+strategy-health gate runs them beside the planner at d2, early-stopped
+(`experiments/gate-046.json`, summarised by `scripts/cards/screen.py --gate`).
 
-- **Healthy:** every check loses ground to the engine at d2 and above, and none matches
-  it at d4. Report each check's gap (engine win % minus the check's) with its noise.
+- **Healthy:** every check loses ground to the planner at d2. Report each check's gap
+  (planner win % minus the check's) with its noise.
 - **When one doesn't lose:** the check names a rule or price that makes thinking
   unnecessary. Fix it when the fix is a number or a content change; otherwise report
   the structural cause.
@@ -121,14 +121,17 @@ The strategy-health gate runs them beside the engine at d0, d2 and d4
 | rich-spend, Science rush (034) | `rich_spend=1`, `science_rush=1` | every spare credit on the rich action; drafts, keeps and plays Science first, for its discounts |
 | always-Expand, always-Consolidate, never-Remove, Science board (041) | `always_expand=1`, `always_consolidate=1`, `never_remove=1`, `science_board=1` | the growth option placing the most presence; the one placing none; never clears a corruption marker; the Science rush, board cards first |
 
+022 ran the checks under the engine at d0, d2 and d4
+(`experiments/archive/screen-022-dominance.json`, summarised by `scripts/cards/screen_022.py`).
 **Since 023 the gate runs at d2 only, 32 seeds a cell** (`experiments/archive/screen-023-dominance.json`
 with `--quick --games 32`, summarised by `scripts/cards/screen_023.py`): 022's d4 half
 could not pass while d4 is not winnable, and 16 seeds left gaps inside the noise. **Since
 028 it runs under the engine and the planner** (`experiments/archive/screen-028-dominance.json`,
 summarised by `scripts/cards/screen_028.py --gate`), each check against its own agent: the
 rules are judged by play that can plan, and a check is the same fixed rule in both. **The
-current gates** are `experiments/gate-034.json` and `experiments/gate-041.json`: planner only,
-d2, early-stopped, summarised by `scripts/cards/screen.py --gate`.
+current gate** is `experiments/gate-046.json`: planner only, d2, early-stopped, every 034
+check plus 041's four fixed policies, summarised by `scripts/cards/screen.py --gate`. Its
+predecessors are `experiments/archive/gate-034.json` and `experiments/archive/gate-041.json`.
 
 ## Sanity checks (028)
 

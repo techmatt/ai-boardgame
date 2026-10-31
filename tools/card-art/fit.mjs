@@ -1,10 +1,12 @@
 // `node fit.mjs`: measure where each frame really put its zones, into
 // art/frames/r3/fit.json (mm boxes the renderer uses instead of the guide's). The master
 // was painted, so its zones sit a little off the guide; every variant derives from it, so
-// all of them should measure alike, and this prints where one doesn't. It seeds from layout.json's zones, inset as derive.mjs insets the frames. Each zone is light inside a darker rim: flood from the guide's centre over the
-// lightly blurred image (texture would stop it), take the bounding box. When no
-// threshold gives a box of about the right size, the guide's stays. Also records the
-// octagon's inside colour, so the plates the renderer draws match it.
+// all of them should measure alike, and this prints where one doesn't. It seeds from
+// layout.json's zones, inset as derive.mjs insets the frames. Each zone is light inside a
+// darker rim: flood from the guide's centre over the lightly blurred image (texture would
+// stop it), take the bounding box. When no threshold gives a box of about the right size,
+// the guide's stays. Also records the octagon's inside colour, so the plates the renderer
+// draws match it.
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -48,7 +50,8 @@ function flood(data, W, H, [cx, cy], [x0, y0, x1, y1], dark) {
 
 const r2 = (b) => b.map((v) => Math.round(v * 100) / 100);
 
-function measure(data, W, H, zone, seed = [(zone[0] + zone[2]) / 2, (zone[1] + zone[3]) / 2]) {
+function measure(data, W, H, zone) {
+  const seed = [(zone[0] + zone[2]) / 2, (zone[1] + zone[3]) / 2];
   for (const dark of DARK) {
     const b = flood(data, W, H, seed, zone, dark);
     if (Math.abs(b[2] - b[0] - (zone[2] - zone[0])) <= SIZE_SLACK && Math.abs(b[3] - b[1] - (zone[3] - zone[1])) <= SIZE_SLACK) return { box: r2(b), ok: true };

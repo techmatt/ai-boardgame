@@ -21,16 +21,13 @@ checks at d0, d2, d4). Prints:
   below the engine at d2 and d4 (gap > 0) and none matches it at d4 (gap
   above one standard error).
 """
-import collections
 import math
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from screens import cnt, load, mean  # noqa: E402
+from screens import ROUND, cnt, ends_text, load, mean  # noqa: E402
 
-ROUND =re.compile(r'\.r\d\d$')
 CHECKS = [
     ('keep_all=1', 'keep-all'),
     ('keep_k=2', 'keep-cheapest-k'),
@@ -64,9 +61,8 @@ def wins_table(cells, games):
         gs, c = games[cell], cells[cell]
         n = len(gs)
         won = sum(g['won'] for g in gs)
-        ends = collections.Counter(('win ' if g['won'] else 'loss ') + g['reason'] for g in gs)
         print(f"| {c['variant']} | {c['difficulty']} | {label(c['agent'])} | {n} | {100 * won / n:.0f} "
-              f"| {mean(gs, lambda g: g['rounds']):.1f} | {', '.join(f'{k} {v}' for k, v in ends.most_common())} |")
+              f"| {mean(gs, lambda g: g['rounds']):.1f} | {ends_text(gs)} |")
 
 
 def economy_table(cells, games):

@@ -8,15 +8,16 @@
 //! card grammar*); `web/card/card.js` draws the parts, and `web/card/faces.json`
 //! is this module's output for it, kept current by `aic-sim docs`.
 //!
-//! A new op fails to compile here until it has its face: no match has a
-//! wildcard. Ops no card can print ([`Op::slots`]) panic: `Content::check`
-//! rejects them first.
+//! A new one-shot op fails to compile here until it has its face: that match
+//! has no wildcard. `standing` has one, so a new standing op panics at content
+//! load until it has a face. Ops no card can print ([`Op::slots`]) panic:
+//! `Content::check` rejects them first.
 
 use serde::Serialize;
 
 use crate::content::{Ability, CardDef, Cond, CountryRule, DamageAt, Op, Resource, Tag, TokenKind};
 
-/// One part of an icon line: an icon or a connector (`→ / : * OR EACH ALL ELSE ACT`), a
+/// One part of an icon line: an icon or a connector (`→ / : * OR ALL ELSE ACT`), a
 /// tag (`#science`), a number, or a box of parts.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
@@ -638,9 +639,15 @@ fn sentence(s: &str) -> String {
 /// The face of `c`, generated from its ops.
 pub fn card_face(c: &CardDef) -> Face {
     let mut f = Face::default();
+    above_art(c, &mut f);
+    below_art(c, &mut f);
+    f
+}
+
+/// Above the art: income first, in one brown box and one "Each round, ...".
+fn above_art(c: &CardDef, f: &mut Face) {
     let mut top_said: Vec<String> = Vec::new();
 
-    // Above the art: income first, in one brown box and one "Each round, ...".
     let mut boxes: Vec<Vec<Part>> = Vec::new();
     let mut each_round: Vec<String> = Vec::new();
     let mut effects: Vec<(Vec<Part>, String)> = Vec::new();
@@ -677,7 +684,7 @@ pub fn card_face(c: &CardDef) -> Face {
     }
     if c.slotless {
         // It costs no slot: the exception to "+1 slot" a reader needs, not a line of its own.
-        let (parts, say) = effects.last_mut().expect("Content::check: a slotless card gives slots");
+        let (parts, say) = effects.last_mut().expect("Content::check: a slotless card has an effect passive");
         parts.push(w("*"));
         say.push_str("* (*this card takes no slot)");
     }
@@ -700,8 +707,10 @@ pub fn card_face(c: &CardDef) -> Face {
         top_said.push(sentence(&format!("action: {open}, {}", says.join(", "))));
     }
     f.top_text = top_said.join(" ");
+}
 
-    // Below the art: what it costs beyond credits, then what it does.
+/// Below the art: what it costs beyond credits, then what it does.
+fn below_art(c: &CardDef, f: &mut Face) {
     let mut said: Vec<String> = Vec::new();
     let pays: Vec<(Resource, i64)> = [
         (Resource::Chips, c.chips),
@@ -725,5 +734,4 @@ pub fn card_face(c: &CardDef) -> Face {
         said.push(sentence(&cl.say));
     }
     f.text = said.join(" ");
-    f
 }

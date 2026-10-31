@@ -22,13 +22,11 @@ SIM = os.environ.get("AIC_SIM", os.path.join("target", "release", "aic-sim"))
 sys.stdout.reconfigure(encoding="utf-8")
 
 
-def run(config, agent, games, seed, sets, threads=None):
+def run(config, agent, games, seed, sets):
     cmd = [SIM, "run", config, "--games", str(games), "--seed", str(seed),
            "--agent", agent, "--json", "--max-actions", "20000"]
     for s in sets:
         cmd += ["--set", s]
-    if threads:
-        cmd += ["--threads", str(threads)]
     t = time.time()
     p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
     if p.returncode != 0:
@@ -40,7 +38,6 @@ def run(config, agent, games, seed, sets, threads=None):
 def row(name, agent, r, secs):
     c = r["counters"]
     ended = " ".join(f"{k}:{v}" for k, v in sorted(r["ended"].items()))
-    rounds = r["end_round"] if isinstance(r.get("end_round"), dict) else {}
     return (f"{name:<22} {agent:<10} win {100 * r['win_rate']:5.1f}% ±{100 * r['win_rate_se']:4.1f} "
             f"rnd {r['rounds_mean']:4.2f} ops {r['adversary_ops_per_round']:5.1f} "
             f"corr {c.get('adversary.corruptions', 0):4.1f} dest {c.get('board.destroyed', 0):4.1f} "

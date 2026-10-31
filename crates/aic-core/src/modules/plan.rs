@@ -14,7 +14,7 @@ use crate::module::World;
 use crate::state::GameState;
 
 use super::adversary;
-use super::common::{clean_city, corrupted, is_base, is_city, scope_hexes, FACTORY, STATION};
+use super::common::{clean_city, corrupted, corrupted_city, is_base, scope_hexes, FACTORY, STATION};
 
 /// What the adversary's build step places with `twists` in force, in country
 /// `scope` or everywhere: `(hex, ambassadors)` for every hex that gains any,
@@ -59,13 +59,13 @@ pub fn build_plan(
     let mut plan = Vec::new();
     for h in scope_hexes(w, scope) {
         let mut n = 0;
-        if is_city(w, h) && corrupted(g, h) {
+        if corrupted_city(w, g, h) {
             n += city;
         }
         if g.tokens(h, FACTORY) > 0 {
             let adj =
                 |pred: &dyn Fn(usize) -> bool| w.map.hexes[h].neighbours.iter().any(|&x| pred(x));
-            if adj(&|x| is_city(w, x) && corrupted(g, x)) {
+            if adj(&|x| corrupted_city(w, g, x)) {
                 n += factory;
             }
             if adj(&|x| clean_city(w, g, x)) {
@@ -84,7 +84,7 @@ pub fn build_plan(
 }
 
 /// Whether hex `h` is a site of type `site`.
-pub fn is_site(w: &World, g: &GameState, h: usize, site: Site) -> bool {
+fn is_site(w: &World, g: &GameState, h: usize, site: Site) -> bool {
     match site {
         Site::Coastal => w.map.hexes[h].coastal,
         Site::Industrial => w.map.hexes[h].industrial,

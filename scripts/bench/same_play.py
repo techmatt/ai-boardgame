@@ -17,9 +17,8 @@ dominance check under the planner, saving every game. `compare` checks:
 The state's JSON holds the name, so fingerprints move and old records can't replay; each
 record is compared with the new one instead, field by field, hashes and fingerprint aside.
 
-Exits 1 on any difference. About 25 min for each `run` on 12 threads (030, before its
-speedups); build the old binary first and copy it aside. For experiment specs use
-`same_results.py`.
+Exits 1 on any difference. Run times are in the README; build the old binary first and
+copy it aside. For experiment specs use `same_results.py`.
 """
 
 import glob

@@ -48,8 +48,9 @@ pub struct Run<'a> {
     pub wall_s: f64,
     pub threads: usize,
     pub out_dir: &'a str,
-    /// Games the grid has; fewer in `games` is a partial report (a run
-    /// still going, or stopped).
+    /// Games the run plans: the grid's, or under a gate the gate's plan as
+    /// things stand; fewer in `games` is a partial report (a run still
+    /// going, or stopped).
     pub planned: usize,
     /// Of `games`, those read back from an earlier run (`--resume`).
     pub resumed: usize,

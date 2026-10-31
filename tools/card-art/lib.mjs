@@ -1,10 +1,10 @@
 // Shared by the card-art scripts: paths, the one browser, Codex's image tool.
 import { spawn } from 'node:child_process';
-import { readdir, readFile, stat, mkdir } from 'node:fs/promises';
+import { appendFile, copyFile, readdir, readFile, rename, stat, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { chromium } from 'playwright-core';
 
@@ -13,7 +13,8 @@ export const REPO = path.resolve(TOOL, '..', '..');
 export const CARD = path.join(REPO, 'web', 'card');
 export const ART = path.join(REPO, 'art');
 export const OUT = path.join(REPO, 'out', 'cards');
-export const DRIVE_ORIGINALS = 'C:\\Code\\gdrive-sync\\aicomplete\\art-originals';
+export const FRAMES = path.join(ART, 'frames', 'r3');
+const DRIVE_ORIGINALS = 'C:\\Code\\gdrive-sync\\aicomplete\\art-originals';
 // The junction when a checkout has one, else the Drive folder it points at.
 export const ORIGINALS = process.env.AIC_ART_ORIGINALS ?? (existsSync(path.join(REPO, 'art-originals')) ? path.join(REPO, 'art-originals') : DRIVE_ORIGINALS);
 
@@ -34,7 +35,7 @@ export function pickerOriginals(who) {
 }
 
 /** The n for a kept <id>.try<n>.png: above every n in use, so a gap can't overwrite a try. */
-export async function nextTry(dir, id) {
+async function nextTry(dir, id) {
   const used = (await readdir(dir)).filter((f) => f.startsWith(`${id}.try`)).map((f) => parseInt(f.slice(id.length + 4), 10));
   return Math.max(0, ...used.filter(Number.isInteger)) + 1;
 }
@@ -53,6 +54,85 @@ export async function openPage(width, height) {
   const browser = await chromium.launch({ channel: 'chrome' });
   const page = await browser.newPage({ viewport: { width, height } });
   return { page, close: () => browser.close() };
+}
+
+export const MM = 96 / 25.4;
+export const frameOf = (card) => `${card.kind}-t${card.tier >= 2 ? 2 : 1}`;
+export const frameUrl = (v) => pathToFileURL(path.join(FRAMES, `${v}.jpg`)).href;
+/** Cards at true size, 9 to an A4 page, bleeds touching: wrap each page in `.sheet-page`. */
+export const SHEET_CSS = '@page{size:210mm 297mm;margin:0}.sheet-page{width:207mm;height:282mm;padding:7.500mm 1.500mm;display:grid;grid-template-columns:repeat(3,69mm);grid-auto-rows:94mm;break-after:page}';
+
+/**
+ * A page at print scale for layout `l`. Returns `{ p, show, clip, close }`: `show(body,
+ * extra)` sets the page to `body` under card.css plus `extra` and waits for the fonts;
+ * `clip` is one card with its bleed.
+ */
+export async function cardPage(l, width, height) {
+  const browser = await chromium.launch({ channel: 'chrome' });
+  const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: l.print_px[0] / (l.bleed_mm[0] * MM) });
+  const p = await ctx.newPage();
+  // A file: page so the relative font and container urls in card.css resolve.
+  const stub = path.join(CARD, 'card.css');
+  await p.goto(pathToFileURL(stub).href.replace('card.css', 'layout.json'));
+  const css = await readFile(stub, 'utf8');
+  const base = pathToFileURL(CARD + path.sep).href;
+  const show = async (body, extra = '') => {
+    await p.setContent(`<!doctype html><html><head><base href="${base}"><style>body{margin:0}${css}${extra}</style></head><body>${body}</body></html>`, { waitUntil: 'load' });
+    await p.evaluate(() => document.fonts.ready);
+  };
+  const clip = { x: 0, y: 0, width: l.bleed_mm[0] * MM, height: l.bleed_mm[1] * MM };
+  return { p, show, clip, close: () => browser.close() };
+}
+
+/** The opening every image prompt shares; the prompt's own lines follow it. */
+export const IMAGE_PREAMBLE = [
+  'Use your built-in image_gen tool ($imagegen) exactly once to generate the image below.',
+  'Do not read any files, run any commands, or try to save the image anywhere: just generate it, then stop.',
+];
+
+/** `--pool=N`, default 3: how many draws run at once. `who` prefixes the message. */
+export function parsePool(argv, who) {
+  const pool = Number(argv.find((a) => a.startsWith('--pool='))?.slice(7) ?? 3);
+  if (!Number.isInteger(pool) || pool < 1) throw new Error(`${who}: --pool must be a whole number, 1 or more`);
+  return pool;
+}
+
+/**
+ * Draws `ids`, `pool` at a time, stopping at the first usage-limit message. `draw(id)`
+ * returns `{ run, ...fields }`; the fields go into log.jsonl in `dir`. A new image goes to
+ * dir/<id>.png, any earlier one to a try, then `kept(id, dest, run, fields)` runs. Sets
+ * exit code 1 if a draw failed or the limit left some undrawn.
+ */
+export async function drawAll(ids, pool, who, { dir, draw, kept }) {
+  let stop = false;
+  let failed = 0;
+  async function one(id) {
+    const { run, ...fields } = await draw(id);
+    await appendFile(path.join(dir, 'log.jsonl'), `${JSON.stringify({ id, at: new Date().toISOString(), ...fields, seconds: run.seconds, thread: run.thread, limit: run.limit, usage: run.usage, message: run.image ? undefined : run.message })}\n`);
+    if (run.limit) {
+      stop = true;
+      console.error(`${who}: usage limit: ${run.limit}`);
+    }
+    if (!run.image) {
+      failed++;
+      console.error(`${who}: ${id}: no image after ${run.seconds}s. ${run.message ?? ''}`);
+      return;
+    }
+    const dest = path.join(dir, `${id}.png`);
+    if (existsSync(dest)) await rename(dest, path.join(dir, `${id}.try${await nextTry(dir, id)}.png`));
+    await copyFile(run.image, dest);
+    await kept(id, dest, run, fields);
+  }
+  const queue = [...ids];
+  await Promise.all(
+    Array.from({ length: pool }, async () => {
+      while (queue.length && !stop) await one(queue.shift());
+    }),
+  );
+  if (failed || queue.length) {
+    process.exitCode = 1;
+    console.error(`${who}: ${ids.length - failed - queue.length} of ${ids.length} drawn, ${failed} failed, ${queue.length} not started`);
+  }
 }
 
 /** Draw one image with Codex's built-in image tool; same route as wordwarriors' art:gen. */

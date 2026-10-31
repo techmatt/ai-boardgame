@@ -107,7 +107,7 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
 struct Alignment;
 
 /// Sway in the Undecided.
-pub const UNDECIDED: &str = "alignment.undecided";
+const UNDECIDED: &str = "alignment.undecided";
 /// Credit income every player has from Unity cards.
 const INCOME_BONUS: &str = "alignment.income_bonus";
 /// Free card purchases left (Unity cards).
@@ -268,7 +268,7 @@ pub fn for_node_removed(g: &mut GameState, cx: &mut Cx) {
 /// Whether the adversary's presence is under the bar for `level`. The
 /// level-0 bar (no adversary pieces) counts only once a card of stage
 /// `clear_win_stage` has been revealed (the stages are stacked and public).
-fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
+fn purge_won(w: &World, g: &GameState, level: i64) -> bool {
     if level == 0 && g.var(adversary::STAGE) < w.int("alignment.clear_win_stage") {
         return false;
     }
@@ -299,14 +299,12 @@ pub fn pull_unity(g: &mut GameState, cx: &mut Cx, n: i64) {
 
 /// Seat `s` sacrifices one of their ambassadors (from their supply or a
 /// hex) or one of their presence tokens, their choice; with none, nothing.
-/// A last presence is never offered (027); a sacrificed presence goes back on
-/// its track, as a destroyed one does.
+/// A last presence is never offered (027); a sacrificed presence leaves the
+/// game, as a destroyed one does ([`board::lose_presence`]).
 pub fn sacrifice(g: &mut GameState, cx: &mut Cx, s: usize) -> Res {
     let w = cx.world;
     let k = ambassador(s);
-    let ambs: Vec<usize> = (0..g.hexes.len())
-        .filter(|&h| g.tokens(h, &k) > 0)
-        .collect();
+    let ambs = ambassador_hexes(g, s);
     // The hexes holding the seat's presence (020: this listed `presence_hexes`, the
     // free hexes where it could place one, so a sacrificed presence removed nothing).
     let pres: Vec<usize> = presence_of(g, s);
@@ -405,9 +403,9 @@ impl Alignment {
     }
 }
 
-/// Whether some seat has no presence on the board.
-fn presence_gone(g: &GameState) -> bool {
-    (0..g.seats.len()).any(|s| !has_presence(g, s))
+/// Whether the antimatter action exists in this game (uses aside).
+fn antimatter_on(w: &World) -> bool {
+    w.int("alignment.antimatter_discord") > 0 && w.variant("alignment") != Some("off")
 }
 
 impl Module for Alignment {
@@ -466,10 +464,7 @@ impl Module for Alignment {
     }
 
     fn legal(&self, _phase: usize, g: &GameState, w: &World, seat: u8, out: &mut Vec<Action>) {
-        if w.int("alignment.antimatter_discord") > 0
-            && w.variant("alignment") != Some("off")
-            && g.var(&used_key(seat as usize)) < w.int("alignment.antimatter_uses")
-        {
+        if antimatter_on(w) && g.var(&used_key(seat as usize)) < w.int("alignment.antimatter_uses") {
             out.push(Action::Antimatter { seat });
         }
     }
@@ -482,10 +477,7 @@ impl Module for Alignment {
         let w = cx.world;
         let s = a.seat() as usize;
         let n = w.int("alignment.antimatter_discord");
-        if n <= 0
-            || w.variant("alignment") == Some("off")
-            || g.var(&used_key(s)) >= w.int("alignment.antimatter_uses")
-        {
+        if !antimatter_on(&w) || g.var(&used_key(s)) >= w.int("alignment.antimatter_uses") {
             return Err(Halt::Illegal("no antimatter action left this round".into()));
         }
         cx.add_key(g, &used_key(s), 1);
@@ -512,7 +504,7 @@ impl Module for Alignment {
                     }
                     // 028: a card that takes a last presence loses here, before
                     // a Unity tip can win a game with no player on the board.
-                    if w.int("alignment.presence_loss") > 0 && presence_gone(g) {
+                    if w.int("alignment.presence_loss") > 0 && adversary::loss(g).is_some() {
                         break;
                     }
                     continue 'tips;
@@ -528,7 +520,7 @@ impl Module for Alignment {
             }
         }
         let level = bar_level(&w, g);
-        if under_bar(&w, g, level) {
+        if purge_won(&w, g, level) {
             cx.end(
                 g,
                 true,
@@ -599,7 +591,7 @@ impl Module for Alignment {
         );
         let cities = (0..g.hexes.len()).filter(|&h| is_city(w, h)).count() as i64;
         let bad = (0..g.hexes.len())
-            .filter(|&h| is_city(w, h) && corrupted(g, h))
+            .filter(|&h| corrupted_city(w, g, h))
             .count() as i64;
         out.global(
             "corrupted_cities",
@@ -667,7 +659,7 @@ impl Module for Alignment {
         }
         out.bookkeeping(&["alignment.used."]);
         let uses = w.int("alignment.antimatter_uses");
-        if w.int("alignment.antimatter_discord") > 0 && w.variant("alignment") != Some("off") {
+        if antimatter_on(w) {
             for s in 0..g.seats.len() {
                 out.seat(
                     s,

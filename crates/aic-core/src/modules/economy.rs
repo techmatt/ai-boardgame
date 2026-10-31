@@ -46,7 +46,7 @@ pub static DEF: ModuleDef = ModuleDef {
 
 /// Insight every player gains next round (Predictive Modelling, Open-Weights
 /// Release).
-pub const BONUS_INSIGHT: &str = "economy.bonus_insight";
+const BONUS_INSIGHT: &str = "economy.bonus_insight";
 
 /// Seat `s`'s printed production of `resource` raised by one-time permanent
 /// gains (021).
@@ -78,14 +78,9 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
 /// What the next upkeep pays seat `s`: its `income`, with no energy for a
 /// seat with presence in a country sabotaged then. Once this round's upkeep
 /// has run, a flag counts only if it outlasts this round's cleanup (2+).
-pub fn upkeep_income(w: &World, g: &GameState, seat: usize) -> PerResource {
+fn upkeep_income(w: &World, g: &GameState, seat: usize) -> PerResource {
     let mut inc = income(w, g, seat);
-    let upkeep_done = g
-        .config
-        .round
-        .iter()
-        .position(|p| p.split('+').any(|q| q == "economy.upkeep"))
-        .is_some_and(|i| g.phase > i);
+    let upkeep_done = g.phase_index("economy.upkeep").is_some_and(|i| g.phase > i);
     let at = if upkeep_done { 2 } else { 1 };
     if (0..w.map.countries.len()).any(|c| {
         board::flag_level(g, RoundFlag::Sabotage, c) >= at && has_presence_in(w, g, seat, c)

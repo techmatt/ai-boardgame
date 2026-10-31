@@ -1,5 +1,6 @@
 //! The machine-readable files: `games.csv` and `cards.csv` (one row per
-//! game, per agent × difficulty × card) and `results.json` (everything).
+//! game, per agent × difficulty × variant × config × card) and
+//! `results.json` (everything).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;

@@ -9,9 +9,8 @@
 //                             a base troop, hardening or an ambassador absorbed the hit)
 // Drives the page with cdp.mjs (headless Edge or Chrome, no extra packages).
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { openPage } from './cdp.mjs';
+import { mkdirSync } from 'node:fs';
+import { newGame, openPage, shotTo } from './cdp.mjs';
 
 const url = process.env.AIC_URL ?? 'http://localhost:5173/';
 const outDir = process.env.AIC_SHOTS;
@@ -20,10 +19,7 @@ mkdirSync(outDir, { recursive: true });
 
 const page = await openPage();
 const { send, js, until } = page;
-async function shot(name) {
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
-  writeFileSync(join(outDir, `${name}.png`), await page.shot());
-}
+const shot = (name) => shotTo(page, outDir, name);
 
 // The troops, their arrows and the presence on the board now.
 const STATE = `(() => {
@@ -42,9 +38,7 @@ try {
   await send('Page.navigate', { url });
   await until('window.aic && window.aic.view', 'the viewer to start', 30000);
   for (let seed = 1; seed <= 30 && !saved.hit; seed++) {
-    await js(`(() => { document.getElementById('config').value = 'baseline.json'; document.getElementById('seed').value = '${seed}';
-                        document.getElementById('new-form').requestSubmit(); })()`);
-    await until(`window.aic.timeline.last === 0 && window.aic.timeline.seed === '${seed}'`, `the seed-${seed} game`, 30000);
+    await newGame(page, 'baseline.json', seed);
     let far = null;
     let near = null;
     for (let i = 0; i < 3000; i++) {

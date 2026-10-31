@@ -39,7 +39,7 @@ const PIECES = {
   // Harden and shelter act on a country's board, so they are bare too.
   harden: fill('M12 1.500 3.500 4.500v7c0 5.500 3.500 9 8.500 11 5-2 8.500-5.500 8.500-11v-7z'),
   shelter: `${fill('M2 13 12 3l10 10h-3v0z')}${line('M5.500 14v7.500h13V14', 2.4)}`,
-  // A country, for "in one country" and "EACH": the map's hex cluster.
+  // A country, for "in one country": the map's hex cluster.
   country: fill('M8 2.500 12 4.800v4.600L8 11.700 4 9.400V4.800zM16.500 2.500l4 2.300v4.600l-4 2.300-4-2.300V4.800zM12.200 12.300l4 2.300v4.600l-4 2.300-4-2.300v-4.600z'),
   project: `<rect x="3.500" y="4" width="17" height="16" rx="1" fill="none" stroke="currentColor" stroke-width="2.200"/>${fill('M7 8h10v2H7zM7 12h6v2H7z')}`,
   hex: line('M12 2 20.700 7v10L12 22 3.300 17V7z', 2.4),
@@ -53,9 +53,9 @@ const PIECES = {
   sway: `${line('M3 12h18M3 8v8M21 8v8', 2.200)}${fill('M9 6.500 16 12l-7 5.500z')}`,
   marker: fill('M12 2 22 12 12 22 2 12zM12 7l-5 5 5 5 5-5z'),
   threat: fill('M12 2 23 21H1zM10.800 9v6.500h2.400V9zm0 7.800v2.400h2.400v-2.400z'),
-  // The adversary deck, looked at.
   // A threat struck through: countered.
   counter: `${fill('M12 2 23 21H1z')}${line('M3 3l18 18', 3)}`,
+  // The adversary deck, looked at.
   peek: `<rect x="5" y="2.500" width="14" height="19" rx="1.600" fill="none" stroke="currentColor" stroke-width="2"/><g transform="translate(5.400 5.400) scale(.55)">${EYE}</g>`,
 };
 

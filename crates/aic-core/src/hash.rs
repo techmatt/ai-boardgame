@@ -2,11 +2,14 @@
 //! content hashes and RNG stream ids. Not cryptographic; stable across
 //! platforms and Rust versions, which `std::hash` is not.
 
+pub(crate) const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+pub(crate) const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
 pub fn fnv1a64(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut h = FNV_OFFSET;
     for &b in bytes {
         h ^= b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        h = h.wrapping_mul(FNV_PRIME);
     }
     h
 }

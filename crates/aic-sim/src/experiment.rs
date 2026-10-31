@@ -3,10 +3,10 @@
 //! `docs/principles.md` gathered per game. `report/` aggregates and writes
 //! them out. See README.md ("Experiments") for the spec format.
 //!
-//! Everything a game measures is read from the public state or the actions
-//! taken, so the engine needs no extra bookkeeping: card offers are read off
-//! the draft packets, picks, keeps, plays, payments and gifts off the
-//! actions, margins off the final table. Probes that simulate (decision
+//! A game's measures are read from the public state, the actions taken and
+//! the engine's stats (`g.stats`: counters and per-round tallies): card offers
+//! are read off the draft packets, picks, keeps, plays, payments and gifts off
+//! the actions, margins off the final table. Probes that simulate (decision
 //! closeness, win probability) use their own RNG and determinize first, like
 //! the agents, and never touch the game being played.
 
@@ -295,7 +295,7 @@ fn first_repeat<'a>(names: impl Iterator<Item = &'a str>) -> Option<&'a str> {
 }
 
 /// Everything measured in one game; one line of `games.jsonl`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GameResult {
     pub cell: usize,
     #[serde(with = "seed_string")]
@@ -509,35 +509,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
     let mut r = GameResult {
         cell: ci,
         seed,
-        won: false,
-        reason: String::new(),
-        rounds: 0,
-        decisions: 0,
-        options_total: 0,
-        forced: 0,
-        probed: 0,
-        close: 0,
-        gap_sum: 0.0,
-        margin: Margin::default(),
-        adversary_ops: Vec::new(),
-        setup_ops: 0,
-        counters: BTreeMap::new(),
-        cards: BTreeMap::new(),
-        gives: 0,
-        pays: 0,
-        withdraws: 0,
-        build: String::new(),
-        winprob: Vec::new(),
-        ms: 0.0,
-        agent_ms: 0.0,
-        probe_ms: 0.0,
-        setup_ms: 0.0,
-        legal_ms: 0.0,
-        apply_ms: 0.0,
-        replay_ms: 0.0,
-        replay_ok: false,
-        actions: Vec::new(),
-        final_state: None,
+        ..Default::default()
     };
     let (mut offered_round, mut checked_round, mut real_choices) = (0u32, 0u32, 0usize);
     let mut picks = vec![0u32; g.seats.len()];
@@ -570,14 +542,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         if g.round != offered_round && legal.iter().any(|a| matches!(a, Action::Draft { .. })) {
             offered_round = g.round;
             picks.iter_mut().for_each(|p| *p = 0);
-            for (k, pile) in g.piles.from_key(cards::PACKETS) {
-                if !k.starts_with(cards::PACKETS) {
-                    break;
-                }
-                for c in pile.iter() {
-                    r.cards.entry(c.to_string()).or_default().offered += 1;
-                }
-            }
+            count_offers(&mut r, &g);
         }
         let n = legal.len();
         r.decisions += 1;
@@ -590,14 +555,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
                 let t = Instant::now();
                 let mut s =
                     search::greedy_scores(rules, &probe_eval, &mut probe_rng, &g, &legal, 1, 1, 1, search::full_growth(1));
-                s.sort_by(|a, b| b.total_cmp(a));
-                // An option the rules refused on a guess scores -inf: two of
-                // them would make the gap NaN; count that as wide open.
-                let gap = (s[0] - s[1]).clamp(0.0, 50.0);
-                let gap = if gap.is_nan() { 50.0 } else { gap };
-                r.probed += 1;
-                r.gap_sum += gap;
-                r.close += (gap < spec.closeness.gap) as u32;
+                record_closeness(&mut r, &mut s, spec.closeness.gap);
                 r.probe_ms += ms_since(t);
             }
         }
@@ -606,47 +564,86 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
         r.agent_ms += ms_since(t);
         let t = Instant::now();
         let a = legal[i].clone();
-        match &a {
-            Action::Draft { seat, card } => {
-                let s = *seat as usize;
-                picks[s] += 1;
-                let e = r.cards.entry(card.to_string()).or_default();
-                e.drafted += 1;
-                e.pick_sum += picks[s];
-            }
-            Action::Keep { card, .. } => r.cards.entry(card.to_string()).or_default().kept += 1,
-            Action::Play { card, .. } => r.cards.entry(card.to_string()).or_default().played += 1,
-            Action::Give { .. } => r.gives += 1,
-            Action::Pay { .. } => r.pays += 1,
-            Action::Withdraw { .. } => r.withdraws += 1,
-            _ => {}
-        }
-        // A draw's card is only known once drawn, and any effect of any step
-        // may draw, for any seat: whatever is new in a hand, bar a keep's card.
-        let mut hands: Vec<Vec<aic_core::Key>> = (0..g.seats.len())
-            .map(|s| g.pile(&cards::hand(s)).to_vec())
-            .collect();
-        if let Action::Keep { seat, card } = &a {
-            hands[*seat as usize].push(card.clone());
-        }
-        rules
-            .apply_mut(&mut g, &a, None)
-            .expect("a legal action applies");
-        for (s, mut before) in hands.into_iter().enumerate() {
-            for c in g.pile(&cards::hand(s)) {
-                match before.iter().position(|b| b == c) {
-                    Some(k) => {
-                        before.swap_remove(k);
-                    }
-                    None => r.cards.entry(c.to_string()).or_default().drawn += 1,
-                }
-            }
-        }
+        tally_action(&mut r, &a, &mut picks);
+        apply_counting_draws(&mut r, rules, &mut g, &a);
         r.actions.push(a);
         r.apply_ms += ms_since(t);
     }
+    finish(&mut r, rules, g);
+    r.ms = ms_since(start);
+    r
+}
+
+/// Every card in the round's draft packets counts as offered.
+fn count_offers(r: &mut GameResult, g: &GameState) {
+    for (k, pile) in g.piles.from_key(cards::PACKETS) {
+        if !k.starts_with(cards::PACKETS) {
+            break;
+        }
+        for c in pile.iter() {
+            r.cards.entry(c.to_string()).or_default().offered += 1;
+        }
+    }
+}
+
+/// One closeness probe's result, from the options' `scores`.
+fn record_closeness(r: &mut GameResult, scores: &mut [f64], close_gap: f64) {
+    scores.sort_by(|a, b| b.total_cmp(a));
+    // An option the rules refused on a guess scores -inf: two of
+    // them would make the gap NaN; count that as wide open.
+    let gap = (scores[0] - scores[1]).clamp(0.0, 50.0);
+    let gap = if gap.is_nan() { 50.0 } else { gap };
+    r.probed += 1;
+    r.gap_sum += gap;
+    r.close += (gap < close_gap) as u32;
+}
+
+/// What the action `a` itself counts for; `picks` is each seat's picks this round.
+fn tally_action(r: &mut GameResult, a: &Action, picks: &mut [u32]) {
+    match a {
+        Action::Draft { seat, card } => {
+            let s = *seat as usize;
+            picks[s] += 1;
+            let e = r.cards.entry(card.to_string()).or_default();
+            e.drafted += 1;
+            e.pick_sum += picks[s];
+        }
+        Action::Keep { card, .. } => r.cards.entry(card.to_string()).or_default().kept += 1,
+        Action::Play { card, .. } => r.cards.entry(card.to_string()).or_default().played += 1,
+        Action::Give { .. } => r.gives += 1,
+        Action::Pay { .. } => r.pays += 1,
+        Action::Withdraw { .. } => r.withdraws += 1,
+        _ => {}
+    }
+}
+
+/// Applies `a`, counting the cards it drew. A draw's card is only known once
+/// drawn, and any effect of any step may draw, for any seat: whatever is new
+/// in a hand, bar a keep's card.
+fn apply_counting_draws(r: &mut GameResult, rules: &Rules, g: &mut GameState, a: &Action) {
+    let mut hands: Vec<Vec<aic_core::Key>> = (0..g.seats.len())
+        .map(|s| g.pile(&cards::hand(s)).to_vec())
+        .collect();
+    if let Action::Keep { seat, card } = a {
+        hands[*seat as usize].push(card.clone());
+    }
+    rules.apply_mut(g, a, None).expect("a legal action applies");
+    for (s, mut before) in hands.into_iter().enumerate() {
+        for c in g.pile(&cards::hand(s)) {
+            match before.iter().position(|b| b == c) {
+                Some(k) => {
+                    before.swap_remove(k);
+                }
+                None => r.cards.entry(c.to_string()).or_default().drawn += 1,
+            }
+        }
+    }
+}
+
+/// The replay check and what the final table shows.
+fn finish(r: &mut GameResult, rules: &Rules, g: GameState) {
     let t = Instant::now();
-    r.replay_ok = replay(rules, seed, &r.actions).is_ok_and(|h| h == g);
+    r.replay_ok = replay(rules, r.seed, &r.actions).is_ok_and(|h| h == g);
     r.replay_ms = ms_since(t);
     r.won = g.outcome.as_ref().is_some_and(|o| o.won);
     r.reason = end_reason(g.outcome.as_ref());
@@ -671,8 +668,6 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
     }
     r.build = build_signature(rules, &g);
     r.final_state = Some(Box::new(g));
-    r.ms = ms_since(start);
-    r
 }
 
 fn ms_since(t: Instant) -> f64 {

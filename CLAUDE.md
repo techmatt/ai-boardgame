@@ -13,7 +13,7 @@ The standing contract for every executor working in this repo.
   it. The first client is **wasm + a JS front-end**. Clients render and take input;
   rules live in the core.
 - Design is still being gathered. The core implements the rules in
-  [docs/rules.md](docs/rules.md) (revision `RULES_REVISION` in `aic-core/src/lib.rs`):
+  [docs/rules.md](docs/rules.md) (revision `RULES_REVISION` in `crates/aic-core/src/lib.rs`):
   the board, the adversary, threats, Alignment and cards. The player cards are 023's
   candidate set ([docs/cards.md](docs/cards.md)); the AI-board, threat, adversary and
   megaproject content are placeholders pending redesign. Don't describe or document code as if it does more than it does.
@@ -32,8 +32,9 @@ The standing contract for every executor working in this repo.
   `crates/aic-sim/src/docs.rs`, and the fast lane fails if a distribution check breaks.
 - Every rules change updates [docs/rules.md](docs/rules.md) and adds its row to
   [docs/rules-history.md](docs/rules-history.md) in the same commit. Run `aic-sim docs`
-  after changing content or tunables: rules.md's tables, docs/ops.md are generated, and a
-  fast-lane test fails if they are stale. One home per rule: a rule's number lives in a
+  after changing content or tunables, then `python scripts/cards/cards_doc.py` for
+  docs/cards.md (it reads the faces docs writes): rules.md's tables, docs/ops.md,
+  docs/harms.md and docs/cards.md are generated, and a fast-lane test fails if they are stale. One home per rule: a rule's number lives in a
   config or in content, its effect in one `Op` arm or the rule that reads it.
 - What content does is one schema, `Op` (`crates/aic-core/src/op.rs`); resources, tags
   and token types are enums (`vocab.rs`). Docs: *The op schema* in docs/architecture.md.
@@ -43,7 +44,7 @@ The standing contract for every executor working in this repo.
 - **Commit to the branch you are on.** Leave nothing uncommitted.
 - **Tests come in two lanes.** `cargo test --workspace` is the fast lane (~4 s once
   built): run it after every change. `cargo test-all` is the full run, the `#[ignore]`d
-  slow lane included (~2.2 min at r16): run it before every commit. A test slower than about a second goes
+  slow lane included (~1.5 min at r22): run it before every commit. A test slower than about a second goes
   in the slow lane, with a cheaper fast-lane twin where one makes sense. Details in
   the README's *Build and test*.
 - **Agents stay fast.** After a change to rules, state or agents, run `python

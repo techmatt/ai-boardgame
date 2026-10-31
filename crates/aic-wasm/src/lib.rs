@@ -1,7 +1,7 @@
 //! Thin wasm-bindgen layer over `aic-core`. No rules live here.
 //!
 //! Configs, states, actions and events cross the boundary as JSON strings.
-//! Seeds are decimal strings. `apply` returns an [`Outcome`] whose `state`
+//! Seeds are decimal strings. `apply` returns an [`Applied`] whose `state`
 //! and `events` are separate JSON strings. Errors (bad JSON, bad seed, an
 //! invalid config, an illegal action) are thrown as JavaScript strings.
 
@@ -12,7 +12,7 @@ use wasm_bindgen::prelude::*;
 /// The result of `apply`: `state` (JSON string, pass it back as-is) and
 /// `events` (JSON array string).
 #[wasm_bindgen(getter_with_clone)]
-pub struct Outcome {
+pub struct Applied {
     pub state: String,
     pub events: String,
 }
@@ -25,13 +25,12 @@ fn parse<T: for<'de> serde::Deserialize<'de>>(what: &str, json: &str) -> Result<
     serde_json::from_str(json).map_err(|e| JsValue::from_str(&format!("bad {what} JSON: {e}")))
 }
 
-fn rules(config_json: &str) -> Result<Rules, JsValue> {
-    let config: Config = parse("config", config_json)?;
-    Rules::new(&config).map_err(|e| JsValue::from_str(&e))
-}
-
 fn err(e: String) -> JsValue {
     JsValue::from_str(&e)
+}
+
+fn rules(config_json: &str) -> Result<Rules, JsValue> {
+    Rules::new(&Config::from_json(config_json).map_err(err)?).map_err(err)
 }
 
 #[wasm_bindgen]
@@ -46,17 +45,11 @@ pub fn rules_revision() -> u32 {
 }
 
 /// All content as JSON: the map (piece shape, layouts, country pieces),
-/// player cards, threats, adversary cards, AI boards and the Unity and
-/// Discord decks.
+/// player cards, threats, adversary cards, the adversary's project deck, AI
+/// boards and the Unity and Discord decks.
 #[wasm_bindgen]
 pub fn content() -> String {
     to_json(aic_core::content())
-}
-
-/// The module registry: modules, variants, parameters, phases.
-#[wasm_bindgen]
-pub fn modules() -> String {
-    to_json(&aic_core::describe_modules())
 }
 
 /// Validates a config. Returns `{"config": <resolved>, "hash": "<16 hex>"}`.
@@ -70,7 +63,7 @@ pub fn resolve_config(config_json: &str) -> Result<String, JsValue> {
 
 /// The board for a config: hexes (axial `[q, r]`, country, piece position,
 /// neighbours, printed number, kind, and for a military base the country it
-/// faces), countries (hex indices, card slots, colour) and fronts (the two
+/// faces), countries (hex indices, colour) and fronts (the two
 /// countries and their bases). `state.hexes[i]` is `hexes[i]`.
 #[wasm_bindgen]
 pub fn board(config_json: &str) -> Result<String, JsValue> {
@@ -90,14 +83,14 @@ fn parse_seed(seed: &str) -> Result<u64, JsValue> {
     })
 }
 
-/// Starts a game and returns an `Outcome` whose `events` are setup's (and
+/// Starts a game and returns an `Applied` whose `events` are setup's (and
 /// the first round's, up to the first decision).
 #[wasm_bindgen]
-pub fn start(config_json: &str, seed: &str) -> Result<Outcome, JsValue> {
+pub fn start(config_json: &str, seed: &str) -> Result<Applied, JsValue> {
     let seed = parse_seed(seed)?;
     let mut events = Vec::new();
     let state = rules(config_json)?.new_game_logged(seed, Some(&mut events));
-    Ok(Outcome {
+    Ok(Applied {
         state: to_json(&state),
         events: to_json(&events),
     })
@@ -153,13 +146,13 @@ pub fn legal_actions(state_json: &str) -> Result<String, JsValue> {
     Ok(to_json(&aic_core::legal_actions(&state).map_err(err)?))
 }
 
-/// Applies an action. Returns an `Outcome` (`.state`, `.events`).
+/// Applies an action. Returns an `Applied` (`.state`, `.events`).
 #[wasm_bindgen]
-pub fn apply(state_json: &str, action_json: &str) -> Result<Outcome, JsValue> {
+pub fn apply(state_json: &str, action_json: &str) -> Result<Applied, JsValue> {
     let state: GameState = parse("state", state_json)?;
     let action: Action = parse("action", action_json)?;
     let (state, events) = aic_core::apply(&state, &action).map_err(err)?;
-    Ok(Outcome {
+    Ok(Applied {
         state: to_json(&state),
         events: to_json(&events),
     })

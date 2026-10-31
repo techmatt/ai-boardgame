@@ -452,3 +452,45 @@ fn claiming_a_site_needs_presence_and_no_node_on_or_next_to_it() {
     put(&mut g, lonely[1], NODE, 1);
     assert!(!standard_offered(&rules, &g, 0).contains("align"));
 }
+
+#[test]
+fn the_rich_action_opens_at_stage_two_and_rises_with_each_use() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let a = rules.map.numbered(0, piece(0).presence);
+    put(&mut g, a, presence(0), 1);
+    g.vars.insert(board::track_key(0).into(), 1);
+    set_res(&mut g, 0, Resource::Credits, 40);
+    g.vars.insert(STAGE.into(), 1);
+    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "presence_buy"), None).is_err(), "stage I");
+    g.vars.insert(STAGE.into(), 2);
+    let base = w.int("board.presence_credits");
+    let rise = w.int("board.presence_rise");
+    rules.apply_mut(&mut g, &std_act(0, "presence_buy"), None).unwrap();
+    answer_all(&rules, &mut g);
+    assert_eq!(g.resource(0, Resource::Credits), 40 - base);
+    rules.apply_mut(&mut g, &std_act(0, "presence_buy"), None).unwrap();
+    answer_all(&rules, &mut g);
+    assert_eq!(g.resource(0, Resource::Credits), 40 - base - (base + rise));
+}
+
+#[test]
+fn a_track_s_last_steps_cost_more_and_the_action_pays_its_price_on_top() {
+    use crate::modules::ai;
+    let (rules, mut g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let b = ai::board(&w, 0);
+    let a = rules.map.numbered(0, piece(0).presence);
+    put(&mut g, a, presence(0), 1);
+    // Both tracks down to their last steps.
+    g.vars.insert(board::track_key(0).into(), b.presence.len() as i64 - 1);
+    g.vars.insert(board::track2_key(0).into(), b.presence2.len() as i64 - 1);
+    let extra = b.presence.last().unwrap().cost.min(b.presence2.last().unwrap().cost);
+    assert!(extra > 0);
+    set_res(&mut g, 0, Resource::Energy, extra);
+    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "presence"), None).is_err(), "base + extra");
+    set_res(&mut g, 0, Resource::Energy, extra + w.int("board.presence_energy"));
+    rules.apply_mut(&mut g, &std_act(0, "presence"), None).unwrap();
+    answer_all(&rules, &mut g);
+    assert_eq!(g.resource(0, Resource::Energy), 0);
+}

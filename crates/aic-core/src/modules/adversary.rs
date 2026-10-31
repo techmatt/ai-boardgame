@@ -116,6 +116,13 @@ pub fn projects(g: &GameState) -> Vec<Key> {
     g.pile(PROJECTS).to_vec()
 }
 
+/// Visible projects holding compute: what a drain can act on.
+pub fn projects_with_compute(g: &GameState) -> Vec<Key> {
+    let mut ids = projects(g);
+    ids.retain(|p| g.var(&project_key(p)) > 0);
+    ids
+}
+
 fn project<'w>(w: &World<'w>, id: &str) -> &'w ProjectCard {
     &w.content.projects[w.content.project_index(id).expect("project in content")]
 }
@@ -158,7 +165,7 @@ pub(super) fn card<'w>(w: &World<'w>, id: &str) -> &'w AdversaryCard {
         .expect("adversary card in content")]
 }
 
-pub fn card_text(c: &AdversaryCard) -> String {
+fn card_text(c: &AdversaryCard) -> String {
     format!(
         "stage {}: {}",
         c.stage,
@@ -174,12 +181,7 @@ pub fn card_text(c: &AdversaryCard) -> String {
 /// the Sway phase) this round's card is still the face-up one: read it (022:
 /// that read last round's card, and none in round 1).
 pub fn twists<'w>(w: &World<'w>, g: &GameState) -> Vec<&'w Op> {
-    let before_build = g
-        .config
-        .round
-        .iter()
-        .position(|p| p.split('+').any(|q| q == "adversary.build"))
-        .is_some_and(|i| g.phase < i);
+    let before_build = g.phase_index("adversary.build").is_some_and(|i| g.phase < i);
     g.pile(if before_build { NEXT } else { CURRENT })
         .iter()
         .flat_map(|id| card(w, id).twists.iter())
@@ -197,7 +199,8 @@ pub fn war_twist(w: &World, g: &GameState) -> bool {
 
 #[derive(Debug)]
 struct Adversary {
-    stage_cards: Vec<i64>,
+    /// What this difficulty deals from stage I, II and III.
+    dealt: [i64; 3],
     project_cards: Vec<i64>,
 }
 
@@ -206,8 +209,8 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
     if stage_cards.len() != 3 {
         return Err("stage_cards: give 3 counts (stage I, II, III)".into());
     }
-    // 044: what this difficulty deals, as setup does (the check used to add
-    // stage3_added at every level and take off no removal).
+    // 044: what this difficulty deals, for setup and the check (which used to
+    // add stage3_added at every level and take off no removal).
     let difficulty = b.int("difficulty")?;
     let dealt = [
         (stage_cards[0] - if difficulty >= 2 { b.int("stage1_removed")? } else { 0 }).max(0),
@@ -252,10 +255,7 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
             ));
         }
     }
-    Ok(Box::new(Adversary {
-        stage_cards,
-        project_cards,
-    }))
+    Ok(Box::new(Adversary { dealt, project_cards }))
 }
 
 impl Module for Adversary {
@@ -278,17 +278,7 @@ impl Module for Adversary {
                 .map(|c| Key::new(&c.id))
                 .collect();
             shuffle(&mut ids, cx.rng(g, "adversary"));
-            let mut n = self.stage_cards[stage as usize - 1];
-            if stage == 1 && level(&w, 2) {
-                n = (n - w.int("adversary.stage1_removed")).max(0);
-            }
-            if stage == 2 && level(&w, 3) {
-                n = (n - w.int("adversary.stage2_removed")).max(0);
-            }
-            if stage == 3 && level(&w, 2) {
-                n += w.int("adversary.stage3_added");
-            }
-            deck.extend(ids.into_iter().take(n as usize));
+            deck.extend(ids.into_iter().take(self.dealt[stage as usize - 1] as usize));
         }
         cx.set_pile(g, DECK, deck);
         reveal(g, cx);
@@ -338,18 +328,10 @@ impl Module for Adversary {
                 });
                 for t in &c.twists {
                     match t {
-                        Op::Sway { side, amount } => alignment::sway(g, cx, *side, *amount),
-                        // 034: a card that makes every player destroy presence.
-                        Op::EachDestroyPresence { count } => {
-                            let hexes: Vec<usize> = (0..g.hexes.len()).collect();
-                            for s in 0..g.seats.len() {
-                                for _ in 0..*count {
-                                    board::destroy_own_presence(g, cx, s, &hexes, board::Cause::Effect("twist"))?;
-                                }
-                            }
+                        // These resolve as they do anywhere (034, 044).
+                        Op::Sway { .. } | Op::EachDestroyPresence { .. } | Op::PullUnity { .. } => {
+                            effects::run(g, cx, std::slice::from_ref(t), &mut effects::Ctx::team().named("twist"))?
                         }
-                        // 044: dropped by the `_` arm since r20, so stage III never pulled.
-                        Op::PullUnity { amount } => alignment::pull_unity(g, cx, *amount),
                         // Read where they act: the build, spread, corrupt and arrivals
                         // steps, and the war step.
                         Op::CityBuild { .. }
@@ -364,7 +346,7 @@ impl Module for Adversary {
                         other => unreachable!("twist with no reader: {other:?}"),
                     }
                 }
-                build_all(g, cx, None)?;
+                build_all(g, cx, None);
                 if c.escalation {
                     for (h, n) in super::plan::escalation_hexes(&w, g) {
                         place(g, cx, h, n);
@@ -707,7 +689,7 @@ fn reveal(g: &mut GameState, cx: &mut Cx) {
 /// gains `city_build` (+ difficulty 3, + twists), each factory next to a
 /// corrupted city `factory_build`; twists add clean-city factories and
 /// corrupted stations.
-pub fn build_all(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> Res {
+pub fn build_all(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) {
     let w = cx.world;
     // One source for the rule: the plan agents forecast with is the build.
     let on = twists(&w, g);
@@ -715,7 +697,6 @@ pub fn build_all(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> Res {
     for (h, n) in super::plan::build_plan(&w, g, &on, scope) {
         place(g, cx, h, n);
     }
-    Ok(())
 }
 
 /// Places `n` adversary ambassadors from the supply on hex `h`. The supply
@@ -747,7 +728,7 @@ fn arrive(g: &mut GameState, cx: &mut Cx, h: usize, spreading: bool) {
     }
     if spreading
         && g.tokens(h, ADV_AMBASSADOR) > 0
-        && !(is_city(&w, h) && !corrupted(g, h))
+        && !collecting_city(&w, g, h)
         && g.tokens(h, NODE) == 0
     {
         remove(g, cx, h, 1);
@@ -846,7 +827,6 @@ pub fn corrupt_city(g: &mut GameState, cx: &mut Cx, h: usize) {
 /// `count` adversary troops, each onto a factory among `hexes` (players
 /// choose), or with no factory onto a city. With `destroy`, each destroys
 /// the presence on the hex it lands on (027), named for its tally.
-#[allow(clippy::too_many_arguments)]
 pub fn land_troops(
     g: &mut GameState,
     cx: &mut Cx,
@@ -876,7 +856,7 @@ pub fn land_troops(
         if let Some(source) = destroy {
             for s in 0..g.seats.len() {
                 if g.tokens(spots[i], &presence(s)) > 0 {
-                    board::destroy_building(g, cx, spots[i], &presence(s), board::Cause::Effect(source));
+                    board::destroy_piece(g, cx, spots[i], &presence(s), board::Cause::Effect(source));
                 }
             }
         }
@@ -901,8 +881,8 @@ pub fn corrupt_station(g: &mut GameState, cx: &mut Cx, h: usize) {
 
 /// Where an ambassador spreading from `from` may go: hexes within `range`
 /// holding a piece (never an empty hex), not shielded, and
-/// without an adversary ambassador unless a clean city (cities collect
-/// them) or a piece with no node (a second ambassador makes a node).
+/// without an adversary ambassador unless a clean or aligned city (cities
+/// collect them) or a piece with no node (a second ambassador makes a node).
 /// Returns the best by priority (player owned, then clean cities, then the
 /// rest), then distance.
 fn destinations(w: &World, g: &GameState, from: usize, range: i32) -> Vec<usize> {
@@ -926,7 +906,7 @@ fn destinations(w: &World, g: &GameState, from: usize, range: i32) -> Vec<usize>
         if shields.iter().any(|&s| g.tokens(h, &presence(s)) > 0) {
             continue;
         }
-        let city = is_city(w, h) && !corrupted(g, h);
+        let city = collecting_city(w, g, h);
         if g.tokens(h, ADV_AMBASSADOR) > 0 && !city && g.tokens(h, NODE) > 0 {
             continue;
         }
@@ -963,7 +943,7 @@ pub fn spread(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> Res {
         });
     let sources: Vec<usize> = scope_hexes(&w, scope)
         .into_iter()
-        .filter(|&h| g.tokens(h, ADV_AMBASSADOR) > 1 && !(is_city(&w, h) && !corrupted(g, h)))
+        .filter(|&h| g.tokens(h, ADV_AMBASSADOR) > 1 && !collecting_city(&w, g, h))
         .collect();
     for from in sources {
         let n = g.tokens(from, ADV_AMBASSADOR) - 1;
@@ -1120,32 +1100,27 @@ pub fn most_infiltrated_city(
 /// adversary troops below level 2; nodes below level 3 (019; with two
 /// thresholds, always).
 pub fn purge_count(w: &World, g: &GameState, level: i64) -> i64 {
-    let mut n = 0;
-    for h in 0..g.hexes.len() {
-        if is_city(w, h) && corrupted(g, h) {
-            n += 1;
-        }
-        if level < 3 {
-            n += g.tokens(h, NODE);
-        }
-        if level < 1 {
-            n += g.tokens(h, ADV_AMBASSADOR);
-        }
-        if level < 2 {
-            n += g.tokens(h, TROOP);
-        }
+    (0..g.hexes.len()).map(|h| counts_against(w, g, h, level)).sum()
+}
+
+/// What hex `h` adds to [`purge_count`].
+fn counts_against(w: &World, g: &GameState, h: usize, level: i64) -> i64 {
+    let mut n = corrupted_city(w, g, h) as i64;
+    if level < 3 {
+        n += g.tokens(h, NODE);
+    }
+    if level < 1 {
+        n += g.tokens(h, ADV_AMBASSADOR);
+    }
+    if level < 2 {
+        n += g.tokens(h, TROOP);
     }
     n
 }
 
 /// Whether [`purge_count`] is 0, stopping at the first piece: every action asks.
 pub fn under_bar(w: &World, g: &GameState, level: i64) -> bool {
-    !(0..g.hexes.len()).any(|h| {
-        (is_city(w, h) && corrupted(g, h))
-            || (level < 3 && g.tokens(h, NODE) > 0)
-            || (level < 1 && g.tokens(h, ADV_AMBASSADOR) > 0)
-            || (level < 2 && g.tokens(h, TROOP) > 0)
-    })
+    !(0..g.hexes.len()).any(|h| counts_against(w, g, h, level) > 0)
 }
 
 pub fn win_text(level: i64) -> String {

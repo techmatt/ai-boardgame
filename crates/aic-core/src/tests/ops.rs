@@ -64,3 +64,69 @@ fn resources_order_as_their_words() {
     }
     assert_eq!(serde_json::to_string(&TagOrAny::Any).unwrap(), "\"any\"");
 }
+
+/// Every number in `v`'s ops, not its name or text.
+fn op_numbers(v: &serde_json::Value, out: &mut Vec<i64>) {
+    match v {
+        serde_json::Value::Number(n) => out.extend(n.as_i64()),
+        serde_json::Value::Array(a) => a.iter().for_each(|x| op_numbers(x, out)),
+        serde_json::Value::Object(o) => o
+            .iter()
+            .filter(|(k, _)| !["id", "name", "text", "tier", "stage"].contains(&k.as_str()))
+            .for_each(|(_, x)| op_numbers(x, out)),
+        _ => {}
+    }
+}
+
+/// Numbers a text prints, a "3+" (a step's tip count, read off no op) aside.
+fn text_numbers(text: &str) -> Vec<i64> {
+    let b = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i].is_ascii_digit() {
+            let start = i;
+            while i < b.len() && b[i].is_ascii_digit() {
+                i += 1;
+            }
+            if b.get(i) != Some(&b'+') {
+                out.push(text[start..i].parse().unwrap());
+            }
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Only player-card text is generated: the hand-written rest must not print a
+/// number its ops don't have (044's content sweep found none; keep it so).
+#[test]
+fn hand_written_text_prints_no_number_its_ops_lack() {
+    fn walk(v: &serde_json::Value, bad: &mut Vec<String>) {
+        match v {
+            serde_json::Value::Array(a) => a.iter().for_each(|x| walk(x, bad)),
+            serde_json::Value::Object(o) => {
+                if let (Some(id), Some(text)) = (o.get("id"), o.get("text").and_then(|t| t.as_str())) {
+                    let mut have = Vec::new();
+                    op_numbers(v, &mut have);
+                    let missing: Vec<i64> = text_numbers(text).into_iter().filter(|n| !have.contains(n)).collect();
+                    if !missing.is_empty() {
+                        bad.push(format!("{id}: {missing:?} in {text:?}"));
+                    }
+                }
+                o.values().for_each(|x| walk(x, bad));
+            }
+            _ => {}
+        }
+    }
+    let mut bad = Vec::new();
+    for file in [
+        include_str!("../../../../content/threats.json"),
+        include_str!("../../../../content/adversary.json"),
+        include_str!("../../../../content/alignment.json"),
+    ] {
+        walk(&serde_json::from_str(file).unwrap(), &mut bad);
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}

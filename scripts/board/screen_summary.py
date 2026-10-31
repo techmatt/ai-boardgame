@@ -13,7 +13,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from screens import cnt, load  # noqa: E402
+from screens import cnt, ends_text, load  # noqa: E402
 
 
 def main(d):
@@ -39,8 +39,7 @@ def main(d):
         ut = sum(cnt(g, 'alignment.tips_unity') for g in gs) / n
         dt = sum(cnt(g, 'alignment.tips_discord') for g in gs) / n
         sa = sum(cnt(g, 'board.std_actions') for g in gs) / n
-        ends = collections.Counter(('win ' if g['won'] else 'loss ') + g['reason'] for g in gs)
-        print(f"| {cell} | {c['variant']} | {c['difficulty']} | {c['agent']} | {n} | {100 * won / n:.0f} | {rounds:.1f} | {first} | {end_s} | {per_war} | {ut:.2f} | {dt:.2f} | {sa:.2f} | {', '.join(f'{k} {v}' for k, v in ends.most_common())} |")
+        print(f"| {cell} | {c['variant']} | {c['difficulty']} | {c['agent']} | {n} | {100 * won / n:.0f} | {rounds:.1f} | {first} | {end_s} | {per_war} | {ut:.2f} | {dt:.2f} | {sa:.2f} | {ends_text(gs)} |")
         by_round = collections.defaultdict(list)
         for g in gs:
             for k, v in g['counters'].items():

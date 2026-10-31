@@ -41,6 +41,12 @@ pub fn file_stem(name: &str) -> String {
     }
 }
 
+const CLOSE_LOSS: &str = "close-loss";
+const EARLY_LOCK_IN: &str = "early-lock-in";
+const SURPRISING_WIN: &str = "surprising-win";
+/// The record categories, each the start of its files' names.
+pub(super) const CATEGORIES: [&str; 3] = [CLOSE_LOSS, EARLY_LOCK_IN, SURPRISING_WIN];
+
 /// Picks and writes the records worth a look. Returns what was saved.
 pub fn save_records(
     dir: &str,
@@ -55,10 +61,10 @@ pub fn save_records(
     // Agents ranked by measured strength, not by ladder tier (011): the
     // ladder's top tier is not always the strongest agent.
     // An agent not measured yet (a partial report) ranks `None`, not weakest.
-    let strength = measured_rank(cells, sums);
-    let rank = |c: &Cell| strength.get(&c.agent.label()).copied();
-    let top_tier = strength.values().copied().max();
-    let low_tier = Some(0);
+    let ranks = measured_rank(cells, sums);
+    let rank = |c: &Cell| ranks.get(&c.agent.label()).copied();
+    let top_rank = ranks.values().copied().max();
+    let weakest_rank = Some(0);
     let mut picked: Vec<(String, usize, String)> = Vec::new();
     let mut taken = BTreeSet::new();
     let mut take =
@@ -90,7 +96,7 @@ pub fn save_records(
         )
     });
     take(
-        "close-loss",
+        CLOSE_LOSS,
         close
             .iter()
             .map(|(i, g)| {
@@ -124,7 +130,7 @@ pub fn save_records(
         )
     });
     take(
-        "early-lock-in",
+        EARLY_LOCK_IN,
         lock.iter()
             .map(|(i, g, r)| {
                 let ps: Vec<String> = g.winprob.iter().map(|p| format!("{p:.2}")).collect();
@@ -147,14 +153,14 @@ pub fn save_records(
     for (i, g) in games.iter().enumerate().filter(|(_, g)| g.won) {
         let c = &cells[g.cell];
         let low = g.winprob.iter().copied().fold(f64::INFINITY, f64::min);
-        let why = if rank(c) == low_tier && low_tier < top_tier {
+        let why = if rank(c) == weakest_rank && weakest_rank < top_rank {
             Some((
                 0,
                 format!("won by the weakest agent as measured ({})", c.agent.label()),
             ))
         } else if low <= 0.25 {
             Some((1, format!("won after the playouts gave it {low:.2}")))
-        } else if c.difficulty == top_d && rank(c) < top_tier {
+        } else if c.difficulty == top_d && rank(c).is_some() && rank(c) < top_rank {
             Some((
                 2,
                 format!(
@@ -165,13 +171,13 @@ pub fn save_records(
         } else {
             None
         };
-        if let Some((rank, w)) = why {
-            surprise.push((i, w, (rank, g.seed)));
+        if let Some((order, w)) = why {
+            surprise.push((i, w, (order, g.seed)));
         }
     }
     surprise.sort_by_key(|s| s.2);
     take(
-        "surprising-win",
+        SURPRISING_WIN,
         surprise.into_iter().map(|(i, w, _)| (i, w)).collect(),
         &mut picked,
     );
@@ -226,9 +232,7 @@ pub fn prune_records(dir: &str, keep: &[SavedRecord]) -> Result<(), String> {
         .flatten()
     {
         let name = e.file_name().to_string_lossy().to_string();
-        let ours = ["close-loss-", "early-lock-in-", "surprising-win-"]
-            .iter()
-            .any(|p| name.starts_with(p));
+        let ours = CATEGORIES.iter().any(|c| name.starts_with(&format!("{c}-")));
         let path = std::path::PathBuf::from(format!("{rec_dir}/{name}"));
         if ours && name.ends_with(".json") && !keep.contains(&path) {
             std::fs::remove_file(e.path()).map_err(|err| format!("{name}: {err}"))?;

@@ -18,15 +18,12 @@ less chips: a factory's chips now only pay buildings); and in the
 engine cells at d0, some AI power used and some building replaced (the new
 primitives are reachable and used).
 """
-import collections
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from screens import checked_cnt, load, mean  # noqa: E402
+from screens import ROUND, checked_cnt, ends_text, load, mean  # noqa: E402
 
-ROUND = re.compile(r'\.r\d\d$')
 
 
 def main(d, short):
@@ -42,9 +39,8 @@ def main(d, short):
         gs, c = games[cell], cells[cell]
         n = len(gs)
         won = sum(g['won'] for g in gs)
-        ends = collections.Counter(('win ' if g['won'] else 'loss ') + g['reason'] for g in gs)
         print(f"| {c['variant']} | {c['difficulty']} | {c['agent']} | {n} | {100 * won / n:.0f} "
-              f"| {mean(gs, lambda g: g['rounds']):.1f} | {', '.join(f'{k} {v}' for k, v in ends.most_common())} |")
+              f"| {mean(gs, lambda g: g['rounds']):.1f} | {ends_text(gs)} |")
     if short:
         return
     print()

@@ -40,13 +40,16 @@ def face_text(face):
     return ' '.join(t for t in (face['top_text'], face['text']) if t)
 
 
-def deck_ids():
+def cards_module():
+    """The baseline config's cards module, if it has one."""
     with open(os.path.join(ROOT, 'configs', 'baseline.json'), encoding='utf-8') as f:
         cfg = json.load(f)
-    for m in cfg['modules']:
-        if m['module'] == 'cards':
-            return set(m['cards'])
-    return set()
+    return next((m for m in cfg['modules'] if m['module'] == 'cards'), None)
+
+
+def deck_ids():
+    m = cards_module()
+    return set(m['cards']) if m else set()
 
 
 def cost_text(c):
@@ -99,6 +102,7 @@ def shape(cards):
 
 def render(cards):
     deck = deck_ids()
+    params = cards_module()['params']
     lines = [
         '# The player cards',
         '',
@@ -107,8 +111,8 @@ def render(cards):
         'primary tag (the first printed tag), then tier, then name; the AI-unique cards',
         '(tier 0) close the list. Costs: credits (cr), energy (en), chips (ch),',
         'antimatter (am), income lowered for the rest of the game, the tags a card needs on',
-        'your buildings, and the tag of the building a replacement is built over. Insight is',
-        'the insight to play it; keeping a drafted card costs 1 insight (tier 1) or 3 (tier 2)',
+        'your cards in play, and the tag of the building a replacement is built over. Insight is',
+        f"the insight to play it; keeping a drafted card costs {params['keep_tier1']} insight (tier 1) or {params['keep_tier2']} (tier 2)",
         'on top. A card marked *(not in deck)* is in the content but not in the baseline',
         "config's card list.",
         '',

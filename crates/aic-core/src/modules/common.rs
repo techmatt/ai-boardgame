@@ -16,15 +16,15 @@ pub use crate::vocab::Resource;
 
 pub const FACTORY: &str = "factory";
 pub const STATION: &str = "station";
-/// The adversary's owner cube (on a city or research station): corrupted.
+/// The adversary's owner cube (on a city, research station or factory): corrupted.
 pub const ADV_CUBE: &str = "cube:adversary";
 pub const ADV_AMBASSADOR: &str = "ambassador:adversary";
-/// An adversary troop: marches in the adversary phase (019) and is used up
-/// when it strikes.
+/// An adversary troop: marches in the adversary phase (019). A strike uses it
+/// up by `troop_spent`.
 pub const TROOP: &str = "troop";
 /// Corp units waiting at a military base (the base's country's corp).
 pub const UNIT: &str = "unit";
-/// A hardening token: absorbs one destruction of a building on its hex.
+/// A hardening token: absorbs one destruction of a building or presence on its hex.
 pub const HARDEN: &str = "harden";
 /// An adversary node: persistent, makes adversary compute, blocks claims next to it.
 pub const NODE: &str = "node";
@@ -43,7 +43,7 @@ pub fn presence(seat: usize) -> &'static str {
     PRESENCE[seat]
 }
 
-/// Seat `s`'s owner cube (an aligned city or an owned station).
+/// Seat `s`'s owner cube (an aligned city or an owned station or factory).
 pub fn cube(seat: usize) -> &'static str {
     CUBE[seat]
 }
@@ -74,6 +74,16 @@ pub fn cube_owner(g: &GameState, h: usize) -> Option<usize> {
     (0..g.seats.len()).find(|&s| g.tokens(h, &cube(s)) > 0)
 }
 
+/// A city with the adversary's cube.
+pub fn corrupted_city(w: &World, g: &GameState, h: usize) -> bool {
+    is_city(w, h) && corrupted(g, h)
+}
+
+/// A city that collects adversary ambassadors: clean or aligned.
+pub fn collecting_city(w: &World, g: &GameState, h: usize) -> bool {
+    is_city(w, h) && !corrupted(g, h)
+}
+
 /// A city with no cube.
 pub fn clean_city(w: &World, g: &GameState, h: usize) -> bool {
     is_city(w, h) && !corrupted(g, h) && cube_owner(g, h).is_none()
@@ -99,7 +109,7 @@ pub fn has_piece(w: &World, g: &GameState, h: usize) -> bool {
     is_city(w, h) || is_base(w, h) || has_building(g, h) || presence_owner(g, h).is_some()
 }
 
-/// Player-owned: a presence, or an aligned city or owned station.
+/// Player-owned: a presence, or an aligned city or owned station or factory.
 pub fn player_owned(g: &GameState, h: usize) -> bool {
     presence_owner(g, h).is_some() || cube_owner(g, h).is_some()
 }
@@ -114,7 +124,6 @@ pub fn has_adversary(g: &GameState, h: usize) -> bool {
     g.tokens(h, ADV_AMBASSADOR) + g.tokens(h, TROOP) > 0
 }
 
-/// Whether hex `h` holds, or is adjacent to a hex holding, something `pred` accepts.
 /// Hex `h`, and with `range` 1 its neighbours.
 pub fn within(w: &World, h: usize, range: i64) -> Vec<usize> {
     let mut hexes = vec![h];
@@ -124,6 +133,7 @@ pub fn within(w: &World, h: usize, range: i64) -> Vec<usize> {
     hexes
 }
 
+/// Whether hex `h` holds, or is adjacent to a hex holding, something `pred` accepts.
 pub fn next_to(w: &World, h: usize, pred: impl Fn(usize) -> bool) -> bool {
     pred(h) || w.map.hexes[h].neighbours.iter().any(|&n| pred(n))
 }
@@ -164,6 +174,12 @@ pub fn presence_of(g: &GameState, seat: usize) -> Vec<usize> {
         .collect()
 }
 
+/// Hexes holding seat `s`'s ambassadors on the board, in hex order.
+pub fn ambassador_hexes(g: &GameState, seat: usize) -> Vec<usize> {
+    let k = ambassador(seat);
+    (0..g.hexes.len()).filter(|&h| g.tokens(h, &k) > 0).collect()
+}
+
 pub fn presence_count(g: &GameState, seat: usize) -> i64 {
     let k = presence(seat);
     (0..g.hexes.len()).filter(|&h| g.tokens(h, k) > 0).count() as i64
@@ -190,18 +206,11 @@ pub fn has_presence_in(w: &World, g: &GameState, seat: usize, country: usize) ->
         .any(|&h| g.tokens(h, &k) > 0)
 }
 
-/// Seats with a presence in `country`, in seat order.
-pub fn seats_in_country(w: &World, g: &GameState, country: usize) -> Vec<usize> {
-    (0..g.seats.len())
-        .filter(|&s| has_presence_in(w, g, s, country))
-        .collect()
-}
-
 /// Seats a threat in `scope` concerns: with a presence in the country,
 /// or every seat for the whole board.
 pub fn seats_in_scope(w: &World, g: &GameState, scope: Option<usize>) -> Vec<usize> {
     match scope {
-        Some(c) => seats_in_country(w, g, c),
+        Some(c) => (0..g.seats.len()).filter(|&s| has_presence_in(w, g, s, c)).collect(),
         None => (0..g.seats.len()).collect(),
     }
 }

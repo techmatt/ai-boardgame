@@ -9,18 +9,15 @@ cards played per game. Every row is appended to out/tune/engine.jsonl.
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 
-SIM = os.environ.get("AIC_SIM", os.path.join("target", "release", "aic-sim"))
+from sweep import run
 
 
 def kinds():
     with open(os.path.join("content", "cards.json"), encoding="utf-8") as f:
-        d = json.load(f)
-    cards = d["cards"] if isinstance(d, dict) else d
-    return {c["id"]: (c["kind"], c["tier"]) for c in cards}
+        return {c["id"]: (c["kind"], c["tier"]) for c in json.load(f)}
 
 
 def main():
@@ -36,20 +33,11 @@ def main():
     os.makedirs(os.path.join("out", "tune"), exist_ok=True)
     log = open(os.path.join("out", "tune", "engine.jsonl"), "a", encoding="utf-8", newline="\n")
     for agent in a.agents:
-        cmd = [SIM, "run", a.config, "--games", str(a.games), "--seed", str(a.seed),
-               "--agent", agent, "--json", "--max-actions", "20000"]
-        for s in a.set:
-            cmd += ["--set", s]
-        t = time.time()
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
-        if p.returncode != 0:
-            raise SystemExit(f"aic-sim failed ({p.returncode}): {' '.join(cmd)}\n{p.stderr[-2000:]}")
-        r = json.loads(p.stdout)["results"][0]
+        r, secs = run(a.config, agent, a.games, a.seed, a.set)
         c = r["counters"]
         played = {key[len("cards.played."):]: v for key, v in c.items() if key.startswith("cards.played.")}
         bld = sum(v for i, v in played.items() if k.get(i, ("", 0))[0] == "building")
         t2 = sum(v for i, v in played.items() if k.get(i, ("", 0))[1] == 2)
-        secs = time.time() - t
         top = sorted(((v, i) for i, v in played.items() if k.get(i, ("", 0))[0] == "building"), reverse=True)[:4]
         print(f"{agent:<48} win {100 * r['win_rate']:5.1f}% ±{100 * r['win_rate_se']:4.1f} "
               f"rnd {r['rounds_mean']:4.2f} bld {bld:4.2f} t2 {t2:4.2f} "

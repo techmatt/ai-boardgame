@@ -1,8 +1,9 @@
 //! AI Complete rules engine.
 //!
 //! Pure and deterministic: no I/O, no wall clock, no global or thread RNG,
-//! and no hash-order leaks (every map is a `BTreeMap`). All randomness comes
-//! from seeded per-purpose streams held in [`GameState`]; the state is
+//! and no hash-order leaks (every map in the state is ordered, a `FlatMap`;
+//! hash maps are for lookups only and are never iterated into a result). All
+//! randomness comes from seeded per-purpose streams held in [`GameState`]; the state is
 //! serde-serializable and a game replays exactly from config + seed +
 //! action list.
 //!
@@ -38,7 +39,7 @@ pub mod vocab;
 pub use action::Action;
 pub use config::{Config, ModuleConfig, ParamValue};
 pub use content::{content, content_hash, Content};
-pub use driver::{play, replay, Agent, GameRecord};
+pub use driver::{play, replay, Agent, PlayedGame};
 pub use event::Event;
 pub use hash::fnv1a64;
 pub use hex::{Dir, Hex};
@@ -63,25 +64,26 @@ pub fn new_game(config: &Config, seed: u64) -> Result<GameState, String> {
     Ok(Rules::new(config)?.new_game(seed))
 }
 
-/// Legal actions in `state` (empty once the game is over).
-pub fn legal_actions(state: &GameState) -> Result<Vec<Action>, String> {
+/// The rules of the config embedded in `state`, checked against it.
+fn rules_for(state: &GameState) -> Result<Rules, String> {
     let rules = Rules::new(&state.config)?;
     rules.check_state(state)?;
-    Ok(rules.legal_actions(state))
+    Ok(rules)
+}
+
+/// Legal actions in `state` (empty once the game is over).
+pub fn legal_actions(state: &GameState) -> Result<Vec<Action>, String> {
+    Ok(rules_for(state)?.legal_actions(state))
 }
 
 /// Applies an action, returning the next state and the events it produced.
 pub fn apply(state: &GameState, action: &Action) -> Result<(GameState, Vec<Event>), String> {
-    let rules = Rules::new(&state.config)?;
-    rules.check_state(state)?;
-    rules.apply(state, action)
+    rules_for(state)?.apply(state, action)
 }
 
 /// The generic view of a state (see `view.rs`), for clients.
 pub fn view(state: &GameState) -> Result<View, String> {
-    let rules = Rules::new(&state.config)?;
-    rules.check_state(state)?;
-    Ok(rules.view(state))
+    Ok(rules_for(state)?.view(state))
 }
 
 /// The module registry as JSON-friendly data: every module, its variants,

@@ -5,7 +5,7 @@
 // economy.income.*, cards.*) get a dedicated drawing, every other value, card group or
 // pile falls back to a generic chip so nothing goes unshown.
 
-import { aiBoard, content, param, type CardView, type Config, type PileView, type Value, type View } from './engine';
+import { content, param, type CardView, type Config, type PileView, type Value, type View } from './engine';
 import { ADVERSARY_COLOUR, escapeHtml, extraCosts, KINDS, strong } from './format';
 
 const esc = escapeHtml;
@@ -28,7 +28,7 @@ const findValue = (vs: Value[], key: string) => vs.find((v) => v.key === key);
 const pile = (v: View, key: string) => v.piles.find((p) => p.key === key);
 
 /** A value chip; `near` marks a value close to its max (where that is a warning). */
-export function valueChip(v: Value, scope: string, label = v.label, near = true): string {
+function valueChip(v: Value, scope: string, label = v.label, near = true): string {
   const val = v.max !== undefined ? `${v.value}<small>/${v.max}</small>` : `${v.value}`;
   // A countdown ("antimatter actions left 1/1") is full when it is safe: no warning
   // near its max (020: drawn red all round).
@@ -37,12 +37,12 @@ export function valueChip(v: Value, scope: string, label = v.label, near = true)
   return `<span class="value${warn}" data-value="${esc(v.key)}" data-scope="${scope}"><span class="label">${esc(label)}</span> <b>${val}</b></span>`;
 }
 
-export function cardChip(c: CardView, where: string, printed = false): string {
+function cardChip(c: CardView, where: string, printed = false): string {
   // 044: costs beyond credits sit in the bracket the printed chip drops, so "unaffordable"
   // could have no visible reason. A card with no price showing (built, played) owes nothing.
   const extra = c.cost !== undefined ? extraCosts(c.text).map((x) => ` <small title="also costs">+${esc(x)}</small>`).join('') : '';
   const cost = (c.cost !== undefined ? ` <small title="cost">${c.cost}</small>` : '') + extra;
-  const status = c.status && !['in slot', 'draft', 'drafted', 'built', 'slotted', 'resolved', 'done', 'ongoing'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
+  const status = c.status && !['draft', 'built', 'resolved', 'done', 'ongoing'].includes(c.status) ? `<em>${esc(c.status)}</em>` : '';
   // 024: a card repeats its rules text under its name, as Terraforming Mars' do.
   // The view's text starts with a bracketed line ("[building, tier 1, industry, +1 insight]
   // ..."): kind, tags and every cost but credits. Printed chips show the rules text only.
@@ -74,34 +74,37 @@ function tipsChip(t: Value | undefined, side: 'unity' | 'discord', name: string)
   return `<span class="tips ${side}" data-value="${esc(t.key)}" data-scope="global">${name} tips <b>${t.value}</b>${t.max !== undefined ? `<small> (next at ${t.max})</small>` : ''}</span>`;
 }
 
-export function statusHtml(v: View, config: Config): string {
+/** The Alignment line, and its resolved cards and decks for the line under it; nothing without the module. */
+function alignmentHtml(v: View): { track: string; cards: string[] } {
   const g = v.globals;
-  const parts: string[] = [];
-  const acards: string[] = [];
   const und = findValue(g, 'alignment.undecided');
   const unity = findValue(g, 'alignment.unity');
   const discord = findValue(g, 'alignment.discord');
   const bar = findValue(g, 'alignment.bar');
-  if (und || unity || discord || bar) {
-    const level = bar?.value ?? 0;
-    const max = bar?.max ?? 0;
-    const undHtml = und
-      ? `<span class="undecided" data-value="${esc(und.key)}" data-scope="global"><b>${und.value}</b><small>/${und.max ?? '?'}</small> undecided</span>`
-      : '';
-    parts.push(`<div class="alignment">
+  if (!und && !unity && !discord && !bar) return { track: '', cards: [] };
+  const level = bar?.value ?? 0;
+  const max = bar?.max ?? 0;
+  const undHtml = und
+    ? `<span class="undecided" data-value="${esc(und.key)}" data-scope="global"><b>${und.value}</b><small>/${und.max ?? '?'}</small> undecided</span>`
+    : '';
+  const track = `<div class="alignment">
       <span class="alabel">Alignment</span>
       <span class="tug">${bucketBar(unity, 'unity', 'Unity')}${undHtml}${bucketBar(discord, 'discord', 'Discord')}</span>
       ${tipsChip(findValue(g, 'alignment.unity_tips'), 'unity', 'Unity')}${tipsChip(findValue(g, 'alignment.discord_tips'), 'discord', 'Discord')}
       ${bar ? `<span class="level" data-value="${esc(bar.key)}" data-scope="global">bar <b>${level}</b>/${max}</span><span class="win">${esc(bar.doc ?? '')}</span>` : ''}
-    </div>`);
-    const groups = ([['alignment.resolved.unity', 'unity'], ['alignment.resolved.discord', 'discord']] as const)
-      .map(([key, cls]) => [pile(v, key), cls] as const)
-      .filter(([p]) => p && p.visible.length)
-      .map(([p, cls]) => `<span class="agroup ${cls}" data-pile="${esc(p!.key)}"><span class="what">${esc(p!.label)}</span>${p!.visible.map((c) => cardChip(c, `pile:${p!.key}`)).join('')}</span>`);
-    const decks = ['unity', 'discord'].map((s) => pile(v, `alignment.deck.${s}`)).filter((p): p is PileView => !!p)
-      .map((p) => `<span class="adeck" data-pile="${esc(p.key)}">${esc(p.label)} <b>${p.count}</b></span>`);
-    acards.push(...groups, ...decks);
-  }
+    </div>`;
+  const groups = ([['alignment.resolved.unity', 'unity'], ['alignment.resolved.discord', 'discord']] as const)
+    .map(([key, cls]) => [pile(v, key), cls] as const)
+    .filter(([p]) => p && p.visible.length)
+    .map(([p, cls]) => `<span class="agroup ${cls}" data-pile="${esc(p!.key)}"><span class="what">${esc(p!.label)}</span>${p!.visible.map((c) => cardChip(c, `pile:${p!.key}`)).join('')}</span>`);
+  const decks = ['unity', 'discord'].map((s) => pile(v, `alignment.deck.${s}`)).filter((p): p is PileView => !!p)
+    .map((p) => `<span class="adeck" data-pile="${esc(p.key)}">${esc(p.label)} <b>${p.count}</b></span>`);
+  return { track, cards: [...groups, ...decks] };
+}
+
+/** The "Lose if" group and, beside it, the other tracks; each only if it has something. */
+function lossesHtml(v: View, config: Config): string[] {
+  const g = v.globals;
   const loss: string[] = [];
   const dd = pile(v, 'alignment.deck.discord');
   if (dd) {
@@ -123,15 +126,19 @@ export function statusHtml(v: View, config: Config): string {
   // The clock's step is a name, not a count: "clock: war" (020: it read "war 2").
   const clockChip = (x: Value) => `<span class="value" data-value="${esc(x.key)}" data-scope="global"><span class="label">clock</span> <b>${esc(x.label)}</b></span>`;
   const other = g.filter((x) => !DRAWN_GLOBALS.has(x.key) && x.source !== 'engine').map((x) => (x.key === 'board.clock' ? clockChip(x) : valueChip(x, 'global')));
-  if (loss.length || other.length) {
-    // The other tracks (the clock's step, Unity bonuses) beside the losses, not in them
-    // (020: drawn inside the red "Lose if" group).
-    if (loss.length) acards.push(`<span class="losses"><span class="what">Lose if</span>${loss.join('')}</span>`);
-    if (other.length) acards.push(`<span class="tracks">${other.join('')}</span>`);
-  }
+  // The other tracks (the clock's step, Unity bonuses) beside the losses, not in them
+  // (020: drawn inside the red "Lose if" group).
+  return [
+    ...(loss.length ? [`<span class="losses"><span class="what">Lose if</span>${loss.join('')}</span>`] : []),
+    ...(other.length ? [`<span class="tracks">${other.join('')}</span>`] : []),
+  ];
+}
+
+export function statusHtml(v: View, config: Config): string {
+  const { track, cards } = alignmentHtml(v);
   // The Alignment cards and the loss conditions share one wrapping line.
-  if (acards.length) parts.push(`<div class="acards">${acards.join('')}</div>`);
-  return parts.join('');
+  const acards = [...cards, ...lossesHtml(v, config)];
+  return track + (acards.length ? `<div class="acards">${acards.join('')}</div>` : '');
 }
 
 // ---------- the adversary row ----------
@@ -243,7 +250,7 @@ function threatCard(c: CardView, where: string): string {
  * A country's megaproject card: its name and a row of cube places, filled left to right
  * by owner (the adversary's, then each seat's), from `board.project*`.
  */
-function projectHtml(v: View, c: View['countries'][number]): string {
+function megaprojectHtml(v: View, c: View['countries'][number]): string {
   const total = findValue(c.values, 'board.project');
   if (!total) return '';
   const name = total.label.replace(/^megaproject:\s*/, '');
@@ -263,10 +270,10 @@ function projectHtml(v: View, c: View['countries'][number]): string {
   return `<div class="project${done ? ' done' : ''}" data-value="${esc(total.key)}" data-scope="country:${c.index}"><b title="megaproject">◆ ${esc(name)}</b><span class="cubes">${cells.join('')}</span><small>${total.value}/${max}${by ? ` · ${by}` : ''}</small></div>`;
 }
 
-export function countriesHtml(v: View, config: Config): string {
+export function countriesHtml(v: View): string {
   const boxes = v.countries.map((c) => {
     const seat = v.seats.find((s) => s.country === c.index);
-    const ai = seat ? seat.board?.name ?? aiBoard(config, seat.index)?.name : undefined;
+    const ai = seat?.board?.name;
     const tok = (k: string) => findValue(c.values, `tokens.${k}`)?.value ?? 0;
     // Cities by owner cube: the adversary's (corrupted), a seat's (aligned), none (clean).
     const cities = v.hexes.filter((h) => h.country === c.index && h.kind === 'city');
@@ -285,7 +292,7 @@ export function countriesHtml(v: View, config: Config): string {
     const groups = c.cards.map((g) => g.key === 'threats.on'
       ? g.cards.map((x) => threatCard(x, `country:${c.index}:${g.key}`)).join('')
       : `<div class="row"><span class="what">${esc(g.label)}</span>${g.cards.map((x) => cardChip(x, `country:${c.index}:${g.key}`)).join('')}</div>`).join('');
-    const project = projectHtml(v, c);
+    const project = megaprojectHtml(v, c);
     return `<div class="country" data-country="${c.index}" style="--tint:${strong(c.colour)};--soft:${c.colour}">
       <div class="chead"><b title="country ${c.index}">${esc(countryName(v, c.index))}</b>${seat ? ` seat ${seat.index}${ai ? ` · ${esc(ai)}` : ''}` : ''} ${counts}${flags}</div>
       ${project}
@@ -350,7 +357,7 @@ export function seatValuesHtml(v: View, seatIndex: number): string {
  * left to right. Uncovered steps are solid, covered ones dashed, the step in effect
  * is boxed; marks (`tier2`, `antimatter`, any other) sit under the step's value.
  */
-export function boardHtml(v: View, seatIndex: number): string {
+function boardHtml(v: View, seatIndex: number): string {
   const b = v.seats[seatIndex].board;
   if (!b) return '';
   const tracks = b.tracks.map((t, ti) => {
@@ -389,8 +396,6 @@ export function boardDetails(v: View, seatIndex: number): string | null {
 export const countryName = (v: View, i: number) => v.countries[i]?.name || `C${i}`;
 
 const GROUP_LABEL: Record<string, string> = {
-  'cards.hand': 'hand',
-  'cards.packet': 'draft hand',
   'cards.drafted': 'drafted',
 };
 

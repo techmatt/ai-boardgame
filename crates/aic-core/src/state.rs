@@ -147,6 +147,11 @@ pub struct Outcome {
 }
 
 impl GameState {
+    /// Where `part` (`"threats.counter"`, ...) sits in the round, if it does.
+    pub fn phase_index(&self, part: &str) -> Option<usize> {
+        self.config.round.iter().position(|p| p.split('+').any(|q| q == part))
+    }
+
     pub fn tokens(&self, hex: usize, kind: &str) -> i64 {
         // A scan, not a search: a hex holds a few kinds, names of other lengths
         // are refused without reading them, and rules and heuristics ask for

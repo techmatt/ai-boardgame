@@ -2,11 +2,13 @@
 //! on the board, and the round cap's shape by difficulty.
 
 use super::*;
-use crate::modules::common::{is_ocean, presence, HARDEN, MARKER};
+use crate::content::Op;
+use crate::modules::common::{hex_opt, is_ocean, presence, HARDEN, MARKER};
 use crate::modules::{ai, alignment, board, effects, threats};
+use crate::state::Pick;
 
 /// A lab with seat 0's presence on the board and both tracks at `taken` steps.
-fn at_step(sets: &[&str], taken: i64) -> (Rules, GameState) {
+pub(super) fn at_step(sets: &[&str], taken: i64) -> (Rules, GameState) {
     let (rules, mut g) = lab_with(&[], sets);
     let a = rules.map.numbered(0, piece(0).presence);
     put(&mut g, a, presence(0), 1);
@@ -15,7 +17,7 @@ fn at_step(sets: &[&str], taken: i64) -> (Rules, GameState) {
     (rules, g)
 }
 
-fn run_ops(rules: &Rules, g: &mut GameState, ops: &[content::Op]) {
+pub(super) fn run_ops(rules: &Rules, g: &mut GameState, ops: &[content::Op]) {
     let mut seed = g.clone();
     with_cx(rules, |cx| {
         effects::run(&mut seed, cx, ops, &mut effects::Ctx::seat(0)).unwrap();
@@ -43,6 +45,51 @@ fn a_card_pays_the_step_and_a_free_one_does_not() {
         board::placing_price(&w, &g, 0, board::Placing::Rich, step).credits,
         w.int("board.presence_credits") + step * w.int("board.energy_credits")
     );
+}
+
+#[test]
+fn up_to_two_markers_can_stop_after_one() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let c = rules.map.numbered(0, piece(0).presence);
+    let n: Vec<usize> = w.map.hexes[c].neighbours.iter().copied().filter(|&h| !crate::modules::common::is_ocean(&w, h)).take(2).collect();
+    put(&mut g, c, presence(0), 1);
+    for &h in &n {
+        put(&mut g, h, MARKER, 1);
+    }
+    let first = hex_opt(&w, n[0]);
+    let picks = vec![Pick { option: first.option, target: first.target }, Pick { option: "stop".into(), target: None }];
+    let mut after = g.clone();
+    with_cx_picks(&rules, picks, |cx| {
+        effects::run(&mut after, cx, &[Op::ClearMarkers { count: 2 }], &mut effects::Ctx::seat(0)).unwrap();
+    });
+    assert_eq!(n.iter().map(|&h| after.tokens(h, MARKER)).sum::<i64>(), 1, "the second pick was stop");
+}
+
+#[test]
+fn a_placements_prompt_names_what_it_charges() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let w = rules.world();
+    let a = rules.map.numbered(0, piece(0).presence);
+    put(&mut g, a, presence(0), 1);
+    g.vars.insert(board::track_key(0).into(), 5);
+    g.vars.insert(board::track2_key(0).into(), 5);
+    let step = crate::modules::ai::board(&w, 0).presence[5].cost;
+    assert!(step > 0);
+    set_res(&mut g, 0, Resource::Energy, 20);
+    set_res(&mut g, 0, Resource::Credits, 50);
+    let prompt_for = |ops: &[Op]| {
+        let mut gg = g.clone();
+        let mut choices = module::Choices::new(Vec::new());
+        let mut cx = module::Cx { world: rules.world(), module: "test", purposes: &[], events: None, choices: &mut choices };
+        let _ = effects::run(&mut gg, &mut cx, ops, &mut effects::Ctx::seat(0));
+        let ask = choices.asked.take().expect("two tracks to choose from");
+        ask.options.iter().map(|o| o.option.clone()).collect::<Vec<_>>().join(" | ")
+    };
+    let free = prompt_for(&[Op::PlacePresence { count: 1, free: true }]);
+    assert!(!free.contains("costs"), "{free}");
+    let paid = prompt_for(&[Op::PlacePresence { count: 1, free: false }]);
+    assert!(paid.contains(&format!("costs {step} energy")), "{paid}");
 }
 
 #[test]
@@ -81,36 +128,6 @@ fn clearing_a_marker_costs_its_energy_and_pays_its_reward() {
     assert_eq!(g.resource(0, Resource::Energy), 0);
     assert_eq!(g.resource(0, Resource::Credits), credits + w.int("board.clear_credits"));
     assert_eq!(g.var(alignment::bucket(content::Side::Unity)), unity + w.int("board.clear_unity"));
-}
-
-#[test]
-fn a_delayed_threat_skips_this_round_and_a_shield_absorbs_a_destruction() {
-    let (rules, mut g) = at_step(&[], 1);
-    let a = rules.map.numbered(0, piece(0).presence);
-    with_cx(&rules, |cx| threats::deal_extra(&mut g, cx, 1));
-    let t = threats::active(&g)[0].0.clone();
-    assert!(!threats::waits(&g, &t));
-    run_ops(&rules, &mut g, &[content::Op::DelayThreat { count: 1 }]);
-    assert!(threats::waits(&g, &t));
-    g.round += 1;
-    assert!(!threats::waits(&g, &t), "it comes back next round");
-    run_ops(&rules, &mut g, &[content::Op::ShieldPresence { count: 1 }]);
-    assert_eq!(g.tokens(a, HARDEN), 1);
-    let kept = with_cx(&rules, |cx| board::destroy_building(&mut g, cx, a, &presence(0), board::Cause::Troop));
-    assert!(!kept, "absorbed");
-    assert_eq!(g.tokens(a, &presence(0)), 1);
-}
-
-#[test]
-fn the_cap_holds_at_eleven_through_d2_with_a_harder_end() {
-    let count = |d: i64| {
-        let arg = format!("adversary.difficulty={d}");
-        let (_, g) = lab_with(&[], &[&arg]);
-        g.pile(DECK).len() + g.pile(NEXT).len()
-    };
-    assert_eq!(count(0), 11);
-    assert_eq!(count(2), 11);
-    assert_eq!(count(3), 10);
 }
 
 #[test]

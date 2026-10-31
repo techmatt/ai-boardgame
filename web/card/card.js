@@ -1,5 +1,5 @@
-// The one card renderer: card content in, HTML out, no I/O. Sizes are mm, so the same
-// markup serves the web client (scale it with CSS) and print (a PDF at true size).
+// The one card renderer: card content in, HTML out, no I/O. Sizes are mm: print now (a
+// PDF at true size), the web client later (scale it with CSS).
 // Needs card.css. Geometry comes from layout.json; the icon set is in icons.js. The frame
 // holds the fixed structure only: what changes card by card is drawn here. Where a thing
 // sits is what it is: see README, Card art.
@@ -55,7 +55,7 @@ function requirement(card, x, box) {
 }
 
 const WORD = (w) => () => `<span class="fx-word">${w}</span>`;
-const TEXT = { '→': arrow, '/': () => '<span class="fx-per">/</span>', ':': () => '<span class="fx-num">:</span>', OR: WORD('OR'), EACH: WORD('EACH'), ALL: WORD('ALL'), ACT: WORD('ACT'), ELSE: WORD('ELSE'), '*': () => '<span class="fx-num">*</span>' };
+const TEXT = { '→': arrow, '/': () => '<span class="fx-per">/</span>', ':': () => '<span class="fx-num">:</span>', OR: WORD('OR'), ALL: WORD('ALL'), ACT: WORD('ACT'), ELSE: WORD('ELSE'), '*': () => '<span class="fx-num">*</span>' };
 
 /** One part of an icon line: a box of parts, an icon, a connector or a number. */
 function part(p) {

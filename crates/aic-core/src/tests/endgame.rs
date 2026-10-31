@@ -6,15 +6,6 @@ use super::*;
 use crate::modules::common::{ambassador, presence, MARKER, NODE};
 use crate::modules::{adversary, board};
 
-/// The baseline playing only the action phase, after setup.
-fn action_only(sets: &[&str]) -> (Rules, GameState) {
-    let mut c = baseline_with(sets);
-    c.round = vec![ACTIONS.into()];
-    let rules = Rules::new(&c).unwrap();
-    let g = rules.new_game(4);
-    (rules, g)
-}
-
 /// The hold rule's numbers (the lab pins them off).
 const HOLD: [&str; 3] = ["board.hold_base=3", "board.hold_min=2", "board.free_leaves=1"];
 
@@ -174,12 +165,12 @@ fn stage_one_never_takes_a_last_presence() {
     with_cx(&rules, |cx| adversary::corrupt_city(&mut g, cx, h));
     assert_eq!(g.tokens(h, &presence(0)), 1, "stage I: it stays");
     let gone = with_cx(&rules, |cx| {
-        board::destroy_building(&mut g, cx, h, &presence(0), board::Cause::Troop)
+        board::destroy_piece(&mut g, cx, h, &presence(0), board::Cause::Troop)
     });
     assert!(!gone);
     g.vars.insert(STAGE.into(), 2);
     let gone = with_cx(&rules, |cx| {
-        board::destroy_building(&mut g, cx, h, &presence(0), board::Cause::Troop)
+        board::destroy_piece(&mut g, cx, h, &presence(0), board::Cause::Troop)
     });
     assert!(gone, "stage II: it goes");
 }
@@ -357,48 +348,6 @@ fn a_marker_counts_toward_corrupting_a_city() {
     assert_eq!(g.tokens(h, MARKER), 0, "the city's corruption replaces it");
 }
 
-#[test]
-fn the_rich_action_opens_at_stage_two_and_rises_with_each_use() {
-    let (rules, mut g) = lab_with(&[], &[]);
-    let w = rules.world();
-    let a = rules.map.numbered(0, piece(0).presence);
-    put(&mut g, a, presence(0), 1);
-    g.vars.insert(board::track_key(0).into(), 1);
-    set_res(&mut g, 0, Resource::Credits, 40);
-    g.vars.insert(STAGE.into(), 1);
-    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "presence_buy"), None).is_err(), "stage I");
-    g.vars.insert(STAGE.into(), 2);
-    let base = w.int("board.presence_credits");
-    let rise = w.int("board.presence_rise");
-    rules.apply_mut(&mut g, &std_act(0, "presence_buy"), None).unwrap();
-    answer_all(&rules, &mut g);
-    assert_eq!(g.resource(0, Resource::Credits), 40 - base);
-    rules.apply_mut(&mut g, &std_act(0, "presence_buy"), None).unwrap();
-    answer_all(&rules, &mut g);
-    assert_eq!(g.resource(0, Resource::Credits), 40 - base - (base + rise));
-}
-
-#[test]
-fn a_track_s_last_steps_cost_more_and_the_action_pays_its_price_on_top() {
-    use crate::modules::ai;
-    let (rules, mut g) = lab_with(&[], &[]);
-    let w = rules.world();
-    let b = ai::board(&w, 0);
-    let a = rules.map.numbered(0, piece(0).presence);
-    put(&mut g, a, presence(0), 1);
-    // Both tracks down to their last steps.
-    g.vars.insert(board::track_key(0).into(), b.presence.len() as i64 - 1);
-    g.vars.insert(board::track2_key(0).into(), b.presence2.len() as i64 - 1);
-    let extra = b.presence.last().unwrap().cost.min(b.presence2.last().unwrap().cost);
-    assert!(extra > 0);
-    set_res(&mut g, 0, Resource::Energy, extra);
-    assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "presence"), None).is_err(), "base + extra");
-    set_res(&mut g, 0, Resource::Energy, extra + w.int("board.presence_energy"));
-    rules.apply_mut(&mut g, &std_act(0, "presence"), None).unwrap();
-    answer_all(&rules, &mut g);
-    assert_eq!(g.resource(0, Resource::Energy), 0);
-}
-
 /// 034's d4 fix: every printed step of the Discord deck acts before it ends,
 /// at each difficulty, with the deck's tips counted as the game counts them.
 #[test]
@@ -435,57 +384,5 @@ fn hold_base_is_the_same_at_every_difficulty() {
         let arg = format!("adversary.difficulty={d}");
         let rules = Rules::new(&baseline_with(&[&arg])).unwrap();
         assert_eq!(rules.world().int("board.hold_base"), 3);
-    }
-}
-
-#[test]
-fn science_tags_discount_insight_to_a_floor_of_one() {
-    use crate::modules::cards;
-    let (rules, mut g) = lab_with(&[], &["cards.science_every=2"]);
-    let w = rules.world();
-    let two = w.content.cards.iter().find(|c| c.insight == 2).unwrap();
-    let one = w.content.cards.iter().find(|c| c.insight == 1).unwrap();
-    assert_eq!(cards::play_insight(&w, &g, 0, two), 2);
-    let science: Vec<_> = w.content.cards.iter().filter(|c| c.tags.iter().filter(|t| **t == crate::content::Tag::Science).count() == 1 && c.tier == 1).take(4).map(|c| crate::key::Key::new(&c.id)).collect();
-    g.piles.insert(cards::played(0).into(), std::sync::Arc::new(science));
-    assert_eq!(cards::play_insight(&w, &g, 0, two), 1, "4 tags: 2 off, stopped at the floor");
-    assert_eq!(cards::play_insight(&w, &g, 0, one), 1, "1 stays 1");
-}
-
-#[test]
-fn industry_tags_discount_buildings_to_a_floor_of_one() {
-    use crate::modules::cards;
-    let (rules, mut g) = lab_with(&[], &["cards.industry_every=2"]);
-    let w = rules.world();
-    let d = w.content.cards.iter().find(|c| c.is_building() && c.cost >= 3 && c.tier == 1).unwrap();
-    let before = cards::play_cost(&w, &g, 1, d);
-    let industry: Vec<_> = w.content.cards.iter().filter(|c| c.tags.iter().filter(|t| **t == crate::content::Tag::Industry).count() == 1 && c.tier == 1 && !c.is_building()).take(2).map(|c| crate::key::Key::new(&c.id)).collect();
-    g.piles.insert(cards::played(1).into(), std::sync::Arc::new(industry));
-    assert_eq!(cards::play_cost(&w, &g, 1, d), before - 1);
-    assert_eq!(cards::discounted_cost(&w, d, 99), 1, "the floor");
-}
-
-/// 042: what the heuristic reads must be what the rules charge.
-#[test]
-fn prices_worked_out_once_match_each_cards_own() {
-    use crate::content::{Resource, TAGS};
-    use crate::modules::cards;
-    let (rules, mut g) = lab_with(&[], &["cards.science_every=2", "cards.industry_every=2"]);
-    let w = rules.world();
-    let tagged: Vec<_> = w.content.cards.iter().filter(|c| !c.tags.is_empty()).take(12).map(|c| crate::key::Key::new(&c.id)).collect();
-    for held in [0, 4, tagged.len()] {
-        g.piles.insert(cards::played(0).into(), std::sync::Arc::new(tagged[..held].to_vec()));
-        g.seats[0].resources.insert(Resource::Energy, 3);
-        let p = cards::prices(&w, &g, 0);
-        for d in &w.content.cards {
-            assert_eq!(p.insight(d), cards::play_insight(&w, &g, 0, d), "{}", d.id);
-            assert_eq!(p.credits(d), cards::play_cost(&w, &g, 0, d), "{}", d.id);
-            assert_eq!(cards::discount_room_at(&w, &g, 0, d, &p), cards::discount_room(&w, &g, 0, d), "{}", d.id);
-        }
-        let counts = cards::tag_counts(&w, &g, 0);
-        for t in TAGS {
-            let by_hand: usize = cards::in_play(&g, 0).iter().map(|id| cards::def(&w, id).tags.iter().filter(|x| **x == t).count()).sum();
-            assert_eq!(counts[t as usize], by_hand as i64);
-        }
     }
 }

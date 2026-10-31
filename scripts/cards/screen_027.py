@@ -20,11 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 import screens as s  # noqa: E402
-
-
-def hist(rounds):
-    c = collections.Counter(rounds)
-    return ' '.join(f'{r}:{c[r]}' for r in sorted(c)) or '–'
+from screens import hist  # noqa: E402
 
 
 def rate(gs, k, per_round=True):
@@ -57,15 +53,8 @@ def table(cells, games):
               f"| {rate(gs, 'adversary.projects_resolved', False):.1f} | {rate(gs, 'adversary.supply_short', False):.1f} |")
 
 
-def sources(cells, games):
-    tot = collections.Counter()
-    for gs in games.values():
-        for g in gs:
-            for k, v in g['counters'].items():
-                if k.startswith('board.presence_lost.') and not k.split('.')[-1].startswith('r'):
-                    tot[k.split('.')[-1]] += v
-    n = sum(tot.values()) or 1
-    print('Presence lost by source: ' + ', '.join(f'{k} {v} ({100 * v / n:.0f}%)' for k, v in tot.most_common()))
+def sources(games):
+    s.sources(games)
     print(f"Last presence saved by the stage-I rule: {sum(g['counters'].get('board.last_presence_safe', 0) for gs in games.values() for g in gs)}")
 
 
@@ -96,4 +85,4 @@ if __name__ == '__main__':
             gate(cells, games)
         else:
             table(cells, games)
-            sources(cells, games)
+            sources(games)

@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 import screens as s  # noqa: E402
-from screens import avg as mean, cnt as count, gate, hist, sources  # noqa: E402
+from screens import avg, cnt, gate, hist, sources  # noqa: E402
 
 
 def table(cells, games):
@@ -34,10 +34,10 @@ def table(cells, games):
               f"| {hist(g['rounds'] for g in wins)} | {hist(g['rounds'] for g in losses)} "
               f"| {ends['purge']} / {ends['unity_deck']} "
               f"| {ends['discord_deck']} / {ends['presence']} / {ends['deck_empty']} "
-              f"| {mean([count(g, 'alignment.tips_unity') for g in gs]):.1f} / {mean([count(g, 'alignment.tips_discord') for g in gs]):.1f} "
-              f"| {mean([count(g, 'board.presence_lost') for g in wins]):.1f} / {mean([count(g, 'board.presence_lost') for g in losses]):.1f} "
-              f"| {mean([count(g, 'board.cities_freed') for g in gs]):.1f} "
-              f"| {mean([count(g, 'board.bases_united') for g in gs]):.1f} |")
+              f"| {avg([cnt(g, 'alignment.tips_unity') for g in gs]):.1f} / {avg([cnt(g, 'alignment.tips_discord') for g in gs]):.1f} "
+              f"| {avg([cnt(g, 'board.presence_lost') for g in wins]):.1f} / {avg([cnt(g, 'board.presence_lost') for g in losses]):.1f} "
+              f"| {avg([cnt(g, 'board.cities_freed') for g in gs]):.1f} "
+              f"| {avg([cnt(g, 'board.bases_united') for g in gs]):.1f} |")
 
 
 if __name__ == '__main__':

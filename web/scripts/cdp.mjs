@@ -1,13 +1,26 @@
 // A headless Edge or Chrome page driven over the DevTools protocol, with no extra npm
-// packages. Shared by scripts/e2e.mjs, scripts/sweep.mjs and the scripts/shots-*.mjs.
+// packages. Shared by scripts/e2e.mjs, sweep.mjs, odd.mjs and the scripts/shots-*.mjs.
 //   AIC_BROWSER browser executable (default: Edge, then Chrome, at their usual paths)
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Starts a game through the viewer's New game form and waits for it. */
+export async function newGame(page, file, seed) {
+  await page.js(`(() => { document.getElementById('config').value = '${file}'; document.getElementById('seed').value = '${seed}';
+                          document.getElementById('new-form').requestSubmit(); })()`);
+  await page.until(`window.aic.timeline.last === 0 && window.aic.timeline.seed === '${seed}'`, `the seed-${seed} game`, 30000);
+}
+
+/** Saves the viewport as `dir/name.png`, the mouse moved off anything with a hover first. */
+export async function shotTo(page, dir, name) {
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
+  writeFileSync(join(dir, `${name}.png`), await page.shot());
+}
 
 function browserPath() {
   const candidates = [

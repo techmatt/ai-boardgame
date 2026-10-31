@@ -12,9 +12,9 @@
 //!
 //! Not every op makes sense everywhere, and the compiler no longer says so:
 //! [`Op::slots`] does, and `Content::check` enforces it when content loads.
-//! Instant ops resolve in `modules/effects.rs`, the one place an op's meaning
-//! is dispatched. Standing and twist ops never resolve: they are read by the
-//! rule they change, while their card is in force.
+//! Instant ops resolve in `modules/effects/`, the one place an op's meaning
+//! is dispatched. Standing ops and the twist-only ops never resolve: they are
+//! read by the rule they change, while their card is in force.
 
 use serde::{Deserialize, Serialize};
 
@@ -73,8 +73,9 @@ pub enum Spot {
     Bases,
 }
 
-/// A country marker that lasts until the end of the round (module `board`):
-/// set by threats and cards, cleared in the board's cleanup.
+/// A country marker (module `board`), up while its var is above 0: set by
+/// threats and cards, counted down in the board's cleanup, so a threat's lasts
+/// to the end of the next round.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RoundFlag {
@@ -82,7 +83,7 @@ pub enum RoundFlag {
     Blackout,
     /// Players with presence in the country make no energy in upkeep (021: was compute).
     Sabotage,
-    /// Buildings in the country can't be destroyed.
+    /// Buildings and presence in the country can't be destroyed.
     Shelter,
     /// Sites in the country can't be claimed (027).
     Embargo,
@@ -255,7 +256,7 @@ pub enum Op {
         resource: Resource,
         amount: i64,
     },
-    /// Add `amount` tokens to one of your cards in play holding `kind` (021).
+    /// Add `amount` tokens to one of your active buildings holding `kind` (021).
     AddTokens {
         kind: TokenKind,
         amount: i64,
@@ -285,7 +286,7 @@ pub enum Op {
         amount: i64,
     },
     /// "Count as power" (023): 1 of `resource` per `per` tokens of `kind` on
-    /// your cards in play (the tokens stay), up to `max`.
+    /// your active buildings (the tokens stay), up to `max`.
     GainPerTokens {
         resource: Resource,
         kind: TokenKind,
@@ -309,7 +310,7 @@ pub enum Op {
         otherwise: Vec<Op>,
     },
 
-    // ---------- instant: any list ----------
+    // ---------- instant: players, threats, the team, twists ----------
     /// Sway `amount` toward `side` (module `alignment`).
     Sway {
         side: Side,
@@ -341,13 +342,6 @@ pub enum Op {
     /// Each player in scope destroys `count` of their presence in scope, their
     /// choice, unless absorbed; a last presence is safe in stage I (028).
     EachDestroyPresence { count: i64 },
-    /// Each player in scope loses a presence in scope, or pays `amount`
-    /// `resource` (their choice). Losing it needs 2 or more presence on the
-    /// board, so this never takes a last presence (027).
-    LosePresenceOr {
-        resource: Resource,
-        amount: i64,
-    },
     /// Up to `amount` Sway leaves the Unity bucket for the Undecided (027).
     PullUnity {
         amount: i64,
@@ -374,7 +368,14 @@ pub enum Op {
     AdversaryBuild,
 
     // ---------- instant: threats ----------
-    /// A round marker on each country in scope, read by production.
+    /// Each player in scope loses a presence in scope, or pays `amount`
+    /// `resource` (their choice). Losing it needs 2 or more presence on the
+    /// board, so this never takes a last presence (027).
+    LosePresenceOr {
+        resource: Resource,
+        amount: i64,
+    },
+    /// A round marker on each country in scope, read by the rule it names.
     Flag {
         name: RoundFlag,
     },
@@ -492,7 +493,7 @@ pub enum Op {
     },
     /// The adversary's spread places no ambassador on hexes holding your presence.
     SpreadShield,
-    /// Once a round, prevent the first building destruction in a country
+    /// Once a round, prevent the first building or presence destruction in a country
     /// where you have a presence.
     CivicShelter,
     /// While you have this building, cards discarded from hand that carry

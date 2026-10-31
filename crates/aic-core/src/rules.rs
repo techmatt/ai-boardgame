@@ -27,7 +27,7 @@ pub const MAX_ROUNDS: u32 = 1000;
 
 pub struct Rules {
     /// The resolved config: validated, lists normalized, `round` filled in.
-    /// Every game's state shares it.
+    /// Each game takes its own copy; states of one game share that copy.
     pub config: Arc<Config>,
     pub config_hash: String,
     /// Of the content these rules play: the embedded files, overlay applied.
@@ -78,6 +78,110 @@ struct Instance {
     module: Box<dyn Module>,
 }
 
+/// A module to build: its definition, variant and resolved cards.
+type ToBuild = (&'static ModuleDef, &'static VariantDef, Vec<usize>);
+
+/// Finds each configured module and variant, and resolves its cards and
+/// parameters into `resolved`.
+fn resolve_modules(resolved: &mut Config, content: &'static Content) -> Result<Vec<ToBuild>, String> {
+    let mut to_build = Vec::new();
+    let mut purposes = BTreeSet::new();
+    let mut card_owner: BTreeMap<usize, &'static str> = BTreeMap::new();
+    for mc in resolved.modules.iter_mut() {
+        let def = modules::find(&mc.module).ok_or_else(|| {
+            let known: Vec<&str> = modules::REGISTRY.iter().map(|m| m.id).collect();
+            format!(
+                "unknown module {:?} (known: {})",
+                mc.module,
+                known.join(", ")
+            )
+        })?;
+        if to_build
+            .iter()
+            .any(|(d, ..): &(&ModuleDef, _, _)| d.id == def.id)
+        {
+            return Err(format!("module {:?} appears twice", def.id));
+        }
+        let variant = def
+            .variants
+            .iter()
+            .find(|v| v.name == mc.variant)
+            .ok_or_else(|| {
+                let known: Vec<&str> = def.variants.iter().map(|v| v.name).collect();
+                format!(
+                    "module {}: unknown variant {:?} (known: {})",
+                    def.id,
+                    mc.variant,
+                    known.join(", ")
+                )
+            })?;
+        for p in variant.rng {
+            if !purposes.insert(*p) {
+                return Err(format!(
+                    "RNG purpose {p:?} is declared by two modules; each purpose needs its own stream"
+                ));
+            }
+        }
+        let cards = resolve_cards(def.id, variant, mc, content)?;
+        for &c in &cards {
+            if let Some(other) = card_owner.insert(c, def.id) {
+                return Err(format!(
+                    "card {:?} is used by both {other} and {}; a card belongs to one module",
+                    content.cards[c].id, def.id
+                ));
+            }
+        }
+        resolve_params(def.id, variant.params, mc)?;
+        to_build.push((def, variant, cards));
+    }
+    Ok(to_build)
+}
+
+/// The round's entries as phase references, each checked against the
+/// modules in the config.
+fn compile_round(names: &[String], instances: &[Instance]) -> Result<Vec<PhaseRef>, String> {
+    let mut round = Vec::new();
+    for name in names {
+        let mut parts = Vec::new();
+        let mut kinds = Vec::new();
+        for part in name.split('+') {
+            let (m, p) = part
+                .split_once('.')
+                .ok_or_else(|| format!("round entry {name:?}: expected <module>.<phase>"))?;
+            let module = instances.iter().position(|i| i.id == m).ok_or_else(|| {
+                format!("round entry {name:?}: module {m:?} is not in the config")
+            })?;
+            let phases = instances[module].variant.phases;
+            let phase = phases.iter().position(|s| s.name == p).ok_or_else(|| {
+                let known: Vec<&str> = phases.iter().map(|s| s.name).collect();
+                format!(
+                    "round entry {name:?}: {m} has no phase {p:?} (has: {})",
+                    known.join(", ")
+                )
+            })?;
+            if parts.iter().any(|q: &PhasePart| q.module == module) {
+                return Err(format!("round entry {name:?}: {m} appears twice"));
+            }
+            parts.push(PhasePart { module, phase });
+            kinds.push(phases[phase].kind);
+        }
+        if parts.len() > 1 && kinds.iter().any(|&k| k != PhaseKind::Decision) {
+            return Err(format!(
+                "round entry {name:?}: only decision phases can be combined with '+'"
+            ));
+        }
+        round.push(PhaseRef {
+            parts,
+            name: name.clone(),
+            kind: kinds[0],
+        });
+    }
+    if round.is_empty() {
+        return Err("the round has no phases".into());
+    }
+    Ok(round)
+}
+
 impl Rules {
     pub fn new(config: &Config) -> Result<Rules, String> {
         let (content, content_hash) = overlaid(&config.content)?;
@@ -85,56 +189,7 @@ impl Rules {
 
         let mut resolved = config.clone();
         let mut instances = Vec::new();
-        let mut to_build = Vec::new();
-        let mut purposes = BTreeSet::new();
-        let mut card_owner: BTreeMap<usize, &'static str> = BTreeMap::new();
-        for mc in resolved.modules.iter_mut() {
-            let def = modules::find(&mc.module).ok_or_else(|| {
-                let known: Vec<&str> = modules::REGISTRY.iter().map(|m| m.id).collect();
-                format!(
-                    "unknown module {:?} (known: {})",
-                    mc.module,
-                    known.join(", ")
-                )
-            })?;
-            if to_build
-                .iter()
-                .any(|(d, ..): &(&ModuleDef, _, _)| d.id == def.id)
-            {
-                return Err(format!("module {:?} appears twice", def.id));
-            }
-            let variant = def
-                .variants
-                .iter()
-                .find(|v| v.name == mc.variant)
-                .ok_or_else(|| {
-                    let known: Vec<&str> = def.variants.iter().map(|v| v.name).collect();
-                    format!(
-                        "module {}: unknown variant {:?} (known: {})",
-                        def.id,
-                        mc.variant,
-                        known.join(", ")
-                    )
-                })?;
-            for p in variant.rng {
-                if !purposes.insert(*p) {
-                    return Err(format!(
-                        "RNG purpose {p:?} is declared by two modules; each purpose needs its own stream"
-                    ));
-                }
-            }
-            let cards = resolve_cards(def.id, variant, mc, content)?;
-            for &c in &cards {
-                if let Some(other) = card_owner.insert(c, def.id) {
-                    return Err(format!(
-                        "card {:?} is used by both {other} and {}; a card belongs to one module",
-                        content.cards[c].id, def.id
-                    ));
-                }
-            }
-            resolve_params(def.id, variant.params, mc)?;
-            to_build.push((def, variant, cards));
-        }
+        let to_build = resolve_modules(&mut resolved, content)?;
         let mut params = FastMap::default();
         for mc in &resolved.modules {
             for (k, v) in &mc.params {
@@ -185,45 +240,7 @@ impl Rules {
                 }
             }
         }
-        let mut round = Vec::new();
-        for name in &resolved.round {
-            let mut parts = Vec::new();
-            let mut kinds = Vec::new();
-            for part in name.split('+') {
-                let (m, p) = part
-                    .split_once('.')
-                    .ok_or_else(|| format!("round entry {name:?}: expected <module>.<phase>"))?;
-                let module = instances.iter().position(|i| i.id == m).ok_or_else(|| {
-                    format!("round entry {name:?}: module {m:?} is not in the config")
-                })?;
-                let phases = instances[module].variant.phases;
-                let phase = phases.iter().position(|s| s.name == p).ok_or_else(|| {
-                    let known: Vec<&str> = phases.iter().map(|s| s.name).collect();
-                    format!(
-                        "round entry {name:?}: {m} has no phase {p:?} (has: {})",
-                        known.join(", ")
-                    )
-                })?;
-                if parts.iter().any(|q: &PhasePart| q.module == module) {
-                    return Err(format!("round entry {name:?}: {m} appears twice"));
-                }
-                parts.push(PhasePart { module, phase });
-                kinds.push(phases[phase].kind);
-            }
-            if parts.len() > 1 && kinds.iter().any(|&k| k != PhaseKind::Decision) {
-                return Err(format!(
-                    "round entry {name:?}: only decision phases can be combined with '+'"
-                ));
-            }
-            round.push(PhaseRef {
-                parts,
-                name: name.clone(),
-                kind: kinds[0],
-            });
-        }
-        if round.is_empty() {
-            return Err("the round has no phases".into());
-        }
+        let round = compile_round(&resolved.round, &instances)?;
 
         let config_hash = resolved.hash();
         Ok(Rules {

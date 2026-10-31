@@ -88,12 +88,11 @@ npm run e2e [-- <record.json>] # browser check, dev server must be running (see 
   ambassador, align a city, harden a building, sell a chip, the rich action (a presence
   at a steep price that rises with each use a round) and the standard projects: harden
   a building, gain 1 energy, remove compute from an adversary project) labelled with the words and costs the rules publish
-  in the view (`standard`), and one *sell*
-  button per card in hand. A standard action that needs a hex asks for it next, as a
-  hex pick.
+  in the view (`standard`), a *power* button for each AI-board power, the *antimatter*
+  action, and one *sell* button per card in hand. A standard action that needs a hex
+  asks for it next, as a hex pick.
 - **Seat panels:** the AI board's name (hover it for its text, innate rule, slots and
-  unique cards), resources with income, then the board's presence track with every
-  printed space: solid spaces are uncovered, dashed ones still under presence, the boxed
+  unique cards), resources with income, then the board's two presence tracks with every printed space: solid spaces are uncovered, dashed ones still under presence, the boxed
   one is the last uncovered, and each space's marks say what it adds (its income, such as
   **+1 energy**, a green **T2 keep** where it lowers a tier-2 keep, and **pay N energy** where a placement pays its printed cost). Hover a step for its details. This is drawn from the generic
   `seats[].board` shape, not from AI-specific keys.
@@ -189,6 +188,10 @@ With `AIC_SHOTS=<dir>` the mid-game and end-of-game shots are also saved there a
   `Cannot read properties of undefined`; run it again once the build is done. Any
   `.rs` edit under `crates/` counts, tests and `aic-sim` included, so while someone
   else edits the engine, run the e2e against `vite preview` instead.
+- **Gotcha:** `board fills its pane at 1366x768` can fail on a good viewer. It measures the
+  random game e2e just played: the same build read 321 px and 379 px against the 346 it
+  asks for (048), and a fixed record's board goes as low as 277 px at that size. Run it
+  again before reading a layout change into it.
 - **Gotcha:** stopping a backgrounded `npm run dev` wrapper can leave the `vite`
   process serving the port; `--strictPort` then fails on the next start. Kill the
   process that holds the port.
@@ -233,6 +236,11 @@ snapshot while the engine is edited) and a release `aic-sim` (`AIC_SIM`, default
 - **Hooks:** `window.aic.play(configJson, seed)`, `open(recordText)`, `act(action)`,
   `seek(i)` and `error` (main.ts) go through the buttons' own paths; nothing changes
   for a user. `scripts/cdp.mjs` is the DevTools driver (no npm packages).
+- **Running it:** give a background run a long timeout, and serve the viewer from a process
+  that outlives it. A sweep spawns `aic-sim`, so don't rebuild it mid-sweep (records from a
+  newer engine than the page's wasm load with warnings). Its rules twin is the core test
+  `invariants_hold_in_random_games` (every action of random games: no negative piles, no
+  pieces on the ocean, presence accounted for, a legal action until the end).
 - **Times:** 044, 14 cases, `AIC_SWEEP_SEEDS=1` (1,337 captures): 25 min beside a planner run, `--quick` 6.7 min. 020, for the 10 cases then: `--quick` about 4.5 min;
   the full run with `AIC_SWEEP_SEEDS=2` (10 cases, 40 games, 1,305 captures) 19.5 min,
   so the default 3 seeds about half an hour.
@@ -258,4 +266,9 @@ screenshot goes to `sweep-out/odd/` (`AIC_SWEEP_OUT`). It counts as one browser 
 | `src/board.ts` | SVG hex board drawn from the view: hex kinds, borders, base pennants, fronts, token glyphs. |
 | `src/format.ts` | Labels for actions (content names for cards, threats, growth options; standard actions with costs) and events; hex-kind and token colours. |
 | `src/panels.ts` | Alignment track, adversary row, countries strip (megaprojects, threats), seat panel contents, piles. |
-| `src/main.ts` | Wiring: choice prompt, action buttons, log, timeline, hover card, record dialog. |
+| `src/hover.ts` | Hover card text for hexes, tokens, piles, values and cards. |
+| `src/log.ts` | One log entry: a step's action and its events, folded by phase. |
+| `src/main.ts` | Wiring: choice prompt, action buttons, timeline, hover card, record dialog. |
+
+`card/` is the printed card renderer, used by `tools/card-art/` and not yet by the
+viewer: see *Card art* in the root README.

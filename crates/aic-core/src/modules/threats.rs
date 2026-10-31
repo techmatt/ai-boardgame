@@ -1,5 +1,6 @@
-//! Threats: dealt each round, countered by pooled payments, executed if
-//! still uncountered when the action phase ends. Variants: `countries`
+//! Threats: dealt each round, countered by pooled payments, executed in
+//! `threats.execute`, after production and upkeep, if still uncountered.
+//! Variants: `countries`
 //! (each threat sits on a country), `shared_row` (one row for every
 //! country) and `off` (no threats).
 
@@ -83,7 +84,7 @@ fn build_off(_: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(NoThreats))
 }
 
-pub const ROW: &str = "threats.row";
+const ROW: &str = "threats.row";
 
 fn deck(tier: u8) -> String {
     format!("threats.deck.{tier}")
@@ -119,11 +120,7 @@ fn late_key(threat: &str) -> String {
 /// Whether the counter phase has passed this round (the current phase is
 /// after the round's `threats.counter`).
 fn after_counter(g: &GameState) -> bool {
-    g.config
-        .round
-        .iter()
-        .position(|p| p.split('+').any(|q| q == "threats.counter"))
-        .is_some_and(|i| g.phase > i)
+    g.phase_index("threats.counter").is_some_and(|i| g.phase > i)
 }
 
 /// Whether `threat` was dealt this round after the counter phase: it skips
@@ -295,7 +292,7 @@ pub fn jam(g: &mut GameState, cx: &mut Cx, threat: &str, n: i64) {
 /// payments are spent (any excess, after Jam Signals, goes back to the
 /// payers, later seats first), payers' Logistics AI pays out, and the
 /// threat is discarded. Returns whether it was countered.
-pub fn try_complete(g: &mut GameState, cx: &mut Cx, threat: &str) -> bool {
+fn try_complete(g: &mut GameState, cx: &mut Cx, threat: &str) -> bool {
     let w = cx.world;
     let Some((_, scope)) = active(g).into_iter().find(|(t, _)| t == threat) else {
         return false;
@@ -656,15 +653,16 @@ pub fn requisition(
     let w = cx.world;
     for s in seats_in_scope(&w, g, scope) {
         let mut opts = Vec::new();
-        if g.resource(s, resource) >= amount {
+        let can_pay = g.resource(s, resource) >= amount;
+        if can_pay {
             opts.push(opt(format!("pay {}", resource.amount(amount))));
         }
         if g.pile(&cards::hand(s)).len() as i64 >= n {
             opts.push(opt(format!("discard {n} cards")));
         }
         let prompt = format!("Seat {s}: pay {} or discard {n} cards?", resource.amount(amount));
-        match cx.choose(s, &prompt, opts.clone())? {
-            Some(i) if opts[i].option.starts_with("pay") => {
+        match cx.choose(s, &prompt, opts)? {
+            Some(0) if can_pay => {
                 cx.add_resource(g, s, resource, -amount);
             }
             Some(_) => {
@@ -700,9 +698,7 @@ pub fn lose_ambassador(g: &mut GameState, cx: &mut Cx, scope: Option<usize>) -> 
             continue;
         }
         let k = ambassador(s);
-        let on: Vec<usize> = (0..g.hexes.len())
-            .filter(|&h| g.tokens(h, &k) > 0)
-            .collect();
+        let on = ambassador_hexes(g, s);
         let opts = on.iter().map(|&h| hex_opt(&w, h)).collect();
         let prompt = format!("Seat {s}: lose the ambassador on which hex?");
         if let Some(i) = cx.choose(s, &prompt, opts)? {

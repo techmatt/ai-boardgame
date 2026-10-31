@@ -4,7 +4,8 @@
 
 Each DIR is an `aic-sim experiment --out` directory on the same spec and seeds. For each game it
 finds the first action that differs and classes it: `growth` (the option picked, or a choice inside
-a growth option), or the kind of action otherwise. An agent change meant to touch only growth
+a growth option), or the kind of action otherwise; `length` is the same actions, one game longer.
+A last line a killed run cut short is dropped. An agent change meant to touch only growth
 should print `same` for an agent with no rollouts, and `growth` first wherever it first bites.
 """
 import collections
@@ -16,7 +17,10 @@ def games(d):
     out = {}
     with open(f'{d}/games.jsonl', encoding='utf-8') as f:
         for line in f:
-            g = json.loads(line)
+            try:
+                g = json.loads(line)
+            except json.JSONDecodeError:
+                continue
             if 'seed' in g:
                 out[(g['cell'], g['seed'])] = g['actions']
     return out

@@ -1,6 +1,6 @@
 {
   "name": "smoke",
-  "note": "A quick check of the harness: every agent kind, both ends of the difficulty range, a few seeds.",
+  "note": "A quick check of the harness: the random, greedy and beam agents, both ends of the difficulty range, a few seeds.",
   "configs": ["configs/baseline.json"],
   "difficulties": [0, 4],
   "agents": ["random", "greedy", "beam"],

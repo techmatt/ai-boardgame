@@ -12,7 +12,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openPage, sleep } from './cdp.mjs';
+import { newGame, openPage, sleep } from './cdp.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const url = process.env.AIC_URL ?? 'http://localhost:5173/';
@@ -79,10 +79,10 @@ try {
     const fill = (k) => [...document.querySelectorAll('#board .token[data-token="' + k + '"] .glyph')].map((e) => e.getAttribute('fill'))[0];
     const kinds = [...new Set(v.hexes.flatMap((h) => h.tokens.map((t) => t.kind)))].sort();
     return { stacks, drawn: document.querySelectorAll('#board .token').length, kinds,
-             adv: fill('cube:adversary'), dc0: fill('presence:0'), dc1: fill('presence:1') };
+             adv: fill('cube:adversary'), presence0: fill('presence:0'), presence1: fill('presence:1') };
   })()`);
   check(toks.stacks > 0 && toks.drawn === toks.stacks, `${toks.drawn} token stacks drawn (${toks.kinds.join(', ')})`);
-  check(!!toks.adv && !!toks.dc0 && !!toks.dc1 && toks.dc0 !== toks.dc1 && toks.adv !== toks.dc0, `owner colours differ: adversary ${toks.adv}, seat 0 ${toks.dc0}, seat 1 ${toks.dc1}`);
+  check(!!toks.adv && !!toks.presence0 && !!toks.presence1 && toks.presence0 !== toks.presence1 && toks.adv !== toks.presence0, `owner colours differ: adversary ${toks.adv}, seat 0 ${toks.presence0}, seat 1 ${toks.presence1}`);
   const panels = await js(`({ pipeline: document.querySelectorAll('#pipeline .slot-box').length, alignment: document.querySelectorAll('#status .alignment .tug .bar').length,
                              undecided: !!document.querySelector('#status .alignment .undecided'),
                              next: document.querySelector('#pipeline .slot-box.next .acard .atext')?.textContent ?? '',
@@ -261,9 +261,7 @@ try {
   await js(`document.getElementById('record-close').click()`);
 
   // The viewer's own autoplay: a new baseline game, Random to end, reaches an outcome.
-  await js(`(() => { document.getElementById('config').value = 'baseline.json'; document.getElementById('seed').value = '5';
-                      document.getElementById('new-form').requestSubmit(); })()`);
-  await until(`window.aic.timeline.last === 0 && window.aic.timeline.seed === '5'`, 'the seed-5 game');
+  await newGame(page, 'baseline.json', 5);
   await js(`document.getElementById('random-end').click()`);
   const auto = await js(`({ o: window.aic.view.outcome, n: window.aic.timeline.last, text: document.querySelector('#phase-bar .outcome')?.textContent })`);
   check(!!auto.o && !!auto.text, `Random to end plays baseline seed 5 to an outcome in ${auto.n} actions: ${auto.text}`);
@@ -291,9 +289,7 @@ try {
 
   // The shared-row threat variant shows its threats in their own box by the countries.
   if (await js(`[...document.querySelectorAll('#config option')].some((o) => o.value === 'shared_row.json')`)) {
-    await js(`(() => { document.getElementById('config').value = 'shared_row.json'; document.getElementById('seed').value = '3';
-                        document.getElementById('new-form').requestSubmit(); })()`);
-    await until(`window.aic.timeline.source.file === 'shared_row.json'`, 'the shared-row game');
+    await newGame(page, 'shared_row.json', 3);
     for (let i = 0; i < 12; i++) await js(`document.getElementById('random-action').click()`);
     const row = await js(`({ pile: !!window.aic.view.piles.find((p) => p.key === 'threats.row'), shown: document.querySelectorAll('#countries .shared .threat').length })`);
     check(!row.pile || row.shown > 0, `shared threat row shown (${row.shown} threats)`);

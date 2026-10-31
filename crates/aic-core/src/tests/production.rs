@@ -51,7 +51,7 @@ fn stations_fill_the_megaproject_and_its_completion_pays_out() {
     let rival = m.numbered(1, piece(1).stations[0]);
     put(&mut g, rival, STATION, 1);
     put(&mut g, rival, ADV_CUBE, 1);
-    assert_eq!(piece(0).project.cubes, 7);
+    assert_eq!(piece(0).megaproject.cubes, 7);
     g.vars.insert(board::project_key(0, Some(0)).into(), 3);
     g.vars.insert(board::project_key(0, Some(1)).into(), 1);
     g.vars.insert(board::project_key(0, None).into(), 2);

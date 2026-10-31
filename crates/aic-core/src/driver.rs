@@ -15,12 +15,12 @@ pub trait Agent {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GameRecord {
+pub struct PlayedGame {
     #[serde(with = "crate::rng::as_string")]
     pub seed: u64,
     /// Hash of the resolved config (see `Config::hash`).
     pub config_hash: String,
-    /// Hash of the embedded content files.
+    /// Hash of the content played: the embedded files, overlay applied.
     pub content_hash: String,
     pub engine_version: String,
     /// `crate::RULES_REVISION` of the engine that played the game.
@@ -49,7 +49,7 @@ pub fn play(
     seed: u64,
     agent: &mut dyn Agent,
     max_actions: usize,
-) -> (GameState, GameRecord) {
+) -> (GameState, PlayedGame) {
     let mut g = rules.new_game(seed);
     let mut legal = Vec::new();
     let mut actions = Vec::new();
@@ -70,7 +70,7 @@ pub fn play(
             .expect("a legal action applies");
         actions.push(a);
     }
-    let record = GameRecord {
+    let record = PlayedGame {
         seed,
         config_hash: rules.config_hash.clone(),
         content_hash: rules.content_hash.to_string(),

@@ -1,7 +1,7 @@
 //! Game content as data, embedded from `content/` at compile time (no I/O
 //! at runtime): the map (piece shape, layouts, the printed country pieces),
-//! player cards, threats, the adversary deck, the AI boards and the
-//! Alignment decks.
+//! player cards, threats, the adversary deck and its project deck, the AI
+//! boards and the Alignment decks.
 //!
 //! What content does is one schema, [`Op`] (`op.rs`). A new op is a code
 //! change; a new card, threat, adversary card, AI board or Alignment card
@@ -161,7 +161,8 @@ pub struct CountryPiece {
     /// Where the starting presence of the player who starts here goes.
     pub presence: u8,
     /// The corp's megaproject card.
-    pub project: Project,
+    #[serde(rename = "project")]
+    pub megaproject: Megaproject,
 }
 
 /// A megaproject card: research stations fill it with cubes; when it holds
@@ -169,7 +170,7 @@ pub struct CountryPiece {
 /// owned station in the country produces `benefit` for its owner every round.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Project {
+pub struct Megaproject {
     pub name: String,
     pub cubes: i64,
     #[serde(default)]
@@ -246,7 +247,7 @@ pub struct CardDef {
     #[serde(default)]
     pub replaces: Option<Tag>,
     /// The token type this card holds, and how many it gains a round while
-    /// in play (021: token engines).
+    /// an active building (021: token engines).
     #[serde(default)]
     pub tokens: Option<TokenSpec>,
     /// Tags you must have (on your cards in play) to play it.
@@ -485,6 +486,17 @@ impl CardDef {
     pub fn is_building(&self) -> bool {
         self.kind == CardKind::Building
     }
+
+    /// Prints standing income: a passive that pays a resource every round
+    /// while the card stands, flat, per tag or if-tags.
+    pub fn pays_income(&self) -> bool {
+        self.passives.iter().any(|o| {
+            matches!(
+                o,
+                Op::Income { .. } | Op::IncomePerTag { .. } | Op::IncomeIfTags { .. }
+            )
+        })
+    }
 }
 
 impl Content {
@@ -520,6 +532,37 @@ impl Content {
     }
 
     pub(crate) fn check(&self) -> Result<(), String> {
+        self.check_ids()?;
+        for c in &self.cards {
+            check_card(c)?;
+        }
+        for t in &self.threats {
+            check_threat(t)?;
+        }
+        for a in &self.adversary {
+            check_adversary_card(a)?;
+        }
+        for a in &self.alignment {
+            check_alignment(a)?;
+        }
+        for p in &self.projects {
+            check_project(p)?;
+        }
+        for b in &self.ais {
+            self.check_ai_board(b)?;
+        }
+        let size = self.map.piece.size;
+        let n = size as usize * size as usize;
+        for (i, p) in self.map.countries.iter().enumerate() {
+            check_country_piece(i, p, n)?;
+        }
+        for l in &self.map.layouts {
+            self.check_layout(l)?;
+        }
+        Ok(())
+    }
+
+    fn check_ids(&self) -> Result<(), String> {
         let mut ids = BTreeSet::new();
         let all = self
             .cards
@@ -537,225 +580,83 @@ impl Content {
                 ));
             }
         }
-        for c in &self.cards {
-            let what = format!("card {:?}", c.id);
-            check_ops(&c.effects, Slot::Player, &what)?;
-            check_ops(&c.passives, Slot::Standing, &what)?;
-            if let Some(a) = &c.ability {
-                check_ops(&a.effects, Slot::Player, &what)?;
-            }
-            if c.tags.is_empty() || c.tags.len() > 3 {
-                return Err(format!("card {:?}: 1-3 tags", c.id));
-            }
-            let printed = c.effects.iter().chain(c.ability.iter().flat_map(|a| &a.effects));
-            if !c.tags.contains(&Tag::Science) && printed.into_iter().any(science_niche) {
-                return Err(format!("{what}: shields, delays and marker clearing are Science's"));
-            }
-            if !c.is_building()
-                && (!c.passives.is_empty() || !c.upkeep.is_empty() || c.slotless)
-            {
-                return Err(format!(
-                    "card {:?}: only buildings have passives or upkeep",
-                    c.id
-                ));
-            }
-            if c.slotless && !crate::face::prints_an_effect(c) {
-                return Err(format!("{what}: a slotless card needs an effect passive"));
-            }
-            if !c.text.is_empty() {
-                return Err(format!("{what}: card text is generated from its ops, not written"));
-            }
-            if !c.is_building() && (c.ability.is_some() || c.tokens.is_some()) {
-                return Err(format!(
-                    "{what}: only a building has an Action or gains tokens each round"
-                ));
-            }
-            if c.replaces.is_some() && !c.is_building() {
-                return Err(format!("card {:?}: only a building replaces one", c.id));
-            }
-            if c.tier > 2 || (c.tier == 0) != c.unique.is_some() {
-                return Err(format!(
-                    "card {:?}: tier 0 exactly for unique cards, else 1 or 2",
-                    c.id
-                ));
-            }
-            for (r, _) in c.upkeep.iter().chain(&c.lowers) {
-                resource(r, &what)?;
-            }
-            if let Some(a) = &c.ability {
-                for (r, _) in &a.cost {
-                    resource(r, &what)?;
-                }
-                if a.tokens != 0 && c.tokens.is_none() {
-                    return Err(format!("{what}: spends tokens but holds none"));
-                }
-            }
+        Ok(())
+    }
+
+    fn check_ai_board(&self, b: &AiBoard) -> Result<(), String> {
+        if b.presence.is_empty() {
+            return Err(format!("AI board {:?}: a presence track", b.id));
         }
-        for t in &self.threats {
-            if !(1..=2).contains(&t.tier) || t.counter.is_empty() {
-                return Err(format!("threat {:?}: tier 1 or 2 and a counter cost", t.id));
-            }
-            let what = format!("threat {:?}", t.id);
-            for (r, _) in &t.counter {
-                resource(r, &what)?;
-            }
-            check_ops(&t.effects, Slot::Threat, &what)?;
-        }
-        for a in &self.adversary {
-            if !(1..=3).contains(&a.stage) {
-                return Err(format!("adversary card {:?}: stage 1-3", a.id));
-            }
-            check_ops(&a.twists, Slot::Twist, &format!("adversary card {:?}", a.id))?;
-        }
-        for a in &self.alignment {
-            if !(1..=2).contains(&a.tier) || a.effects.is_empty() {
-                return Err(format!(
-                    "alignment card {:?}: tier 1 or 2 and an effect",
-                    a.id
-                ));
-            }
-            if a.steps.windows(2).any(|p| p[0].at >= p[1].at) || a.steps.iter().any(|s| s.at < 1) {
-                return Err(format!(
-                    "alignment card {:?}: steps at 1 or more tips, in rising order",
-                    a.id
-                ));
-            }
-            let what = format!("alignment card {:?}", a.id);
-            check_ops(&a.effects, Slot::Team, &what)?;
-            for st in &a.steps {
-                check_ops(&st.effects, Slot::Team, &what)?;
-            }
-        }
-        for p in &self.projects {
-            if !(1..=2).contains(&p.stage) || p.cost < 1 || p.effects.is_empty() {
-                return Err(format!(
-                    "project {:?}: stage 1 or 2, a cost of 1 or more and an effect",
-                    p.id
-                ));
-            }
-            check_ops(&p.effects, Slot::Team, &format!("project {:?}", p.id))?;
-        }
-        for b in &self.ais {
-            if b.presence.is_empty() {
-                return Err(format!("AI board {:?}: a presence track", b.id));
-            }
-            for c in &b.cards {
-                match self.card_index(c) {
-                    Some(i) if self.cards[i].unique.as_deref() == Some(b.id.as_str()) => {}
-                    _ => {
-                        return Err(format!(
-                            "AI board {:?}: {c:?} is not a card unique to it",
-                            b.id
-                        ))
-                    }
-                }
-            }
-            let what = format!("AI board {:?}", b.id);
-            for (r, _) in b
-                .income
-                .iter()
-                .chain(b.presence.iter().chain(&b.presence2).flat_map(|u| u.income.iter()))
-            {
-                resource(r, &what)?;
-            }
-            for d in &b.discounts {
-                resource(&d.resource, &what)?;
-            }
-            for gr in &b.growth {
-                check_ops(&gr.effects, Slot::Player, &what)?;
-            }
-            if b.growth.iter().map(|g| &g.effects).chain(b.powers.iter().map(|p| &p.effects)).flatten().any(science_niche) {
-                return Err(format!("{what}: shields, delays and marker clearing are Science's"));
-            }
-            for p in &b.powers {
-                check_ops(&p.effects, Slot::Player, &what)?;
-                for (r, _) in &p.cost {
-                    resource(r, &what)?;
-                }
-                for (_, n) in &p.tags {
-                    if *n < 1 {
-                        return Err(format!("{what}: power tag counts are 1 or more"));
-                    }
-                }
-            }
-            if let Some(id) = &b.start {
-                match self.card_index(id) {
-                    Some(i) if self.cards[i].is_building() => {}
-                    _ => return Err(format!("{what}: start building {id:?} is not a building")),
-                }
-            }
-            check_ops(&b.innate.passives, Slot::Standing, &what)?;
-        }
-        let size = self.map.piece.size;
-        let n = size as usize * size as usize;
-        for (i, p) in self.map.countries.iter().enumerate() {
-            let start = vec![p.presence];
-            let lists = [
-                &p.cities,
-                &p.corrupted,
-                &p.ocean,
-                &p.coast,
-                &p.stations,
-                &p.industry,
-                &start,
-            ];
-            if lists
-                .iter()
-                .flat_map(|l| l.iter())
-                .any(|&h| h == 0 || h as usize > n)
-            {
-                return Err(format!("country piece {i}: hex numbers are 1-{n}"));
-            }
-            if p.coast.iter().any(|h| !p.cities.contains(h)) {
-                return Err(format!("country piece {i}: a coast entry is not a city"));
-            }
-            if p.corrupted.iter().any(|c| !p.cities.contains(c)) {
-                return Err(format!(
-                    "country piece {i}: corrupted cities must be cities"
-                ));
-            }
-            if p.factories.iter().any(|f| !p.industry.contains(f)) {
-                return Err(format!(
-                    "country piece {i}: setup factories go on industrial zones"
-                ));
-            }
-            let built: Vec<u8> = [&p.stations, &p.industry, &start]
-                .iter()
-                .flat_map(|l| l.iter().copied())
-                .collect();
-            for (k, &h) in built.iter().enumerate() {
-                if p.kind_at(h) != HexKind::Open || built[..k].contains(&h) {
+        for c in &b.cards {
+            match self.card_index(c) {
+                Some(i) if self.cards[i].unique.as_deref() == Some(b.id.as_str()) => {}
+                _ => {
                     return Err(format!(
-                        "country piece {i}: buildings go on open hexes, one per hex (#{h})"
-                    ));
+                        "AI board {:?}: {c:?} is not a card unique to it",
+                        b.id
+                    ))
                 }
-            }
-            for (r, _) in &p.project.benefit {
-                resource(r, &format!("project of country piece {i}"))?;
             }
         }
-        for l in &self.map.layouts {
-            if l.pieces.len() != l.countries as usize {
-                return Err(format!(
-                    "layout for {} countries has {} pieces",
-                    l.countries,
-                    l.pieces.len()
-                ));
+        let what = format!("AI board {:?}", b.id);
+        for (r, _) in b
+            .income
+            .iter()
+            .chain(b.presence.iter().chain(&b.presence2).flat_map(|u| u.income.iter()))
+        {
+            resource(r, &what)?;
+        }
+        for d in &b.discounts {
+            resource(&d.resource, &what)?;
+        }
+        for gr in &b.growth {
+            check_ops(&gr.effects, Slot::Player, &what)?;
+        }
+        if b.growth.iter().map(|g| &g.effects).chain(b.powers.iter().map(|p| &p.effects)).flatten().any(science_niche) {
+            return Err(format!("{what}: shields, delays and marker clearing are Science's"));
+        }
+        for p in &b.powers {
+            check_ops(&p.effects, Slot::Player, &what)?;
+            for (r, _) in &p.cost {
+                resource(r, &what)?;
             }
-            if l.countries as usize > self.map.countries.len() {
-                return Err(format!(
-                    "layout for {} countries: not enough country pieces",
-                    l.countries
-                ));
-            }
-            for p in &l.pieces {
-                let d = (p.axes[0].index() + 6 - p.axes[1].index()) % 6;
-                if d == 0 || d == 3 {
-                    return Err(format!(
-                        "piece at {:?}: axes {:?} do not span a rhombus",
-                        p.anchor, p.axes
-                    ));
+            for (_, n) in &p.tags {
+                if *n < 1 {
+                    return Err(format!("{what}: power tag counts are 1 or more"));
                 }
+            }
+        }
+        if let Some(id) = &b.start {
+            match self.card_index(id) {
+                Some(i) if self.cards[i].is_building() => {}
+                _ => return Err(format!("{what}: start building {id:?} is not a building")),
+            }
+        }
+        check_ops(&b.innate.passives, Slot::Standing, &what)?;
+        Ok(())
+    }
+
+    fn check_layout(&self, l: &LayoutDef) -> Result<(), String> {
+        if l.pieces.len() != l.countries as usize {
+            return Err(format!(
+                "layout for {} countries has {} pieces",
+                l.countries,
+                l.pieces.len()
+            ));
+        }
+        if l.countries as usize > self.map.countries.len() {
+            return Err(format!(
+                "layout for {} countries: not enough country pieces",
+                l.countries
+            ));
+        }
+        for p in &l.pieces {
+            let d = (p.axes[0].index() + 6 - p.axes[1].index()) % 6;
+            if d == 0 || d == 3 {
+                return Err(format!(
+                    "piece at {:?}: axes {:?} do not span a rhombus",
+                    p.anchor, p.axes
+                ));
             }
         }
         Ok(())
@@ -785,19 +686,6 @@ impl Content {
         self.map.layouts.iter().find(|l| l.countries == countries)
     }
 
-    /// Display name of any content id (card, threat, adversary card, AI
-    /// board, Alignment card).
-    pub fn name_of(&self, id: &str) -> Option<&str> {
-        self.cards
-            .iter()
-            .map(|c| (&c.id, &c.name))
-            .chain(self.threats.iter().map(|c| (&c.id, &c.name)))
-            .chain(self.adversary.iter().map(|c| (&c.id, &c.name)))
-            .chain(self.ais.iter().map(|c| (&c.id, &c.name)))
-            .chain(self.alignment.iter().map(|c| (&c.id, &c.name)))
-            .find(|(i, _)| *i == id)
-            .map(|(_, n)| n.as_str())
-    }
 }
 
 /// A cost or income must name a player resource.
@@ -829,6 +717,162 @@ fn science_niche(op: &Op) -> bool {
     }
 }
 
+fn check_card(c: &CardDef) -> Result<(), String> {
+    let what = format!("card {:?}", c.id);
+    check_ops(&c.effects, Slot::Player, &what)?;
+    check_ops(&c.passives, Slot::Standing, &what)?;
+    if let Some(a) = &c.ability {
+        check_ops(&a.effects, Slot::Player, &what)?;
+    }
+    if c.tags.is_empty() || c.tags.len() > 3 {
+        return Err(format!("card {:?}: 1-3 tags", c.id));
+    }
+    let printed = c.effects.iter().chain(c.ability.iter().flat_map(|a| &a.effects));
+    if !c.tags.contains(&Tag::Science) && printed.into_iter().any(science_niche) {
+        return Err(format!("{what}: shields, delays and marker clearing are Science's"));
+    }
+    if !c.is_building()
+        && (!c.passives.is_empty() || !c.upkeep.is_empty() || c.slotless)
+    {
+        return Err(format!(
+            "card {:?}: only buildings have passives or upkeep",
+            c.id
+        ));
+    }
+    if c.slotless && !crate::face::prints_an_effect(c) {
+        return Err(format!("{what}: a slotless card needs an effect passive"));
+    }
+    if !c.text.is_empty() {
+        return Err(format!("{what}: card text is generated from its ops, not written"));
+    }
+    if !c.is_building() && (c.ability.is_some() || c.tokens.is_some()) {
+        return Err(format!(
+            "{what}: only a building has an Action or gains tokens each round"
+        ));
+    }
+    if c.replaces.is_some() && !c.is_building() {
+        return Err(format!("card {:?}: only a building replaces one", c.id));
+    }
+    if c.tier > 2 || (c.tier == 0) != c.unique.is_some() {
+        return Err(format!(
+            "card {:?}: tier 0 exactly for unique cards, else 1 or 2",
+            c.id
+        ));
+    }
+    for (r, _) in c.upkeep.iter().chain(&c.lowers) {
+        resource(r, &what)?;
+    }
+    if let Some(a) = &c.ability {
+        for (r, _) in &a.cost {
+            resource(r, &what)?;
+        }
+        if a.tokens != 0 && c.tokens.is_none() {
+            return Err(format!("{what}: spends tokens but holds none"));
+        }
+    }
+    Ok(())
+}
+
+fn check_threat(t: &ThreatDef) -> Result<(), String> {
+    if !(1..=2).contains(&t.tier) || t.counter.is_empty() {
+        return Err(format!("threat {:?}: tier 1 or 2 and a counter cost", t.id));
+    }
+    let what = format!("threat {:?}", t.id);
+    for (r, _) in &t.counter {
+        resource(r, &what)?;
+    }
+    check_ops(&t.effects, Slot::Threat, &what)?;
+    Ok(())
+}
+
+fn check_adversary_card(a: &AdversaryCard) -> Result<(), String> {
+    if !(1..=3).contains(&a.stage) {
+        return Err(format!("adversary card {:?}: stage 1-3", a.id));
+    }
+    check_ops(&a.twists, Slot::Twist, &format!("adversary card {:?}", a.id))?;
+    Ok(())
+}
+
+fn check_alignment(a: &AlignmentCard) -> Result<(), String> {
+    if !(1..=2).contains(&a.tier) || a.effects.is_empty() {
+        return Err(format!(
+            "alignment card {:?}: tier 1 or 2 and an effect",
+            a.id
+        ));
+    }
+    if a.steps.windows(2).any(|p| p[0].at >= p[1].at) || a.steps.iter().any(|s| s.at < 1) {
+        return Err(format!(
+            "alignment card {:?}: steps at 1 or more tips, in rising order",
+            a.id
+        ));
+    }
+    let what = format!("alignment card {:?}", a.id);
+    check_ops(&a.effects, Slot::Team, &what)?;
+    for st in &a.steps {
+        check_ops(&st.effects, Slot::Team, &what)?;
+    }
+    Ok(())
+}
+
+fn check_project(p: &ProjectCard) -> Result<(), String> {
+    if !(1..=2).contains(&p.stage) || p.cost < 1 || p.effects.is_empty() {
+        return Err(format!(
+            "project {:?}: stage 1 or 2, a cost of 1 or more and an effect",
+            p.id
+        ));
+    }
+    check_ops(&p.effects, Slot::Team, &format!("project {:?}", p.id))?;
+    Ok(())
+}
+
+fn check_country_piece(i: usize, p: &CountryPiece, n: usize) -> Result<(), String> {
+    let start = vec![p.presence];
+    let lists = [
+        &p.cities,
+        &p.corrupted,
+        &p.ocean,
+        &p.coast,
+        &p.stations,
+        &p.industry,
+        &start,
+    ];
+    if lists
+        .iter()
+        .flat_map(|l| l.iter())
+        .any(|&h| h == 0 || h as usize > n)
+    {
+        return Err(format!("country piece {i}: hex numbers are 1-{n}"));
+    }
+    if p.coast.iter().any(|h| !p.cities.contains(h)) {
+        return Err(format!("country piece {i}: a coast entry is not a city"));
+    }
+    if p.corrupted.iter().any(|c| !p.cities.contains(c)) {
+        return Err(format!(
+            "country piece {i}: corrupted cities must be cities"
+        ));
+    }
+    if p.factories.iter().any(|f| !p.industry.contains(f)) {
+        return Err(format!(
+            "country piece {i}: setup factories go on industrial zones"
+        ));
+    }
+    let built: Vec<u8> = [&p.stations, &p.industry, &start]
+        .iter()
+        .flat_map(|l| l.iter().copied())
+        .collect();
+    for (k, &h) in built.iter().enumerate() {
+        if p.kind_at(h) != HexKind::Open || built[..k].contains(&h) {
+            return Err(format!(
+                "country piece {i}: buildings go on open hexes, one per hex (#{h})"
+            ));
+        }
+    }
+    for (r, _) in &p.megaproject.benefit {
+        resource(r, &format!("project of country piece {i}"))?;
+    }
+    Ok(())
+}
+
 /// Checks every op of a content list: it may sit in `slot`, and the
 /// resources it names are ones it can use. `if` branches included.
 pub(crate) fn check_ops(ops: &[Op], slot: Slot, what: &str) -> Result<(), String> {
@@ -854,6 +898,7 @@ pub(crate) fn check_ops(ops: &[Op], slot: Slot, what: &str) -> Result<(), String
             }
             Op::Production { resource: r, .. }
             | Op::PlayersLose { resource: r, .. }
+            | Op::LosePresenceOr { resource: r, .. }
             | Op::Requisition { resource: r, .. }
             | Op::Income { resource: r, .. }
             | Op::Logistics { resource: r, .. }

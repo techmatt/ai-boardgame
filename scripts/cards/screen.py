@@ -21,10 +21,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 import screens as s  # noqa: E402
-from screens import avg, cnt, hist, mean  # noqa: E402
+from screens import ROUND, avg, cnt, hist, mean  # noqa: E402
 
 CONTENT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'content', 'ais.json')
-ROUND = re.compile(r'\.r\d\d$')
 
 
 @functools.lru_cache(maxsize=None)
@@ -98,15 +97,12 @@ def loss_ends(c, gs):
 
 
 def ends_text(c, gs):
-    e = collections.Counter(('win ' if g['won'] else 'loss ') + g['reason'] for g in gs)
-    return ', '.join(f'{k} {v}' for k, v in e.most_common())
+    return s.ends_text(gs)
 
 
 @reads('board.presence_placed')
 def tokens_left(c, gs):
-    # The c3 variants are three seats; everything else two.
-    seats = 3 if c['variant'].startswith('c3') else 2
-    return f"{avg([tokens() - 1 - cnt(g, 'board.presence_placed') / seats for g in gs]):.1f}"
+    return f"{avg([tokens() - 1 - cnt(g, 'board.presence_placed') / s.seats(c) for g in gs]):.1f}"
 
 
 @reads(*(f'ai.growth.{b}.{k}' for b in ('builder', 'protector') for k in range(3)))
@@ -119,7 +115,7 @@ def growth(c, gs):
 @reads('board.presence_placed.r01', 'board.presence_placed.r02')
 def placed_by_round(c, gs):
     """Tokens on or off the board a seat has taken by rounds 6 and 10, the setup token in."""
-    seats = 3 if c['variant'].startswith('c3') else 2
+    seats = s.seats(c)
     def by(r):
         reached = [g for g in gs if g['rounds'] >= r]
         n = [1 + sum(cnt(g, f'board.presence_placed.r{k:02}') for k in range(1, r + 1)) / seats for g in reached]

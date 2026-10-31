@@ -48,7 +48,7 @@ pub fn uncovered(w: &World, g: &GameState, seat: usize) -> usize {
 }
 
 /// Spaces uncovered on seat `s`'s second presence track (021; none at setup).
-pub fn uncovered2(w: &World, g: &GameState, seat: usize) -> usize {
+fn uncovered2(w: &World, g: &GameState, seat: usize) -> usize {
     board::track2_taken(g, seat).min(board(w, seat).presence2.len())
 }
 
@@ -80,12 +80,12 @@ pub fn slots(w: &World, seat: usize) -> i64 {
 }
 
 /// Set once seat `s` has used power `k` this round.
-pub fn power_used(seat: usize, k: usize) -> String {
+fn power_used(seat: usize, k: usize) -> String {
     format!("ai.power_used.{seat}.{k}")
 }
 
 /// Why seat `s` can't use its board's power `k` now, or `None` if it can.
-pub fn power_blocked(w: &World, g: &GameState, seat: usize, k: usize) -> Option<&'static str> {
+fn power_blocked(w: &World, g: &GameState, seat: usize, k: usize) -> Option<&'static str> {
     let Some(p) = board(w, seat).powers.get(k) else {
         return Some("no such power");
     };

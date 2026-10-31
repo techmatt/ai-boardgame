@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::process::exit;
 use std::time::Instant;
 
-use aic_core::{play, replay, Action, Config, Event, GameRecord, Outcome, Rules, SavedGame};
+use aic_core::{play, replay, Action, Config, Event, PlayedGame, Outcome, Rules, SavedGame};
 use serde::Serialize;
 
 use crate::agents::AgentSpec;
@@ -136,7 +136,7 @@ fn replay_record(path: &str) -> bool {
     }
 }
 
-/// `win (unity)`, `loss (supply)`, `not over (100000 actions)`: a game with no
+/// `win (unity_deck)`, `loss (discord_deck)`, `not over (100000 actions)`: a game with no
 /// outcome hit the action cap, or (a viewer bug report) was saved mid-game
 /// (020: both read "timeout").
 fn describe(outcome: Option<&Outcome>, actions: usize) -> String {
@@ -275,7 +275,7 @@ struct SaveReport {
 }
 
 struct Played {
-    record: GameRecord,
+    record: PlayedGame,
     replay_ok: bool,
     /// A `--save-when` selector matched.
     when: bool,
@@ -288,26 +288,16 @@ struct Kept {
     record: SavedGame,
 }
 
-fn simulate(
-    label: String,
-    path: &str,
-    overrides: Vec<&String>,
-    r: &Rules,
-    o: &Options,
-) -> (Summary, Vec<SavedGame>) {
-    let seeds: Vec<u64> = (o.seed..=o.last_seed()).collect();
-    // Replays go through rules rebuilt from the resolved config, as a
-    // saved state would: proof that config + seed + actions is enough.
-    let rebuilt = Rules::new(&r.config).expect("a resolved config is valid");
-    let saving = o.save.is_some();
-    // The note on every saved record: what was run, and why it was picked.
+/// The note on every saved record, either side of the game's own words: what
+/// was run, and its overrides.
+fn save_note(o: &Options, label: &str, overrides: &[&String]) -> (String, String) {
     let side = if o.command == "compare" {
         format!(" (config {label})")
     } else {
         String::new()
     };
-    let note_head = format!("aic-sim {} {}{side}", o.command, o.paths.join(" "));
-    let note_tail = if overrides.is_empty() {
+    let head = format!("aic-sim {} {}{side}", o.command, o.paths.join(" "));
+    let tail = if overrides.is_empty() {
         String::new()
     } else {
         format!(
@@ -319,14 +309,63 @@ fn simulate(
                 .join(" ")
         )
     };
-    let start = Instant::now();
+    (head, tail)
+}
+
+/// Plays one seed and replay-checks it, keeping it in `kept` if `--save`
+/// picks it; `when_seen` counts this chunk's `--save-when` matches.
+fn play_seed(
+    r: &Rules,
+    rebuilt: &Rules,
+    o: &Options,
+    (note_head, note_tail): (&str, &str),
+    seed: u64,
+    when_seen: &mut usize,
+    kept: &mut Vec<Kept>,
+) -> Played {
+    let saving = o.save.is_some();
+    let (g, mut record) = play(r, seed, &mut *o.agent.build(r, seed), o.max_actions);
+    let replay_ok = replay(rebuilt, seed, &record.actions).is_ok_and(|h| h == g);
+    let w = if saving {
+        when_match(&o.save_when, record.outcome.as_ref())
+    } else {
+        None
+    };
+    let by_seed = saving && o.save_seeds.binary_search(&seed).is_ok();
+    let by_when = w.is_some() && *when_seen < o.save_max;
+    *when_seen += w.is_some() as usize;
+    if by_when || by_seed {
+        let why = match w {
+            Some(w) if !by_seed => format!("--save-when {w}"),
+            _ => "--save-seed".to_string(),
+        };
+        let note = format!(
+            "{note_head}: {}, seed {seed}, picked by {why}{note_tail}",
+            describe(record.outcome.as_ref(), record.actions.len()),
+        );
+        // The summary needs no actions; the record does.
+        let actions = std::mem::take(&mut record.actions);
+        kept.push(Kept {
+            by_when: w.is_some(),
+            by_seed,
+            record: SavedGame::new(r, seed, actions, &g, &note),
+        });
+    }
+    Played {
+        record,
+        replay_ok,
+        when: w.is_some(),
+    }
+}
+
+/// Plays every seed on `--threads` workers, each a run of consecutive seeds.
+fn play_seeds(r: &Rules, rebuilt: &Rules, o: &Options, notes: (&str, &str)) -> (Vec<Played>, Vec<Kept>) {
+    let seeds: Vec<u64> = (o.seed..=o.last_seed()).collect();
     let chunk = seeds.len().div_ceil(o.threads.max(1)).max(1);
-    let (mut played, mut kept): (Vec<Played>, Vec<Kept>) = std::thread::scope(|s| {
+    std::thread::scope(|s| {
         let handles: Vec<_> = seeds
             .chunks(chunk)
             .map(|part| {
-                let rebuilt = &rebuilt;
-                let (note_head, note_tail) = (&note_head, &note_tail);
                 s.spawn(move || {
                     // Each chunk is a run of consecutive seeds, so the
                     // global first `save_max` matches are among each
@@ -334,45 +373,10 @@ fn simulate(
                     // the result independent of `--threads`.
                     let mut kept = Vec::new();
                     let mut when_seen = 0usize;
-                    let played = part
+                    let played: Vec<Played> = part
                         .iter()
-                        .map(|&seed| {
-                            let (g, mut record) =
-                                play(r, seed, &mut *o.agent.build(r, seed), o.max_actions);
-                            let replay_ok =
-                                replay(rebuilt, seed, &record.actions).is_ok_and(|h| h == g);
-                            let w = if saving {
-                                when_match(&o.save_when, record.outcome.as_ref())
-                            } else {
-                                None
-                            };
-                            let by_seed = saving && o.save_seeds.binary_search(&seed).is_ok();
-                            let by_when = w.is_some() && when_seen < o.save_max;
-                            when_seen += w.is_some() as usize;
-                            if by_when || by_seed {
-                                let why = match w {
-                                    Some(w) if !by_seed => format!("--save-when {w}"),
-                                    _ => "--save-seed".to_string(),
-                                };
-                                let note = format!(
-                                    "{note_head}: {}, seed {seed}, picked by {why}{note_tail}",
-                                    describe(record.outcome.as_ref(), record.actions.len()),
-                                );
-                                // The summary needs no actions; the record does.
-                                let actions = std::mem::take(&mut record.actions);
-                                kept.push(Kept {
-                                    by_when: w.is_some(),
-                                    by_seed,
-                                    record: SavedGame::new(r, seed, actions, &g, &note),
-                                });
-                            }
-                            Played {
-                                record,
-                                replay_ok,
-                                when: w.is_some(),
-                            }
-                        })
-                        .collect::<Vec<_>>();
+                        .map(|&seed| play_seed(r, rebuilt, o, notes, seed, &mut when_seen, &mut kept))
+                        .collect();
                     (played, kept)
                 })
             })
@@ -384,22 +388,24 @@ fn simulate(
             all.1.extend(k);
         }
         all
-    });
-    let elapsed = start.elapsed().as_secs_f64();
-    played.sort_by_key(|p| p.record.seed);
-    kept.sort_by_key(|k| k.record.seed);
+    })
+}
+
+/// The global `--save-max` cut, over games in seed order.
+fn cap_saved(kept: Vec<Kept>, max: usize) -> Vec<SavedGame> {
     let mut rank = 0usize;
-    let saved_games: Vec<SavedGame> = kept
-        .into_iter()
+    kept.into_iter()
         .filter(|k| {
-            let keep = k.by_seed || (k.by_when && rank < o.save_max);
+            let keep = k.by_seed || (k.by_when && rank < max);
             rank += k.by_when as usize;
             keep
         })
         .map(|k| k.record)
-        .collect();
-    let matched = played.iter().filter(|p| p.when).count() as u64;
-    // A reason code nobody ended with is most likely a typo: say so.
+        .collect()
+}
+
+/// A reason code nobody ended with is most likely a typo: say so.
+fn warn_unmatched_when(o: &Options, label: &str, played: &[Played]) {
     let reasons: std::collections::BTreeSet<&str> = played
         .iter()
         .filter_map(|p| p.record.outcome.as_ref().map(|o| o.reason.as_str()))
@@ -409,13 +415,16 @@ fn simulate(
         {
             let seen: Vec<&str> = reasons.iter().copied().collect();
             eprintln!(
-                // 020: said "known:", as if a reason no game met (unity, deck_empty) were unknown.
+                // 020: said "known:", as if a reason no game met (unity_deck, deck_empty) were unknown.
                 "warning: --save-when {w:?} matched no game ({label}); a typo? Selectors: all, win, loss, timeout, or an end reason; these games ended by: {}",
                 seen.join(", ")
             );
         }
     }
-    let saved = saving.then(|| SaveReport {
+}
+
+fn save_report(o: &Options, matched: u64) -> SaveReport {
+    SaveReport {
         when: o.save_when.clone(),
         matched,
         max: o.save_max,
@@ -427,8 +436,19 @@ fn simulate(
             .map(|s| s.to_string())
             .collect(),
         paths: Vec::new(),
-    });
+    }
+}
 
+/// One config's games, aggregated.
+fn summarize(
+    label: String,
+    path: &str,
+    overrides: Vec<&String>,
+    r: &Rules,
+    played: &[Played],
+    elapsed: f64,
+    saved: Option<SaveReport>,
+) -> Summary {
     let n = played.len().max(1) as f64;
     let wins = played
         .iter()
@@ -446,7 +466,7 @@ fn simulate(
         (0u64, 0u64, 0u64, 0u64, 0u64);
     let (mut rmin, mut rmax, mut max_options, mut ops_max) = (u32::MAX, 0u32, 0u32, 0u32);
     let mut setup_ops = 0u64;
-    for g in &played {
+    for g in played {
         let rec = &g.record;
         *ended.entry(end_reason(rec.outcome.as_ref())).or_insert(0) += 1;
         *end_round.entry(rec.rounds).or_insert(0) += 1;
@@ -469,14 +489,14 @@ fn simulate(
     for (k, v) in counters.iter_mut() {
         *v /= if is_round_counter(k) {
             reached[k]
-        } else if let Some(r) = per_round_counter(k) {
+        } else if let Some((r, tally)) = per_round_counter(k) {
             // A round's own counter, per game that reached that round (020: games that
             // had ended counted as 0, so the curves fell away late in the game). A level
             // tallied every round (`adversary.ambassadors_r06`) is over the games that
             // tallied it (a game can end in round 6 before the tally); an event count
             // (`alignment.tip_unity.r03`, tallied only when it happens) over the games
             // that reached the round.
-            if k.contains("_r") && !k.contains(".r") {
+            if tally == RoundTally::Level {
                 reached[k]
             } else {
                 played.iter().filter(|g| g.record.rounds >= r).count().max(1) as f64
@@ -485,7 +505,7 @@ fn simulate(
             n
         };
     }
-    let summary = Summary {
+    Summary {
         label,
         path: path.to_string(),
         overrides: overrides.into_iter().cloned().collect(),
@@ -514,7 +534,30 @@ fn simulate(
         replay_ok: played.iter().filter(|p| p.replay_ok).count() as u64,
         ms_per_game: elapsed * 1000.0 / n,
         saved,
-    };
+    }
+}
+
+fn simulate(
+    label: String,
+    path: &str,
+    overrides: Vec<&String>,
+    r: &Rules,
+    o: &Options,
+) -> (Summary, Vec<SavedGame>) {
+    // Replays go through rules rebuilt from the resolved config, as a
+    // saved state would: proof that config + seed + actions is enough.
+    let rebuilt = Rules::new(&r.config).expect("a resolved config is valid");
+    let (note_head, note_tail) = save_note(o, &label, &overrides);
+    let start = Instant::now();
+    let (mut played, mut kept) = play_seeds(r, &rebuilt, o, (&note_head, &note_tail));
+    let elapsed = start.elapsed().as_secs_f64();
+    played.sort_by_key(|p| p.record.seed);
+    kept.sort_by_key(|k| k.record.seed);
+    let saved_games = cap_saved(kept, o.save_max);
+    let matched = played.iter().filter(|p| p.when).count() as u64;
+    warn_unmatched_when(o, &label, &played);
+    let saved = o.save.is_some().then(|| save_report(o, matched));
+    let summary = summarize(label, path, overrides, r, &played, elapsed, saved);
     (summary, saved_games)
 }
 
@@ -684,11 +727,25 @@ fn is_round_counter(k: &str) -> bool {
     k.ends_with("_round")
 }
 
-/// The round of a per-round counter, from its `_rNN` or `.rNN` suffix.
-fn per_round_counter(k: &str) -> Option<u32> {
+/// How a per-round counter was tallied.
+#[derive(Debug, PartialEq)]
+enum RoundTally {
+    /// Every round, a level (`_rNN`).
+    Level,
+    /// Only when it happens (`.rNN`).
+    Event,
+}
+
+/// The round of a per-round counter and how it was tallied, from its `_rNN`
+/// or `.rNN` suffix.
+fn per_round_counter(k: &str) -> Option<(u32, RoundTally)> {
     let tail = k.rsplit(['_', '.']).next()?;
     let digits = tail.strip_prefix('r')?;
-    (digits.len() == 2 && digits.bytes().all(|b| b.is_ascii_digit())).then(|| digits.parse().ok())?
+    if digits.len() != 2 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let tally = if k.strip_suffix(tail)?.ends_with('_') { RoundTally::Level } else { RoundTally::Event };
+    Some((digits.parse().ok()?, tally))
 }
 
 #[cfg(test)]
@@ -700,8 +757,8 @@ mod tests {
     fn counters_that_average_over_reached_games() {
         assert!(is_round_counter("adversary.first_corruption_round"));
         assert!(!is_round_counter("board.war_rounds"));
-        assert_eq!(per_round_counter("adversary.ambassadors_r06"), Some(6));
-        assert_eq!(per_round_counter("alignment.tip_unity.r11"), Some(11));
+        assert_eq!(per_round_counter("adversary.ambassadors_r06"), Some((6, RoundTally::Level)));
+        assert_eq!(per_round_counter("alignment.tip_unity.r11"), Some((11, RoundTally::Event)));
         assert_eq!(per_round_counter("board.war_rounds"), None);
         assert_eq!(per_round_counter("adversary.removed_troop.r"), None);
         assert_eq!(per_round_counter("adversary.nodes_peak.c0"), None);

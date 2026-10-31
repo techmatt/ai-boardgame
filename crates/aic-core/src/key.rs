@@ -26,20 +26,23 @@ use std::sync::{OnceLock, RwLock};
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 
+use crate::hash::{FNV_OFFSET, FNV_PRIME};
+
 /// An interned name. Copying one copies a pointer; two keys are equal exactly
 /// when their pointers are. Orders, hashes, prints and serializes as its text.
 #[derive(Clone, Copy)]
 pub struct Key(&'static str);
 
-/// FNV-1a for the thread's interner cache: short keys, and no DoS to fear.
+/// FNV-1a for the thread's interner cache and every [`FastMap`]: short keys,
+/// and no DoS to fear.
 #[derive(Default)]
 pub struct Fnv(u64);
 
 impl Hasher for Fnv {
     fn write(&mut self, bytes: &[u8]) {
-        let mut h = if self.0 == 0 { 0xcbf2_9ce4_8422_2325 } else { self.0 };
+        let mut h = if self.0 == 0 { FNV_OFFSET } else { self.0 };
         for b in bytes {
-            h = (h ^ *b as u64).wrapping_mul(0x0000_0100_0000_01b3);
+            h = (h ^ *b as u64).wrapping_mul(FNV_PRIME);
         }
         self.0 = h;
     }
@@ -398,10 +401,6 @@ impl<K: Ord + Copy, V> FlatMap<K, V> {
         self.0.iter().map(|(_, v)| v)
     }
 
-    pub fn values_mut(&mut self) -> impl DoubleEndedIterator<Item = &mut V> {
-        self.0.iter_mut().map(|(_, v)| v)
-    }
-
     pub fn retain(&mut self, mut f: impl FnMut(&K, &mut V) -> bool) {
         self.0.retain_mut(|(k, v)| f(k, v))
     }
@@ -557,10 +556,11 @@ mod tests {
     #[test]
     fn every_content_id_fits_a_stack_key() {
         let c = crate::content::content();
+        let longest = crate::vocab::RESOURCES.iter().map(|r| r.name()).max_by_key(|n| n.len()).unwrap();
         let ids = c.cards.iter().map(|x| &x.id).chain(c.threats.iter().map(|x| &x.id));
         for id in ids.chain(c.projects.iter().map(|x| &x.id)) {
             KeyBuf::new("cards.unpowered.").num(3).text(".").text(id);
-            KeyBuf::new("threats.paid.").text(id).text(".").num(3).text(".presence_reserve");
+            KeyBuf::new("threats.paid.").text(id).text(".").num(3).text(".").text(longest);
         }
     }
 

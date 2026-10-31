@@ -1,5 +1,6 @@
 use super::*;
-use crate::modules::adversary;
+use crate::content::Op;
+use crate::modules::{adversary, alignment};
 
 #[test]
 fn the_build_step_grows_corrupted_cities_and_the_factories_next_to_them() {
@@ -339,6 +340,24 @@ fn twists_before_the_build_step_are_the_face_up_cards() {
     assert!(!reach(&g), "after the build step, this round's card");
 }
 
+#[test]
+fn a_stage_iii_card_pulls_sway_out_of_the_unity_bucket() {
+    let (rules, mut g) = lab_with(&["adversary.build"], &[]);
+    let w = rules.world();
+    let card = w.content.adversary.iter().find(|c| c.stage == 3).unwrap();
+    let pull = card.twists.iter().find_map(|t| match t {
+        Op::PullUnity { amount } => Some(*amount),
+        _ => None,
+    });
+    let pull = pull.expect("a stage-III card prints the pull");
+    g.vars.insert(alignment::bucket(Side::Unity).into(), pull + 1);
+    g.piles.insert(NEXT.into(), vec![card.id.as_str().into()].into());
+    run(&rules, &mut g);
+    answer_all(&rules, &mut g);
+    assert_eq!(g.stats.counters.get("alignment.unity_pulled").copied(), Some(pull));
+    assert!(g.var(alignment::bucket(Side::Unity)) <= 1, "the bucket loses the pull");
+}
+
 /// 028: an aligned city collects spreading ambassadors as a clean one does,
 /// and no node forms on it.
 #[test]
@@ -369,4 +388,16 @@ fn an_aligned_city_collects_ambassadors_and_never_forms_a_node() {
     run(&rules, &mut g);
     answer_all(&rules, &mut g);
     assert_eq!((g.tokens(target, NODE), g.tokens(target, ADV_AMBASSADOR)), (0, 2));
+}
+
+#[test]
+fn the_cap_holds_at_eleven_through_d2_with_a_harder_end() {
+    let count = |d: i64| {
+        let arg = format!("adversary.difficulty={d}");
+        let (_, g) = lab_with(&[], &[&arg]);
+        g.pile(DECK).len() + g.pile(NEXT).len()
+    };
+    assert_eq!(count(0), 11);
+    assert_eq!(count(2), 11);
+    assert_eq!(count(3), 10);
 }

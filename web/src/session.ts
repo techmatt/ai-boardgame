@@ -36,7 +36,7 @@ export interface Frame {
 /** Where the game came from: played here, or loaded from a record. */
 export type Source =
   | { kind: 'play'; file: string }
-  | { kind: 'record'; file: string; note: string; record: GameRecord };
+  | { kind: 'record'; file: string; note: string };
 
 export class Timeline {
   readonly frames: Frame[] = [];
@@ -77,7 +77,6 @@ export class Timeline {
       kind: 'record',
       file,
       note: record.note ?? '',
-      record,
     });
     t.cursor = 0;
     return t;
@@ -138,10 +137,7 @@ export class Timeline {
   }
 
   save() {
-    const src = this.source.kind === 'record'
-      ? { kind: 'record', file: this.source.file, note: this.source.note }
-      : this.source;
-    storageSet(SAVE_KEY, JSON.stringify({ config: this.configJson, seed: this.seed, actions: this.actions, cursor: this.cursor, source: src }));
+    storageSet(SAVE_KEY, JSON.stringify({ config: this.configJson, seed: this.seed, actions: this.actions, cursor: this.cursor, source: this.source }));
   }
 
   /** The saved session, replayed; null if there is none. Throws if its config no longer loads. */
@@ -155,12 +151,7 @@ export class Timeline {
       return null;
     }
     const source: Source = saved.source?.kind === 'record'
-      ? {
-          kind: 'record',
-          file: saved.source.file,
-          note: saved.source.note ?? '',
-          record: { format: '', config: JSON.parse(saved.config), seed: saved.seed, actions: saved.actions },
-        }
+      ? { kind: 'record', file: saved.source.file, note: saved.source.note ?? '' }
       : { kind: 'play', file: saved.source?.file ?? '?' };
     const t = Timeline.replay(saved.config, saved.seed, saved.actions, source);
     t.seek(saved.cursor ?? t.last);
@@ -180,16 +171,20 @@ export function randomSeed(): string {
   return String(Math.floor(Math.random() * 2 ** 32));
 }
 
+/**
+ * The lead-in for a record from another rules revision, or nothing. 0 is "not recorded"
+ * (the field defaults to it).
+ */
+export function revisionNote(r: GameRecord): string {
+  return r.rules_revision && r.rules_revision !== rulesRevision
+    ? `this record is from rules revision ${r.rules_revision} and this engine plays revision ${rulesRevision}: `
+    : '';
+}
+
 /** A pasted or opened record; throws with the reason it can't be used. */
 export function readRecord(text: string): GameRecord {
   const r = parseRecord(text);
-  if (r.config_error) {
-    // Say first that it is an older game (020: only a long parameter list said so).
-    // 0 is "not recorded" (the field defaults to it).
-    const older = r.rules_revision && r.rules_revision !== rulesRevision
-      ? `this record is from rules revision ${r.rules_revision} and this engine plays revision ${rulesRevision}: `
-      : '';
-    throw new Error(`${older}the record's config is invalid for this engine: ${r.config_error}`);
-  }
+  // Say first that it is an older game (020: only a long parameter list said so).
+  if (r.config_error) throw new Error(`${revisionNote(r)}the record's config is invalid for this engine: ${r.config_error}`);
   return r;
 }

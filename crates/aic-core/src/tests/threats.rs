@@ -1,3 +1,4 @@
+use super::growth::{at_step, run_ops};
 use super::*;
 use crate::content::RoundFlag;
 use crate::modules::{board, threats};
@@ -245,4 +246,34 @@ fn the_tier_2_deck_covers_four_countries_and_a_short_deal_is_counted() {
     g.piles.insert("threats.deck.1".into(), vec!["blackout".into()].into());
     with_cx(&rules, |cx| threats::deal_extra(&mut g, cx, 3));
     assert_eq!(g.stats.counters["threats.short"], 2);
+}
+
+#[test]
+fn a_seat_that_lost_its_presence_there_can_take_back_a_payment() {
+    let (rules, mut g) = lab_with(&[], &[]);
+    let t = rules.world().content.threats[0].id.clone();
+    let on = format!("threats.on.{}", 0);
+    g.piles.insert(on.as_str().into(), vec![t.as_str().into()].into());
+    g.vars.insert(format!("threats.paid.{t}.0.credits").as_str().into(), 1);
+    let legal = rules.legal_actions(&g);
+    assert!(legal.iter().any(|a| matches!(a, Action::Withdraw { seat: 0, .. })), "{legal:?}");
+    assert!(!legal.iter().any(|a| matches!(a, Action::Pay { seat: 0, .. })), "no presence, no paying");
+}
+
+#[test]
+fn a_delayed_threat_skips_this_round_and_a_shield_absorbs_a_destruction() {
+    let (rules, mut g) = at_step(&[], 1);
+    let a = rules.map.numbered(0, piece(0).presence);
+    with_cx(&rules, |cx| threats::deal_extra(&mut g, cx, 1));
+    let t = threats::active(&g)[0].0.clone();
+    assert!(!threats::waits(&g, &t));
+    run_ops(&rules, &mut g, &[content::Op::DelayThreat { count: 1 }]);
+    assert!(threats::waits(&g, &t));
+    g.round += 1;
+    assert!(!threats::waits(&g, &t), "it comes back next round");
+    run_ops(&rules, &mut g, &[content::Op::ShieldPresence { count: 1 }]);
+    assert_eq!(g.tokens(a, HARDEN), 1);
+    let kept = with_cx(&rules, |cx| board::destroy_piece(&mut g, cx, a, &presence(0), board::Cause::Troop));
+    assert!(!kept, "absorbed");
+    assert_eq!(g.tokens(a, &presence(0)), 1);
 }
