@@ -1,6 +1,6 @@
 """Proves a refactor left play unchanged: same games, state by state where it can tell.
 
-    python scripts/bench/same_play.py run SIM DIR       # play the matrix on binary SIM into DIR
+    python scripts/bench/same_play.py run SIM DIR [--threads N]   # play the matrix on binary SIM into DIR
     python scripts/bench/same_play.py compare SIM BASE NEW [--map OLD=NEW]...
         # SIM: the new binary
 
@@ -35,6 +35,8 @@ CONFIGS = ["baseline", "shared_row"]
 # Fields and trace lines that differ between runs of the same play.
 IGNORED = ("content_hash", "ms_per_game", "paths")
 TRACE_NOISE = ("wall ms/game", "seeds ")
+# `run --threads N`, to leave a shared machine room: results do not depend on it.
+THREADS = []
 # And what a rename moves in a record.
 RENAME_IGNORED = ("config_hash", "final_fingerprint")
 
@@ -44,7 +46,7 @@ def play(sim, out, label, agent, games, config, sets):
     extra = [x for s in sets for x in ("--set", s)]
     rec = os.path.join(out, "rec", label)
     with open(os.path.join(out, label + ".json"), "w", encoding="utf-8") as f:
-        subprocess.run(base + extra + ["--games", str(games), "--json", "--save", rec,
+        subprocess.run(base + extra + THREADS + ["--games", str(games), "--json", "--save", rec,
                                        "--save-when", "all", "--save-max", "1000"],
                        stdout=f, stderr=subprocess.DEVNULL, check=True)
     with open(os.path.join(out, label + ".trace"), "wb") as f:
@@ -148,6 +150,10 @@ def compare(sim, base, new, maps=()):
 if __name__ == "__main__":
     argv = sys.argv[1:]
     pairs = take_maps(argv)
+    if "--threads" in argv:
+        i = argv.index("--threads")
+        THREADS.extend(argv[i:i + 2])
+        del argv[i:i + 2]
     if argv[:1] == ["run"] and len(argv) == 3:
         run(argv[1], argv[2])
     elif argv[:1] == ["compare"] and len(argv) == 4:

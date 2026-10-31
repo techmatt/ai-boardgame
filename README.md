@@ -72,19 +72,25 @@ Current:
 - `bench/same_play.py` (025): proves a refactor left play unchanged: a matrix of configs,
   countries, difficulties and variants, with every agent but the beam (030: rollout and
   planner too, which are what a speedup is for), on the old and new binaries, ~20 min a
-  run on 12 threads; every saved game replays on the new binary. Keep a copy of the old
-  binary. Takes `--map` too (026): records are then compared by field, since a renamed
+  run on 12 threads; every saved game replays on the new binary. `run ... --threads N`
+  (042) caps it on a shared machine: ~13 min a run on 4 threads at r20, two at once, and
+  `compare` under a minute. Keep a copy of the old binary. Takes `--map` too (026): records are then compared by field, since a renamed
   state's fingerprint moves.
 - `bench/speed.py` (030): games a minute per agent. `pair OLD NEW --out FILE` runs each
   row on both binaries in turn, so the ratio holds on a busy machine: use it for a before
   and after. `table SIM --out FILE` is one binary's rates (`rollout` alone takes ~20 min;
   `--only "planner c2"` for a row, and both keep the file's other rows). `check SIM` is
   the standing check (about a minute, on a quiet machine): fails at 1.3 ×
-  `scripts/bench/speed_baseline.json`, `--update` to move the baseline. It fails on main
-  since r19 (planner over 3 ×, engine 1.3 ×): 034's tag discounts made `eval` about 2 × dearer
-  a call, a real cost, so the baseline stays until that is fixed (040).
+  `scripts/bench/speed_baseline.json`, `--update` to move the baseline. Rewritten at r20
+  (042, on a quiet machine): see *Speed* for why it is above r18's. Its planner row is one
+  game on one seed, so a rules change that moves that game's length moves the row: r18
+  to r20 reads 6.7 × there and 1.75 × on 16 seeds. After a rules change read
+  `per_decision.py`, not this. A `--update` compares a run with itself: run a plain
+  `check` after it.
 - `bench/per_decision.py OLD_ROOT NEW_ROOT` (040): rounds, decisions and ms per game and per
-  decision on the same seeds, for telling longer games from a slower agent.
+  decision on the same seeds, for telling longer games from a slower agent. 6 games is
+  too few across rules revisions (042: the same two binaries read 1.73 × on 6 seeds, 1.66 ×
+  on 16 others); `--games 16` or more.
   `bench/gate_stop_rate.py`: how often the gate's early stop flips a verdict.
 - `tune/` (007-008): `sweep.py`, `log_table.py`, `engine_sweep.py`.
 
@@ -743,6 +749,16 @@ Thread time a game at d2, r17 (030), old and new binaries under the same load, f
 The legacy `rollout` tier does a full beam search per decision: 92 s a game at c2, 373 s
 at c3 (r17, one thread), so its `speed.py table` rows take 4-15 min each, and its
 `same_play.py` trace cells 3-5 min each.
+
+**What r19 and r20 cost (042, c2 d2, 16 seeds, one thread):** the agents make more calls
+now, and that is the rules, not waste. Heuristic calls a decision, engine: 41.7 at r18, 49.5
+at r19, 59.4 at r20, of which 041's doubled Growth look-ahead is 3.7. A call costs `eval`
+13.7 us at r18 and 17.3 at r20 (35 before 042's fix), `apply` 12.4 and 14.8. Together:
+planner 9.8 to 16.3 ms a decision, engine 1.2 to 2.1. About 2 in 3 `eval` calls inside
+one sample return a value already seen there, but only 1 in 8 are the same state by
+fingerprint, so a memo would have to key on what `eval` reads: not tried. Pricing a hand
+goes through `cards::prices`, and anything counting several tags through
+`cards::tag_counts`: a tag count walks the seat's cards.
 
 Random is 2.4 × at c2, on 1 thread and on 12 (`speed.py pair`). Compare two binaries with
 `pair`, not two `table` runs: a test suite elsewhere on the box halved a whole table.

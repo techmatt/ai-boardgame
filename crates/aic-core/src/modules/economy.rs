@@ -4,7 +4,7 @@
 //! cubes) is the board's production phase.
 
 use crate::action::Action;
-use crate::content::{Op, PerResource, Resource, RoundFlag, RESOURCES};
+use crate::content::{Op, PerResource, Resource, RoundFlag, Tag, RESOURCES};
 use crate::key::KeyBuf;
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
@@ -104,6 +104,9 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> PerResource {
     for (r, n) in ai::track_income(w, g, seat) {
         add(r, n);
     }
+    // Counted at the first passive that asks: most of a seat's pay by tag.
+    let mut counts = None;
+    let mut tags = |tag: Tag| counts.get_or_insert_with(|| cards::tag_counts(w, g, seat))[tag as usize];
     for p in cards::passives(w, g, seat) {
         match p {
             Op::Income { resource, amount } => add(*resource, *amount),
@@ -112,14 +115,14 @@ pub fn income(w: &World, g: &GameState, seat: usize) -> PerResource {
                 tag,
                 per,
                 max,
-            } => add(*resource, (cards::tags(w, g, seat, *tag) / per).min(*max)),
+            } => add(*resource, (tags(*tag) / per).min(*max)),
             Op::IncomeIfTags {
                 resource,
                 tag,
                 count,
                 amount,
             } => {
-                if cards::tags(w, g, seat, *tag) >= *count {
+                if tags(*tag) >= *count {
                     add(*resource, *amount)
                 }
             }

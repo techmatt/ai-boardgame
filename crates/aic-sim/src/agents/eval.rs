@@ -516,10 +516,11 @@ impl Eval {
             }
             v -= w.node * g.tokens(h, common::NODE) as f64;
             v -= w.marker * g.tokens(h, common::MARKER) as f64;
-            if g.tokens(h, HARDEN) > 0 && common::presence_owner(g, h).is_some() {
+            let held = common::presence_owner(g, h).is_some();
+            if held && g.tokens(h, HARDEN) > 0 {
                 v += w.shield;
             }
-            if common::presence_owner(g, h).is_some() {
+            if held {
                 v += w.data_centre;
             }
             for s in 0..self.seats {
@@ -861,14 +862,13 @@ impl Eval {
             // insight the cards before it in hand take.
             let earn_credits = income[Resource::Credits];
             let mut insight_queue = 0i64;
-            // The same for every building in hand: worked out once.
-            let discount = cards::building_discount(&world, g, s);
+            // The same for every card in hand: worked out once.
+            let prices = cards::prices(&world, g, s);
             let mut play = |id: &str| -> f64 {
                 let d = cards::def(&world, id);
                 let mut p = 1.0;
                 // 022: playing costs insight again (shared with keeps).
-                let insight = cards::play_insight(&world, g, s, d);
-                insight_queue += insight;
+                insight_queue += prices.insight(d);
                 let insight_need = if w.insight_wait > 0.0 {
                     insight_queue
                 } else {
@@ -878,9 +878,9 @@ impl Eval {
                     // The AI's discount: energy or compute spent as credits.
                     (
                         res(Resource::Credits)
-                            + cards::discount_room_at(&world, g, s, d, cards::discounted_cost(&world, d, discount))
+                            + cards::discount_room_at(&world, g, s, d, &prices)
                                 .map_or(0, |(_, rate, k)| rate * k),
-                        cards::discounted_cost(&world, d, discount),
+                        prices.credits(d),
                         earn_credits,
                     ),
                     (

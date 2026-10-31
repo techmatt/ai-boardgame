@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use crate::action::Action;
-use crate::content::{CardDef, DiscountOn, Op, Tag, TagOrAny, TokenKind};
+use crate::content::{CardDef, DiscountOn, Op, Tag, TagOrAny, TokenKind, TAGS};
 use crate::key::{Key, KeyBuf};
 use crate::module::{
     Build, Cx, Halt, Module, ModuleDef, ParamSpec, PhaseSpec, Res, VariantDef, World,
@@ -181,24 +181,39 @@ pub fn list_cost(w: &World, id: &str) -> i64 {
     def(w, id).cost
 }
 
-/// One off per `every` tags of `tag` on seat `s`'s cards (0: off).
-fn per_tags(w: &World, g: &GameState, seat: usize, tag: Tag, every: &str) -> i64 {
+const SCIENCE_EVERY: &str = "cards.science_every";
+const INDUSTRY_EVERY: &str = "cards.industry_every";
+
+/// One off per `every` tags on a seat's cards, of which it has `count` (0: off).
+fn per_tags(w: &World, count: i64, every: &str) -> i64 {
     if w.variant("cards") != Some("draft") {
         return 0;
     }
     match w.int(every) {
         0 => 0,
-        n => tags(w, g, seat, tag) / n,
+        n => count / n,
     }
 }
 
 /// An insight cost `need` after seat `s`'s Science tags (034): never below
 /// `cards.discount_floor`, and a cost under the floor stays as printed.
 fn science_off(w: &World, g: &GameState, seat: usize, need: i64) -> i64 {
-    match per_tags(w, g, seat, Tag::Science, "cards.science_every") {
-        0 => need,
-        off => (need - off).max(need.min(w.int("cards.discount_floor"))),
+    floored(need, per_tags(w, tags(w, g, seat, Tag::Science), SCIENCE_EVERY), discount_floor(w))
+}
+
+/// The lowest a discount takes a cost that is at least this: only the draft
+/// variant has a floor.
+fn discount_floor(w: &World) -> i64 {
+    if w.variant("cards") == Some("draft") {
+        w.int("cards.discount_floor")
+    } else {
+        0
     }
+}
+
+/// `cost` less `off`, never below `floor`: a cost under the floor stays as printed.
+fn floored(cost: i64, off: i64, floor: i64) -> i64 {
+    (cost - off).max(cost.min(floor))
 }
 
 /// The insight seat `s` pays to play `d`.
@@ -206,14 +221,57 @@ pub fn play_insight(w: &World, g: &GameState, seat: usize, d: &CardDef) -> i64 {
     science_off(w, g, seat, d.insight)
 }
 
-/// A card's costs beyond credits, for seat `s`, in the order its text prints them.
-fn extra_costs(w: &World, g: &GameState, seat: usize, d: &CardDef) -> [(Resource, i64); 4] {
+/// What seat `s` takes off card costs now, worked out once: a caller pricing
+/// a whole hand gets the same numbers as [`play_cost`] and [`play_insight`]
+/// without counting the seat's tags again for each card (042: that was most of
+/// what the heuristic cost). Good until the seat's cards or vars change.
+#[derive(Clone, Copy)]
+pub struct Prices {
+    insight_off: i64,
+    building_off: i64,
+    floor: i64,
+}
+
+pub fn prices(w: &World, g: &GameState, seat: usize) -> Prices {
+    let counts = tag_counts(w, g, seat);
+    Prices {
+        insight_off: per_tags(w, counts[Tag::Science as usize], SCIENCE_EVERY),
+        building_off: passive_discount(w, g, seat)
+            + per_tags(w, counts[Tag::Industry as usize], INDUSTRY_EVERY),
+        floor: discount_floor(w),
+    }
+}
+
+impl Prices {
+    /// [`play_insight`].
+    pub fn insight(&self, d: &CardDef) -> i64 {
+        floored(d.insight, self.insight_off, self.floor)
+    }
+
+    /// [`play_cost`].
+    pub fn credits(&self, d: &CardDef) -> i64 {
+        if d.is_building() {
+            floored(d.cost, self.building_off, self.floor)
+        } else {
+            d.cost
+        }
+    }
+}
+
+/// A card's costs beyond credits, in the order its text prints them, with
+/// its insight cost for the seat already known.
+fn extra_costs_at(d: &CardDef, insight: i64) -> [(Resource, i64); 4] {
     [
-        (Resource::Insight, play_insight(w, g, seat, d)),
+        (Resource::Insight, insight),
         (Resource::Energy, d.energy),
         (Resource::Chips, d.chips),
         (Resource::Antimatter, d.antimatter),
     ]
+}
+
+/// A card's costs beyond credits, for seat `s`.
+fn extra_costs(w: &World, g: &GameState, seat: usize, d: &CardDef) -> [(Resource, i64); 4] {
+    extra_costs_at(d, play_insight(w, g, seat, d))
 }
 
 /// Discards `card` from pile `from`: to its tier's discard pile, or back to
@@ -258,10 +316,25 @@ pub fn in_play(g: &GameState, seat: usize) -> Vec<Key> {
 
 /// Seat `s`'s tags of one kind, over every card it has in play (021).
 pub fn tags(w: &World, g: &GameState, seat: usize, tag: Tag) -> i64 {
-    in_play(g, seat)
-        .iter()
-        .map(|id| def(w, id).tags.iter().filter(|t| **t == tag).count() as i64)
-        .sum()
+    tag_counts(w, g, seat)[tag as usize]
+}
+
+/// Seat `s`'s tags of every kind, indexed by `Tag as usize`: one pass over its
+/// cards in play, for a caller that wants more than one count.
+pub fn tag_counts(w: &World, g: &GameState, seat: usize) -> [i64; TAGS.len()] {
+    let mut out = [0; TAGS.len()];
+    let mut count = |ids: &[Key]| {
+        for t in ids.iter().flat_map(|id| &def(w, id).tags) {
+            out[*t as usize] += 1;
+        }
+    };
+    let tops = g.pile(&built(seat));
+    for top in tops {
+        count(g.pile(&under(seat, top)));
+    }
+    count(tops);
+    count(g.pile(&played(seat)));
+    out
 }
 
 /// Active buildings of seat `s` holding tokens of `kind`.
@@ -457,24 +530,24 @@ pub fn discount_room(
     seat: usize,
     d: &CardDef,
 ) -> Option<(Resource, i64, i64)> {
-    discount_room_at(w, g, seat, d, play_cost(w, g, seat, d))
+    discount_room_at(w, g, seat, d, &prices(w, g, seat))
 }
 
-/// [`discount_room`] with [`play_cost`] already known (a caller pricing a whole
-/// hand works it out once).
+/// [`discount_room`] with the seat's [`Prices`] already known.
 pub fn discount_room_at(
     w: &World,
     g: &GameState,
     seat: usize,
     d: &CardDef,
-    cost: i64,
+    prices: &Prices,
 ) -> Option<(Resource, i64, i64)> {
+    let cost = prices.credits(d);
     ai::board(w, seat).discounts.iter().find_map(|x| {
         let applies = match x.tag {
             DiscountOn::Building => d.is_building(),
             DiscountOn::Tag(t) => d.tags.contains(&t),
         };
-        let reserved = extra_costs(w, g, seat, d)
+        let reserved = extra_costs_at(d, prices.insight(d))
             .iter()
             .find(|&&(r, _)| r == x.resource)
             .map_or(0, |&(_, n)| n);
@@ -498,6 +571,11 @@ pub fn play_cost(w: &World, g: &GameState, seat: usize, d: &CardDef) -> i64 {
 /// The credits seat `s`'s buildings cost less now (its passives, a one-off
 /// discount and its Industry tags, 034): what [`play_cost`] takes off a building.
 pub fn building_discount(w: &World, g: &GameState, seat: usize) -> i64 {
+    passive_discount(w, g, seat) + per_tags(w, tags(w, g, seat, Tag::Industry), INDUSTRY_EVERY)
+}
+
+/// [`building_discount`] before tags.
+fn passive_discount(w: &World, g: &GameState, seat: usize) -> i64 {
     passives(w, g, seat)
         .iter()
         .map(|p| match p {
@@ -506,15 +584,13 @@ pub fn building_discount(w: &World, g: &GameState, seat: usize) -> i64 {
         })
         .sum::<i64>()
         + g.var(&next_discount(seat))
-        + per_tags(w, g, seat, Tag::Industry, "cards.industry_every")
 }
 
 /// [`play_cost`] with the seat's [`building_discount`] already known (a
 /// caller pricing a whole hand works it out once).
 pub fn discounted_cost(w: &World, d: &CardDef, discount: i64) -> i64 {
     if d.is_building() {
-        let floor = if w.variant("cards") == Some("draft") { w.int("cards.discount_floor") } else { 0 };
-        (d.cost - discount).max(d.cost.min(floor))
+        floored(d.cost, discount, discount_floor(w))
     } else {
         d.cost
     }

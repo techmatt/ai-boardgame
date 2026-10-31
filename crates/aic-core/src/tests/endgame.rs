@@ -464,3 +464,28 @@ fn industry_tags_discount_buildings_to_a_floor_of_one() {
     assert_eq!(cards::play_cost(&w, &g, 1, d), before - 1);
     assert_eq!(cards::discounted_cost(&w, d, 99), 1, "the floor");
 }
+
+/// 042: what the heuristic reads must be what the rules charge.
+#[test]
+fn prices_worked_out_once_match_each_cards_own() {
+    use crate::content::{Resource, TAGS};
+    use crate::modules::cards;
+    let (rules, mut g) = lab_with(&[], &["cards.science_every=2", "cards.industry_every=2"]);
+    let w = rules.world();
+    let tagged: Vec<_> = w.content.cards.iter().filter(|c| !c.tags.is_empty()).take(12).map(|c| crate::key::Key::new(&c.id)).collect();
+    for held in [0, 4, tagged.len()] {
+        g.piles.insert(cards::played(0).into(), std::sync::Arc::new(tagged[..held].to_vec()));
+        g.seats[0].resources.insert(Resource::Energy, 3);
+        let p = cards::prices(&w, &g, 0);
+        for d in &w.content.cards {
+            assert_eq!(p.insight(d), cards::play_insight(&w, &g, 0, d), "{}", d.id);
+            assert_eq!(p.credits(d), cards::play_cost(&w, &g, 0, d), "{}", d.id);
+            assert_eq!(cards::discount_room_at(&w, &g, 0, d, &p), cards::discount_room(&w, &g, 0, d), "{}", d.id);
+        }
+        let counts = cards::tag_counts(&w, &g, 0);
+        for t in TAGS {
+            let by_hand: usize = cards::in_play(&g, 0).iter().map(|id| cards::def(&w, id).tags.iter().filter(|x| **x == t).count()).sum();
+            assert_eq!(counts[t as usize], by_hand as i64);
+        }
+    }
+}
