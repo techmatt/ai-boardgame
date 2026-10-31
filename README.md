@@ -248,6 +248,10 @@ browser; `npm ci` first):
   points at that folder. `npm run scene-picker` stops first, naming the ids, if a raw draw
   is missing. Each round has its folder (`card-frames-r3/` holds the
   container sheet): full-size originals, `frames/` (815×1110 PNG) and `log.jsonl`.
+  Retired rounds (`card-frames-r1`, `-r2`, `scenes/r1`) live in
+  `C:\Code\gdrive-sync\aicomplete\archive\art-originals\`, same relative paths, outside the
+  junction. `scenes/r1` there is the raw draws only: to rebuild the rest, export commit
+  `06ef387`, copy `raw/` into its `art-originals/scenes/r1/`, and run `npm run scene-picker`.
 - **The master's outer steel band lies in its bleed;** `derive` is what brings it inside
   the trim. Composed singles show the full bleed; the splay is trimmed.
 
