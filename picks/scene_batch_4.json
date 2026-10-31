@@ -1,0 +1,967 @@
+{
+ "name": "scene_batch_4",
+ "title": "Card scenes, batch 4",
+ "intro": "Keep or reject each scene, in the C and E mix. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. Scenes are a pool: the card a scene was written for is a suggestion. The second card only shows the other window. For true size, print art-originals/scenes/b4/cards.pdf at 100%. Use the notes for what to change.",
+ "rows": [
+  {
+   "id": "black_ice_fortress",
+   "label": "1. Cyber: A fortress of faceted black crystal rising from a frozen plain, its walls threaded with cold green circuit lines.",
+   "note": "Written for Black Ice Citadel. Shown on Black Ice Citadel and Node Severance. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/black_ice_fortress.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "charter_signing",
+   "label": "2. Diplomacy: A long table in a bright hall, many hands taking turns to sign one great scroll, pens passing along the row.",
+   "note": "Written for Coalition Charter. Shown on Coalition Charter and Planetary Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/charter_signing.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "interconnector_ship",
+   "label": "3. Power: A cable-laying ship at sea paying out a heavy subsea power link, a coastal converter station on each horizon.",
+   "note": "Written for Interconnector Treaty. Shown on Interconnector Treaty and Dyson Swarm Tranche. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/interconnector_ship.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "adversarial_sweep_scanners",
+   "label": "4. Science: Rows of scanning arms sweeping a fan of blue light across a hall of models on plinths, flagging one with a marker.",
+   "note": "Written for Adversarial Inference Sweep. Shown on Adversarial Inference Sweep and Foundation Model Campus. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/adversarial_sweep_scanners.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "sovereign_fund_hall",
+   "label": "5. Industry: A marble national treasury hall with a giant globe at its centre, a few officials crossing the floor.",
+   "note": "Written for Sovereign Capital Fund. Shown on Sovereign Capital Fund and Megacorp IPO. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/sovereign_fund_hall.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "cordon_of_soldiers",
+   "label": "6. Security: A line of soldiers and armoured vehicles strung across a wide boulevard, citizens held back behind tape.",
+   "note": "Written for Martial Cordon. Shown on Martial Cordon and Point Defense. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/cordon_of_soldiers.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "siphon_pipes",
+   "label": "7. Cyber: A clear pipeline tapped into the side of a huge compute tower, glowing liquid light draining out into a small hidden tank.",
+   "note": "Written for Compute Siphon. Shown on Compute Siphon and Intrusion Lab. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/siphon_pipes.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "corridor_huddle",
+   "label": "8. Diplomacy: A knot of delegates huddled in a tall marble corridor, conferring in low voices outside a pair of closed doors.",
+   "note": "Written for Summit Caucus. Shown on Summit Caucus and Liaison Corps. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/corridor_huddle.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "steady_baseload_plant",
+   "label": "9. Power: A calm nuclear plant with twin cooling towers by a river, plain steam rising, a signed contract on a table in the foreground.",
+   "note": "Written for Baseload Contract. Shown on Baseload Contract and Lights-Out Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/steady_baseload_plant.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "grant_cheque_racks",
+   "label": "10. Science: A university and a small lab's crews wheeling one rack of donated compute through a campus quad on a trolley.",
+   "note": "Written for Shared Compute Grant. Shown on Shared Compute Grant and Telemetry Archive. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/grant_cheque_racks.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "empty_payroll_office",
+   "label": "11. Industry: A rows-of-desks office with no staff left, a single small machine stamping and sorting pay envelopes.",
+   "note": "Written for Payroll Automation. Shown on Payroll Automation and Turnkey Factory. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/empty_payroll_office.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "shoulder_to_shoulder_shields",
+   "label": "12. Security: Two nations' soldiers manning one sandbag wall together, two different flags planted at either end.",
+   "note": "Written for Mutual Defense Pact. Shown on Mutual Defense Pact and Sentinel Post. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/shoulder_to_shoulder_shields.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "mirrored_mind",
+   "label": "13. Cyber: Two glass heads facing each other on a workbench, a web of light copied thread by thread from one to the other.",
+   "note": "Written for Neural Mirror. Shown on Neural Mirror and Honeypot Relay. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/mirrored_mind.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "shared_rooftop_grid",
+   "label": "14. Diplomacy: A neighbourhood's rooftops linked by shared solar panels, residents together hauling a cable across a street.",
+   "note": "Written for Commons Grid. Shown on Commons Grid and Brownout Relief. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/shared_rooftop_grid.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "faraday_yard_cage",
+   "label": "15. Power: A yard of huge copper mesh cages around transformers, a bolt of harmless static crawling across the nearest cage.",
+   "note": "Written for Faraday Yard. Shown on Faraday Yard and Collateralized Grid. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/faraday_yard_cage.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "red_team_at_whiteboard",
+   "label": "16. Science: A team in red lanyards circling a boxed AI terminal in a test chamber, ticking through a long paper checklist.",
+   "note": "Written for Red-Team Audit. Shown on Red-Team Audit and Grad Student Pool. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/red_team_at_whiteboard.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "plant_in_crates",
+   "label": "17. Industry: A power plant in numbered crates laid out across a field like a giant model kit, a small crew beginning to bolt it up.",
+   "note": "Written for Prefab Plant Kit. Shown on Prefab Plant Kit and Modular Expansion. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/plant_in_crates.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "field_station_tent",
+   "label": "18. Security: A discreet field station in a desert: a tent, radio mast and two parked trucks, an operative studying a map.",
+   "note": "Written for Agency Field Station. Shown on Agency Field Station and Strike Team. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/field_station_tent.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "quantum_vault_core",
+   "label": "19. Cyber: A chandelier-shaped quantum computer hanging in a pale vault, a padlock of light unpicking itself at its centre.",
+   "note": "Written for Quantum Decryptor. Shown on Quantum Decryptor and Zero-Knowledge Exploit. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/quantum_vault_core.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "released_prisoners",
+   "label": "20. Diplomacy: Prison gates standing open in morning light, a thin line of people walking out to waiting families.",
+   "note": "Written for Amnesty Decree. Shown on Amnesty Decree and Consulate Tower. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/released_prisoners.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "substation_hub",
+   "label": "21. Power: A fenced substation of ceramic insulators and transformers at a crossroads of pylon lines in open country.",
+   "note": "Written for Substation Hub. Shown on Substation Hub and Relay Mast Rollout. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/substation_hub.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "paper_engine",
+   "label": "22. Science: A great whirring machine of brass and paper, journals feeding in one end and threads of references spinning out to a wall.",
+   "note": "Written for Citation Engine. Shown on Citation Engine and Breakthrough Leak. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/paper_engine.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "station_on_a_barge",
+   "label": "23. Industry: A prefabricated research station module being floated down a river on a barge, tugs alongside.",
+   "note": "Written for Station Prefab Order. Shown on Station Prefab Order and Foundry Core. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/station_on_a_barge.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "kill_team_lineup",
+   "label": "24. Security: Black-clad operators in a ready room gearing up at open lockers, seen from behind, a blank roster board on the wall.",
+   "note": "Written for Kill Team Roster. Shown on Kill Team Roster and Shared Exploit Kit. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/kill_team_lineup.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "sentinel_mesh_nodes",
+   "label": "25. Cyber: A hillside of small identical sensor posts joined by a visible net of light, one post snapping a thread shut.",
+   "note": "Written for Sentinel Mesh. Shown on Sentinel Mesh and Dataset Scraper. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/sentinel_mesh_nodes.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "walled_embassy",
+   "label": "26. Diplomacy: A walled embassy with a garden courtyard and a guarded gate, a black car waiting at the steps.",
+   "note": "Written for Embassy Compound. Shown on Embassy Compound and Joint Fabrication Pact. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/walled_embassy.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "peaker_turbine_hall",
+   "label": "27. Power: A clean row of jet-engine-sized gas turbines in a bright hall, one spinning up with a shimmer of heat.",
+   "note": "Written for Peaker Turbines. Shown on Peaker Turbines and Demand Response Grid. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/peaker_turbine_hall.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "data_forge_anvil",
+   "label": "28. Science: A smith-like machine hammering out glowing blocks of data on an anvil, a stack of finished cubes beside it.",
+   "note": "Written for Synthetic Data Forge. Shown on Synthetic Data Forge and Open Preprint. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/data_forge_anvil.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "pylon_fed_smelter",
+   "label": "29. Industry: A huge electric smelter with power lines running straight into its roof, slag glowing at its base.",
+   "note": "Written for Grid-Tied Smelter. Shown on Grid-Tied Smelter and Venture Capital. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/pylon_fed_smelter.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "contractor_glass_hq",
+   "label": "30. Security: A sleek private security headquarters behind a fence, armoured SUVs lined up neatly at its entrance.",
+   "note": "Written for Security Contractor HQ. Shown on Security Contractor HQ and Signal Hijack. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/contractor_glass_hq.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "logic_bomb_timer",
+   "label": "31. Cyber: A tidy mechanical clockwork device nested among circuit boards, its gears lining up as a technician backs away.",
+   "note": "Written for Logic Bomb. Shown on Logic Bomb and Rootkit Cache. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/logic_bomb_timer.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "treaty_bridge",
+   "label": "32. Diplomacy: A bridge across a border river carrying a pylon line and a freight train together, a small flag at each end.",
+   "note": "Written for Treaty Grid Exchange. Shown on Treaty Grid Exchange and Shared Grid Accord. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/treaty_bridge.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "fusion_garage",
+   "label": "33. Power: A small tokamak in a converted warehouse, a tiny startup team gathered round its ring of magnets and bright plasma window.",
+   "note": "Written for Fusion Startup Stake. Shown on Fusion Startup Stake and Tidal Barrage. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/fusion_garage.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "endowed_chair",
+   "label": "34. Science: A carved oak chair in a sunlit panelled university library, a single scholar's books and notes laid out before it.",
+   "note": "Written for Endowed Research Chair. Shown on Endowed Research Chair and Simulation Cluster. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/endowed_chair.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "treaty_port_cranes",
+   "label": "35. Industry: A container port at full stretch, flags of two nations on the quay and a ship being loaded under big gantry cranes.",
+   "note": "Written for Supply Chain Treaty. Shown on Supply Chain Treaty and Retained Earnings. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/treaty_port_cranes.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "triage_ops_table",
+   "label": "36. Security: An operations room's huge map table, officers pushing a few markers forward and sweeping others aside.",
+   "note": "Written for Threat Triage. Shown on Threat Triage and Sentry Drone Wing. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/triage_ops_table.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "bonded_warehouse",
+   "label": "37. Industry: A cavernous warehouse of sealed crates in tall racks, a customs officer with a clipboard, forklifts in the aisles.",
+   "note": "Written for Bonded Warehouse. Shown on Bonded Warehouse and Chip Spot Market. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/bonded_warehouse.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "bunker_in_the_hillside",
+   "label": "38. Security: A concrete bunker entrance set into a grassy hillside, thick steel doors, ventilation stacks and an access road.",
+   "note": "Written for Hardened Bunker Complex. Shown on Hardened Bunker Complex and Shelter Order. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/bunker_in_the_hillside.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "factory_robot_arms",
+   "label": "39. Industry: An automated factory floor, robot arms assembling machines.",
+   "note": "Written for Robotic Foundry. Shown on Robotic Foundry and Bulk Silicon Procurement. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/factory_robot_arms.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "interceptor_launchers",
+   "label": "40. Security: A battery of missile launchers angled up on a plateau, one interceptor rising on a clean white trail.",
+   "note": "Written for Interceptor Battery. Shown on Interceptor Battery and Storm Hardening. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/interceptor_launchers.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "falling_dominoes_of_servers",
+   "label": "41. Cyber: A long row of tall server cabinets toppling like dominoes down a wide hall.",
+   "note": "Written for Cascade Failure. Shown on Cascade Failure and Hyperscale Botnet. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/falling_dominoes_of_servers.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "accords_in_the_square",
+   "label": "42. Diplomacy: Foreign envoys escorted down a town hall's steps by local officials while a crowd watches from the square.",
+   "note": "Written for Liberation Accords. Shown on Liberation Accords and Planetary Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/accords_in_the_square.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "antiproton_flask",
+   "label": "43. Power: A shielded magnetic flask holding one bright point of antimatter, carried on a padded cradle by two suited technicians.",
+   "note": "Written for Antiproton Offtake Deal. Shown on Antiproton Offtake Deal and Dyson Swarm Tranche. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/antiproton_flask.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "exabyte_vault_mountain",
+   "label": "44. Science: A vault cut into a mountainside, its enormous door open on endless illuminated aisles of storage.",
+   "note": "Written for Exabyte Archive. Shown on Exabyte Archive and Data Licensing Deal. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/exabyte_vault_mountain.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "red_switch",
+   "label": "45. Cyber: A heavy lever under a lifted safety cover on a bare concrete wall, a gloved hand pulling it down.",
+   "note": "Written for Killswitch Directive. Shown on Killswitch Directive and Darknet Exchange. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/red_switch.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "orbital_embassy",
+   "label": "46. Diplomacy: A ring-shaped station above a blue Earth limb, a formal docking hall with flags and a shuttle arriving.",
+   "note": "Written for Orbital Embassy. Shown on Orbital Embassy and Exodus Corridors. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/orbital_embassy.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "supergrid_continent",
+   "label": "47. Power: A high aerial view of a coastline and continent with huge bright transmission lines knitting its cities together.",
+   "note": "Written for Continental Supergrid. Shown on Continental Supergrid and Beamed Power Constellation. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/supergrid_continent.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "observatory_array",
+   "label": "48. Science: A line of telescope satellites spread in formation above Earth, their mirrors all turned the same way.",
+   "note": "Written for Orbital Observatory Array. Shown on Orbital Observatory Array and Open-Weights Release. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/observatory_array.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "singularity_rift",
+   "label": "49. Cyber: A small sphere of folded light hanging inside a data hall, racks bending and stretching towards it.",
+   "note": "Written for Singularity Exploit. Shown on Singularity Exploit and Hyperscale Botnet. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/singularity_rift.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "chains_falling_city",
+   "label": "50. Diplomacy: Crowds pouring through a city gate, an occupier's banner being hauled down from the wall above them.",
+   "note": "Written for Great Liberation. Shown on Great Liberation and Safehouse Network. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/chains_falling_city.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "positron_ring",
+   "label": "51. Power: A vast ring-shaped accelerator tunnel curving out of sight, magnets in amber housings and one worker on a bicycle.",
+   "note": "Written for Positron Storage Ring. Shown on Positron Storage Ring and Planetary Referendum. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/positron_ring.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "machine_rebuilding_itself",
+   "label": "52. Science: A tall robot in a workshop carefully rebuilding its own arm, an older discarded version of itself on a bench beside it.",
+   "note": "Written for Recursive Self-Improvement. Shown on Recursive Self-Improvement and Foundation Model Campus. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/machine_rebuilding_itself.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "arc_furnace",
+   "label": "53. Industry: Three massive graphite electrodes lowered into a furnace bowl, a blinding contained arc and a shower of sparks.",
+   "note": "Written for Arc Furnace Complex. Shown on Arc Furnace Complex and Asteroid Salvage Rights. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/arc_furnace.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "ledger_in_the_vault",
+   "label": "54. Security: A single huge bound ledger on a lectern in a locked underground archive, a gloved hand turning its page.",
+   "note": "Written for Deep State Ledger. Shown on Deep State Ledger and Mesh Intrusion Pact. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/ledger_in_the_vault.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "fully_automated_city",
+   "label": "55. Industry: A city's streets and rooftops busy with robots at every job, trucks and cranes all moving with nobody at the controls.",
+   "note": "Written for Full Automation Mandate. Shown on Full Automation Mandate and Expansion Fund. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/fully_automated_city.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "sealed_hex_of_barricades",
+   "label": "56. Security: A whole district ringed by giant concrete barriers and containment trucks, a crew closing the last gap.",
+   "note": "Written for Total Containment. Shown on Total Containment and Open Assembly. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/sealed_hex_of_barricades.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "arcology_of_workshops",
+   "label": "57. Industry: A stepped mountain of a building with terraces of factories, gardens and homes stacked up its sides.",
+   "note": "Written for Arcology Foundry. Shown on Arcology Foundry and Vendor Financing. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/arcology_of_workshops.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "aegis_dome",
+   "label": "58. Security: A shimmering dome of hexagonal light raised over a whole city, emitter towers ringing its edge.",
+   "note": "Written for Aegis Dome Array. Shown on Aegis Dome Array and Aegis Grid Lockdown. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/aegis_dome.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "mass_driver_launch",
+   "label": "59. Industry: A kilometres-long launch rail climbing a mountainside, a cargo capsule streaking up it into the sky.",
+   "note": "Written for Orbital Mass Driver. Shown on Orbital Mass Driver and Materials Hedge Desk. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/mass_driver_launch.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "directorate_tower",
+   "label": "60. Security: A windowless grey monolith of an agency headquarters rising above its car park, tiny figures streaming to its doors.",
+   "note": "Written for Agency Directorate. Shown on Agency Directorate and Threat Neutralization Mandate. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_4/directorate_tower.jpg",
+     "label": "keep"
+    }
+   ]
+  }
+ ]
+}

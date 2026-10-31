@@ -243,7 +243,8 @@ browser; `npm ci` first):
   2.5 min, 3% of the 5-hour window. Round 2 (036): 39–76 s each, about 3 min for 12, 24 draws in all. Batch 1 (037):
   27 draws, 32–73 s each, about 7 min for 24, 7% of the window. Batch 2 (039): 40 draws at
   3 at once, 31–82 s each, about 10 min, 10% of the window, none refused. Batch 3 (043):
-  40 draws at 3 at once, 30–77 s each, about 11 min, 10% of the window, none refused. A style
+  40 draws at 3 at once, 30–77 s each, about 11 min, 10% of the window, none refused. Batch 4
+  (045): 60 draws at 3 at once, 31–103 s each, about 17.5 min, 17% of the window, none refused. A style
   line alone came back as detailed concept art; the `emphasis` line (never a
   photograph or 3D render, and what to do instead) is what pushes a draw towards illustration.
   "Near-future setting" alone gave a historical foundry and village: the preamble now
@@ -251,7 +252,8 @@ browser; `npm ci` first):
 - `npm run scene-picker`: from the raw draws, each scene cut to the program window's shape
   (`<id>.png`), its two cards from `batch` at 300 dpi (`cards/`), the same at true size
   (`cards.pdf`, about 260 MB for 80 cards), and `picks/<picker>.json` with previews, about
-  45 s for 24, or about 2 min when writing through the Drive folder, about 3 min for 40:
+  45 s for 24, or about 2 min when writing through the Drive folder, about 3 min for 40
+  or 60 (cards.pdf about 400 MB for 120 cards):
   background it. `npm ci` first in a fresh worktree. Runs at below-normal priority, one
   image at a time. Each new batch replaces `batch` in `scenes.json`, so the scenes already
   drawn are the row ids in `picks/scene_batch_<n>.json`. Passes the scene to
@@ -265,8 +267,11 @@ browser; `npm ci` first):
   six tags so their drawn totals stay level, ties going to the tag with the most left
   undrawn. Each scene's first card is its own; the second fills the other art window (one
   program or event, one building), from the same tag and tier frame where one is free, and
-  no card appears twice in a batch. After batch 3: industry and security 17 drawn, the
-  other tags 16, 60 left (34 tier 1, 26 tier 2).
+  no card appears twice in a batch. Batch 4 took all 60 left: one tier-2 scene per tag, then
+  tier 1, then the other tier 2. It needed 60 buildings of the 56 there are, so four tier-2
+  buildings appear twice, as second cards only. All 158 card scenes are drawn, 25 in each of
+  cyber, diplomacy, power and science, 29 in each of industry and security; none remain. With
+  the 6 adversary, Discord and Unity scenes, that is 164 drawn.
 
 - **Numbers (2026-10-30, 026):** asking for 69:94 with a same-shape guide returns
   1075×1464, the right shape already, so the crop takes at most a pixel. 44–71 s an image,
