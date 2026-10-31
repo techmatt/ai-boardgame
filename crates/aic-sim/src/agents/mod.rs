@@ -147,6 +147,10 @@ macro_rules! with_policy_params {
             ("unity_farm", 0.0, "exploit check (028): before anything else, buy ambassadors and land them on bases and factories"),
             ("rich_spend", 0.0, "exploit check (034): every spare credit on the rich action"),
             ("science_rush", 0.0, "exploit check (034): draft, keep and play Science first, for its discounts"),
+            ("always_expand", 0.0, "fixed policy (041): the growth option that places the most presence"),
+            ("always_consolidate", 0.0, "fixed policy (041): the growth option that places none"),
+            ("never_remove", 0.0, "fixed policy (041): never clear a corruption marker"),
+            ("science_board", 0.0, "fixed policy (041): the Science rush, board cards first"),
         ]
     };
 }
@@ -416,6 +420,10 @@ impl AgentSpec {
             unity_farm: on("unity_farm"),
             rich_spend: on("rich_spend"),
             science_rush: on("science_rush"),
+            always_expand: on("always_expand"),
+            always_consolidate: on("always_consolidate"),
+            never_remove: on("never_remove"),
+            science_board: on("science_board"),
             plan_keep: on("plan_keep"),
             plan_rounds: num("plan_rounds") as usize,
             plan_reserve: num("plan_reserve") as i64,

@@ -7,6 +7,26 @@ What each rules revision changed, what it replaced and whether it is **locked** 
 record, moved out of it in 025 otherwise as written, so a row quoting a number or a card
 is as of its revision. Add a table here with every rules change.
 
+**Revision 20 (041): growth as a choice, the marker worth clearing, Science on the board.**
+Matt's rulings on 034 (2026-10-30); only "a cap exists and can shorten" is locked.
+
+| What | Was | Now | Status |
+|---|---|---|---|
+| Round cap | 11, 10 from difficulty 2 | 11 through d2: difficulty 2 swaps a stage-I card for a stage-III (`stage3_added`); difficulty 3 removes a stage-II card (`stage2_removed`): 10 | candidate (that a cap exists and can shorten: **locked**) |
+| Stage-III cards | each player destroys 1; 1 Discord | each destroys 2; 1 Discord; 2 Sway leaves the Unity bucket (ruling: the cap bites through a harder end) | candidate |
+| Growth | three board-specific options, one placing 1 presence free | Expand (2 presence, small gain), Develop (1 presence, a draw or insight), Consolidate (no presence, a bundle) | candidate |
+| Presence payment | growth and cards free, the action paid an extra, the rich action paid it in credits | one path: every placement pays the step's printed `cost` unless a card prints free; the action adds `presence_energy`, the rich action pays credits | candidate |
+| Track steps | extras 0, 0, 0, 0, 1, 2, 3, 4 and 0, 0, 1, 3, 4, 5 | costs 0, 0, 0, 0, 1, 2, 2, 3 and 0, 0, 1, 2, 3, 4 | candidate |
+| Tier-2 placing cards | free | still free, printed so | candidate |
+| Clearing a marker | part of Remove, after any ambassador on the hex, no reward | its own action, `clear_energy` 1, sways `clear_unity` 1 toward Unity | candidate |
+| Science | insight and cards only | six cards reworked to clear markers, shield presence, delay threats, move an ambassador | candidate |
+| Shield | hardening on buildings only | Science's `shield_presence`: a hardening token on a hex of your presence | candidate |
+| Delay | | `delay_threat`: a threat waits a round, and can be countered next round | candidate |
+
+Agents, no rules change: growth is scored 4 choice levels deep (at 2, Expand looked like its first
+token); eval weights `marker`, `shield`, `threat_waits`, and a marker counts as city pressure.
+Screen: `experiments/results/screen-041-growth/growth.md`.
+
 **Revision 19 (034): three distinct loss pressures, Spirit Island presence, earlier Science and Industry.**
 (The review called this r18; 033 took that number.)
 

@@ -488,10 +488,13 @@ fn difficulty_block(r: &Rules) -> String {
             t(&["adversary.extra_threats", "adversary.counter_bonus", "adversary.counter_bonus_all"]),
         ),
         (
-            "Stage-I cards removed: stage II (escalation, tier-2 threats) sooner, and a shorter round cap (the table above)",
-            t(&["adversary.stage1_removed"]),
+            "A stage-I card swapped for a stage-III card: stage II (escalation, tier-2 threats) sooner and a harder end, at the same round cap (the table above)",
+            t(&["adversary.stage1_removed", "adversary.stage3_added"]),
         ),
-        ("Larger builds: each corrupted city gains more", t(&["adversary.build_bonus"])),
+        (
+            "Larger builds: each corrupted city gains more, and a stage-II card removed (a shorter round cap)",
+            t(&["adversary.build_bonus", "adversary.stage2_removed"]),
+        ),
         (
             "A still shorter Discord deck (027: was a smaller supply, which does nothing now it is a cap): the removed cards count as tips already made, so every printed step still acts (034); tier-2 threats sooner; optionally more corrupted cities per country at setup",
             t(&["adversary.discord_removed", "adversary.tier2_early", "adversary.extra_corrupted"]),
@@ -612,8 +615,8 @@ fn space(u: &Uncover) -> String {
         parts.push("**keep upgrade**".to_string());
     }
     let mut out = parts.join(", ");
-    if u.extra != 0 {
-        out.push_str(&format!(" (extra {})", u.extra));
+    if u.cost != 0 {
+        out.push_str(&format!(" (cost {})", u.cost));
     }
     out
 }
@@ -660,7 +663,7 @@ fn standard_actions_block(r: &Rules) -> String {
     let rows: Vec<[String; 3]> = vec![
         [
             "Place presence".to_string(),
-            format!("{}, plus the step's printed extra (§7)", t("board.presence_energy")),
+            format!("{}, plus the step's printed cost (§7)", t("board.presence_energy")),
             "the next token off your track (uncovering its space) on a land hex next to your presence, with no corruption marker, 1 presence per hex (**locked**)".to_string(),
         ],
         [
@@ -671,7 +674,16 @@ fn standard_actions_block(r: &Rules) -> String {
         [
             "Remove an adversary ambassador".to_string(),
             t("board.remove_energy"),
-            "in reach; with none on the hex, a corruption marker (034)".to_string(),
+            "in reach".to_string(),
+        ],
+        [
+            "Clear a corruption marker".to_string(),
+            t("board.clear_energy"),
+            format!(
+                "in reach (041): sway {} toward Unity, gain {} credits",
+                t("board.clear_unity"),
+                t("board.clear_credits")
+            ),
         ],
         [
             "Move a player ambassador".to_string(),
@@ -706,7 +718,7 @@ fn standard_actions_block(r: &Rules) -> String {
         [
             "The rich action (`presence_buy`, 034)".to_string(),
             format!(
-                "{} credits, + {} for each earlier use by you this round, + {} a step of the track's printed extra",
+                "{} credits, + {} for each earlier use by you this round, + {} an energy of the step's printed cost",
                 t("board.presence_credits"),
                 t("board.presence_rise"),
                 t("board.energy_credits")
@@ -1220,14 +1232,14 @@ mod tests {
     #[test]
     fn the_round_cap_comes_from_the_engines_deal() {
         let base = round_cap_block(&baseline(&[]));
-        // At the baseline: 4, 5, 2 cards, less the stage-I card difficulty 2 removes.
+        // At the baseline: 4, 5, 2 cards; difficulty 2 swaps a stage-I card for a stage-III.
         assert_eq!(row(&base, "0"), ["0", "4", "5", "2", "5", "11"]);
-        assert_eq!(row(&base, "2"), ["2", "3", "5", "2", "4", "10"]);
+        assert_eq!(row(&base, "2"), ["2", "3", "5", "3", "4", "11"]);
         let shorter = round_cap_block(&baseline(&["adversary.stage_cards=4,4,2"]));
         assert_eq!(row(&shorter, "0")[5], "10");
         let harsher = round_cap_block(&baseline(&["adversary.stage1_removed=2"]));
         assert_eq!(row(&base, "1")[5], row(&harsher, "1")[5], "difficulty 1 removes nothing");
-        assert_eq!(row(&harsher, "2")[5], "9");
+        assert_eq!(row(&harsher, "2")[5], "10");
     }
 
     /// Every block that reads a config moves with it.
@@ -1255,7 +1267,7 @@ mod tests {
         let base = content();
         let mut c = base.clone();
         c.ais[0].presence[1].income[0].1 += 1;
-        c.ais[1].presence2[2].extra += 1;
+        c.ais[1].presence2[2].cost += 1;
         c.ais[1].powers[0].tags[0].1 += 1;
         c.ais[0].growth[0].name = "Something else".to_string();
         c.map.countries[0].project.cubes += 1;
@@ -1274,12 +1286,12 @@ mod tests {
     }
 
     #[test]
-    fn a_track_space_prints_income_upgrade_and_extra() {
+    fn a_track_space_prints_income_upgrade_and_cost() {
         let u = Uncover {
             income: vec![(Resource::Credits, 2), (Resource::Chips, 1)],
             keep2: true,
-            extra: 3,
+            cost: 3,
         };
-        assert_eq!(space(&u), "+2 credits, +1 chip, **keep upgrade** (extra 3)");
+        assert_eq!(space(&u), "+2 credits, +1 chip, **keep upgrade** (cost 3)");
     }
 }

@@ -1,0 +1,13 @@
+{
+  "name": "screen-041-tune2",
+  "note": "r20 lever probe: a longer Unity deck, for the cap's share of losses. Same seeds as screen-041 at 16.",
+  "configs": ["configs/baseline.json"],
+  "variants": [
+    {"name": "c2u43", "set": ["alignment.unity_cards=4,3"]},
+    {"name": "c3u43", "set": ["countries=3", "alignment.unity_cards=4,3"]}
+  ],
+  "difficulties": [2],
+  "agents": ["planner"],
+  "games": 16,
+  "records": 0
+}

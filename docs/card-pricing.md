@@ -5,6 +5,33 @@ generated from `content/cards.json`. The screen that checked these prices, and t
 patches it led to, are in
 [experiments/results/screen-023-cards/cards.md](../experiments/results/screen-023-cards/cards.md).
 
+## 041's changes (r20)
+
+Science paid only in insight and cards, and insight becomes board change only through other tags'
+cards, so ignoring it cost nothing (-16 ±11 at c2 at r19). Six cards now change the board directly;
+each effect is fixed and the floor on discounts stays at 1, so "board action, fewer threats, more
+insight" has no loop to run. Yardsticks: a marker cleared is 1 energy, 1 Sway (about 2 credits) and a
+hex back; a shield is a token kept (about 4 credits plus its marker); a threat delayed is half a
+counter (2-3 credits: it still has to be answered, or it hits next round); a move is 1 energy.
+
+| card | was | now | why |
+|---|---|---|---|
+| Field Sensor Grid (T1) | 3 cr, up to 2 insight | 2 cr, clear 1 marker, up to 1 insight | about 3 of marker and 2 of insight; a tag early, when no marker stands |
+| Predictive Modelling (T1) | 2 cr + 1 insight, peek 2, +1 insight next round | peek 1, one threat waits | 2-3 for the delay and 1 for the peek against 6 paid |
+| Benchmark Suite (T1) | 2 cr, 1 insight, 2 Datasets | 2 cr, 1 insight, shield 1, 1 Dataset | the shield replaces a Dataset and a credit's worth of filler at 0 insight, since it only pays if the hex is hit |
+| Shared Compute Grant (T1) | give 2 insight (+1), draw 1 | give 2 insight (+1), move an ambassador 2 | a move for a draw: cheaper, on the map |
+| Open-Weights Release (T2) | 6 cr + 2 insight, gifts, draw 2, +1 insight | 4 cr + 1 insight, clear 2, shield 2, give 2 insight | the keep (3 insight) is most of the price; about 11 for about 18 when markers stand |
+| Adversarial Inference Sweep (T2) | 7 cr + 2 insight, needs 1 Cyber, drain all 1, draw 2 | 5 cr + 1 insight, drain all 1, 2 threats wait, draw 1 | a swing round's worth of counters put off; the draw shrinks to pay for it |
+
+The two tier-2 prices come from the screen (`experiments/screen-041-science2.json`): at 6 and 7 credits
+the planner kept them a third of the time and played one in eight dealt. Agents draft tier 2 nearly
+every pick, so tier-2 Science is the part of the tag they see at all.
+
+**Placing presence.** Every placement now pays its track step, so a placing card's price is its own
+plus the step's. Pylon Drop gains its energy first, so the card can pay a cheap step. Tier-1 cards pay;
+the three tier-2 placements (Beamed Power Constellation, Interconnector Treaty, Aegis Grid Lockdown)
+print "free": late steps cost 2-4 energy each, and they land when only late steps are left.
+
 ## 034's changes (r19)
 
 Ignoring Science or Industry cost a planning agent nothing: Industry paid over rounds and

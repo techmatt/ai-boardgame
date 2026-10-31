@@ -152,7 +152,7 @@
   "id": "adv_s3_total_mobilisation",
   "name": "Total Mobilisation",
   "stage": 3,
-  "text": "Arrivals: industrial zones. Each corrupted city builds 1 more, and factories next to clean cities build 1 too; sway 1 toward Discord; each player destroys a presence of theirs.",
+  "text": "Arrivals: industrial zones. Each corrupted city builds 1 more, and factories next to clean cities build 1 too; sway 1 toward Discord; each player destroys 2 presence of theirs; 2 Sway leaves the Unity bucket.",
   "twists": [
    {
     "op": "arrivals",
@@ -173,7 +173,11 @@
    },
    {
     "op": "each_destroy_presence",
-    "count": 1
+    "count": 2
+   },
+   {
+    "op": "pull_unity",
+    "amount": 2
    }
   ]
  },
@@ -181,7 +185,7 @@
   "id": "adv_s3_blitzkrieg",
   "name": "Blitzkrieg",
   "stage": 3,
-  "text": "Arrivals: military bases. This round is a war round, and spread reaches 1 hex further; sway 1 toward Discord; each player destroys a presence of theirs.",
+  "text": "Arrivals: military bases. This round is a war round, and spread reaches 1 hex further; sway 1 toward Discord; each player destroys 2 presence of theirs; 2 Sway leaves the Unity bucket.",
   "twists": [
    {
     "op": "arrivals",
@@ -201,7 +205,11 @@
    },
    {
     "op": "each_destroy_presence",
-    "count": 1
+    "count": 2
+   },
+   {
+    "op": "pull_unity",
+    "amount": 2
    }
   ]
  },
@@ -209,7 +217,7 @@
   "id": "adv_s3_occupation",
   "name": "Occupation",
   "stage": 3,
-  "text": "Arrivals: research stations. Clean cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1; sway 1 toward Discord; each player destroys a presence of theirs.",
+  "text": "Arrivals: research stations. Clean cities corrupt at 1 fewer ambassador, and each corrupted research station builds 1; sway 1 toward Discord; each player destroys 2 presence of theirs; 2 Sway leaves the Unity bucket.",
   "twists": [
    {
     "op": "arrivals",
@@ -230,7 +238,11 @@
    },
    {
     "op": "each_destroy_presence",
-    "count": 1
+    "count": 2
+   },
+   {
+    "op": "pull_unity",
+    "amount": 2
    }
   ]
  },
@@ -238,7 +250,7 @@
   "id": "adv_s3_iron_doctrine",
   "name": "Iron Doctrine",
   "stage": 3,
-  "text": "Arrivals: coastal cities. This round is a war round; sway 1 toward Discord; each player destroys a presence of theirs.",
+  "text": "Arrivals: coastal cities. This round is a war round; sway 1 toward Discord; each player destroys 2 presence of theirs; 2 Sway leaves the Unity bucket.",
   "twists": [
    {
     "op": "arrivals",
@@ -254,7 +266,11 @@
    },
    {
     "op": "each_destroy_presence",
-    "count": 1
+    "count": 2
+   },
+   {
+    "op": "pull_unity",
+    "amount": 2
    }
   ]
  }

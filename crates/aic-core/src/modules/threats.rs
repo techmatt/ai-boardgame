@@ -128,8 +128,16 @@ fn after_counter(g: &GameState) -> bool {
 
 /// Whether `threat` was dealt this round after the counter phase: it skips
 /// this round's execution.
-fn waits(g: &GameState, threat: &str) -> bool {
+pub fn waits(g: &GameState, threat: &str) -> bool {
     g.var(&late_key(threat)) == g.round as i64
+}
+
+
+/// `threat` waits: it skips this round's execution and stays up, to be
+/// countered next round (041).
+pub fn delay(g: &mut GameState, cx: &mut Cx, threat: &str) {
+    cx.set_key(g, &late_key(threat), g.round as i64);
+    cx.tally(g, "threats.delayed", 1);
 }
 
 fn def<'w>(w: &World<'w>, id: &str) -> &'w ThreatDef {
@@ -557,7 +565,7 @@ impl Module for Threats {
                 extra.push_str(&format!(" Jammed: needs {jam} less of each."));
             }
             if waits(g, t) {
-                extra.push_str(" Dealt after the counter phase: executes next round.");
+                extra.push_str(" Waits: executes next round.");
             }
             CardView {
                 id: t.to_string(),

@@ -116,6 +116,9 @@ pub fn greedy_scores(
             scores[i] += match a {
                 Action::Pass { .. } => stay,
                 _ => match step(rules, base, a) {
+                    // 041: an option places up to 2 presence, each a track and a
+                    // hex: scored at 2 levels, Expand looked like its first token.
+                    Some(c) if matches!(a, Action::Growth { .. }) => lookahead(rules, ev, &c, depth - 1, choices * 2),
                     Some(c) => lookahead(rules, ev, &c, depth - 1, choices),
                     None => f64::NEG_INFINITY,
                 },

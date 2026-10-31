@@ -1,0 +1,15 @@
+{
+  "name": "screen-041-science",
+  "note": "r20: ignore-Science against the planner, at science_every 2 and 1 (ruling 4). Same seeds as screen-041 at 16.",
+  "configs": ["configs/baseline.json"],
+  "variants": [
+    {"name": "c2", "set": []},
+    {"name": "c3", "set": ["countries=3"]},
+    {"name": "c2se1", "set": ["cards.science_every=1"]},
+    {"name": "c3se1", "set": ["countries=3", "cards.science_every=1"]}
+  ],
+  "difficulties": [2],
+  "agents": ["planner", "planner:never_tag=1"],
+  "games": 16,
+  "records": 0
+}

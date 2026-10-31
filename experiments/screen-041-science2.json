@@ -1,0 +1,13 @@
+{
+  "name": "screen-041-science2",
+  "note": "r20: the tier-2 Science board cards cheaper, by overlay, against ignore-Science. Same seeds as screen-041 at 16.",
+  "configs": ["configs/baseline.json"],
+  "variants": [
+    {"name": "c2cheap", "set": ["cards.open_weights_release.cost=4", "cards.open_weights_release.insight=1", "cards.adversarial_inference_sweep.cost=5", "cards.adversarial_inference_sweep.insight=1", "cards.adversarial_inference_sweep.needs=[]"]},
+    {"name": "c3cheap", "set": ["countries=3", "cards.open_weights_release.cost=4", "cards.open_weights_release.insight=1", "cards.adversarial_inference_sweep.cost=5", "cards.adversarial_inference_sweep.insight=1", "cards.adversarial_inference_sweep.needs=[]"]}
+  ],
+  "difficulties": [2],
+  "agents": ["planner"],
+  "games": 16,
+  "records": 0
+}

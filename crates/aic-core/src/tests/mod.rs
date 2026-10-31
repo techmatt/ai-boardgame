@@ -20,6 +20,7 @@ mod config;
 mod determinism;
 mod factories;
 mod freeing;
+mod growth;
 mod invariants;
 mod map;
 mod march;
@@ -365,7 +366,7 @@ fn variant_matrix() -> Vec<Config> {
 // ---------- the golden game ----------
 
 // r19 (034).
-const GOLDEN_FINGERPRINT: &str = "80cb1c34054f04a4";
+const GOLDEN_FINGERPRINT: &str = "f8c0eb283d6a4805";
 
 /// A fixed game (baseline, seed u64::MAX; action `k` is legal action
 /// `(k * 7919) % count`: "always the first" can pay and withdraw forever).
@@ -387,6 +388,6 @@ fn golden_game() {
     assert!(g.is_over());
     assert_eq!(
         (RULES_REVISION, g.fingerprint().as_str()),
-        (19, GOLDEN_FINGERPRINT)
+        (20, GOLDEN_FINGERPRINT)
     );
 }

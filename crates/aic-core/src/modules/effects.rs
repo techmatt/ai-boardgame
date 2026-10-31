@@ -9,7 +9,7 @@ use crate::module::{Cx, Res, World};
 use crate::state::GameState;
 
 use super::common::*;
-use super::{adversary, ai, alignment, board, cards, economy, threats};
+use super::{adversary, alignment, board, cards, economy, threats};
 
 /// Who is resolving an op.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +20,15 @@ pub enum Source {
     Threat,
     /// A Unity or Discord card or a project: seat 0 chooses for the team.
     Team,
+}
+
+/// How an op's placement pays (041).
+fn placing(free: bool) -> board::Placing {
+    if free {
+        board::Placing::Free
+    } else {
+        board::Placing::Step
+    }
 }
 
 /// The context an op resolves in.
@@ -169,6 +178,15 @@ fn walk(g: &mut GameState, cx: &mut Cx, seat: usize, from: usize, to: usize) {
 /// Whether every targeted effect in `effects` has something to act on
 /// (a card is not offered when it would do nothing).
 pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Op]) -> bool {
+    // 041: energy the same effects gain first can pay a placement's step.
+    let gained: i64 = effects
+        .iter()
+        .take_while(|e| !matches!(e, Op::PlacePresence { .. }))
+        .map(|e| match e {
+            Op::Gain { resource: Resource::Energy, amount } => *amount,
+            _ => 0,
+        })
+        .sum();
     effects.iter().all(|e| match e {
         Op::Damage { at, .. } => !damage_hexes(w, g, seat, *at).is_empty(),
         Op::DamageCountry { .. } | Op::DestroyAll => any_hex(g, |h| has_adversary(g, h)),
@@ -202,9 +220,13 @@ pub fn feasible(w: &World, g: &GameState, seat: usize, effects: &[Op]) -> bool {
             .iter()
             .any(|c| g.var(&cards::tokens_key(seat, c)) > 0),
         Op::MoveAmbassadors { .. } => movable_ambassadors(g, seat) > 0,
-        Op::PlacePresence { .. } => {
-            ai::can_place(w, g, seat) && !board::presence_hexes(w, g, seat).is_empty()
+        Op::PlacePresence { free, .. } => {
+            board::can_pay_placement(w, g, seat, placing(*free), gained)
+                && !board::presence_hexes(w, g, seat).is_empty()
         }
+        Op::ClearMarkers { .. } => any_hex(g, |h| g.tokens(h, MARKER) > 0 && in_reach(w, g, seat, h)),
+        Op::ShieldPresence { .. } => any_hex(g, |h| g.tokens(h, &presence(seat)) > 0 && g.tokens(h, HARDEN) == 0),
+        Op::DelayThreat { .. } => threats::active(g).iter().any(|(t, _)| !threats::waits(g, t)),
         // Giving needs someone to give to (Grant and Venture Capital still pay you).
         Op::Transfer { .. } => g.seats.len() > 1,
         // 023: the branch that would fire needs its targets (was always true).
@@ -296,11 +318,51 @@ fn one(g: &mut GameState, cx: &mut Cx, e: &Op, ctx: &mut Ctx) -> Res {
                 cx.add_resource(g, seat, *to, k * rate);
             }
         }
-        Op::PlacePresence { count } => {
+        Op::PlacePresence { count, free } => {
             for _ in 0..*count {
-                if !board::place_presence(g, cx, seat)? {
+                if !board::place_presence(g, cx, seat, placing(*free))? {
                     break;
                 }
+            }
+        }
+        Op::ClearMarkers { count } => {
+            for _ in 0..*count {
+                let hexes: Vec<usize> = (0..g.hexes.len())
+                    .filter(|&h| g.tokens(h, MARKER) > 0 && in_reach(&w, g, seat, h))
+                    .collect();
+                let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+                let prompt = format!("Seat {seat}: clear the corruption marker on which hex?");
+                let Some(i) = cx.choose(seat, &prompt, opts)? else {
+                    break;
+                };
+                board::clear_marker(g, cx, seat, hexes[i]);
+            }
+        }
+        Op::ShieldPresence { count } => {
+            for _ in 0..*count {
+                let hexes: Vec<usize> = (0..g.hexes.len())
+                    .filter(|&h| g.tokens(h, &presence(seat)) > 0 && g.tokens(h, HARDEN) == 0)
+                    .collect();
+                let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
+                let prompt = format!("Seat {seat}: shield your presence on which hex?");
+                let Some(i) = cx.choose(seat, &prompt, opts)? else {
+                    break;
+                };
+                cx.add_tokens(g, hexes[i], HARDEN, 1);
+            }
+        }
+        Op::DelayThreat { count } => {
+            for _ in 0..*count {
+                let active: Vec<_> = threats::active(g)
+                    .into_iter()
+                    .filter(|(t, _)| !threats::waits(g, t))
+                    .collect();
+                let opts = active.iter().map(|(t, _)| opt(t.clone())).collect();
+                let prompt = format!("Seat {seat}: delay which threat?");
+                let Some(i) = cx.choose(seat, &prompt, opts)? else {
+                    break;
+                };
+                threats::delay(g, cx, &active[i].0);
             }
         }
         Op::Damage { amount, at } => {

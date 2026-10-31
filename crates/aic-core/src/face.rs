@@ -258,7 +258,26 @@ fn once(op: &Op, gain: &str) -> Vec<Clause> {
                 ),
             ))
         }
-        Op::PlacePresence { count } => one(clause(counted(*count, "presence"), format!("place {count} presence"))),
+        Op::PlacePresence { count, free } => one(clause(
+            counted(*count, "presence"),
+            format!("place {count} presence{}", if *free { " free" } else { "" }),
+        )),
+        Op::ClearMarkers { count } => one(clause(
+            adversary(minus(*count, "marker")),
+            format!("clear up to {count} corruption marker{} in your reach", if *count == 1 { "" } else { "s" }),
+        )),
+        Op::ShieldPresence { count } => one(clause(
+            counted(*count, "harden"),
+            format!("harden up to {count} hex{} of your presence", if *count == 1 { "" } else { "es" }),
+        )),
+        Op::DelayThreat { count } => one(clause(
+            adversary(minus(*count, "threat")),
+            if *count == 1 {
+                "one threat waits: not executed this round".to_string()
+            } else {
+                format!("up to {count} threats wait: not executed this round")
+            },
+        )),
         Op::Damage { amount: n, at } => {
             let mut parts = minus(*n, "ambassador");
             parts.extend([w("troop"), w("hex")]);

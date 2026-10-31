@@ -84,6 +84,14 @@ pub struct Weights {
     /// Each node on the board (a cost: adversary compute, contests presence,
     /// blocks the purge).
     pub node: f64,
+    /// Each corruption marker (041: a hex lost to placement).
+    pub marker: f64,
+    /// A hardening token on a presence hex, on top of `harden` (041: it
+    /// keeps a token that can't be replaced).
+    pub shield: f64,
+    /// A threat that waits this round counts this share (041): it comes back,
+    /// but with a counter phase first.
+    pub threat_waits: f64,
     /// Each player-owned factory (chips each production step); an
     /// adversary-owned one costs as much.
     pub owned_factory: f64,
@@ -221,6 +229,9 @@ impl Default for Weights {
             // 022 (020's D9): a node is permanent since 019; at 6 agents made
             // nodes answering the spread when an equal free option existed.
             node: 25.0,
+            marker: 1.0,
+            shield: 3.0,
+            threat_waits: 0.5,
             owned_factory: 4.0,
             chips: 2.0,
             reach: 0.5,
@@ -468,7 +479,9 @@ impl Eval {
                     if common::cube_owner(g, h).is_some() {
                         v += w.aligned;
                     }
-                    let p = (adv as f64 / fc.corrupt_at as f64).min(1.0);
+                    // 034: a corruption marker counts toward corrupting.
+                    let toward = adv + g.tokens(h, common::MARKER);
+                    let p = (toward as f64 / fc.corrupt_at as f64).min(1.0);
                     v -= w.corrupted * w.pressure * p * p;
                 }
             }
@@ -502,6 +515,10 @@ impl Eval {
                 }
             }
             v -= w.node * g.tokens(h, common::NODE) as f64;
+            v -= w.marker * g.tokens(h, common::MARKER) as f64;
+            if g.tokens(h, HARDEN) > 0 && common::presence_owner(g, h).is_some() {
+                v += w.shield;
+            }
             if common::presence_owner(g, h).is_some() {
                 v += w.data_centre;
             }
@@ -587,6 +604,7 @@ impl Eval {
     /// Each active threat's share still unpaid.
     fn unpaid_threats(&self, rules: &Rules, g: &GameState) -> Vec<f64> {
         let world = rules.world();
+        let w = &self.w;
         let mut out = Vec::new();
         for (t, _) in threats::active(g) {
             let req: i64 = threats::requirement(&world, g, &t)
@@ -603,7 +621,8 @@ impl Eval {
                 .take_while(|(k, _)| k.starts_with(prefix.as_str()))
                 .map(|(_, &n)| n)
                 .sum();
-            out.push(1.0 - (paid as f64 / req as f64).min(1.0));
+            let waits = if threats::waits(g, &t) { w.threat_waits } else { 1.0 };
+            out.push(waits * (1.0 - (paid as f64 / req as f64).min(1.0)));
         }
         out
     }

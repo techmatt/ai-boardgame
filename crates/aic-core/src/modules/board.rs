@@ -53,18 +53,21 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("presence_marker", 0, 1, "1: a destroyed presence leaves a corruption marker on its hex"),
             ParamSpec::int("corruption_reach", 0, 1, "a city that corrupts destroys presence within this many hexes of it"),
             ParamSpec::int("war_reach", 0, 1, "war that destroys a factory destroys presence within this many hexes of it"),
-            ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence"),
+            ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence, on top of the track step's cost"),
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_chips", 0, 20, "standard action: chips to build a research station"),
             ParamSpec::int("factory_chips", 0, 5, "chips a player-owned factory makes its owner on a production step"),
             ParamSpec::int("chips_credits", 0, 50, "standard action: credits for selling 1 chip"),
             ParamSpec::int("remove_energy", 0, 20, "standard action: energy to remove an adversary ambassador within reach"),
+            ParamSpec::int("clear_energy", 0, 20, "standard action: energy to clear a corruption marker within reach"),
+            ParamSpec::int("clear_unity", 0, 5, "Sway toward Unity for clearing a corruption marker"),
+            ParamSpec::int("clear_credits", 0, 5, "credits back for clearing a corruption marker"),
             ParamSpec::int("move_energy", 0, 20, "standard action: energy to move a player ambassador"),
             ParamSpec::int("ambassador_credits", 1, 50, "standard action: credits to gain a player ambassador (at least 1: a free untargeted action has no limit)"),
             ParamSpec::int("harden_energy", 1, 20, "standard action (Harden passive): energy a hardening token (at least 1: free, it has no limit)"),
             ParamSpec::int("sell_credits", 0, 20, "standard action: credits for selling a card from hand"),
             ParamSpec::int("align_energy", 0, 20, "standard action: energy (and 1 ambassador) to align a clean city"),
-            ParamSpec::int("presence_credits", 1, 50, "the rich action: credits to place a presence, before its rise and the step's extra"),
+            ParamSpec::int("presence_credits", 1, 50, "the rich action: credits to place a presence, before its rise and the step's cost"),
             ParamSpec::int("presence_rise", 0, 20, "the rich action: credits more for each earlier use this round"),
             ParamSpec::int("presence_stage", 1, 3, "the rich action: from this stage of adversary card on"),
             ParamSpec::int("harden_credits", 1, 50, "standard project: credits for a hardening token"),
@@ -131,6 +134,7 @@ pub enum StandardAction {
     Presence,
     Station,
     Remove,
+    Clear,
     Move,
     Ambassador,
     Align,
@@ -144,10 +148,11 @@ pub enum StandardAction {
 }
 
 /// The standard actions, in the order they are offered and published.
-pub const STANDARD: [StandardAction; 12] = [
+pub const STANDARD: [StandardAction; 13] = [
     StandardAction::Presence,
     StandardAction::Station,
     StandardAction::Remove,
+    StandardAction::Clear,
     StandardAction::Move,
     StandardAction::Ambassador,
     StandardAction::Align,
@@ -166,6 +171,7 @@ impl StandardAction {
             StandardAction::Presence => "presence",
             StandardAction::Station => "station",
             StandardAction::Remove => "remove",
+            StandardAction::Clear => "clear",
             StandardAction::Move => "move",
             StandardAction::Ambassador => "ambassador",
             StandardAction::Align => "align",
@@ -249,35 +255,83 @@ pub fn rich_key(seat: usize) -> KeyBuf {
     KeyBuf::new("board.rich.").num(seat)
 }
 
-/// The cheapest next step's extra energy (034: printed on the track, each
+/// The cheapest next step's printed cost (034: printed on the track, each
 /// track's last steps cost more), or `None` with both tracks empty.
-fn cheapest_extra(w: &World, g: &GameState, seat: usize) -> Option<i64> {
+fn cheapest_step(w: &World, g: &GameState, seat: usize) -> Option<i64> {
     let b = ai::board(w, seat);
-    let first = b.presence.get(track_taken(g, seat)).map(|u| u.extra);
-    let second = b.presence2.get(track2_taken(g, seat)).map(|u| u.extra);
+    let first = b.presence.get(track_taken(g, seat)).map(|u| u.cost);
+    let second = b.presence2.get(track2_taken(g, seat)).map(|u| u.cost);
     first.into_iter().chain(second).min()
 }
 
-/// How a track's step extra is paid when a presence is placed.
+/// What something costs: the one shape every standard action and every
+/// placement of presence is priced in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Price {
+    pub energy: i64,
+    pub credits: i64,
+    pub chips: i64,
+}
+
+impl Price {
+    pub fn affordable(self, g: &GameState, seat: usize) -> bool {
+        g.resource(seat, Resource::Energy) >= self.energy
+            && g.resource(seat, Resource::Credits) >= self.credits
+            && g.resource(seat, Resource::Chips) >= self.chips
+    }
+
+    fn pay(self, g: &mut GameState, cx: &mut Cx, seat: usize) {
+        cx.add_resource(g, seat, Resource::Energy, -self.energy);
+        cx.add_resource(g, seat, Resource::Credits, -self.credits);
+        cx.add_resource(g, seat, Resource::Chips, -self.chips);
+        cx.tally(g, "board.chips_spent", self.chips);
+    }
+}
+
+/// Who is placing a presence, which sets its price (041: every placement
+/// pays its track step through [`place_presence`] unless a card says free).
 #[derive(Clone, Copy, PartialEq)]
-pub enum StepPay {
-    /// Cards and growth place at no extra.
+pub enum Placing {
+    /// Growth, and a card: the step's cost in energy.
+    Step,
+    /// A card that says "free".
     Free,
-    /// The standard action: 1 energy a step.
-    Energy,
-    /// The rich action: `board.energy_credits` credits a step.
-    Credits,
+    /// The standard action: `board.presence_energy` more.
+    Action,
+    /// The rich action: `board.presence_credits` and its rise, the step at
+    /// `board.energy_credits` credits an energy.
+    Rich,
+}
+
+/// What seat `s` pays to place on a step printing `step`.
+pub fn placing_price(w: &World, g: &GameState, seat: usize, how: Placing, step: i64) -> Price {
+    match how {
+        Placing::Step => Price { energy: step, ..Price::default() },
+        Placing::Free => Price::default(),
+        Placing::Action => Price { energy: w.int("board.presence_energy") + step, ..Price::default() },
+        Placing::Rich => Price {
+            credits: w.int("board.presence_credits")
+                + g.var(&rich_key(seat)) * w.int("board.presence_rise")
+                + step * w.int("board.energy_credits"),
+            ..Price::default()
+        },
+    }
+}
+
+/// Whether seat `s` has a token and can pay its cheapest step `how`, with
+/// `gained` more energy than it holds.
+pub fn can_pay_placement(w: &World, g: &GameState, seat: usize, how: Placing, gained: i64) -> bool {
+    cheapest_step(w, g, seat).is_some_and(|step| {
+        let mut price = placing_price(w, g, seat, how, step);
+        price.energy = (price.energy - gained).max(0);
+        price.affordable(g, seat)
+    })
 }
 
 /// Places one presence for `seat`: the next token off its track (uncovering
-/// the space under it) onto a hex next to its presence. Returns whether placed.
-pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize) -> Res<bool> {
-    place_presence_paying(g, cx, seat, StepPay::Free)
-}
-
-/// [`place_presence`], with the track's step extra paid by `pay`: only tracks
-/// whose next step the seat can pay are offered.
-pub fn place_presence_paying(g: &mut GameState, cx: &mut Cx, seat: usize, pay: StepPay) -> Res<bool> {
+/// the space under it) onto a hex next to its presence, paying `how`; only
+/// tracks whose next step the seat can pay are offered. Returns whether placed.
+pub fn place_presence(g: &mut GameState, cx: &mut Cx, seat: usize, how: Placing) -> Res<bool> {
     let w = cx.world;
     if !ai::can_place(&w, g, seat) {
         return Ok(false);
@@ -286,11 +340,7 @@ pub fn place_presence_paying(g: &mut GameState, cx: &mut Cx, seat: usize, pay: S
     // 021: with two tracks the player chooses which one's next token to take.
     let b = ai::board(&w, seat);
     let (t1, t2) = (track_taken(g, seat), track2_taken(g, seat));
-    let can_pay = |u: &crate::content::Uncover| match pay {
-        StepPay::Free => true,
-        StepPay::Energy => g.resource(seat, Resource::Energy) >= u.extra,
-        StepPay::Credits => g.resource(seat, Resource::Credits) >= u.extra * w.int("board.energy_credits"),
-    };
+    let can_pay = |u: &crate::content::Uncover| placing_price(&w, g, seat, how, u.cost).affordable(g, seat);
     let mut tracks: Vec<(bool, &crate::content::Uncover)> = Vec::new();
     if let Some(u) = b.presence.get(t1).filter(|u| can_pay(u)) {
         tracks.push((false, u));
@@ -313,17 +363,16 @@ pub fn place_presence_paying(g: &mut GameState, cx: &mut Cx, seat: usize, pay: S
         return Ok(false);
     };
     let second = tracks[k].0;
-    let extra = tracks[k].1.extra;
+    let step = tracks[k].1.cost;
     let what = format!("uncovers {}", ai::uncover_label(tracks[k].1));
     let opts = hexes.iter().map(|&h| hex_opt(&w, h)).collect();
     let prompt = format!("Seat {seat}: place presence ({what}) on which hex?");
     let Some(j) = cx.choose(seat, &prompt, opts)? else {
         return Ok(false);
     };
-    match pay {
-        StepPay::Free => {}
-        StepPay::Energy => cx.add_resource(g, seat, Resource::Energy, -extra),
-        StepPay::Credits => cx.add_resource(g, seat, Resource::Credits, -extra * w.int("board.energy_credits")),
+    placing_price(&w, g, seat, how, step).pay(g, cx, seat);
+    if how == Placing::Rich {
+        cx.add_key(g, &rich_key(seat), 1);
     }
     if second {
         cx.add_key(g, &track2_key(seat), 1);
@@ -332,6 +381,7 @@ pub fn place_presence_paying(g: &mut GameState, cx: &mut Cx, seat: usize, pay: S
     }
     cx.add_tokens(g, hexes[j], &presence(seat), 1);
     cx.tally(g, "board.presence_placed", 1);
+    cx.per_round(g, "board.presence_placed", 1);
     Ok(true)
 }
 
@@ -350,39 +400,50 @@ fn build(_b: &Build) -> Result<Box<dyn Module>, String> {
     Ok(Box::new(Board))
 }
 
-/// What seat `s` pays for a standard action now: the rich action rises with
-/// each use this round; a presence also needs its cheapest step's extra.
-fn seat_cost(w: &World, g: &GameState, seat: usize, act: StandardAction) -> (i64, i64, i64) {
-    let (e, cr, chips) = std_cost(w, act);
-    let extra = cheapest_extra(w, g, seat).unwrap_or(0);
+/// What seat `s` pays for a standard action now; a placement, at its
+/// cheapest step, through [`placing_price`].
+pub fn seat_price(w: &World, g: &GameState, seat: usize, act: StandardAction) -> Price {
+    let step = cheapest_step(w, g, seat).unwrap_or(0);
     match act {
-        StandardAction::Presence => (e + extra, cr, chips),
-        StandardAction::PresenceBuy => (
-            e,
-            cr + g.var(&rich_key(seat)) * w.int("board.presence_rise") + extra * w.int("board.energy_credits"),
-            chips,
-        ),
-        _ => (e, cr, chips),
+        StandardAction::Presence => placing_price(w, g, seat, Placing::Action, step),
+        StandardAction::PresenceBuy => placing_price(w, g, seat, Placing::Rich, step),
+        _ => printed_price(w, act),
     }
 }
 
-/// A standard action's printed cost: (energy, credits, chips).
-pub fn std_cost(w: &World, act: StandardAction) -> (i64, i64, i64) {
+/// A standard action's price as the rules print it, before any seat's track.
+fn printed_price(w: &World, act: StandardAction) -> Price {
     let i = |k: &str| w.int(&format!("board.{k}"));
+    let energy = |energy| Price { energy, ..Price::default() };
+    let credits = |credits| Price { credits, ..Price::default() };
     match act {
-        StandardAction::Presence => (i("presence_energy"), 0, 0),
-        StandardAction::Station => (i("build_energy"), 0, i("station_chips")),
-        StandardAction::Remove => (i("remove_energy"), 0, 0),
-        StandardAction::Move => (i("move_energy"), 0, 0),
-        StandardAction::Ambassador => (0, i("ambassador_credits"), 0),
-        StandardAction::Align => (i("align_energy"), 0, 0),
-        StandardAction::Harden => (i("harden_energy"), 0, 0),
-        StandardAction::Chips => (0, 0, 1),
-        StandardAction::PresenceBuy => (0, i("presence_credits"), 0),
-        StandardAction::HardenBuy => (0, i("harden_credits"), 0),
-        StandardAction::Energy => (0, i("energy_credits"), 0),
-        StandardAction::Drain => (0, i("drain_credits"), 0),
+        StandardAction::Presence => energy(i("presence_energy")),
+        StandardAction::Station => Price { energy: i("build_energy"), chips: i("station_chips"), ..Price::default() },
+        StandardAction::Remove => energy(i("remove_energy")),
+        StandardAction::Clear => energy(i("clear_energy")),
+        StandardAction::Move => energy(i("move_energy")),
+        StandardAction::Ambassador => credits(i("ambassador_credits")),
+        StandardAction::Align => energy(i("align_energy")),
+        StandardAction::Harden => energy(i("harden_energy")),
+        StandardAction::Chips => Price { chips: 1, ..Price::default() },
+        StandardAction::PresenceBuy => credits(i("presence_credits")),
+        StandardAction::HardenBuy => credits(i("harden_credits")),
+        StandardAction::Energy => credits(i("energy_credits")),
+        StandardAction::Drain => credits(i("drain_credits")),
     }
+}
+
+/// Takes the corruption marker off hex `h` (the action or a card), for its
+/// reward (041): `clear_unity` Sway toward Unity and `clear_credits` to `seat`.
+pub fn clear_marker(g: &mut GameState, cx: &mut Cx, seat: usize, h: usize) {
+    let w = cx.world;
+    cx.add_tokens(g, h, MARKER, -1);
+    cx.tally(g, "board.markers_removed", 1);
+    if is_city(&w, h) {
+        cx.tally(g, "board.markers_removed_city", 1);
+    }
+    alignment::sway(g, cx, Side::Unity, w.int("board.clear_unity"));
+    cx.add_resource(g, seat, Resource::Credits, w.int("board.clear_credits"));
 }
 
 /// What a standard action does, for the view.
@@ -390,7 +451,8 @@ pub fn std_text(act: StandardAction) -> &'static str {
     match act {
         StandardAction::Presence => "place a presence next to yours (uncovers your track's next space)",
         StandardAction::Station => "build a research station in reach (yours)",
-        StandardAction::Remove => "remove an adversary ambassador in reach, or else a corruption marker",
+        StandardAction::Remove => "remove an adversary ambassador in reach",
+        StandardAction::Clear => "clear a corruption marker in reach, for its reward",
         StandardAction::Move => "move a player ambassador onto a piece in reach",
         StandardAction::Ambassador => "gain a player ambassador",
         StandardAction::Align => "align a clean city you can claim (1 ambassador)",
@@ -401,12 +463,6 @@ pub fn std_text(act: StandardAction) -> &'static str {
         StandardAction::Energy => "standard project: gain 1 energy",
         StandardAction::Drain => "standard project: remove compute from an adversary project",
     }
-}
-
-fn can_afford(g: &GameState, seat: usize, (e, cr, chips): (i64, i64, i64)) -> bool {
-    g.resource(seat, Resource::Energy) >= e
-        && g.resource(seat, Resource::Credits) >= cr
-        && g.resource(seat, Resource::Chips) >= chips
 }
 
 /// The hexes a standard action of `seat` may target (empty: not offered).
@@ -425,9 +481,8 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: StandardAction) -> Ve
         StandardAction::Station => all
             .filter(|&h| buildable(w, g, h) && !w.map.hexes[h].industrial && reach(h))
             .collect(),
-        StandardAction::Remove => all
-            .filter(|&h| reach(h) && (g.tokens(h, ADV_AMBASSADOR) > 0 || g.tokens(h, MARKER) > 0))
-            .collect(),
+        StandardAction::Remove => all.filter(|&h| reach(h) && g.tokens(h, ADV_AMBASSADOR) > 0).collect(),
+        StandardAction::Clear => all.filter(|&h| reach(h) && g.tokens(h, MARKER) > 0).collect(),
         // Onto a piece in reach, from the supply or another hex: never onto the
         // hex the seat's only ambassador already holds (020: that charged the
         // energy and moved nothing).
@@ -493,14 +548,10 @@ fn std_resolve(
             cx.tally(g, "board.chips_sold", 1);
         }
         StandardAction::Presence => {
-            place_presence_paying(g, cx, s, StepPay::Energy)?;
+            place_presence(g, cx, s, Placing::Action)?;
         }
         StandardAction::PresenceBuy => {
-            // The base price and the rise; the step's extra follows the track.
-            let rise = g.var(&rich_key(s)) * w.int("board.presence_rise");
-            cx.add_resource(g, s, Resource::Credits, -rise);
-            cx.add_key(g, &rich_key(s), 1);
-            place_presence_paying(g, cx, s, StepPay::Credits)?;
+            place_presence(g, cx, s, Placing::Rich)?;
         }
         StandardAction::Energy => cx.add_resource(g, s, Resource::Energy, 1),
         StandardAction::Drain => {
@@ -522,12 +573,12 @@ fn std_resolve(
         }
         StandardAction::Remove => {
             if let Some(h) = on_hex(cx)? {
-                if g.tokens(h, ADV_AMBASSADOR) > 0 {
-                    adversary::remove_piece(g, cx, Some(s), h, ADV_AMBASSADOR);
-                } else {
-                    cx.add_tokens(g, h, MARKER, -1);
-                    cx.tally(g, "board.markers_removed", 1);
-                }
+                adversary::remove_piece(g, cx, Some(s), h, ADV_AMBASSADOR);
+            }
+        }
+        StandardAction::Clear => {
+            if let Some(h) = on_hex(cx)? {
+                clear_marker(g, cx, s, h);
             }
         }
         StandardAction::Move => {
@@ -723,6 +774,11 @@ pub fn lose_presence(g: &mut GameState, cx: &mut Cx, h: usize, s: usize, source:
         return false;
     }
     cx.add_tokens(g, h, &presence(s), -1);
+    // 041: a shield on the hex goes with the token it shielded.
+    if !hardenable(g, h) {
+        let shields = g.tokens(h, HARDEN);
+        cx.add_tokens(g, h, HARDEN, -shields);
+    }
     let tainted = g.tokens(h, MARKER) > 0 || g.tokens(h, NODE) > 0 || corrupted(g, h);
     if w.int("board.presence_marker") > 0 && !tainted {
         cx.add_tokens(g, h, MARKER, 1);
@@ -1461,7 +1517,7 @@ impl Module for Board {
     fn legal(&self, _phase: usize, g: &GameState, w: &World, seat: u8, out: &mut Vec<Action>) {
         let s = seat as usize;
         for act in STANDARD {
-            if !can_afford(g, s, seat_cost(w, g, s, act)) {
+            if !seat_price(w, g, s, act).affordable(g, s) {
                 continue;
             }
             if !std_targets(w, g, s, act).is_empty() {
@@ -1503,16 +1559,14 @@ impl Module for Board {
                     return Err(Halt::Illegal("no such standard action".into()));
                 };
                 let targets = std_targets(&w, g, s, act);
-                if !can_afford(g, s, seat_cost(&w, g, s, act)) || targets.is_empty() {
+                let price = seat_price(&w, g, s, act);
+                if !price.affordable(g, s) || targets.is_empty() {
                     return Err("can't take that standard action now".into());
                 }
-                // The printed price; a presence's rise and extra follow in
-                // `std_resolve`, once the track is chosen.
-                let (e, cr, chips) = std_cost(&w, act);
-                cx.add_resource(g, s, Resource::Energy, -e);
-                cx.add_resource(g, s, Resource::Credits, -cr);
-                cx.add_resource(g, s, Resource::Chips, -chips);
-                cx.tally(g, "board.chips_spent", chips);
+                // A placement pays in `place_presence`, once the track is chosen.
+                if !matches!(act, StandardAction::Presence | StandardAction::PresenceBuy) {
+                    price.pay(g, cx, s);
+                }
                 cx.tally(g, &format!("board.std.{}", act.name()), 1);
                 cx.tally(g, "board.std_actions", 1);
                 std_resolve(g, cx, s, act, &targets)
@@ -1706,7 +1760,7 @@ impl Module for Board {
             }
         }
         for act in STANDARD {
-            let (e, cr, chips) = std_cost(w, act);
+            let Price { energy: e, credits: cr, chips } = printed_price(w, act);
             let cost: Vec<String> = [(e, Resource::Energy), (cr, Resource::Credits), (chips, Resource::Chips)]
                 .iter()
                 .filter(|(n, _)| *n > 0)
@@ -1729,17 +1783,17 @@ impl Module for Board {
                 s,
                 "presence_energy_now",
                 "next presence (energy)",
-                seat_cost(w, g, s, StandardAction::Presence).0,
+                seat_price(w, g, s, StandardAction::Presence).energy,
                 None,
-                "the standard action at your cheapest track: printed price plus the step's extra",
+                "the standard action at your cheapest track: printed price plus the step's cost",
             );
             out.seat(
                 s,
                 "presence_credits_now",
                 "next rich action (credits)",
-                seat_cost(w, g, s, StandardAction::PresenceBuy).1,
+                seat_price(w, g, s, StandardAction::PresenceBuy).credits,
                 None,
-                "printed price, plus its rise this round and the step's extra",
+                "printed price, plus its rise this round and the step's cost",
             );
             out.seat(
                 s,

@@ -372,9 +372,6 @@
   "tags": [
    "science"
   ],
-  "keywords": [
-   "tokens"
-  ],
   "effects": [
    {
     "op": "gain",
@@ -382,9 +379,13 @@
     "amount": 1
    },
    {
+    "op": "shield_presence",
+    "count": 1
+   },
+   {
     "op": "add_tokens",
     "kind": "datasets",
-    "amount": 2
+    "amount": 1
    }
   ]
  },
@@ -458,8 +459,8 @@
     "bonus": 1
    },
    {
-    "op": "draw",
-    "count": 1
+    "op": "move_one",
+    "range": 2
    }
   ]
  },
@@ -476,11 +477,11 @@
   "effects": [
    {
     "op": "peek",
-    "count": 2
+    "count": 1
    },
    {
-    "op": "next_round_insight",
-    "amount": 1
+    "op": "delay_threat",
+    "count": 1
    }
   ]
  },
@@ -532,15 +533,19 @@
   "name": "Field Sensor Grid",
   "tier": 1,
   "kind": "program",
-  "cost": 3,
+  "cost": 2,
   "tags": [
    "science"
   ],
   "effects": [
    {
+    "op": "clear_markers",
+    "count": 1
+   },
+   {
     "op": "gain_per_presence",
     "resource": "insight",
-    "max": 2
+    "max": 1
    }
   ]
  },
@@ -841,8 +846,8 @@
   "name": "Open-Weights Release",
   "tier": 2,
   "kind": "program",
-  "cost": 6,
-  "insight": 2,
+  "cost": 4,
+  "insight": 1,
   "tags": [
    "science",
    "cyber"
@@ -852,25 +857,20 @@
   ],
   "effects": [
    {
+    "op": "clear_markers",
+    "count": 2
+   },
+   {
+    "op": "shield_presence",
+    "count": 2
+   },
+   {
     "op": "choose_player"
    },
    {
     "op": "other_gain",
     "resource": "insight",
     "amount": 2
-   },
-   {
-    "op": "other_gain",
-    "resource": "credits",
-    "amount": 3
-   },
-   {
-    "op": "draw",
-    "count": 2
-   },
-   {
-    "op": "next_round_insight",
-    "amount": 1
    }
   ]
  },
@@ -879,14 +879,8 @@
   "name": "Adversarial Inference Sweep",
   "tier": 2,
   "kind": "event",
-  "cost": 7,
-  "insight": 2,
-  "needs": [
-   [
-    "cyber",
-    1
-   ]
-  ],
+  "cost": 5,
+  "insight": 1,
   "tags": [
    "science",
    "cyber",
@@ -901,8 +895,12 @@
     "amount": 1
    },
    {
-    "op": "draw",
+    "op": "delay_threat",
     "count": 2
+   },
+   {
+    "op": "draw",
+    "count": 1
    }
   ]
  },
@@ -2321,13 +2319,13 @@
   ],
   "effects": [
    {
-    "op": "place_presence",
-    "count": 1
-   },
-   {
     "op": "gain",
     "resource": "energy",
     "amount": 1
+   },
+   {
+    "op": "place_presence",
+    "count": 1
    }
   ]
  },
@@ -2828,7 +2826,8 @@
   "effects": [
    {
     "op": "place_presence",
-    "count": 3
+    "count": 3,
+    "free": true
    },
    {
     "op": "gain_per_presence",
@@ -2910,7 +2909,8 @@
    },
    {
     "op": "place_presence",
-    "count": 1
+    "count": 1,
+    "free": true
    }
   ]
  },
@@ -2939,7 +2939,8 @@
    },
    {
     "op": "place_presence",
-    "count": 2
+    "count": 2,
+    "free": true
    }
   ]
  },

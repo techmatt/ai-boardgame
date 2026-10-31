@@ -448,10 +448,11 @@ pub struct Uncover {
     /// `cards.keep_tier2_upgraded` insight instead of `cards.keep_tier2`.
     #[serde(default)]
     pub keep2: bool,
-    /// Energy the standard action pays for this step on top of
-    /// `board.presence_energy` (034: each track's last steps cost more).
+    /// Energy every placement pays for this step (041; a card can say free).
+    /// The action adds `board.presence_energy`; the rich action pays it in
+    /// credits.
     #[serde(default)]
-    pub extra: i64,
+    pub cost: i64,
 }
 
 /// An AI-board power (021, locked: paid by sacrificing tags). `tags` is the
@@ -887,7 +888,7 @@ pub fn is_overlay_key(key: &str) -> bool {
 }
 
 /// One overlay entry applied to the parsed content files. `path` walks
-/// object fields and list indexes (`effects.0.amount`, `presence.4.extra`);
+/// object fields and list indexes (`effects.0.amount`, `presence.4.cost`);
 /// the last step may add a field the JSON left at its default, and parsing
 /// rejects one the schema doesn't have. `id` may be `*`: every row of the
 /// table. The value is JSON, or a bare word taken as a string.

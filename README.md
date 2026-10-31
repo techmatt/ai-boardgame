@@ -565,6 +565,14 @@ standard actions and how games ended; then adversary ambassadors on the board by
 and standard actions by kind. Committed with the report and records in
 `experiments/results/screen-014-board/` (`board.md`).
 
+**Growth screen and gate (041, r20)**: `experiments/screen-041.json` (planner, d2, `c2`, `c3`) and
+`experiments/gate-041.json` (early-stopped), with `python scripts/cards/screen.py DIR --preset 041`
+and `screen.py --gate DIR`. Fixed policies: `planner:always_expand=1`, `always_consolidate=1`,
+`never_remove=1`, `science_board=1`. A planner game at r20 d2 is about 28 s of thread time; a 16-seed
+screen takes about 2 min on 8 threads. Results: `experiments/results/screen-041-growth/growth.md`.
+A cargo build that fails leaves the old exe in `target/release`: a launcher that copies it and
+starts a run must check the build's exit code.
+
 **Clocks screen and gate (034, r19)**: `experiments/screen-034.json` (planner, d2, `c2`, `c3`) and
 `experiments/screen-034-dominance.json` (028's checks, `rich_spend` and `science_rush`, under the
 planner), with `--quick --games 32`, then `python scripts/cards/screen.py DIR --preset 034` and `screen.py --gate DIR`.

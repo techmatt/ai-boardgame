@@ -32,6 +32,14 @@ pub struct Forced {
     pub rich_spend: bool,
     /// Exploit check (034): draft, keep and play Science first, for its discounts.
     pub science_rush: bool,
+    /// Fixed policy (041): the growth option that places the most presence.
+    pub always_expand: bool,
+    /// Fixed policy (041): the growth option that places none.
+    pub always_consolidate: bool,
+    /// Fixed policy (041): never clear a corruption marker.
+    pub never_remove: bool,
+    /// Fixed policy (041): the Science rush, board cards first.
+    pub science_board: bool,
     /// Keep only its `keep_k` cheapest drafted cards (0: off).
     pub keep_k: usize,
     /// Sanity check (028): keep no drafted card.
@@ -98,6 +106,10 @@ impl Forced {
             keep_k,
             rich_spend,
             science_rush,
+            always_expand,
+            always_consolidate,
+            never_remove,
+            science_board,
             keep_none,
             keep_random,
             tier1_only,
@@ -123,6 +135,10 @@ impl Forced {
             || *keep_k > 0
             || *rich_spend
             || *science_rush
+            || *always_expand
+            || *always_consolidate
+            || *never_remove
+            || *science_board
             || *keep_none
             || *keep_random
             || *tier1_only
@@ -157,12 +173,13 @@ impl Forced {
             && (!self.events_only || d.is_event())
             && (!self.free_only || d.tags.contains(&Tag::Diplomacy))
             && (!self.ignore_threats || !counters_threats(&d.effects))
+            && (!self.never_remove || !d.effects.iter().any(|e| matches!(e, Op::ClearMarkers { .. })))
     }
 }
 
 /// Whether `ops` counter a threat or make one cheaper.
 fn counters_threats(ops: &[Op]) -> bool {
-    ops.iter().any(|o| matches!(o, Op::CounterThreat | Op::Jam { .. }))
+    ops.iter().any(|o| matches!(o, Op::CounterThreat | Op::Jam { .. } | Op::DelayThreat { .. }))
 }
 
 pub struct Policy {
@@ -198,7 +215,7 @@ impl Policy {
             drafted.into_iter().filter(coin).collect()
         } else if self.forced.keep_all {
             drafted
-        } else if self.forced.science_rush {
+        } else if self.forced.science_rush || self.forced.science_board {
             let world = rules.world();
             let mut set = plan_keeps(&world, g, s, &self.forced);
             for id in g.pile(&cards::drafted(s)) {
@@ -240,8 +257,9 @@ impl Policy {
             Action::Standard { act, .. } => {
                 let presence = act == "presence" || act == "presence_buy";
                 (f.no_presence && presence)
-                    || (f.turtle && !matches!(act.as_str(), "remove" | "ambassador" | "harden" | "harden_buy" | "chips"))
-                    || (f.free_only && !matches!(act.as_str(), "remove" | "ambassador" | "move" | "chips"))
+                    || (f.never_remove && act == "clear")
+                    || (f.turtle && !matches!(act.as_str(), "remove" | "clear" | "ambassador" | "harden" | "harden_buy" | "chips"))
+                    || (f.free_only && !matches!(act.as_str(), "remove" | "clear" | "ambassador" | "move" | "chips"))
             }
             Action::Play { card, .. } => {
                 let d = cards::def(world, card);
@@ -249,11 +267,11 @@ impl Policy {
             }
             Action::Keep { card, .. } => !f.allows(cards::def(world, card)),
             Action::Growth { seat, option } => {
-                f.stays_put()
-                    && ai::board(world, *seat as usize)
-                        .growth
-                        .get(*option as usize)
-                        .is_some_and(|o| places_presence(&o.effects))
+                let options = &ai::board(world, *seat as usize).growth;
+                let placed = presence_placed(&options[*option as usize].effects);
+                (f.stays_put() && placed > 0)
+                    || (f.always_consolidate && placed > 0)
+                    || (f.always_expand && placed < options.iter().map(|o| presence_placed(&o.effects)).max().unwrap_or(0))
             }
             _ => false,
         }
@@ -261,7 +279,25 @@ impl Policy {
 }
 
 fn places_presence(effects: &[Op]) -> bool {
-    effects.iter().any(|e| matches!(e, Op::PlacePresence { .. }))
+    presence_placed(effects) > 0
+}
+
+/// The presence `effects` place.
+fn presence_placed(effects: &[Op]) -> i64 {
+    effects
+        .iter()
+        .map(|e| if let Op::PlacePresence { count, .. } = e { *count } else { 0 })
+        .sum()
+}
+
+/// Whether a card acts on the board the way 041's Science does.
+fn acts_on_board(d: &CardDef) -> bool {
+    d.effects.iter().any(|e| {
+        matches!(
+            e,
+            Op::ClearMarkers { .. } | Op::ShieldPresence { .. } | Op::DelayThreat { .. } | Op::MoveOne { .. }
+        )
+    })
 }
 
 impl Agent for Policy {
@@ -280,6 +316,14 @@ impl Agent for Policy {
         if keeps {
             if let Some(s) = legal.first().map(|a| a.seat() as usize) {
                 let set = crate::prof::time(crate::prof::Part::Policy, || self.keep_set(rules, g, s));
+                // 041: with insight short, the board cards go first.
+                let board = |a: &Action| matches!(a, Action::Keep { seat, card } if *seat as usize == s
+                    && set.contains(card) && acts_on_board(cards::def(&world, card)));
+                if self.forced.science_board {
+                    if let Some(i) = legal.iter().position(board) {
+                        return i;
+                    }
+                }
                 if let Some(i) = legal.iter().position(
                     |a| matches!(a, Action::Keep { seat, card } if *seat as usize == s && set.contains(card)),
                 ) {
@@ -309,6 +353,19 @@ impl Agent for Policy {
                 matches!(a, Action::Draft { card, .. } | Action::Keep { card, .. } | Action::Play { card, .. } if science(card))
             }) {
                 return i;
+            }
+        }
+        if self.forced.science_board && !pending {
+            let science = |id: &Key, board: bool| {
+                let d = cards::def(&world, id);
+                d.tags.contains(&Tag::Science) && (!board || acts_on_board(d))
+            };
+            for board in [true, false] {
+                if let Some(i) = legal.iter().position(|a| {
+                    matches!(a, Action::Draft { card, .. } | Action::Keep { card, .. } | Action::Play { card, .. } if science(card, board))
+                }) {
+                    return i;
+                }
             }
         }
         // Tier-2 rush: tier 2 whenever the keep is affordable.

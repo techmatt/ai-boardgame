@@ -109,6 +109,24 @@ def tokens_left(c, gs):
     return f"{avg([tokens() - 1 - cnt(g, 'board.presence_placed') / seats for g in gs]):.1f}"
 
 
+@reads(*(f'ai.growth.{b}.{k}' for b in ('builder', 'protector') for k in range(3)))
+def growth(c, gs):
+    """Share of growth picks by option (Expand, Develop, Consolidate), over both boards."""
+    picks = [sum(cnt(g, f'ai.growth.{b}.{k}') for g in gs for b in ('builder', 'protector')) for k in range(3)]
+    return ' / '.join(f'{100 * n / max(1, sum(picks)):.0f}' for n in picks)
+
+
+@reads('board.presence_placed.r01', 'board.presence_placed.r02')
+def placed_by_round(c, gs):
+    """Tokens on or off the board a seat has taken by rounds 6 and 10, the setup token in."""
+    seats = 3 if c['variant'].startswith('c3') else 2
+    def by(r):
+        reached = [g for g in gs if g['rounds'] >= r]
+        n = [1 + sum(cnt(g, f'board.presence_placed.r{k:02}') for k in range(1, r + 1)) / seats for g in reached]
+        return f'{avg(n):.1f}' if n else '-'
+    return f'{by(6)} / {by(10)}'
+
+
 def peak_ambassadors(c, gs):
     peak = 0.0
     for g in gs:
@@ -139,6 +157,11 @@ COLUMNS = {
     'loss_ends': ('losses: Discord / presence / deck-out', loss_ends),
     'presence_rounds': ('presence-loss rounds', lambda c, gs: hist(g['rounds'] for g in gs if g['reason'] == 'presence')),
     'tokens_left': ('tokens left a seat', tokens_left),
+    'growth': ('growth: Expand / Develop / Consolidate %', growth),
+    'markers': ('markers placed / removed', per_game('board.markers', 'board.markers_removed')),
+    'markers_city': ('markers removed from cities', per_game('board.markers_removed_city')),
+    'placed_by_round': ('tokens placed a seat by r6 / r10', placed_by_round),
+    'delayed': ('threats delayed', per_game('threats.delayed')),
     'rich_uses': ('rich uses a game', per_game('board.std.presence_buy')),
     'presence_lost': ('presence lost: wins / losses', split('board.presence_lost')),
     'presence_lost_mean': ('presence lost', per_game('board.presence_lost')),
@@ -171,6 +194,8 @@ COLUMNS = {
 }
 
 PRESETS = {
+    '041': ('variant,d,agent,n,win,win_rounds,loss_rounds,wins_mix,loss_mix,tokens_left,growth,markers,'
+            'markers_city,placed_by_round,rich_uses,presence_lost,freed,delayed', True),
     '034': ('variant,d,agent,n,win,win_rounds,loss_rounds,wins_mix,loss_mix,presence_rounds,tokens_left,'
             'rich_uses,presence_lost,freed', True),
     '028': ('variant,d,agent,n,win,win_rounds,loss_rounds,wins_split,loss_ends,tips,presence_lost,freed,'

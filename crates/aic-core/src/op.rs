@@ -150,8 +150,26 @@ pub enum Op {
         max: i64,
         rate: i64,
     },
-    /// Place `count` presence off your AI board's tracks.
+    /// Place `count` presence off your AI board's tracks, paying each step's
+    /// cost unless `free` (041).
     PlacePresence {
+        count: i64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        free: bool,
+    },
+    /// Clear up to `count` corruption markers in your reach, for each one's
+    /// reward (041).
+    ClearMarkers {
+        count: i64,
+    },
+    /// A hardening token on up to `count` hexes of your presence, in your
+    /// reach (041): it absorbs a destruction there.
+    ShieldPresence {
+        count: i64,
+    },
+    /// Up to `count` active threats wait: they don't execute this round, and
+    /// can be countered next round (041).
+    DelayThreat {
         count: i64,
     },
     /// Remove adversary pieces in one hex, `amount` worth: an ambassador
@@ -531,6 +549,7 @@ impl Op {
         use Slot::*;
         match self {
             Op::Sway { .. } => &[Player, Threat, Team, Twist],
+            Op::PullUnity { .. } => &[Threat, Team, Twist],
             Op::EachDestroyPresence { .. } => &[Threat, Team, Twist],
             Op::Gain { .. } | Op::CounterThreat => &[Player, Team],
             Op::Troops { .. }
@@ -538,7 +557,6 @@ impl Op {
             | Op::CorruptCity
             | Op::PlayersLose { .. }
             | Op::DestroyPresence
-            | Op::PullUnity { .. }
             | Op::LoseInsight { .. }
             | Op::AdversaryBuild => &[Threat, Team],
             Op::Ambassadors { .. }
@@ -586,6 +604,9 @@ impl Op {
             | Op::Transfer { .. }
             | Op::Convert { .. }
             | Op::PlacePresence { .. }
+            | Op::ClearMarkers { .. }
+            | Op::ShieldPresence { .. }
+            | Op::DelayThreat { .. }
             | Op::Damage { .. }
             | Op::DamageCountry { .. }
             | Op::DestroyAll

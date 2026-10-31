@@ -18,7 +18,7 @@ One row per harm, one column per kind of source. A number is how many printed ca
 | projects advanced (compute) | 5 | 6 |  |  |  |  | yes |  |  |  |
 | extra threats |  |  | 2 |  | 1 |  |  |  |  |  |
 | Discord sway | 1 | 1 |  | 5 | 3 | yes |  | yes |  |  |
-| Unity pulled back | 1 |  | 1 |  |  |  |  |  |  |  |
+| Unity pulled back | 1 |  | 1 | 4 |  |  |  |  |  |  |
 | actions or claims blocked | 1 |  |  |  |  |  | yes |  |  |  |
 
 **Checks** (`aic-sim docs --check`, and a fast test): every harm in at least 2 kinds of source; each threat tier at least 5 kinds of harm; no kind of source more than about half of the printed presence destruction. Measured shares are in the 034 screen (`experiments/results/screen-034-clocks/clocks.md`).

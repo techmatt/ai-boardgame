@@ -27,6 +27,8 @@ const PARAMS: &[ParamSpec] = &[
     ParamSpec::int("counter_bonus_all", 0, 10, "difficulty 1+: added to every counter requirement of every threat"),
     ParamSpec::int("extra_threats", 0, 5, "difficulty 1+: extra threats dealt each round in all, one per country in turn"),
     ParamSpec::int("stage1_removed", 0, 3, "difficulty 2+: stage-I cards removed"),
+    ParamSpec::int("stage3_added", 0, 3, "difficulty 2+: stage-III cards added (041: the cap holds, its end gets harder)"),
+    ParamSpec::int("stage2_removed", 0, 3, "difficulty 3+: stage-II cards removed (a shorter round cap)"),
     ParamSpec::int("extra_corrupted", 0, 3, "difficulty 4: more cities per country start corrupted"),
     ParamSpec::int("build_bonus", 0, 5, "difficulty 3+: ambassadors each corrupted city gains on top of city_build"),
     ParamSpec::int("tier2_early", 0, 3, "difficulty 4+: tier-2 threats start this many rounds sooner"),
@@ -209,6 +211,8 @@ fn build(b: &Build) -> Result<Box<dyn Module>, String> {
         return Err("stage_cards: deal at least one card (the deck is the game's clock)".into());
     }
     for (s, &n) in stage_cards.iter().enumerate() {
+        // 041: difficulty 2 adds stage-III cards, which must be printed too.
+        let n = n + if s == 2 { b.int("stage3_added")? } else { 0 };
         let have = b
             .world
             .content
@@ -271,6 +275,12 @@ impl Module for Adversary {
             let mut n = self.stage_cards[stage as usize - 1];
             if stage == 1 && level(&w, 2) {
                 n = (n - w.int("adversary.stage1_removed")).max(0);
+            }
+            if stage == 2 && level(&w, 3) {
+                n = (n - w.int("adversary.stage2_removed")).max(0);
+            }
+            if stage == 3 && level(&w, 2) {
+                n += w.int("adversary.stage3_added");
             }
             deck.extend(ids.into_iter().take(n as usize));
         }

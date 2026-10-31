@@ -379,7 +379,7 @@ fn the_rich_action_opens_at_stage_two_and_rises_with_each_use() {
 }
 
 #[test]
-fn a_track_s_last_steps_cost_more_and_cards_skip_the_extra() {
+fn a_track_s_last_steps_cost_more_and_the_action_pays_its_price_on_top() {
     use crate::modules::ai;
     let (rules, mut g) = lab_with(&[], &[]);
     let w = rules.world();
@@ -389,7 +389,7 @@ fn a_track_s_last_steps_cost_more_and_cards_skip_the_extra() {
     // Both tracks down to their last steps.
     g.vars.insert(board::track_key(0).into(), b.presence.len() as i64 - 1);
     g.vars.insert(board::track2_key(0).into(), b.presence2.len() as i64 - 1);
-    let extra = b.presence.last().unwrap().extra.min(b.presence2.last().unwrap().extra);
+    let extra = b.presence.last().unwrap().cost.min(b.presence2.last().unwrap().cost);
     assert!(extra > 0);
     set_res(&mut g, 0, Resource::Energy, extra);
     assert!(rules.apply_mut(&mut g.clone(), &std_act(0, "presence"), None).is_err(), "base + extra");
@@ -426,7 +426,7 @@ fn the_round_cap_is_the_deck_and_higher_difficulty_shortens_it() {
         let (_, g) = lab_with(&[], &[&arg]);
         g.pile("adversary.deck").len() + g.pile("adversary.next").len()
     };
-    assert_eq!((cap(0), cap(1), cap(2), cap(4)), (11, 11, 10, 10));
+    assert_eq!((cap(0), cap(1), cap(2), cap(3), cap(4)), (11, 11, 11, 10, 10));
 }
 
 #[test]

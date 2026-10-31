@@ -116,8 +116,8 @@ pub fn uncover_label(u: &Uncover) -> String {
     if u.keep2 {
         parts.push("T2 keep -1".into());
     }
-    if u.extra > 0 {
-        parts.push(format!("costs {} energy more", u.extra));
+    if u.cost > 0 {
+        parts.push(format!("costs {} energy", u.cost));
     }
     parts.join(", ")
 }

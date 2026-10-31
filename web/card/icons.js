@@ -51,6 +51,7 @@ const PIECES = {
   slot: `<rect x="4" y="3" width="16" height="19" rx="1.500" fill="none" stroke="currentColor" stroke-width="2.200" stroke-dasharray="3.500 2.500"/>`,
   // The Alignment track: a marker moving toward Unity.
   sway: `${line('M3 12h18M3 8v8M21 8v8', 2.200)}${fill('M9 6.500 16 12l-7 5.500z')}`,
+  marker: fill('M12 2 22 12 12 22 2 12zM12 7l-5 5 5 5 5-5z'),
   threat: fill('M12 2 23 21H1zM10.800 9v6.500h2.400V9zm0 7.800v2.400h2.400v-2.400z'),
   // The adversary deck, looked at.
   // A threat struck through: countered.

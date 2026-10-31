@@ -661,7 +661,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
     // 021: the card and economy per-round counters, as `<key>.rNN` (summed
     // over seats), for the screen's by-round tables.
     for (k, v) in &g.stats.per_round {
-        if k.starts_with("cards.") || k.starts_with("ai.") || k.starts_with("economy.") {
+        if k.starts_with("cards.") || k.starts_with("ai.") || k.starts_with("economy.") || k.starts_with("board.presence") {
             for (i, n) in v.iter().enumerate().skip(1) {
                 if *n != 0 {
                     r.counters.insert(format!("{k}.r{i:02}"), *n);

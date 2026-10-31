@@ -1,0 +1,13 @@
+{
+  "name": "screen-041",
+  "note": "r20 calibration: the planner at d2, 2 and 3 countries. Levers go in as extra variants or --set.",
+  "configs": ["configs/baseline.json"],
+  "variants": [
+    {"name": "c2", "set": []},
+    {"name": "c3", "set": ["countries=3"]}
+  ],
+  "difficulties": [2],
+  "agents": ["planner"],
+  "games": 32,
+  "records": 0
+}
