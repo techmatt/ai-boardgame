@@ -349,16 +349,15 @@
     ]
    },
    {
-    "name": "Develop: place 1 presence, gain 1 insight",
+    "name": "Develop: place 1 presence, draw 1 card",
     "effects": [
      {
       "op": "place_presence",
       "count": 1
      },
      {
-      "op": "gain",
-      "resource": "insight",
-      "amount": 1
+      "op": "draw",
+      "count": 1
      }
     ]
    },

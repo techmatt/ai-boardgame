@@ -547,6 +547,10 @@ impl Content {
             if c.tags.is_empty() || c.tags.len() > 3 {
                 return Err(format!("card {:?}: 1-3 tags", c.id));
             }
+            let printed = c.effects.iter().chain(c.ability.iter().flat_map(|a| &a.effects));
+            if !c.tags.contains(&Tag::Science) && printed.into_iter().any(science_niche) {
+                return Err(format!("{what}: shields, delays and marker clearing are Science's"));
+            }
             if !c.is_building()
                 && (!c.passives.is_empty() || !c.upkeep.is_empty() || c.slotless)
             {
@@ -659,6 +663,9 @@ impl Content {
             }
             for gr in &b.growth {
                 check_ops(&gr.effects, Slot::Player, &what)?;
+            }
+            if b.growth.iter().map(|g| &g.effects).chain(b.powers.iter().map(|p| &p.effects)).flatten().any(science_niche) {
+                return Err(format!("{what}: shields, delays and marker clearing are Science's"));
             }
             for p in &b.powers {
                 check_ops(&p.effects, Slot::Player, &what)?;
@@ -809,6 +816,16 @@ fn seat_resource(r: &Resource, what: &str) -> Result<(), String> {
         Ok(())
     } else {
         resource(r, what)
+    }
+}
+
+/// Whether `op` does a job only Science cards print (046): a shield, a threat
+/// delay or marker clearing. `if` branches included.
+fn science_niche(op: &Op) -> bool {
+    match op {
+        Op::ShieldPresence { .. } | Op::DelayThreat { .. } | Op::ClearMarkers { .. } => true,
+        Op::If { then, otherwise, .. } => then.iter().chain(otherwise).any(science_niche),
+        _ => false,
     }
 }
 

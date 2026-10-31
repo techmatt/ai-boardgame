@@ -54,6 +54,7 @@ pub static DEF: ModuleDef = ModuleDef {
             ParamSpec::int("corruption_reach", 0, 1, "a city that corrupts destroys presence within this many hexes of it"),
             ParamSpec::int("war_reach", 0, 1, "war that destroys a factory destroys presence within this many hexes of it"),
             ParamSpec::int("presence_energy", 0, 20, "standard action: energy to place a presence, on top of the track step's cost"),
+            ParamSpec::int("presence_action_cap", 0, 5, "standard action: placements a seat may make with it a round (0: no limit; the rich action has its own rise)"),
             ParamSpec::int("build_energy", 0, 20, "standard action: energy to build a research station"),
             ParamSpec::int("station_chips", 0, 20, "standard action: chips to build a research station"),
             ParamSpec::int("factory_chips", 0, 5, "chips a player-owned factory makes its owner on a production step"),
@@ -253,6 +254,17 @@ pub fn presence_hexes(w: &World, g: &GameState, seat: usize) -> Vec<usize> {
 /// Seat `s`'s uses of the rich action this round (034).
 pub fn rich_key(seat: usize) -> KeyBuf {
     KeyBuf::new("board.rich.").num(seat)
+}
+
+/// Seat `s`'s uses of the standard placement this round (046).
+pub fn placed_key(seat: usize) -> KeyBuf {
+    KeyBuf::new("board.placed.").num(seat)
+}
+
+/// Whether seat `s` may still take the standard placement this round.
+fn placement_open(w: &World, g: &GameState, seat: usize) -> bool {
+    let cap = w.int("board.presence_action_cap");
+    cap == 0 || g.var(&placed_key(seat)) < cap
 }
 
 /// The cheapest next step's printed cost (034: printed on the track, each
@@ -488,7 +500,10 @@ fn std_targets(w: &World, g: &GameState, seat: usize, act: StandardAction) -> Ve
     let all = 0..g.hexes.len();
     match act {
         StandardAction::Presence | StandardAction::PresenceBuy => {
-            let open = act == StandardAction::Presence || g.var(adversary::STAGE) >= w.int("board.presence_stage");
+            let open = match act {
+                StandardAction::Presence => placement_open(w, g, seat),
+                _ => g.var(adversary::STAGE) >= w.int("board.presence_stage"),
+            };
             if open && ai::can_place(w, g, seat) {
                 presence_hexes(w, g, seat)
             } else {
@@ -566,6 +581,7 @@ fn std_resolve(
         }
         StandardAction::Presence => {
             place_presence(g, cx, s, Placing::Action)?;
+            cx.add_key(g, &placed_key(s), 1);
         }
         StandardAction::PresenceBuy => {
             place_presence(g, cx, s, Placing::Rich)?;
@@ -1600,6 +1616,7 @@ impl Module for Board {
     fn round_start(&self, g: &mut GameState, cx: &mut Cx) {
         for s in 0..g.seats.len() {
             cx.set_key(g, &rich_key(s), 0);
+            cx.set_key(g, &placed_key(s), 0);
         }
     }
 
@@ -1658,7 +1675,7 @@ impl Module for Board {
             .map(|f| format!("board.{}.", f.name()))
             .collect();
         let mut keys: Vec<&str> = flags.iter().map(String::as_str).collect();
-        keys.extend(["board.project.", "board.project_done.", "board.track.", "board.track2.", "board.rich."]);
+        keys.extend(["board.project.", "board.project_done.", "board.track.", "board.track2.", "board.rich.", "board.placed."]);
         out.bookkeeping(&keys);
         for c in 0..w.map.countries.len() {
             for f in FLAGS {
@@ -1786,6 +1803,9 @@ impl Module for Board {
             // 044: Clear's words say what its reward is.
             let text = match act {
                 StandardAction::Clear => clear_words(w),
+                StandardAction::Presence if w.int("board.presence_action_cap") > 0 => {
+                    format!("{}; {} a round", std_text(act), w.int("board.presence_action_cap"))
+                }
                 _ => std_text(act).to_string(),
             };
             let doc = format!(

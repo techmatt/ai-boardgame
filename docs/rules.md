@@ -832,7 +832,7 @@ Every map target is in the player's reach. The view publishes each action with i
 <!-- generated: standard_actions -->
 | Action | Cost | What |
 |---|---|---|
-| Place presence | `presence_energy` 1, plus the step's printed cost (§7) | the next token off your track (uncovering its space) on a land hex next to your presence, with no corruption marker, 1 presence per hex (**locked**) |
+| Place presence | `presence_energy` 1, plus the step's printed cost (§7) | `presence_action_cap` 1 a round (046): the next token off your track (uncovering its space) on a land hex next to your presence, with no corruption marker, 1 presence per hex (**locked**) |
 | Build a research station | `build_energy` 2 + `station_chips` 2 chips | on an open hex in reach that is not an industrial zone; it is yours (your cube) |
 | Remove an adversary ambassador | `remove_energy` 1 | in reach |
 | Clear a corruption marker | `clear_energy` 1 | in reach (041): sway `clear_unity` 1 toward Unity, gain `clear_credits` 0 credits |
@@ -894,9 +894,15 @@ Only tracks whose next step you can pay are offered, and a placement you can't p
 happen: Expand with energy for one step places one.
 
 **Growth chooses (041, candidate).** Each round each player picks one option: **Expand** (2
-presence, a small gain), **Develop** (1 presence, a card or an insight) or **Consolidate** (no
-presence, a solid bundle). Growth should stay something a printed game can grow out of: nothing
-here stops one cheap energy coming from a city's power plant later.
+presence, a small gain), **Develop** (1 presence, draw a card, 046: for both boards) or
+**Consolidate** (no presence, a solid bundle). Growth should stay something a printed game can grow
+out of: nothing here stops one cheap energy coming from a city's power plant later.
+
+**One standard placement a round (046, candidate; the 1 energy stays locked).** The Place presence
+standard action can be taken `presence_action_cap` times a round by each player. Growth, cards and
+the rich action don't count against it. Without the limit a seat that never grew still took 11-12
+tokens by round 10 on its Consolidate energy, and "presence or resources" was a choice only for the
+turn.
 
 <!-- generated: presence_track -->
 | Space | Builder | Protector |
@@ -957,7 +963,7 @@ in a slot (**Default:** one copy each, so a repeated AI's second seat has neithe
 | Board | Innate | Discount | Growth options | Unique cards |
 |---|---|---|---|---|
 | Builder | *Economies of scale*: Each building you play costs 1 credit less. Energy pays for buildings, 1 energy a credit. | energy on buildings 1:1 | Expand: place 2 presence, gain 1 credit; Develop: place 1 presence, draw 1 card; Consolidate: gain 4 credits and 2 energy; next building this round costs 2 less | Turnkey Factory, Venture Capital, Modular Expansion |
-| Protector | *Bulwark*: You may harden buildings (standard action, 1 energy a token). Energy pays for Security cards, 1 energy a credit. | energy on Security cards 1:1 | Expand: place 2 presence, gain 1 energy; Develop: place 1 presence, gain 1 insight; Consolidate: gain 3 energy and 2 credits; harden 2 buildings in your reach, in one country | Point Defense, Strike Team, Shelter Order |
+| Protector | *Bulwark*: You may harden buildings (standard action, 1 energy a token). Energy pays for Security cards, 1 energy a credit. | energy on Security cards 1:1 | Expand: place 2 presence, gain 1 energy; Develop: place 1 presence, draw 1 card; Consolidate: gain 3 energy and 2 credits; harden 2 buildings in your reach, in one country | Point Defense, Strike Team, Shelter Order |
 <!-- /generated -->
 
 Hardening (the Protector's growth, the standard action, cards, Point Defense) goes only on
@@ -1076,15 +1082,18 @@ The cards config lists which cards are in the game (baseline: all of them).
   income 1": your production of that resource falls for the rest of the game; it can't
   be played if that income is lower). **Insight to play (022):** 0 for small programs
   and events, 1 by default (removal events included), 2 for big effects and nearly all
-  tier 2 (the set: 35 / 78 / 37 cards at 0 / 1 / 2); it comes from
+  tier 2 (the set: 36 / 77 / 37 cards at 0 / 1 / 2); it comes from
   the same insight as keeps, and the credit conversion is for keeps only. Its `needs`
   (tags on your cards in play) are checked only when it is played. Each card's price is
   in [cards.md](cards.md); the reasoning is in [card-pricing.md](card-pricing.md).
-- **Science acts on the board (041, candidate).** Four tier-1 and two tier-2 Science cards clear
-  corruption markers, put a hardening token on a hex of your presence
-  (which absorbs a destruction there as on a building), make a threat wait a
-  round (it skips this round's execution, stays up, and can be countered next
-  round) or move an ambassador. Priced in [card-pricing.md](card-pricing.md).
+- **Science owns a niche (041, 046, candidate).** Only Science cards clear corruption markers,
+  put a hardening token on a hex of your presence (a shield, which absorbs a destruction there as
+  on a building) or make a threat wait a round (a delay: it skips this round's execution, stays
+  up, and can be countered next round); the content check
+  refuses any of the three on a card without the tag, an AI board's growth or a power. Five tier-1
+  and three tier-2 cards do it. No card `needs` Science for it: a team without the tag still has
+  the Clear standard action, its counters and the board. Priced in
+  [card-pricing.md](card-pricing.md).
 - **Tag discounts (034, candidate; the Terraforming Mars pattern).** Every `science_every`
   Science tags you have take 1 insight off your tier-2 keeps and your card plays; every
   `industry_every` Industry tags take 1 credit off your buildings, as steel does. Neither goes
@@ -1285,6 +1294,7 @@ edit the source, not the table.
 | `board.corruption_reach` | 1 | 0..1 | a city that corrupts destroys presence within this many hexes of it |
 | `board.war_reach` | 0 | 0..1 | war that destroys a factory destroys presence within this many hexes of it |
 | `board.presence_energy` | 1 | 0..20 | standard action: energy to place a presence, on top of the track step's cost |
+| `board.presence_action_cap` | 1 | 0..5 | standard action: placements a seat may make with it a round (0: no limit; the rich action has its own rise) |
 | `board.build_energy` | 2 | 0..20 | standard action: energy to build a research station |
 | `board.station_chips` | 2 | 0..20 | standard action: chips to build a research station |
 | `board.factory_chips` | 1 | 0..5 | chips a player-owned factory makes its owner on a production step |

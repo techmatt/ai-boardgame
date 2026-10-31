@@ -141,3 +141,49 @@ fn a_shield_goes_with_a_token_lost_another_way() {
     with_cx(&rules, |cx| board::lose_presence(&mut g, cx, a, 0, "test"));
     assert_eq!(g.tokens(a, HARDEN), 0);
 }
+
+#[test]
+fn the_standard_placement_is_once_a_round_and_the_cap_can_be_off() {
+    for (sets, second) in [(&[][..], false), (&["board.presence_action_cap=0"][..], true)] {
+        let (rules, mut g) = at_step(sets, 1);
+        set_res(&mut g, 0, Resource::Energy, 9);
+        rules.apply_mut(&mut g, &std_act(0, "presence"), None).unwrap();
+        answer_all(&rules, &mut g);
+        let again = rules.apply_mut(&mut g, &std_act(0, "presence"), None);
+        assert_eq!(again.is_ok(), second, "{sets:?}");
+    }
+}
+
+#[test]
+fn shields_delays_and_marker_clearing_are_refused_off_science() {
+    for op in ["shield_presence", "delay_threat", "clear_markers"] {
+        let set = format!("cards.payroll_automation.effects=[{{\"op\":\"{op}\",\"count\":1}}]");
+        let err = Rules::new(&baseline_with(&[&set])).err().expect("refused");
+        assert!(err.contains("Science"), "{err}");
+        let on_science = format!("cards.literature_crawler.effects=[{{\"op\":\"{op}\",\"count\":1}}]");
+        assert!(Rules::new(&baseline_with(&[&on_science])).is_ok());
+    }
+}
+
+#[test]
+fn develop_can_reshuffle_the_tier_1_deck() {
+    let rules = Rules::new(&baseline()).unwrap();
+    let mut g = rules.new_game(1);
+    let mut legal = Vec::new();
+    loop {
+        rules.legal_actions_into(&g, &mut legal);
+        if legal.iter().any(|a| matches!(a, Action::Growth { .. })) {
+            break;
+        }
+        rules.apply_mut(&mut g, &legal[0], None).unwrap();
+    }
+    let seat = legal[0].seat();
+    let hand = crate::modules::cards::hand(seat as usize);
+    let held = g.pile(&hand).len();
+    let deck = g.pile("cards.deck.1").to_vec();
+    g.piles.insert("cards.deck.1".into(), Vec::new().into());
+    g.piles.insert("cards.discard.1".into(), deck.clone().into());
+    act(&rules, &mut g, Action::Growth { seat, option: 1 });
+    assert_eq!(g.pile(&hand).len(), held + 1);
+    assert_eq!(g.pile("cards.deck.1").len(), deck.len() - 1);
+}

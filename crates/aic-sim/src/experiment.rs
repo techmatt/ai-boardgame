@@ -589,7 +589,7 @@ pub fn play_one(spec: &Spec, cells: &[Cell], ci: usize, seed: u64) -> GameResult
             if real_choices % spec.closeness.every == 0 {
                 let t = Instant::now();
                 let mut s =
-                    search::greedy_scores(rules, &probe_eval, &mut probe_rng, &g, &legal, 1, 1, 1);
+                    search::greedy_scores(rules, &probe_eval, &mut probe_rng, &g, &legal, 1, 1, 1, search::full_growth(1));
                 s.sort_by(|a, b| b.total_cmp(a));
                 // An option the rules refused on a guess scores -inf: two of
                 // them would make the gap NaN; count that as wide open.

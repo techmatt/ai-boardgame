@@ -380,12 +380,7 @@
    },
    {
     "op": "shield_presence",
-    "count": 1
-   },
-   {
-    "op": "add_tokens",
-    "kind": "datasets",
-    "amount": 1
+    "count": 2
    }
   ]
  },
@@ -470,7 +465,7 @@
   "tier": 1,
   "kind": "program",
   "cost": 2,
-  "insight": 1,
+  "insight": 0,
   "tags": [
    "science"
   ],
@@ -540,7 +535,7 @@
   "effects": [
    {
     "op": "clear_markers",
-    "count": 1
+    "count": 2
    },
    {
     "op": "gain_per_presence",
@@ -1750,8 +1745,8 @@
   ],
   "effects": [
    {
-    "op": "peek",
-    "count": 2
+    "op": "clear_markers",
+    "count": 1
    },
    {
     "op": "draw",
@@ -2171,9 +2166,8 @@
     "amount": 2
    },
    {
-    "op": "gain",
-    "resource": "credits",
-    "amount": 2
+    "op": "shield_presence",
+    "count": 2
    }
   ]
  },
@@ -3962,10 +3956,10 @@
   "effects": [
    {
     "op": "peek",
-    "count": 2
+    "count": 1
    },
    {
-    "op": "draw",
+    "op": "delay_threat",
     "count": 1
    }
   ]

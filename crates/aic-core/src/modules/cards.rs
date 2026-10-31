@@ -798,7 +798,7 @@ fn top_of(g: &mut GameState, cx: &mut Cx, tier: u8) -> Option<Key> {
         if cards.is_empty() {
             return None;
         }
-        shuffle(&mut cards, cx.rng(g, "cards"));
+        shuffle(&mut cards, cx.deck_rng(g));
         cx.set_pile(g, &discard_pile(tier), Vec::new());
         cx.set_pile(g, &deck(tier), cards);
         cx.note(None, || format!("Tier-{tier} discards reshuffled into the deck"));

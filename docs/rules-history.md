@@ -7,6 +7,27 @@ What each rules revision changed, what it replaced and whether it is **locked** 
 record, moved out of it in 025 otherwise as written, so a row quoting a number or a card
 is as of its revision. Add a table here with every rules change.
 
+**Revision 22 (046): one standard placement, a Science niche, a better Develop.** Matt's rulings on
+041 and 042 (2026-10-30). (The prompt called this r21; 044 took that number.) The round cap's quiet
+backstop is **locked**: 0 cap losses is fine and it has no share target; all else is a candidate.
+
+| What | Was | Now | Status |
+|---|---|---|---|
+| Place presence (standard action) | any number a round | `presence_action_cap` 1 a seat a round; the price stays 1 energy (locked, 016); growth, cards and the rich action don't count | candidate |
+| Develop | Builder: 1 presence, a card; Protector: 1 presence, 1 insight | both: 1 presence, draw 1 tier-1 card | candidate |
+| Shields, threat delays, marker clearing on cards | any card, by custom | Science only, refused at load (no card needed moving; `needs` unchanged, no tag mandatory) | candidate |
+| Field Sensor Grid | clear 1 | clear 2 | candidate |
+| Benchmark Suite | 1 insight, shield 1, 1 Dataset | 1 insight, shield 2 | candidate |
+| Predictive Modelling | 1 insight to play | 0 | candidate |
+| Threat Forecast Engine | peek 2, draw 1 | peek 1, one threat waits | candidate |
+| Shadow Broker Feed | peek 2, draw 1 | clear 1, draw 1 | candidate |
+| Mesh Intrusion Pact | gain 2 credits | shield 2 instead | candidate |
+
+Agents, no rules change: growth is scored at full depth at the top level only, and the planner's line
+follows that pick; drafted and packet cards count only as far as the round's insight keeps them
+(`w.packet_budget`); the keep plan adds `plan_niche` for each marker a card would clear, threat it would delay
+and shield it prints. Screen: `experiments/results/screen-046-niche/niche.md`.
+
 **Revision 21 (044, bug hunt): rules that didn't run, cards offered for nothing.** All fixes;
 none changes a number.
 

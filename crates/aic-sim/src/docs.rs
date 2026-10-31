@@ -665,7 +665,7 @@ fn standard_actions_block(r: &Rules) -> String {
         [
             "Place presence".to_string(),
             format!("{}, plus the step's printed cost (§7)", t("board.presence_energy")),
-            "the next token off your track (uncovering its space) on a land hex next to your presence, with no corruption marker, 1 presence per hex (**locked**)".to_string(),
+            format!("{} a round (046): the next token off your track (uncovering its space) on a land hex next to your presence, with no corruption marker, 1 presence per hex (**locked**)", t("board.presence_action_cap")),
         ],
         [
             "Build a research station".to_string(),
@@ -1252,7 +1252,7 @@ mod tests {
             ("board.remove_energy=3", standard_actions_block),
             ("board.base_unity=3", sway_sources_block),
             ("alignment.unity_ease=1,3,5", purge_ease_block),
-            ("cards.keep_tier2=4", new_players_block),
+            ("cards.keep_tier2=5", new_players_block),
             ("adversary.corrupt_at=7", game_end_block),
             ("adversary.stage_cards=3,5,2", round_cap_block),
             ("ai.slots=5,3", |r| boards_block(r, content())),

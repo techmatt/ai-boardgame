@@ -508,6 +508,13 @@ impl<'a> Cx<'a> {
         g.seats[seat].exhausted.retain(|c| c.as_str() != card);
     }
 
+    /// The card decks' stream, for a reshuffle: a draw is an op, so it runs in
+    /// whichever module's phase played it (046: Develop's draw in `ai.growth`
+    /// emptied the tier-1 deck and panicked in [`Cx::rng`]).
+    pub fn deck_rng<'g>(&self, g: &'g mut GameState) -> &'g mut Stream {
+        Arc::make_mut(g.rng.get_mut("cards").expect("the cards module has a stream"))
+    }
+
     /// The stream for one of this variant's declared purposes. Drawing from
     /// any other purpose, even one another module declared, panics.
     pub fn rng<'g>(&self, g: &'g mut GameState, purpose: &str) -> &'g mut Stream {

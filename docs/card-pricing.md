@@ -5,6 +5,34 @@ generated from `content/cards.json`. The screen that checked these prices, and t
 patches it led to, are in
 [experiments/results/screen-023-cards/cards.md](../experiments/results/screen-023-cards/cards.md).
 
+## 046's changes (r22)
+
+Shields, delays and marker clearing are Science's alone (the content check refuses them elsewhere;
+all five cards that carried one already had the tag). The niche was real but thin: five cards in 150,
+kept 1.7-2.5 a game, played 1-1.5, and ignoring Science stayed level. So eight cards now do it, and
+each pays back by itself within two rounds of a marker or a threat landing near a city. Same
+yardsticks as 041; a marker on a city is also a step of `corrupt_at` 6, so one or two clears take a
+city back out of reach of a Fifth Column round.
+
+| card | was | now | payback |
+|---|---|---|---|
+| Field Sensor Grid (T1) | clear 1, up to 1 insight | clear 2, up to 1 insight | 2 cr for up to 2 × (1 energy + 1 Sway) plus 4 credits of insight: the round it is played |
+| Benchmark Suite (T1) | 1 insight, shield 1, 1 Dataset | 1 insight, shield 2 | 2 cr less 4 of insight is free; each hit absorbed saves a token and a marker, about 7 |
+| Predictive Modelling (T1) | 2 cr + 1 insight | 2 cr, 0 insight | half a counter, 2-3 credits, the round it is played: one copy pays back on one threat |
+| Threat Forecast Engine (T1) | peek 2, draw 1 | peek 1, one threat waits | the same at three tags; a second delay answers the round the first comes back |
+| Shadow Broker Feed (T1) | peek 2, draw 1 | clear 1, draw 1 | 2 cr for about 3 of marker and a blind card |
+| Mesh Intrusion Pact (T2) | drain all 3, gift, 2 credits | drain all 3, gift, shield 2 | the 2 credits become up to 14 when Discord's presence hits start |
+
+Loop: Science niche, fewer losses, more insight, more Science. Each effect is fixed, the discount
+floor stays at 1 and eight of 150 cards do it, so a table can't assemble more than a few a game. The
+Clear action stays at `clear_energy` 1: at 2 the team without Science lost as much as the team with
+it (16 seeds: 94 / 88 at c2, 44 / 31 at c3, against 100 / 88 and 56 / 38), so board play stays the
+team's fallback, as the ruling says, and Science is the cheaper, bigger answer.
+
+**The tier-2 keep stays 3, 2 with the upgrade.** A dearer keep doesn't make the mix beat the tier-2
+rush; it only makes the game harder. Planner and rush win %, 12 seeds, c2 / c3: 3 and 2: 100 and 100 /
+33 and 42; 3 and 3: 67 and 75 / 8 and 17; 4 and 3: 83 and 75 / 8 and 25.
+
 ## 041's changes (r20)
 
 Science paid only in insight and cards, and insight becomes board change only through other tags'
@@ -24,8 +52,9 @@ counter (2-3 credits: it still has to be answered, or it hits next round); a mov
 | Adversarial Inference Sweep (T2) | 7 cr + 2 insight, needs 1 Cyber, drain all 1, draw 2 | 5 cr + 1 insight, drain all 1, 2 threats wait, draw 1 | a swing round's worth of counters put off; the draw shrinks to pay for it |
 
 The two tier-2 prices come from the screen (`experiments/screen-041-science2.json`): at 6 and 7 credits
-the planner kept them a third of the time and played one in eight dealt. Agents draft tier 2 nearly
-every pick, so tier-2 Science is the part of the tag they see at all.
+the planner kept them a third of the time and played one in eight dealt. Agents draft tier 2 three
+picks in four, so tier-2 Science is the part of the tag they see most (046: Develop's draws now reach
+the tier-1 deck too).
 
 **Placing presence.** Every placement now pays its track step, so a placing card's price is its own
 plus the step's. Pylon Drop gains its energy first, so the card can pay a cheap step. Tier-1 cards pay;

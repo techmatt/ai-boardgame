@@ -27,7 +27,7 @@ use rand_chacha::ChaCha8Rng;
 
 use super::eval::{Eval, Weights};
 use super::policy::{Forced, Policy};
-use super::search::{greedy_scores, pick, Greedy, PhaseHistory};
+use super::search::{full_growth, greedy_scores, pick, Greedy, PhaseHistory};
 use crate::prof::{self, Part};
 
 /// The phase the planner searches.
@@ -102,7 +102,7 @@ impl Planner {
     /// a line repeats.
     fn policy(&self, g: &GameState) -> Box<dyn Agent + Send> {
         let rng = ChaCha8Rng::seed_from_u64(g.seed ^ g.stats.actions as u64);
-        let inner = Box::new(Greedy::new(self.ev.clone(), rng, self.cfg.samples, 1, self.cfg.choices).pruned(self.cfg.prune));
+        let inner = Box::new(Greedy::new(self.ev.clone(), rng, self.cfg.samples, 1, self.cfg.choices).pruned(self.cfg.prune).in_rollout());
         Box::new(Policy::new(inner, self.forced.clone()))
     }
 
@@ -198,7 +198,7 @@ impl Agent for Planner {
             self.spent = (state.round, 0);
         }
         let samples = self.cfg.samples;
-        let mut scores = greedy_scores(rules, &self.ev, &mut self.rng, state, legal, samples, 1, self.cfg.choices);
+        let mut scores = greedy_scores(rules, &self.ev, &mut self.rng, state, legal, samples, 1, self.cfg.choices, full_growth(self.cfg.choices));
         self.history.mask(legal, &mut scores);
         let engine = pick(legal, &scores);
         let stop = state.round + self.cfg.horizon;
@@ -206,6 +206,13 @@ impl Agent for Planner {
             self.history.push(&legal[engine]);
             return engine;
         };
+        // 046: a line's growth was scored shallow, so a real one is the top
+        // level's score, and the line follows it.
+        if matches!(legal[engine], Action::Growth { .. }) && best.actions.get(best.next) != Some(&legal[engine]) {
+            if let Some(l) = self.line_from(rules, state, Some(&legal[engine]), stop) {
+                best = l;
+            }
+        }
         let phase = state.config.round.get(state.phase).map_or("", String::as_str);
         if phase.starts_with(ACTION_PHASE) {
             let mut order: Vec<usize> = (0..legal.len()).filter(|&i| scores[i].is_finite()).collect();

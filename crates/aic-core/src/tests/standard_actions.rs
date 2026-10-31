@@ -328,10 +328,12 @@ fn placing_presence_takes_the_next_track_token_and_uncovers_its_income() {
         (board::track_taken(&g, 0), credit_income(&g), ai::keep2(&w, &g, 0)),
         (2, 2, false)
     );
+    g.vars.insert(board::placed_key(0).into(), 0);
     act(&rules, &mut g, std_act(0, "presence"));
     // The 3rd: the tier-2 keep upgrade (021: no tier-2 gate).
     assert_eq!((board::track_taken(&g, 0), ai::keep2(&w, &g, 0)), (3, true));
     assert_eq!(presence_of(&g, 0).len(), 3);
+    g.vars.insert(board::placed_key(0).into(), 0);
     // The tracks run out after their last spaces (021: both of them).
     g.vars
         .insert(board::track_key(0).into(), ai::board(&w, 0).presence.len() as i64);

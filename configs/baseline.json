@@ -39,6 +39,7 @@
         "corruption_reach": 1,
         "war_reach": 0,
         "presence_energy": 1,
+        "presence_action_cap": 1,
         "build_energy": 2,
         "station_chips": 2,
         "factory_chips": 1,

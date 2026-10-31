@@ -14,7 +14,7 @@
 //! candidates) in value-per-cost order, filled into each round's budget.
 
 use aic_core::content::{CardDef, Op, Resource, Tag};
-use aic_core::modules::{ai, cards, common, economy, effects};
+use aic_core::modules::{ai, cards, common, economy, effects, threats};
 use aic_core::module::World;
 use aic_core::{fnv1a64, Action, Agent, GameState, Key, Rules};
 
@@ -94,6 +94,11 @@ pub struct Forced {
     pub plan_t2: f64,
     /// What a credit paid for a keep costs the plan (024).
     pub plan_credit: f64,
+    /// What the keep plan adds, in credits, for each marker a card would clear
+    /// and threat it would delay on the table as it stands, and each shield it
+    /// prints (046: priced at its printed cost, a 2-credit Science card lost
+    /// every keep to a tier-2).
+    pub plan_niche: f64,
 }
 
 impl Forced {
@@ -130,6 +135,7 @@ impl Forced {
             plan_hand: _,
             plan_t2: _,
             plan_credit: _,
+            plan_niche: _,
         } = self;
         *keep_all
             || *keep_k > 0
@@ -457,8 +463,8 @@ pub fn plan_keeps(w: &World, g: &GameState, s: usize, f: &Forced) -> Vec<Key> {
     let mut drafted = g.pile(&cards::drafted(s)).to_vec();
     let order = |ids: &mut Vec<Key>| {
         ids.sort_by(|a, b| {
-            ratio(w, g, s, b)
-                .total_cmp(&ratio(w, g, s, a))
+            ratio(w, g, s, b, f)
+                .total_cmp(&ratio(w, g, s, a, f))
                 .then_with(|| a.cmp(b))
         })
     };
@@ -497,9 +503,29 @@ fn plan_value(w: &World, g: &GameState, s: usize, kept: &[Key], f: &Forced) -> f
     plan(w, g, s, kept, f).map_or(f64::NEG_INFINITY, |(v, _)| v)
 }
 
-/// The card's value: its printed cost plus 1 (a play is worth something).
-fn value(d: &CardDef) -> f64 {
-    1.0 + list_cost(d) as f64
+/// The jobs `d` would do for seat `s` on this table: markers in reach to
+/// clear, threats to delay, a shield always.
+fn niche_jobs(w: &World, g: &GameState, s: usize, d: &CardDef) -> i64 {
+    d.effects
+        .iter()
+        .map(|e| match e {
+            Op::ClearMarkers { count } => {
+                let open = |h: &usize| g.tokens(*h, common::MARKER) > 0 && common::in_reach(w, g, s, *h);
+                (*count).min((0..g.hexes.len()).filter(open).count() as i64)
+            }
+            Op::DelayThreat { count } => {
+                (*count).min(threats::active(g).iter().filter(|(t, _)| !threats::waits(g, t)).count() as i64)
+            }
+            Op::ShieldPresence { count } => *count,
+            _ => 0,
+        })
+        .sum()
+}
+
+/// The card's value: its printed cost plus 1 (a play is worth something),
+/// plus the jobs it would do (046).
+fn value(w: &World, g: &GameState, s: usize, d: &CardDef, f: &Forced) -> f64 {
+    1.0 + list_cost(d) as f64 + f.plan_niche * niche_jobs(w, g, s, d) as f64
 }
 
 /// Whether a building that must go over one of the seat's can (024: the
@@ -515,9 +541,9 @@ fn spend(w: &World, g: &GameState, s: usize, d: &CardDef) -> i64 {
     credit_equivalent(d, cards::play_cost(w, g, s, d))
 }
 
-fn ratio(w: &World, g: &GameState, s: usize, id: &str) -> f64 {
+fn ratio(w: &World, g: &GameState, s: usize, id: &str, f: &Forced) -> f64 {
     let d = cards::def(w, id);
-    value(d) / (1 + spend(w, g, s, d)) as f64
+    value(w, g, s, d, f) / (1 + spend(w, g, s, d)) as f64
 }
 
 /// The plan with `kept` bought now: its value, and the cards it plays.
@@ -558,8 +584,8 @@ fn plan(
     let mut pool: Vec<Key> = g.pile(&cards::hand(s)).to_vec();
     pool.extend(kept.iter().cloned());
     pool.sort_by(|a, b| {
-        ratio(w, g, s, b)
-            .total_cmp(&ratio(w, g, s, a))
+        ratio(w, g, s, b, f)
+            .total_cmp(&ratio(w, g, s, a, f))
             .then_with(|| a.cmp(b))
     });
     let mut planned: Vec<Key> = Vec::new();
@@ -598,7 +624,7 @@ fn plan(
                 b.energy -= d.energy;
                 b.antimatter -= d.antimatter;
                 let share = if d.tier == 2 { f.plan_t2 } else { 1.0 };
-                total += share * value(d) * (1.0 - WAIT * round as f64).max(0.1);
+                total += share * value(w, g, s, d, f) * (1.0 - WAIT * round as f64).max(0.1);
                 planned.push(id.clone());
             }
         }

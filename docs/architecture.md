@@ -487,7 +487,7 @@ In the baseline:
   on its track, and ambassadors on the board; it publishes every standard action with
   its cost (`View.standard`, read by the viewer's labels) and each adversary troop's
   next target and how many marches away (`View.arrows`, 019, drawn as arrows); bookkeeping
-  `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`, `board.track2.*`, `board.rich.*`.
+  `board.<flag>.*`, `board.project.*`, `board.project_done.*`, `board.track.*`, `board.track2.*`, `board.rich.*`, `board.placed.*`.
 - `economy` adds each seat's income per resource and the next round's bonus insight
   (bookkeeping `economy.bonus_insight`, shown as its own global while >0;
   `economy.production.*`, one-time permanent gains, counted in the income;

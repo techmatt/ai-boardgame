@@ -146,6 +146,11 @@ pub struct Weights {
     /// tier pick is a choice (before 023 a tier pick scored nothing, and
     /// tier 2 was drafted only once the tier-1 deck ran dry).
     pub packet_keep: f64,
+    /// 046: above 0, drafted and packet cards count only as far as this
+    /// round's insight keeps them, best first. Priced one at a time, every
+    /// tier-2 pick looked worth a keep and agents drafted tier 2 three picks
+    /// in four, more than a seat could keep, and tier-1 Science went unseen.
+    pub packet_budget: f64,
     /// A building in play: `built + built_cost * cost`.
     pub built: f64,
     pub built_cost: f64,
@@ -259,6 +264,7 @@ impl Default for Weights {
             hand_cost: 0.4,
             drafted: 0.3,
             packet_keep: 1.0,
+            packet_budget: 1.0,
             built: 4.0,
             built_cost: 0.5,
             threat: 6.0,
@@ -731,23 +737,51 @@ impl Eval {
                 .pile(&cards::hand(s))
                 .iter()
                 .map(|id| w.hand + w.hand_cost * Self::cost(cards::def(&world, id)))
-                .chain(
-                    g.pile(&cards::drafted(s))
-                        .iter()
-                        .map(|id| w.drafted * (w.hand + w.hand_cost * Self::cost(cards::def(&world, id)))),
-                )
-                .chain(g.pile(&cards::packet(s)).iter().map(|id| {
-                    let d = cards::def(&world, id);
-                    let keep = keep_insight(&world, d.tier);
-                    let v = w.hand + w.hand_cost * (Self::cost(d) - w.packet_keep * keep);
-                    w.drafted * v.max(0.0)
-                }))
                 .collect();
+            let drafted = g.pile(&cards::drafted(s)).iter().map(|id| {
+                let d = cards::def(&world, id);
+                (w.drafted * (w.hand + w.hand_cost * Self::cost(d)), d.tier)
+            });
+            let packet = g.pile(&cards::packet(s)).iter().map(|id| {
+                let d = cards::def(&world, id);
+                let keep = keep_insight(&world, d.tier);
+                let v = w.hand + w.hand_cost * (Self::cost(d) - w.packet_keep * keep);
+                (w.drafted * v.max(0.0), d.tier)
+            });
+            let picks: Vec<(f64, u8)> = drafted.chain(packet).collect();
+            self.keepable(&world, g, s, picks, &mut cards);
             *v += Self::capped(&mut cards, w.hand_cap);
             for id in g.pile(&cards::built(s)) {
                 *v += w.built + w.built_cost * Self::cost(cards::def(&world, id));
             }
             self.in_play_value(rules, g, s, v);
+        }
+    }
+
+    /// Adds to `cards` the value of each of seat `s`'s picks (value, tier) that
+    /// its insight this round keeps, best first (046; `packet_budget` 0: all).
+    fn keepable(
+        &self,
+        world: &aic_core::module::World,
+        g: &GameState,
+        s: usize,
+        mut picks: Vec<(f64, u8)>,
+        cards: &mut Vec<f64>,
+    ) {
+        if self.w.packet_budget <= 0.0 {
+            cards.extend(picks.iter().map(|p| p.0));
+            return;
+        }
+        picks.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let mut left = g.resource(s, Resource::Insight);
+        let mut kept = 0;
+        for (v, tier) in picks {
+            let (need, _) = cards::keep_need(world, g, s, tier, kept);
+            if need <= left {
+                left -= need;
+                kept += 1;
+                cards.push(v);
+            }
         }
     }
 
@@ -902,13 +936,16 @@ impl Eval {
                 p * (w.hand + w.hand_cost * Self::cost(d))
             };
             let mut cards: Vec<f64> = g.pile(&cards::hand(s)).iter().map(|id| play(id)).collect();
+            let mut picks = Vec::new();
             for id in g.pile(&cards::drafted(s)) {
-                cards.push(w.drafted * play(id));
+                picks.push((w.drafted * play(id), cards::def(&world, id).tier));
             }
             for id in g.pile(&cards::packet(s)) {
-                let keep = keep_insight(&world, cards::def(&world, id).tier);
-                cards.push(w.drafted * (play(id) - w.hand_cost * w.packet_keep * keep).max(0.0));
+                let tier = cards::def(&world, id).tier;
+                let keep = keep_insight(&world, tier);
+                picks.push((w.drafted * (play(id) - w.hand_cost * w.packet_keep * keep).max(0.0), tier));
             }
+            self.keepable(&world, g, s, picks, &mut cards);
             v += Self::capped(&mut cards, w.hand_cap);
         }
         *out += v;
@@ -918,6 +955,26 @@ impl Eval {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn picks_count_only_as_far_as_insight_keeps_them() {
+        let r = crate::agents::tests::rules(0);
+        let w = r.world();
+        let mut g = r.new_game(1);
+        g.round = 3;
+        let keep = |tier| cards::keep_need(&w, &g, 0, tier, 0).0;
+        let (one, two) = (keep(1), keep(2));
+        g.seats[0].resources.insert(Resource::Insight, two + one);
+        let picks = vec![(1.0, 2), (3.0, 2), (2.0, 1)];
+        let run = |budget: f64| {
+            let ev = Eval::new(&r, Weights { packet_budget: budget, ..Weights::default() });
+            let mut cards = Vec::new();
+            ev.keepable(&w, &g, 0, picks.clone(), &mut cards);
+            cards
+        };
+        assert_eq!(run(1.0), [3.0, 2.0], "the second tier-2 card is past the budget");
+        assert_eq!(run(0.0), [1.0, 3.0, 2.0]);
+    }
 
     #[test]
     fn renamed_weight_keeps_its_old_name() {
