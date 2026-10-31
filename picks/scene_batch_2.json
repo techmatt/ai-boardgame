@@ -1,0 +1,647 @@
+{
+ "name": "scene_batch_2",
+ "title": "Card scenes, batch 2",
+ "intro": "Keep or reject each scene, in the C and E mix. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. Scenes are a pool: the card a scene was written for is a suggestion. The second card only shows the other window. For true size, print art-originals/scenes/b2/cards.pdf at 100%. Use the notes for what to change.",
+ "rows": [
+  {
+   "id": "stacked_container_wing",
+   "label": "1. Industry: A crane lowering a prefabricated factory module onto the end of a row of identical modules.",
+   "note": "Written for Modular Expansion. Shown on Modular Expansion and Bridge Loan. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/stacked_container_wing.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "vault_of_ingots",
+   "label": "2. Industry: An open company vault stacked with neat bars and ledgers, a bookkeeper setting one more bar on the pile.",
+   "note": "Written for Retained Earnings. Shown on Retained Earnings and Joint Fabrication Pact. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/vault_of_ingots.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "dark_assembly_line",
+   "label": "3. Industry: A long assembly line with no people at all, machines working on alone under a few plain skylights.",
+   "note": "Written for Lights-Out Assembly. Shown on Lights-Out Assembly and Bulk Silicon Procurement. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/dark_assembly_line.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "trading_floor_surge",
+   "label": "4. Industry: A stock exchange floor in a frenzy, traders surging towards the centre, papers thrown into the air.",
+   "note": "Written for Liquidity Event. Shown on Liquidity Event and Grid-Tied Smelter. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/trading_floor_surge.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "chip_market_stalls",
+   "label": "5. Industry: A crowded open-air market where traders haggle over trays of bright chips on long tables.",
+   "note": "Written for Chip Spot Market. Shown on Chip Spot Market and Bonded Warehouse. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/chip_market_stalls.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "showroom_handshake",
+   "label": "6. Industry: A machine-tool showroom with a salesman and a buyer shaking hands in front of a gleaming lathe on a plinth.",
+   "note": "Written for Vendor Financing. Shown on Vendor Financing and Robotic Foundry. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/showroom_handshake.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "ipo_bell_crowd",
+   "label": "7. Industry: A vast exchange atrium hung with blank banners, executives on a balcony ringing a great brass bell above a crowd.",
+   "note": "Written for Megacorp IPO. Shown on Megacorp IPO and Sovereign Capital Fund. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/ipo_bell_crowd.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "point_defense_turret",
+   "label": "8. Security: A compact automated gun turret on a factory roof, its barrels tracking a small drone in the sky.",
+   "note": "Written for Point Defense. Shown on Point Defense and Diplomatic Expulsion. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/point_defense_turret.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "drone_wing_launch",
+   "label": "9. Security: A flight of small quadcopter sentries lifting off in formation from racks on the roof of a truck.",
+   "note": "Written for Sentry Drone Wing. Shown on Sentry Drone Wing and Peacekeeper Rotation. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/drone_wing_launch.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "safehouse_stairs",
+   "label": "10. Security: An ordinary apartment block with a hidden back stair, a handler ushering a small family through a false wall.",
+   "note": "Written for Safehouse Network. Shown on Safehouse Network and Shared Threat Intel. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/safehouse_stairs.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "door_breach",
+   "label": "11. Security: An armoured squad stacked at a steel door in a concrete corridor, the door bursting inward in a puff of dust.",
+   "note": "Written for Breach and Clear. Shown on Breach and Clear and Agency Field Station. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/door_breach.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "recruits_on_the_course",
+   "label": "12. Security: New recruits scrambling over a training obstacle course in clear daylight, an instructor watching with a stopwatch.",
+   "note": "Written for Recruit Operatives. Shown on Recruit Operatives and Security Contractor HQ. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/recruits_on_the_course.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "bounty_noticeboard",
+   "label": "13. Security: A weathered noticeboard outside a frontier outpost, faceless silhouette posters and a hunter pinning up a new one.",
+   "note": "Written for Bounty Board. Shown on Bounty Board and Deep State Ledger. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/bounty_noticeboard.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "orbital_rods_falling",
+   "label": "14. Security: Thin bright streaks of orbital rods falling onto a distant fortified ridge, seen from far off across a plain.",
+   "note": "Written for Kinetic Interdiction. Shown on Kinetic Interdiction and Aegis Dome Array. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/orbital_rods_falling.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "tape_library",
+   "label": "15. Science: A long archive of tape reels with a robot arm sliding along the shelves, a single archivist below.",
+   "note": "Written for Telemetry Archive. Shown on Telemetry Archive and Dataset Scraper. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/tape_library.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "simulation_weather_globe",
+   "label": "16. Science: A compact compute cluster around a floating holographic model of swirling weather over a globe, two researchers watching.",
+   "note": "Written for Simulation Cluster. Shown on Simulation Cluster and Predictive Modelling. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/simulation_weather_globe.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "preprint_mailbag",
+   "label": "17. Science: A researcher pinning a single paper to a huge public noticeboard as a small crowd of others gather to read it.",
+   "note": "Written for Open Preprint. Shown on Open Preprint and Citation Engine. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/preprint_mailbag.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "crawler_in_the_stacks",
+   "label": "18. Science: A spider-legged robot walking the tall shelves of a great library, pulling down volumes and scanning them.",
+   "note": "Written for Literature Crawler. Shown on Literature Crawler and Synthetic Data Forge. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/crawler_in_the_stacks.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "liquid_nitrogen_vent",
+   "label": "19. Science: A cryogenic compute tank venting thick white fog across a lab floor, frost on its pipes, an engineer opening a valve.",
+   "note": "Written for Cryo-Compute Burn. Shown on Cryo-Compute Burn and Exabyte Archive. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/liquid_nitrogen_vent.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "brain_map_table",
+   "label": "20. Science: A cartographer's table with a huge hand-drawn map of a neural network unrolled like a chart of rivers, dividers in hand.",
+   "note": "Written for Neural Cartographer. Shown on Neural Cartographer and Orbital Observatory Array. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/brain_map_table.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "data_licence_handover",
+   "label": "21. Science: A loading dock where crates of labelled data drives are checked against a contract by a lawyer and a courier.",
+   "note": "Written for Data Licensing Deal. Shown on Data Licensing Deal and Grad Student Pool. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/data_licence_handover.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "demand_dial",
+   "label": "22. Power: A wall of giant analogue dials in a grid office, an operator turning one down, a daytime city through the window.",
+   "note": "Written for Demand Response Grid. Shown on Demand Response Grid and Shared Grid Accord. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/demand_dial.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "capacitor_bank_flash",
+   "label": "23. Power: A row of tall capacitor drums dumping their charge in one bright bolt across a test hall, engineers behind a screen.",
+   "note": "Written for Capacitor Discharge. Shown on Capacitor Discharge and Continental Supergrid. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/capacitor_bank_flash.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "power_auction",
+   "label": "24. Power: An auctioneer on a podium before a room of bidders, a large model turbine on the block beside them.",
+   "note": "Written for Surplus Auction. Shown on Surplus Auction and Positron Storage Ring. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/power_auction.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "armoured_conduit_trench",
+   "label": "25. Power: An open trench with workers lowering a thick armoured power conduit into a concrete channel.",
+   "note": "Written for Hardened Conduits. Shown on Hardened Conduits and Faraday Yard. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/armoured_conduit_trench.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "grid_census_lineman",
+   "label": "26. Power: A surveyor with a clipboard counting pylons from a hilltop, power lines running away across the farmland in every direction.",
+   "note": "Written for Grid Census. Shown on Grid Census and Substation Hub. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/grid_census_lineman.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "pylon_from_helicopter",
+   "label": "27. Power: A heavy helicopter lowering a complete pylon onto a remote ridge, a small crew reaching for its legs.",
+   "note": "Written for Pylon Drop. Shown on Pylon Drop and Tidal Barrage. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/pylon_from_helicopter.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "beamed_power_rectenna",
+   "label": "28. Power: Satellites strung across a pale sky sending soft amber beams down to a huge mesh receiving dish in the desert.",
+   "note": "Written for Beamed Power Constellation. Shown on Beamed Power Constellation and Dyson Swarm Tranche. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/beamed_power_rectenna.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "buried_cache",
+   "label": "29. Cyber: A small black box hidden deep inside the open floor panels of a data centre, thin roots of cable spreading out from it.",
+   "note": "Written for Rootkit Cache. Shown on Rootkit Cache and Shadow Broker Feed. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/buried_cache.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "honeypot_relay_hut",
+   "label": "30. Cyber: A lone antenna hut in a meadow rigged as a trap, tempting signal lines running in and a steel cage door hanging open inside.",
+   "note": "Written for Honeypot Relay. Shown on Honeypot Relay and Eviction Worm. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/honeypot_relay_hut.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "forged_badge",
+   "label": "31. Cyber: A security gate with a figure holding up a blank forged badge as the barrier arm lifts.",
+   "note": "Written for Spoofed Credentials. Shown on Spoofed Credentials and Darknet Exchange. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/forged_badge.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "dark_control_room",
+   "label": "32. Cyber: A grid control room in daylight with one wall of status lamps going out row by row, two operators turning to look.",
+   "note": "Written for Blackout Script. Shown on Blackout Script and Quantum Decryptor. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/dark_control_room.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "flash_exploit_arc",
+   "label": "33. Cyber: A single bright arc leaping across a long rack of servers, every rack door blown open in sequence behind it.",
+   "note": "Written for Flash Exploit. Shown on Flash Exploit and Sentinel Mesh. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/flash_exploit_arc.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "severed_cable",
+   "label": "34. Cyber: A thick undersea-gauge data cable cut clean through on a dockside, its bright strands fanned out, sparks falling.",
+   "note": "Written for Node Severance. Shown on Node Severance and Black Ice Citadel. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/severed_cable.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "town_hall_square",
+   "label": "35. Diplomacy: An open-air meeting in a town square, a crowd on benches under awnings, raised hands, one speaker on a low stage.",
+   "note": "Written for Open Assembly. Shown on Open Assembly and Peacekeeping Detail. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/town_hall_square.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "liaison_officers",
+   "label": "36. Diplomacy: A line of uniformed liaison officers with satchels boarding small aircraft on a sunny airstrip.",
+   "note": "Written for Liaison Corps. Shown on Liaison Corps and Ceasefire Monitors. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/liaison_officers.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "manifesto_pamphlets",
+   "label": "37. Diplomacy: A blizzard of blank pamphlets drifting down from a rooftop onto a crowded street, hands reaching up.",
+   "note": "Written for Manifesto Leak. Shown on Manifesto Leak and Treaty Grid Exchange. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/manifesto_pamphlets.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "back_channel_bench",
+   "label": "38. Diplomacy: Two distant figures in overcoats sharing a park bench, a closed briefcase on the ground between them.",
+   "note": "Written for Back-Channel Talks. Shown on Back-Channel Talks and Orbital Embassy. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/back_channel_bench.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "new_bridge_ribbon",
+   "label": "39. Diplomacy: A half-built road and school rising in a green valley, surveyors and a loan officer walking the site with rolled plans.",
+   "note": "Written for Development Loan. Shown on Development Loan and Commons Grid. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/new_bridge_ribbon.jpg",
+     "label": "keep"
+    }
+   ]
+  },
+  {
+   "id": "worldwide_ballot",
+   "label": "40. Diplomacy: A long queue winding across a plaza to a line of plain ballot boxes, tents and people of every sort in the crowd.",
+   "note": "Written for Planetary Referendum. Shown on Planetary Referendum and Consulate Tower. Tile on: keep. Tile off: reject.",
+   "kind": "many",
+   "default": [
+    "keep"
+   ],
+   "options": [
+    {
+     "key": "keep",
+     "image": "../art-originals/picks/scene_batch_2/worldwide_ballot.jpg",
+     "label": "keep"
+    }
+   ]
+  }
+ ]
+}

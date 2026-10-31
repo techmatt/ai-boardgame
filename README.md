@@ -220,16 +220,19 @@ browser; `npm ci` first):
   `tools/card-art/scenes.json`, not `art/prompts.json`: a scene's `card` is a suggestion, not
   a binding. `scenes.json` at 036 has the three styles of the round 2 test. Round 1 (035): 12 draws at 3 at once, 30–55 s each, about
   2.5 min, 3% of the 5-hour window. Round 2 (036): 39–76 s each, about 3 min for 12, 24 draws in all. Batch 1 (037):
-  27 draws, 32–73 s each, about 7 min for 24, 7% of the window. A style
+  27 draws, 32–73 s each, about 7 min for 24, 7% of the window. Batch 2 (039): 40 draws at
+  3 at once, 31–82 s each, about 10 min, 10% of the window, none refused. A style
   line alone came back as detailed concept art; the `emphasis` line (never a
   photograph or 3D render, and what to do instead) is what pushes a draw towards illustration.
   "Near-future setting" alone gave a historical foundry and village: the preamble now
   says clean modern machinery, clothes and buildings, never historical.
 - `npm run scene-picker`: from the raw draws, each scene cut to the program window's shape
   (`<id>.png`), its two cards from `batch` at 300 dpi (`cards/`), the same at true size
-  (`cards.pdf`), and `picks/<picker>.json` with previews, about 45 s for 24, or about 2 min
-  when writing through the Drive folder: background it. Runs at below-normal priority, one
-  image at a time. Passes the scene to
+  (`cards.pdf`, about 260 MB for 80 cards), and `picks/<picker>.json` with previews, about
+  45 s for 24, or about 2 min when writing through the Drive folder, about 3 min for 40:
+  background it. `npm ci` first in a fresh worktree. Runs at below-normal priority, one
+  image at a time. Each new batch replaces `batch` in `scenes.json`, so the scenes already
+  drawn are the row ids in `picks/scene_batch_<n>.json`. Passes the scene to
   `renderCard`'s `artUrl`, which centre-crops it to the window `fit` measured: 53.3×33.2 mm
   for program and event, 53.3×25.3 mm for buildings, so a building shows the middle 76%.
 

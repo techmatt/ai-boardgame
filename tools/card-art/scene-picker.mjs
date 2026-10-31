@@ -77,6 +77,7 @@ const SHEET_W = l.print_px[0] * 2 + 20;
 const rows = [];
 const all = [];
 const tagOf = (id) => Object.keys(s.scenes).find((tag) => s.scenes[tag][id]);
+const frameless = Object.keys(s.batch).some((id) => ['adversary', 'discord', 'unity'].includes(tagOf(id)));
 for (const [id, pair] of Object.entries(s.batch)) {
   const size = await cut(id);
   for (const c of pair) {
@@ -124,7 +125,7 @@ await writeFile(
     {
       name: NAME,
       title: `Card scenes, batch ${s.round.slice(1)}`,
-      intro: `Keep or reject each scene, in the C and E mix. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. Scenes are a pool: the card a scene was written for is a suggestion. The second card only shows the other window, and adversary, Discord and Unity cards have no frame yet, so their scenes sit on the nearest fit by name. For true size, print art-originals/scenes/${s.round}/cards.pdf at 100%. Use the notes for what to change.`,
+      intro: `Keep or reject each scene, in the C and E mix. Each tile is the bare scene over two real cards, a program or event and a building, composed at 300 dpi with the full bleed showing: the program window is the whole scene, the building window its centre. Scenes are a pool: the card a scene was written for is a suggestion. The second card only shows the other window${frameless ? ', and adversary, Discord and Unity cards have no frame yet, so their scenes sit on the nearest fit by name' : ''}. For true size, print art-originals/scenes/${s.round}/cards.pdf at 100%. Use the notes for what to change.`,
       rows,
     },
     null,
